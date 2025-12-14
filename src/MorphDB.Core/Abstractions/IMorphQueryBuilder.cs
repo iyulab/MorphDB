@@ -124,9 +124,52 @@ public interface IMorphQuery
     Task<long> CountAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Executes a SUM aggregate query.
+    /// </summary>
+    Task<decimal?> SumAsync(string column, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Executes an AVG aggregate query.
+    /// </summary>
+    Task<decimal?> AvgAsync(string column, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Executes a MIN aggregate query.
+    /// </summary>
+    Task<T?> MinAsync<T>(string column, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Executes a MAX aggregate query.
+    /// </summary>
+    Task<T?> MaxAsync<T>(string column, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Selects aggregate columns (for GROUP BY queries).
+    /// </summary>
+    IMorphQuery SelectAggregate(AggregateFunction aggregateFunction, string columnName, string? resultAlias = null);
+
+    /// <summary>
+    /// Uses cursor-based pagination.
+    /// </summary>
+    /// <param name="cursorColumn">Column to use for cursor (typically 'id' or 'created_at').</param>
+    /// <param name="cursorValue">The cursor value to start after.</param>
+    /// <param name="pageSize">Number of items per page.</param>
+    IMorphQuery After(string cursorColumn, object cursorValue, int pageSize);
+
+    /// <summary>
+    /// Uses cursor-based pagination (before cursor).
+    /// </summary>
+    IMorphQuery Before(string cursorColumn, object cursorValue, int pageSize);
+
+    /// <summary>
     /// Gets the generated SQL for debugging.
     /// </summary>
     string ToSql();
+
+    /// <summary>
+    /// Gets the query parameters for debugging.
+    /// </summary>
+    IDictionary<string, object?> GetParameters();
 }
 
 /// <summary>
@@ -146,4 +189,17 @@ public enum FilterOperator
     Contains,
     StartsWith,
     EndsWith
+}
+
+/// <summary>
+/// Aggregate functions for SELECT and queries.
+/// </summary>
+public enum AggregateFunction
+{
+    Count,
+    Sum,
+    Avg,
+    Min,
+    Max,
+    CountDistinct
 }

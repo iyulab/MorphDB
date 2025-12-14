@@ -5,6 +5,7 @@ using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
 using MorphDB.Npgsql.Dml;
 using MorphDB.Npgsql.Infrastructure;
+using MorphDB.Npgsql.Query;
 using MorphDB.Npgsql.Repositories;
 using Npgsql;
 
@@ -39,8 +40,7 @@ public sealed class PostgresDataService : IMorphDataService
     /// <inheritdoc />
     public IMorphQueryBuilder Query(Guid tenantId)
     {
-        // Note: QueryBuilder will be fully implemented in Phase 3
-        throw new NotImplementedException("Query builder will be implemented in Phase 3");
+        return new MorphQueryBuilder(_dataSource, _metadataRepository, tenantId);
     }
 
     /// <inheritdoc />
@@ -190,9 +190,29 @@ public sealed class PostgresDataService : IMorphDataService
         IMorphQuery whereClause,
         CancellationToken cancellationToken = default)
     {
-        // Note: Full query builder integration in Phase 3
-        // For now, use a simple implementation
-        throw new NotImplementedException("Batch update with query will be fully implemented in Phase 3");
+        var table = await GetTableWithColumnsAsync(tenantId, tableName, cancellationToken);
+
+        // Map logical names to physical and prepare parameters
+        var (setColumns, values) = PrepareUpdateParameters(data, table.Columns);
+
+        // Get WHERE clause SQL from the query
+        var whereSql = ExtractWhereClause(whereClause);
+        var whereParams = whereClause.GetParameters();
+
+        // Merge parameters
+        var valuesDict = (IDictionary<string, object?>)values;
+        foreach (var (key, value) in whereParams)
+        {
+            valuesDict[key] = value;
+        }
+
+        var sql = DmlBuilder.BuildBatchUpdate(table.PhysicalName, setColumns, whereSql);
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        var affectedRows = await connection.ExecuteAsync(
+            new CommandDefinition(sql, values, cancellationToken: cancellationToken));
+
+        return affectedRows;
     }
 
     /// <inheritdoc />
@@ -202,8 +222,43 @@ public sealed class PostgresDataService : IMorphDataService
         IMorphQuery whereClause,
         CancellationToken cancellationToken = default)
     {
-        // Note: Full query builder integration in Phase 3
-        throw new NotImplementedException("Batch delete with query will be fully implemented in Phase 3");
+        var table = await GetTableWithColumnsAsync(tenantId, tableName, cancellationToken);
+
+        // Get WHERE clause SQL from the query
+        var whereSql = ExtractWhereClause(whereClause);
+        var whereParams = whereClause.GetParameters();
+
+        var sql = $"DELETE FROM {table.PhysicalName} {whereSql}";
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        var affectedRows = await connection.ExecuteAsync(
+            new CommandDefinition(sql, whereParams, cancellationToken: cancellationToken));
+
+        return affectedRows;
+    }
+
+    private static string ExtractWhereClause(IMorphQuery query)
+    {
+        // Get full SQL and extract WHERE clause
+        var fullSql = query.ToSql();
+        var whereIndex = fullSql.IndexOf("WHERE", StringComparison.OrdinalIgnoreCase);
+        if (whereIndex < 0)
+            return "";
+
+        // Find the end of WHERE clause (before ORDER BY, LIMIT, etc.)
+        var endKeywords = new[] { "ORDER BY", "GROUP BY", "HAVING", "LIMIT", "OFFSET" };
+        var endIndex = fullSql.Length;
+
+        foreach (var keyword in endKeywords)
+        {
+            var keywordIndex = fullSql.IndexOf(keyword, whereIndex, StringComparison.OrdinalIgnoreCase);
+            if (keywordIndex > 0 && keywordIndex < endIndex)
+            {
+                endIndex = keywordIndex;
+            }
+        }
+
+        return fullSql[whereIndex..endIndex].Trim();
     }
 
     /// <inheritdoc />
