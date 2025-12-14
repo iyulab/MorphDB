@@ -154,22 +154,34 @@ MorphDB is developed in 12 phases. Each phase represents an independently testab
 
 ---
 
-## Phase 6: OData
+## Phase 6: OData ✅ Completed
 
 **Goal**: OData v4 protocol support
 
 ### 6.1 EDM Model
-- [ ] Dynamic $metadata generation
-- [ ] Entity type mapping
+- [x] Dynamic $metadata generation (`DynamicEdmModelBuilder`)
+- [x] Entity type mapping (MorphDataType → EdmPrimitiveTypeKind)
+- [x] Navigation properties for relations
+- [x] EDM model caching per tenant (`CachingEdmModelProvider`)
 
 ### 6.2 Query Options
-- [ ] $filter, $orderby, $top, $skip
-- [ ] $select, $expand
-- [ ] $count
+- [x] $filter (eq, ne, gt, ge, lt, le, contains, startswith, endswith)
+- [x] $orderby (asc, desc)
+- [x] $top, $skip
+- [x] $select
+- [x] $count
 
 ### 6.3 CUD Operations
-- [ ] POST, PATCH, DELETE
-- [ ] Batch requests
+- [x] POST /odata/{entitySet} (Create)
+- [x] PATCH /odata/{entitySet}({key}) (Update)
+- [x] DELETE /odata/{entitySet}({key})
+- [x] POST /odata/$batch (Batch requests)
+
+**Key Implementations**:
+- `DynamicEdmModelBuilder`: Static EDM model builder from table metadata
+- `CachingEdmModelProvider`: Per-tenant EDM model caching with IServiceScopeFactory
+- `ODataQueryHandler`: OData query options → MorphDB query conversion
+- `MorphODataController`: OData endpoints (CRUD + batch)
 
 ---
 

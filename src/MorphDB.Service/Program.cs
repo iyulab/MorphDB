@@ -1,6 +1,7 @@
 using System.Globalization;
 using MorphDB.Npgsql;
 using MorphDB.Service.GraphQL;
+using MorphDB.Service.OData;
 using MorphDB.Service.Services;
 using Serilog;
 
@@ -47,6 +48,13 @@ try
     builder.Services.AddHttpContextAccessor();
     builder.Services.AddScoped<ITenantContextAccessor, HttpTenantContextAccessor>();
     builder.Services.AddScoped<ISubscriptionEventSender, HotChocolateSubscriptionEventSender>();
+
+    // Add OData services for dynamic EDM model generation
+    builder.Services.AddSingleton<IEdmModelProvider>(sp =>
+        new CachingEdmModelProvider(
+            sp.GetRequiredService<IServiceScopeFactory>(),
+            TimeSpan.FromMinutes(5)));
+    builder.Services.AddScoped<ODataQueryHandler>();
 
     // Add GraphQL (HotChocolate) with dynamic MorphDB types
     builder.Services
