@@ -77,22 +77,25 @@ MorphDB는 12개 Phase로 개발됩니다. 각 Phase는 독립적으로 테스�
 
 ---
 
-## Phase 3: Query Builder
+## Phase 3: Query Builder ✅ Completed
 
 **목표**: 논리적 쿼리 인터페이스
 
 ### 3.1 MorphQueryBuilder 구현
-- [ ] `IMorphQueryBuilder` 구현
-- [ ] SELECT, WHERE, JOIN, ORDER BY
-- [ ] 집계 함수 (COUNT, SUM, AVG)
+- [x] `IMorphQueryBuilder` 구현 (`MorphQueryBuilder`)
+- [x] SELECT, WHERE, JOIN, ORDER BY
+- [x] 집계 함수 (COUNT, SUM, AVG, MIN, MAX)
 
 ### 3.2 SqlKata 통합
-- [ ] 물리적 쿼리 생성
-- [ ] 파라미터 바인딩
+- [x] 물리적 쿼리 생성 (논리명→물리명 변환)
+- [x] 파라미터 바인딩
 
 ### 3.3 페이징
-- [ ] Offset 기반 페이징
-- [ ] Cursor 기반 페이징
+- [x] Offset 기반 페이징 (Limit/Offset)
+- [x] Cursor 기반 페이징 (After/Before)
+
+### 3.4 테스트
+- [x] 통합 테스트 (`QueryBuilderTests`)
 
 ---
 
