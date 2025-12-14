@@ -199,11 +199,15 @@ public class BatchApiTests
         // Insert records first
         await _client.PostAsJsonAsync($"/api/data/{tableName}", new Dictionary<string, object?>
         {
-            ["name"] = "User 1", ["email"] = "u1@example.com", ["score"] = 10
+            ["name"] = "User 1",
+            ["email"] = "u1@example.com",
+            ["score"] = 10
         });
         await _client.PostAsJsonAsync($"/api/data/{tableName}", new Dictionary<string, object?>
         {
-            ["name"] = "User 2", ["email"] = "u2@example.com", ["score"] = 20
+            ["name"] = "User 2",
+            ["email"] = "u2@example.com",
+            ["score"] = 20
         });
 
         var updateRequest = new BulkUpdateRequest
@@ -239,11 +243,17 @@ public class BatchApiTests
         var id2 = Guid.NewGuid();
         await _client.PostAsJsonAsync($"/api/data/{tableName}", new Dictionary<string, object?>
         {
-            ["id"] = id1, ["name"] = "User 1", ["email"] = "u1@example.com", ["score"] = 10
+            ["id"] = id1,
+            ["name"] = "User 1",
+            ["email"] = "u1@example.com",
+            ["score"] = 10
         });
         await _client.PostAsJsonAsync($"/api/data/{tableName}", new Dictionary<string, object?>
         {
-            ["id"] = id2, ["name"] = "User 2", ["email"] = "u2@example.com", ["score"] = 20
+            ["id"] = id2,
+            ["name"] = "User 2",
+            ["email"] = "u2@example.com",
+            ["score"] = 20
         });
 
         // Act - Delete using filter

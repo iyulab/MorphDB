@@ -380,8 +380,8 @@ See [ROADMAP.md](./ROADMAP.md) for detailed implementation phases.
 
 ### Current Progress
 
-- **Phase 0-5**: ✅ Completed (Foundation, Schema, Data, Query, REST API, GraphQL)
-- **Phase 6-12**: In Progress (OData, Real-time, Webhook, Bulk, SDKs, Security)
+- **Phase 0-7**: ✅ Completed (Foundation, Schema, Data, Query, REST API, GraphQL, OData, Real-time)
+- **Phase 8-12**: Planned (Webhook, Bulk, SDKs, Security, Deployment)
 
 ### Version Milestones
 

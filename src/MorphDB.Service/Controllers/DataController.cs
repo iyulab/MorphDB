@@ -319,7 +319,8 @@ public sealed class DataController : ControllerBase
         foreach (var filter in filters)
         {
             var parts = filter.Split(':', 3);
-            if (parts.Length != 3) continue;
+            if (parts.Length != 3)
+                continue;
 
             var column = parts[0].Trim();
             var op = ApiModelExtensions.ParseFilterOperator(parts[1].Trim());

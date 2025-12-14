@@ -71,7 +71,8 @@ public static class TypeMapper
     /// </remarks>
     public static object? ToDbValue(object? value, MorphDataType dataType)
     {
-        if (value is null) return null;
+        if (value is null)
+            return null;
 
         return dataType switch
         {
@@ -86,7 +87,8 @@ public static class TypeMapper
     /// </summary>
     public static object? FromDbValue(object? value, MorphDataType dataType)
     {
-        if (value is null or DBNull) return null;
+        if (value is null or DBNull)
+            return null;
 
         return dataType switch
         {

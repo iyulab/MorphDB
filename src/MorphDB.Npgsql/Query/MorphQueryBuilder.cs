@@ -680,55 +680,79 @@ internal sealed class MorphQuery : IMorphQuery
         switch (op)
         {
             case FilterOperator.Equals:
-                if (isOr) query.OrWhere(column, "=", value);
-                else query.Where(column, "=", value);
+                if (isOr)
+                    query.OrWhere(column, "=", value);
+                else
+                    query.Where(column, "=", value);
                 break;
             case FilterOperator.NotEquals:
-                if (isOr) query.OrWhere(column, "!=", value);
-                else query.Where(column, "!=", value);
+                if (isOr)
+                    query.OrWhere(column, "!=", value);
+                else
+                    query.Where(column, "!=", value);
                 break;
             case FilterOperator.GreaterThan:
-                if (isOr) query.OrWhere(column, ">", value);
-                else query.Where(column, ">", value);
+                if (isOr)
+                    query.OrWhere(column, ">", value);
+                else
+                    query.Where(column, ">", value);
                 break;
             case FilterOperator.GreaterThanOrEquals:
-                if (isOr) query.OrWhere(column, ">=", value);
-                else query.Where(column, ">=", value);
+                if (isOr)
+                    query.OrWhere(column, ">=", value);
+                else
+                    query.Where(column, ">=", value);
                 break;
             case FilterOperator.LessThan:
-                if (isOr) query.OrWhere(column, "<", value);
-                else query.Where(column, "<", value);
+                if (isOr)
+                    query.OrWhere(column, "<", value);
+                else
+                    query.Where(column, "<", value);
                 break;
             case FilterOperator.LessThanOrEquals:
-                if (isOr) query.OrWhere(column, "<=", value);
-                else query.Where(column, "<=", value);
+                if (isOr)
+                    query.OrWhere(column, "<=", value);
+                else
+                    query.Where(column, "<=", value);
                 break;
             case FilterOperator.Like:
-                if (isOr) query.OrWhereLike(column, value?.ToString() ?? "", caseSensitive: true);
-                else query.WhereLike(column, value?.ToString() ?? "", caseSensitive: true);
+                if (isOr)
+                    query.OrWhereLike(column, value?.ToString() ?? "", caseSensitive: true);
+                else
+                    query.WhereLike(column, value?.ToString() ?? "", caseSensitive: true);
                 break;
             case FilterOperator.NotLike:
-                if (isOr) query.OrWhereNotLike(column, value?.ToString() ?? "", caseSensitive: true);
-                else query.WhereNotLike(column, value?.ToString() ?? "", caseSensitive: true);
+                if (isOr)
+                    query.OrWhereNotLike(column, value?.ToString() ?? "", caseSensitive: true);
+                else
+                    query.WhereNotLike(column, value?.ToString() ?? "", caseSensitive: true);
                 break;
             case FilterOperator.ILike:
-                if (isOr) query.OrWhereLike(column, value?.ToString() ?? "", caseSensitive: false);
-                else query.WhereLike(column, value?.ToString() ?? "", caseSensitive: false);
+                if (isOr)
+                    query.OrWhereLike(column, value?.ToString() ?? "", caseSensitive: false);
+                else
+                    query.WhereLike(column, value?.ToString() ?? "", caseSensitive: false);
                 break;
             case FilterOperator.Contains:
                 var containsPattern = $"%{value}%";
-                if (isOr) query.OrWhereLike(column, containsPattern, caseSensitive: false);
-                else query.WhereLike(column, containsPattern, caseSensitive: false);
+                if (isOr)
+                    query.OrWhereLike(column, containsPattern, caseSensitive: false);
+                else
+                    query.WhereLike(column, containsPattern, caseSensitive: false);
                 break;
             case FilterOperator.StartsWith:
                 var startsWithPattern = $"{value}%";
-                if (isOr) query.OrWhereLike(column, startsWithPattern, caseSensitive: false);
-                else query.WhereLike(column, startsWithPattern, caseSensitive: false);
+                if (isOr)
+                    query.OrWhereLike(column, startsWithPattern, caseSensitive: false);
+                else
+                    query.WhereLike(column, startsWithPattern, caseSensitive: false);
                 break;
             case FilterOperator.EndsWith:
                 var endsWithPattern = $"%{value}";
-                if (isOr) query.OrWhereLike(column, endsWithPattern, caseSensitive: false);
-                else query.WhereLike(column, endsWithPattern, caseSensitive: false);
+                if (isOr)
+                    query.OrWhereLike(column, endsWithPattern, caseSensitive: false);
+                else
+                    query.WhereLike(column, endsWithPattern, caseSensitive: false);
                 break;
         }
     }

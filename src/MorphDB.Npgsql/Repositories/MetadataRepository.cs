@@ -61,7 +61,8 @@ public sealed class MetadataRepository : IMetadataRepository
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         var row = await connection.QuerySingleOrDefaultAsync<TableRow>(sql, new { TableId = tableId });
 
-        if (row is null) return null;
+        if (row is null)
+            return null;
 
         var table = MapToTableMetadata(row);
 
@@ -91,7 +92,8 @@ public sealed class MetadataRepository : IMetadataRepository
         var row = await connection.QuerySingleOrDefaultAsync<TableRow>(
             sql, new { TenantId = tenantId, LogicalName = logicalName });
 
-        if (row is null) return null;
+        if (row is null)
+            return null;
 
         var table = MapToTableMetadata(row);
 

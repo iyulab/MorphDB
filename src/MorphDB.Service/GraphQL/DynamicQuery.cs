@@ -131,7 +131,8 @@ public sealed class DynamicQuery
 
         // Apply pagination
         var pageSize = first ?? 20;
-        if (pageSize > 100) pageSize = 100;
+        if (pageSize > 100)
+            pageSize = 100;
 
         if (!string.IsNullOrEmpty(after))
         {
@@ -200,7 +201,8 @@ public sealed class DynamicQuery
         foreach (var part in parts)
         {
             var segments = part.Split(':', 3);
-            if (segments.Length != 3) continue;
+            if (segments.Length != 3)
+                continue;
 
             var column = segments[0];
             var op = ParseOperator(segments[1]);
