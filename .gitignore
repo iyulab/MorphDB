@@ -80,5 +80,6 @@ coverage/
 
 # Local
 .serena/
+local-docs/
 research-docs/
 nul

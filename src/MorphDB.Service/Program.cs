@@ -1,6 +1,7 @@
 using System.Globalization;
 using MorphDB.Npgsql;
 using MorphDB.Service.GraphQL;
+using MorphDB.Service.Services;
 using Serilog;
 
 Log.Logger = new LoggerConfiguration()
@@ -42,11 +43,16 @@ try
         });
     });
 
-    // Add GraphQL (HotChocolate)
+    // Add HTTP context accessor for tenant context
+    builder.Services.AddHttpContextAccessor();
+    builder.Services.AddScoped<ITenantContextAccessor, HttpTenantContextAccessor>();
+    builder.Services.AddScoped<ISubscriptionEventSender, HotChocolateSubscriptionEventSender>();
+
+    // Add GraphQL (HotChocolate) with dynamic MorphDB types
     builder.Services
         .AddGraphQLServer()
-        .AddQueryType<Query>()
-        .AddMutationType<Mutation>();
+        .AddMorphDbTypes()
+        .ModifyRequestOptions(opt => opt.IncludeExceptionDetails = builder.Environment.IsDevelopment());
 
     // Health checks
     builder.Services.AddHealthChecks();
@@ -63,11 +69,15 @@ try
     }
 
     app.UseHttpsRedirection();
+    app.UseWebSockets(); // Required for GraphQL subscriptions
     app.UseAuthentication();
     app.UseAuthorization();
 
     app.MapControllers();
-    app.MapGraphQL();
+    app.MapGraphQL().WithOptions(new HotChocolate.AspNetCore.GraphQLServerOptions
+    {
+        Tool = { Enable = app.Environment.IsDevelopment() }
+    });
     app.MapHealthChecks("/health");
 
     // Ready endpoint
