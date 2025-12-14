@@ -267,7 +267,7 @@ MorphDB는 12개 Phase로 개발됩니다. 각 Phase는 독립적으로 테스�
 | 0.2.0 | 4-6 | API 레이어 완성 |
 | 0.3.0 | 7-8 | Real-time 기능 |
 | 0.4.0 | 9-10 | Bulk & SDKs |
-| 1.0.0 | 11-12 | Production Ready |
+| 0.5.0 | 11-12 | Production Ready (Beta) |
 
 ---
 
