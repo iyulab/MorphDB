@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>MorphDB.Core</RootNamespace>
+    <Description>Core abstractions and interfaces for MorphDB</Description>
+  </PropertyGroup>
+
+</Project>

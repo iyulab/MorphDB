@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <RootNamespace>MorphDB.Service</RootNamespace>
+    <Description>MorphDB API Service</Description>
+    <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MorphDB.Core\MorphDB.Core.csproj" />
+    <ProjectReference Include="..\MorphDB.Npgsql\MorphDB.Npgsql.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- API Frameworks -->
+    <PackageReference Include="HotChocolate.AspNetCore" />
+    <PackageReference Include="HotChocolate.Data" />
+    <PackageReference Include="Microsoft.AspNetCore.OData" />
+    <PackageReference Include="Swashbuckle.AspNetCore" />
+
+    <!-- Authentication -->
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+
+    <!-- Logging -->
+    <PackageReference Include="Serilog.AspNetCore" />
+    <PackageReference Include="Serilog.Sinks.Console" />
+
+    <!-- Validation -->
+    <PackageReference Include="FluentValidation.AspNetCore" />
+  </ItemGroup>
+
+  <!-- Note: OpenTelemetry packages temporarily removed due to security vulnerability
+       Re-add when fixed version is available:
+       <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
+       <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />
+  -->
+
+</Project>
