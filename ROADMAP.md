@@ -131,21 +131,24 @@ MorphDB는 12개 Phase로 개발됩니다. 각 Phase는 독립적으로 테스�
 
 ---
 
-## Phase 5: GraphQL
+## Phase 5: GraphQL ✅ Completed
 
 **목표**: HotChocolate 기반 GraphQL
 
 ### 5.1 동적 스키마 생성
-- [ ] 테이블 → GraphQL Type 매핑
-- [ ] Query, Mutation 자동 생성
+- [x] 테이블 → GraphQL Type 매핑 (`DynamicSchemaBuilder`)
+- [x] Query 자동 생성 (`DynamicQuery` - GetTables, GetTable, GetRecords, GetRecord)
+- [x] Mutation 자동 생성 (`DynamicMutation` - CreateRecord, UpdateRecord, DeleteRecord, UpsertRecord, CreateRecords)
+- [x] 테넌트 컨텍스트 지원 (`ITenantContextAccessor`)
 
 ### 5.2 관계 해석
-- [ ] FK → GraphQL 관계 필드
-- [ ] DataLoader 통합
+- [x] FK → GraphQL 관계 필드 (`RelationGraphType`)
+- [x] DataLoader 통합 (`TableByNameDataLoader`, `TableByIdDataLoader`, `RecordByIdDataLoader`, `RelatedRecordsDataLoader`)
 
 ### 5.3 Subscription
-- [ ] GraphQL Subscription 지원
-- [ ] 변경 이벤트 스트리밍
+- [x] GraphQL Subscription 지원 (`DynamicSubscription`)
+- [x] 변경 이벤트 스트리밍 (`ISubscriptionEventSender`, `HotChocolateSubscriptionEventSender`)
+- [x] WebSocket 지원 (in-memory subscriptions)
 
 ---
 
