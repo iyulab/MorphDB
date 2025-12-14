@@ -188,3 +188,35 @@ public class ValidationException : MorphDbException
     {
     }
 }
+
+/// <summary>
+/// Thrown when a duplicate entity is detected.
+/// </summary>
+public class DuplicateException : MorphDbException
+{
+    public DuplicateException(string message)
+        : base("DUPLICATE", message)
+    {
+    }
+
+    public DuplicateException(string entityType, string identifier)
+        : base("DUPLICATE", $"{entityType} '{identifier}' already exists.")
+    {
+    }
+}
+
+/// <summary>
+/// Thrown when a concurrency conflict occurs (optimistic locking).
+/// </summary>
+public class ConcurrencyException : MorphDbException
+{
+    public ConcurrencyException(string message)
+        : base("CONCURRENCY_CONFLICT", message)
+    {
+    }
+
+    public ConcurrencyException(string message, Exception innerException)
+        : base("CONCURRENCY_CONFLICT", message, innerException)
+    {
+    }
+}

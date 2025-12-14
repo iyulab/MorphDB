@@ -1,5 +1,6 @@
 using System.Globalization;
 using MorphDB.Npgsql;
+using MorphDB.Service.GraphQL;
 using Serilog;
 
 Log.Logger = new LoggerConfiguration()
@@ -44,8 +45,8 @@ try
     // Add GraphQL (HotChocolate)
     builder.Services
         .AddGraphQLServer()
-        .AddQueryType()
-        .AddMutationType();
+        .AddQueryType<Query>()
+        .AddMutationType<Mutation>();
 
     // Health checks
     builder.Services.AddHealthChecks();
@@ -82,3 +83,6 @@ finally
 {
     Log.CloseAndFlush();
 }
+
+// Needed for WebApplicationFactory in integration tests
+public partial class Program { }
