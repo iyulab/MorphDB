@@ -10,6 +10,8 @@ namespace MorphDB.Tests.Integration;
 
 /// <summary>
 /// Integration tests for PostgresSchemaManager.
+/// Note: SchemaManager automatically adds system columns (id, tenant_id, created_at, updated_at).
+/// Tests should only include user-defined columns in CreateTableRequest.
 /// </summary>
 [Collection("PostgreSQL")]
 public class SchemaManagerTests
@@ -46,15 +48,10 @@ public class SchemaManagerTests
         var request = new CreateTableRequest
         {
             TenantId = tenantId,
-            LogicalName = "customers",
+            LogicalName = "customers_" + Guid.NewGuid().ToString("N")[..8],
             Columns =
             [
-                new CreateColumnRequest
-                {
-                    LogicalName = "id",
-                    DataType = MorphDataType.Uuid,
-                    IsPrimaryKey = true
-                },
+                // Only user-defined columns (system columns are auto-added)
                 new CreateColumnRequest
                 {
                     LogicalName = "email",
@@ -63,9 +60,9 @@ public class SchemaManagerTests
                 },
                 new CreateColumnRequest
                 {
-                    LogicalName = "created_at",
-                    DataType = MorphDataType.DateTime,
-                    IsNullable = false
+                    LogicalName = "name",
+                    DataType = MorphDataType.Text,
+                    IsNullable = true
                 }
             ]
         };
@@ -76,18 +73,23 @@ public class SchemaManagerTests
         // Assert
         result.Should().NotBeNull();
         result.TableId.Should().NotBeEmpty();
-        result.LogicalName.Should().Be("customers");
-        result.PhysicalName.Should().StartWith("t_");
-        result.Columns.Should().HaveCount(3);
+        result.LogicalName.Should().Be(request.LogicalName);
+        result.PhysicalName.Should().StartWith("tbl_");
+
+        // 4 system columns + 2 user columns = 6 total
+        result.Columns.Should().HaveCount(6);
         result.Columns.Should().Contain(c => c.LogicalName == "id" && c.IsPrimaryKey);
-        result.Columns.Should().Contain(c => c.LogicalName == "email");
+        result.Columns.Should().Contain(c => c.LogicalName == "tenant_id");
         result.Columns.Should().Contain(c => c.LogicalName == "created_at");
+        result.Columns.Should().Contain(c => c.LogicalName == "updated_at");
+        result.Columns.Should().Contain(c => c.LogicalName == "email");
+        result.Columns.Should().Contain(c => c.LogicalName == "name");
 
         // Verify metadata was persisted
         var storedTable = await _metadataRepository.GetTableByIdAsync(result.TableId, includeColumns: true);
         storedTable.Should().NotBeNull();
-        storedTable!.LogicalName.Should().Be("customers");
-        storedTable.Columns.Should().HaveCount(3);
+        storedTable!.LogicalName.Should().Be(request.LogicalName);
+        storedTable.Columns.Should().HaveCount(6);
     }
 
     [Fact]
@@ -95,17 +97,17 @@ public class SchemaManagerTests
     {
         // Arrange
         var tenantId = Guid.NewGuid();
+        var tableName = "duplicate_table_" + Guid.NewGuid().ToString("N")[..8];
         var request = new CreateTableRequest
         {
             TenantId = tenantId,
-            LogicalName = "duplicate_table",
+            LogicalName = tableName,
             Columns =
             [
                 new CreateColumnRequest
                 {
-                    LogicalName = "id",
-                    DataType = MorphDataType.Uuid,
-                    IsPrimaryKey = true
+                    LogicalName = "data",
+                    DataType = MorphDataType.Text
                 }
             ]
         };
@@ -125,15 +127,9 @@ public class SchemaManagerTests
         var createTableRequest = new CreateTableRequest
         {
             TenantId = tenantId,
-            LogicalName = "products",
+            LogicalName = "products_" + Guid.NewGuid().ToString("N")[..8],
             Columns =
             [
-                new CreateColumnRequest
-                {
-                    LogicalName = "id",
-                    DataType = MorphDataType.Uuid,
-                    IsPrimaryKey = true
-                },
                 new CreateColumnRequest
                 {
                     LogicalName = "name",
@@ -144,13 +140,15 @@ public class SchemaManagerTests
         };
 
         var table = await _schemaManager.CreateTableAsync(createTableRequest);
+        var initialColumnCount = table.Columns.Count;
 
         var addColumnRequest = new AddColumnRequest
         {
             TableId = table.TableId,
             LogicalName = "price",
             DataType = MorphDataType.Decimal,
-            IsNullable = false
+            IsNullable = false,
+            ExpectedVersion = table.SchemaVersion  // Use current schema version for optimistic concurrency
         };
 
         // Act
@@ -164,7 +162,7 @@ public class SchemaManagerTests
 
         // Verify metadata was updated
         var storedTable = await _metadataRepository.GetTableByIdAsync(table.TableId, includeColumns: true);
-        storedTable!.Columns.Should().HaveCount(3);
+        storedTable!.Columns.Should().HaveCount(initialColumnCount + 1);
         storedTable.Columns.Should().Contain(c => c.LogicalName == "price");
     }
 
@@ -176,15 +174,9 @@ public class SchemaManagerTests
         var createTableRequest = new CreateTableRequest
         {
             TenantId = tenantId,
-            LogicalName = "orders",
+            LogicalName = "orders_" + Guid.NewGuid().ToString("N")[..8],
             Columns =
             [
-                new CreateColumnRequest
-                {
-                    LogicalName = "id",
-                    DataType = MorphDataType.Uuid,
-                    IsPrimaryKey = true
-                },
                 new CreateColumnRequest
                 {
                     LogicalName = "customer_id",
@@ -236,15 +228,9 @@ public class SchemaManagerTests
         var customersTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
             TenantId = tenantId,
-            LogicalName = "rel_customers",
+            LogicalName = "rel_customers_" + Guid.NewGuid().ToString("N")[..8],
             Columns =
             [
-                new CreateColumnRequest
-                {
-                    LogicalName = "id",
-                    DataType = MorphDataType.Uuid,
-                    IsPrimaryKey = true
-                },
                 new CreateColumnRequest
                 {
                     LogicalName = "name",
@@ -258,15 +244,9 @@ public class SchemaManagerTests
         var ordersTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
             TenantId = tenantId,
-            LogicalName = "rel_orders",
+            LogicalName = "rel_orders_" + Guid.NewGuid().ToString("N")[..8],
             Columns =
             [
-                new CreateColumnRequest
-                {
-                    LogicalName = "id",
-                    DataType = MorphDataType.Uuid,
-                    IsPrimaryKey = true
-                },
                 new CreateColumnRequest
                 {
                     LogicalName = "customer_id",
@@ -313,15 +293,9 @@ public class SchemaManagerTests
         var createTableRequest = new CreateTableRequest
         {
             TenantId = tenantId,
-            LogicalName = "get_test_table",
+            LogicalName = "get_test_table_" + Guid.NewGuid().ToString("N")[..8],
             Columns =
             [
-                new CreateColumnRequest
-                {
-                    LogicalName = "id",
-                    DataType = MorphDataType.Uuid,
-                    IsPrimaryKey = true
-                },
                 new CreateColumnRequest
                 {
                     LogicalName = "data",
@@ -339,8 +313,9 @@ public class SchemaManagerTests
         // Assert
         result.Should().NotBeNull();
         result!.TableId.Should().Be(created.TableId);
-        result.LogicalName.Should().Be("get_test_table");
-        result.Columns.Should().HaveCount(2);
+        result.LogicalName.Should().Be(createTableRequest.LogicalName);
+        // 4 system columns + 1 user column = 5 total
+        result.Columns.Should().HaveCount(5);
     }
 
     [Fact]
@@ -357,9 +332,8 @@ public class SchemaManagerTests
             [
                 new CreateColumnRequest
                 {
-                    LogicalName = "id",
-                    DataType = MorphDataType.Uuid,
-                    IsPrimaryKey = true
+                    LogicalName = "data",
+                    DataType = MorphDataType.Text
                 }
             ]
         };
@@ -379,18 +353,18 @@ public class SchemaManagerTests
     {
         // Arrange
         var tenantId = Guid.NewGuid();
+        var uniqueSuffix = Guid.NewGuid().ToString("N")[..8];
 
         await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
             TenantId = tenantId,
-            LogicalName = "list_table_1",
+            LogicalName = "list_table_1_" + uniqueSuffix,
             Columns =
             [
                 new CreateColumnRequest
                 {
-                    LogicalName = "id",
-                    DataType = MorphDataType.Uuid,
-                    IsPrimaryKey = true
+                    LogicalName = "data",
+                    DataType = MorphDataType.Text
                 }
             ]
         });
@@ -398,14 +372,13 @@ public class SchemaManagerTests
         await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
             TenantId = tenantId,
-            LogicalName = "list_table_2",
+            LogicalName = "list_table_2_" + uniqueSuffix,
             Columns =
             [
                 new CreateColumnRequest
                 {
-                    LogicalName = "id",
-                    DataType = MorphDataType.Uuid,
-                    IsPrimaryKey = true
+                    LogicalName = "data",
+                    DataType = MorphDataType.Text
                 }
             ]
         });
@@ -415,7 +388,7 @@ public class SchemaManagerTests
 
         // Assert
         tables.Should().HaveCountGreaterThanOrEqualTo(2);
-        tables.Should().Contain(t => t.LogicalName == "list_table_1");
-        tables.Should().Contain(t => t.LogicalName == "list_table_2");
+        tables.Should().Contain(t => t.LogicalName == "list_table_1_" + uniqueSuffix);
+        tables.Should().Contain(t => t.LogicalName == "list_table_2_" + uniqueSuffix);
     }
 }

@@ -636,62 +636,83 @@ public sealed class MetadataRepository : IMetadataRepository
 
     #region Row Types
 
-    private sealed record TableRow(
-        Guid table_id,
-        Guid tenant_id,
-        string logical_name,
-        string physical_name,
-        int schema_version,
-        string? descriptor,
-        bool is_active,
-        DateTimeOffset created_at,
-        DateTimeOffset updated_at);
+    /// <summary>
+    /// Dapper-compatible row type for table metadata.
+    /// Uses parameterless constructor and public setters for Dapper materialization.
+    /// </summary>
+    private sealed class TableRow
+    {
+        public Guid table_id { get; set; }
+        public Guid tenant_id { get; set; }
+        public string logical_name { get; set; } = "";
+        public string physical_name { get; set; } = "";
+        public int schema_version { get; set; }
+        public string? descriptor { get; set; }
+        public bool is_active { get; set; }
+        public DateTimeOffset created_at { get; set; }
+        public DateTimeOffset updated_at { get; set; }
+    }
 
-    private sealed record ColumnRow(
-        Guid column_id,
-        Guid table_id,
-        string logical_name,
-        string physical_name,
-        string data_type,
-        string native_type,
-        bool is_nullable,
-        bool is_unique,
-        bool is_primary_key,
-        bool is_indexed,
-        bool is_encrypted,
-        string? default_value,
-        string? check_expr,
-        int ordinal_position,
-        string? descriptor,
-        bool is_active);
+    /// <summary>
+    /// Dapper-compatible row type for column metadata.
+    /// </summary>
+    private sealed class ColumnRow
+    {
+        public Guid column_id { get; set; }
+        public Guid table_id { get; set; }
+        public string logical_name { get; set; } = "";
+        public string physical_name { get; set; } = "";
+        public string data_type { get; set; } = "";
+        public string native_type { get; set; } = "";
+        public bool is_nullable { get; set; }
+        public bool is_unique { get; set; }
+        public bool is_primary_key { get; set; }
+        public bool is_indexed { get; set; }
+        public bool is_encrypted { get; set; }
+        public string? default_value { get; set; }
+        public string? check_expr { get; set; }
+        public int ordinal_position { get; set; }
+        public string? descriptor { get; set; }
+        public bool is_active { get; set; }
+    }
 
-    private sealed record IndexRow(
-        Guid index_id,
-        Guid table_id,
-        string logical_name,
-        string physical_name,
-        string columns,
-        string index_type,
-        bool is_unique,
-        string? where_clause,
-        string? descriptor,
-        bool is_active,
-        DateTimeOffset created_at);
+    /// <summary>
+    /// Dapper-compatible row type for index metadata.
+    /// </summary>
+    private sealed class IndexRow
+    {
+        public Guid index_id { get; set; }
+        public Guid table_id { get; set; }
+        public string logical_name { get; set; } = "";
+        public string physical_name { get; set; } = "";
+        public string columns { get; set; } = "";
+        public string index_type { get; set; } = "";
+        public bool is_unique { get; set; }
+        public string? where_clause { get; set; }
+        public string? descriptor { get; set; }
+        public bool is_active { get; set; }
+        public DateTimeOffset created_at { get; set; }
+    }
 
-    private sealed record RelationRow(
-        Guid relation_id,
-        Guid tenant_id,
-        string logical_name,
-        Guid source_table_id,
-        Guid source_column_id,
-        Guid target_table_id,
-        Guid target_column_id,
-        string relation_type,
-        string on_delete,
-        string on_update,
-        string? descriptor,
-        bool is_active,
-        DateTimeOffset created_at);
+    /// <summary>
+    /// Dapper-compatible row type for relation metadata.
+    /// </summary>
+    private sealed class RelationRow
+    {
+        public Guid relation_id { get; set; }
+        public Guid tenant_id { get; set; }
+        public string logical_name { get; set; } = "";
+        public Guid source_table_id { get; set; }
+        public Guid source_column_id { get; set; }
+        public Guid target_table_id { get; set; }
+        public Guid target_column_id { get; set; }
+        public string relation_type { get; set; } = "";
+        public string on_delete { get; set; } = "";
+        public string on_update { get; set; } = "";
+        public string? descriptor { get; set; }
+        public bool is_active { get; set; }
+        public DateTimeOffset created_at { get; set; }
+    }
 
     #endregion
 }

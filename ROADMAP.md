@@ -26,47 +26,54 @@ MorphDB는 12개 Phase로 개발됩니다. 각 Phase는 독립적으로 테스�
 
 ---
 
-## Phase 1: Core Schema Management
+## Phase 1: Core Schema Management ✅ Completed
 
 **목표**: 동적 스키마 생성 및 관리
 
 ### 1.1 SchemaManager 구현
-- [ ] `ISchemaManager` 구현
-- [ ] 테이블 CRUD (CREATE, ALTER, DROP)
-- [ ] 컬럼 CRUD (ADD, MODIFY, DROP)
-- [ ] 시스템 테이블 동기화 (_morph_tables, _morph_columns)
+- [x] `ISchemaManager` 구현 (`PostgresSchemaManager`)
+- [x] 테이블 CRUD (CREATE, ALTER, DROP)
+- [x] 컬럼 CRUD (ADD, MODIFY, DROP)
+- [x] 시스템 테이블 동기화 (`MetadataRepository`)
 
 ### 1.2 DDL 안전성
-- [ ] Advisory Lock 통합
-- [ ] 트랜잭션 기반 DDL
-- [ ] 롤백 지원
+- [x] Advisory Lock 통합 (`PostgresAdvisoryLockManager`)
+- [x] 트랜잭션 기반 DDL
+- [x] DdlBuilder - DDL SQL 생성
 
 ### 1.3 변경 로깅
-- [ ] _morph_changelog 기록
-- [ ] 변경 이력 조회 API
+- [x] `ChangeLogger` - _morph_changelog 기록
+- [x] `SchemaChangeEntry` - 변경 이력 모델
 
 ### 1.4 테스트
-- [ ] 단위 테스트
-- [ ] 통합 테스트 (Testcontainers)
+- [x] 단위 테스트 (`DdlBuilderTests`)
+- [x] 통합 테스트 (`SchemaManagerTests`, `MetadataRepositoryTests`)
 
 ---
 
-## Phase 2: Data Operations
+## Phase 2: Data Operations ✅ Completed
 
 **목표**: 기본 CRUD 데이터 조작
 
 ### 2.1 DataService 구현
-- [ ] `IMorphDataService` 구현
-- [ ] INSERT, UPDATE, DELETE 작업
-- [ ] 배치 DML 지원
+- [x] `IMorphDataService` 구현 (`PostgresDataService`)
+- [x] INSERT, UPDATE, DELETE 작업
+- [x] 배치 DML 지원 (InsertBatchAsync)
+- [x] Upsert 지원 (INSERT ... ON CONFLICT)
 
 ### 2.2 논리명→물리명 변환
-- [ ] 쿼리 빌더 연동
-- [ ] 자동 네이밍 변환
+- [x] DmlBuilder - DML SQL 생성
+- [x] 자동 네이밍 변환 (논리명 ↔ 물리명)
+- [x] tenant_id 자동 주입
 
 ### 2.3 타입 매핑
-- [ ] MorphDataType → PostgreSQL 변환
-- [ ] 값 검증 및 변환
+- [x] MorphDataType → PostgreSQL 변환 (`TypeMapper`)
+- [x] JSONB 타입 직렬화/역직렬화
+- [x] 값 검증 및 변환
+
+### 2.4 테스트
+- [x] 단위 테스트 (`DmlBuilderTests`)
+- [x] 통합 테스트 (`DataServiceTests`)
 
 ---
 

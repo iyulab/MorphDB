@@ -65,9 +65,13 @@ public static class TypeMapper
     /// <summary>
     /// Converts a .NET value to a PostgreSQL-compatible value.
     /// </summary>
+    /// <remarks>
+    /// Returns null as-is rather than DBNull.Value because Dapper handles null correctly
+    /// when using ExpandoObject parameters.
+    /// </remarks>
     public static object? ToDbValue(object? value, MorphDataType dataType)
     {
-        if (value is null) return DBNull.Value;
+        if (value is null) return null;
 
         return dataType switch
         {

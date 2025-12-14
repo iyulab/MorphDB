@@ -156,3 +156,35 @@ public class TenantIsolationException : MorphDbException
     {
     }
 }
+
+/// <summary>
+/// Thrown when a resource is not found.
+/// </summary>
+public class NotFoundException : MorphDbException
+{
+    public NotFoundException(string message)
+        : base("NOT_FOUND", message)
+    {
+    }
+
+    public NotFoundException(string resourceType, string identifier)
+        : base("NOT_FOUND", $"{resourceType} '{identifier}' not found.")
+    {
+    }
+}
+
+/// <summary>
+/// Thrown when input validation fails.
+/// </summary>
+public class ValidationException : MorphDbException
+{
+    public ValidationException(string message)
+        : base("VALIDATION_ERROR", message)
+    {
+    }
+
+    public ValidationException(string field, string message)
+        : base("VALIDATION_ERROR", $"Validation error for '{field}': {message}")
+    {
+    }
+}
