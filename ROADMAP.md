@@ -99,23 +99,35 @@ MorphDB는 12개 Phase로 개발됩니다. 각 Phase는 독립적으로 테스�
 
 ---
 
-## Phase 4: REST API
+## Phase 4: REST API ✅ Completed
 
 **목표**: RESTful API 엔드포인트
 
 ### 4.1 Schema API
-- [ ] POST /api/schema/tables
-- [ ] GET/PATCH/DELETE /api/schema/tables/{name}
-- [ ] 컬럼, 관계, 인덱스 관리
+- [x] POST /api/schema/tables
+- [x] GET/PATCH/DELETE /api/schema/tables/{name}
+- [x] 컬럼, 관계, 인덱스 관리
 
 ### 4.2 Data API
-- [ ] GET /api/data/{table}
-- [ ] POST/PATCH/DELETE /api/data/{table}/{id}
-- [ ] 필터, 정렬, 페이징
+- [x] GET /api/data/{table} (필터, 정렬, 페이징)
+- [x] GET /api/data/{table}/{id}
+- [x] POST /api/data/{table} (Insert)
+- [x] PATCH /api/data/{table}/{id} (Update)
+- [x] DELETE /api/data/{table}/{id}
 
 ### 4.3 Batch API
-- [ ] POST /api/schema/batch
-- [ ] POST /api/data/batch
+- [x] POST /api/batch/data (혼합 작업)
+- [x] POST /api/batch/data/{table}/insert (대량 삽입)
+- [x] PATCH /api/batch/data/{table} (필터 기반 업데이트)
+- [x] DELETE /api/batch/data/{table} (필터 기반 삭제)
+- [x] PUT /api/batch/data/{table} (Upsert)
+
+**주요 구현**:
+- `SchemaController`: 테이블, 컬럼, 인덱스, 관계 CRUD
+- `DataController`: 데이터 쿼리 및 CRUD
+- `BatchController`: 대량 작업
+- X-Tenant-Id 헤더 기반 테넌트 격리
+- 필터 표현식 (column:operator:value)
 
 ---
 
