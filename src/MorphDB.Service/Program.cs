@@ -2,6 +2,7 @@ using System.Globalization;
 using MorphDB.Npgsql;
 using MorphDB.Service.GraphQL;
 using MorphDB.Service.OData;
+using MorphDB.Service.Realtime;
 using MorphDB.Service.Services;
 using Serilog;
 
@@ -62,6 +63,9 @@ try
         .AddMorphDbTypes()
         .ModifyRequestOptions(opt => opt.IncludeExceptionDetails = builder.Environment.IsDevelopment());
 
+    // Add real-time services (SignalR + PostgreSQL LISTEN/NOTIFY)
+    builder.Services.AddMorphDbRealtime();
+
     // Health checks
     builder.Services.AddHealthChecks();
 
@@ -87,6 +91,7 @@ try
         Tool = { Enable = app.Environment.IsDevelopment() }
     });
     app.MapHealthChecks("/health");
+    app.MapMorphHub(); // SignalR hub at /hubs/morph
 
     // Ready endpoint
     app.MapGet("/ready", () => Results.Ok(new { status = "ready", timestamp = DateTime.UtcNow }));
