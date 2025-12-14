@@ -2,11 +2,13 @@
 
 ## Overview
 
-MorphDB는 12개 Phase로 개발됩니다. 각 Phase는 독립적으로 테스트 가능한 기능 단위입니다.
+MorphDB is developed in 12 phases. Each phase represents an independently testable functional unit.
+
+---
 
 ## Phase 0: Foundation ✅ Completed
 
-**목표**: 솔루션 구조 및 개발 환경 구성
+**Goal**: Solution structure and development environment setup
 
 - [x] Solution structure (MorphDB.sln)
 - [x] Central Package Management (Directory.Packages.props)
@@ -18,291 +20,333 @@ MorphDB는 12개 Phase로 개발됩니다. 각 Phase는 독립적으로 테스�
 - [x] GitHub Actions CI/CD pipeline
 - [x] Code style (.editorconfig)
 
-**핵심 구성요소**:
-- `ISchemaManager`, `ISchemaMapping`, `INameHasher` 인터페이스
-- `IMorphQueryBuilder`, `IMorphDataService` 쿼리 추상화
-- `Sha256NameHasher` - 논리명→물리명 해시 생성
-- `PostgresAdvisoryLockManager` - DDL 직렬화를 위한 Advisory Lock
+**Key Components**:
+- `ISchemaManager`, `ISchemaMapping`, `INameHasher` interfaces
+- `IMorphQueryBuilder`, `IMorphDataService` query abstractions
+- `Sha256NameHasher` - Logical name → Physical name hash generation
+- `PostgresAdvisoryLockManager` - Advisory Lock for DDL serialization
 
 ---
 
 ## Phase 1: Core Schema Management ✅ Completed
 
-**목표**: 동적 스키마 생성 및 관리
+**Goal**: Dynamic schema creation and management
 
-### 1.1 SchemaManager 구현
-- [x] `ISchemaManager` 구현 (`PostgresSchemaManager`)
-- [x] 테이블 CRUD (CREATE, ALTER, DROP)
-- [x] 컬럼 CRUD (ADD, MODIFY, DROP)
-- [x] 시스템 테이블 동기화 (`MetadataRepository`)
+### 1.1 SchemaManager Implementation
+- [x] `ISchemaManager` implementation (`PostgresSchemaManager`)
+- [x] Table CRUD (CREATE, ALTER, DROP)
+- [x] Column CRUD (ADD, MODIFY, DROP)
+- [x] System table synchronization (`MetadataRepository`)
 
-### 1.2 DDL 안전성
-- [x] Advisory Lock 통합 (`PostgresAdvisoryLockManager`)
-- [x] 트랜잭션 기반 DDL
-- [x] DdlBuilder - DDL SQL 생성
+### 1.2 DDL Safety
+- [x] Advisory Lock integration (`PostgresAdvisoryLockManager`)
+- [x] Transaction-based DDL
+- [x] DdlBuilder - DDL SQL generation
 
-### 1.3 변경 로깅
-- [x] `ChangeLogger` - _morph_changelog 기록
-- [x] `SchemaChangeEntry` - 변경 이력 모델
+### 1.3 Change Logging
+- [x] `ChangeLogger` - _morph_changelog recording
+- [x] `SchemaChangeEntry` - Change history model
 
-### 1.4 테스트
-- [x] 단위 테스트 (`DdlBuilderTests`)
-- [x] 통합 테스트 (`SchemaManagerTests`, `MetadataRepositoryTests`)
+### 1.4 Testing
+- [x] Unit tests (`DdlBuilderTests`)
+- [x] Integration tests (`SchemaManagerTests`, `MetadataRepositoryTests`)
 
 ---
 
 ## Phase 2: Data Operations ✅ Completed
 
-**목표**: 기본 CRUD 데이터 조작
+**Goal**: Basic CRUD data manipulation
 
-### 2.1 DataService 구현
-- [x] `IMorphDataService` 구현 (`PostgresDataService`)
-- [x] INSERT, UPDATE, DELETE 작업
-- [x] 배치 DML 지원 (InsertBatchAsync)
-- [x] Upsert 지원 (INSERT ... ON CONFLICT)
+### 2.1 DataService Implementation
+- [x] `IMorphDataService` implementation (`PostgresDataService`)
+- [x] INSERT, UPDATE, DELETE operations
+- [x] Batch DML support (InsertBatchAsync)
+- [x] Upsert support (INSERT ... ON CONFLICT)
 
-### 2.2 논리명→물리명 변환
-- [x] DmlBuilder - DML SQL 생성
-- [x] 자동 네이밍 변환 (논리명 ↔ 물리명)
-- [x] tenant_id 자동 주입
+### 2.2 Logical → Physical Name Conversion
+- [x] DmlBuilder - DML SQL generation
+- [x] Automatic naming conversion (logical ↔ physical)
+- [x] Auto tenant_id injection
 
-### 2.3 타입 매핑
-- [x] MorphDataType → PostgreSQL 변환 (`TypeMapper`)
-- [x] JSONB 타입 직렬화/역직렬화
-- [x] 값 검증 및 변환
+### 2.3 Type Mapping
+- [x] MorphDataType → PostgreSQL conversion (`TypeMapper`)
+- [x] JSONB type serialization/deserialization
+- [x] Value validation and conversion
 
-### 2.4 테스트
-- [x] 단위 테스트 (`DmlBuilderTests`)
-- [x] 통합 테스트 (`DataServiceTests`)
+### 2.4 Testing
+- [x] Unit tests (`DmlBuilderTests`)
+- [x] Integration tests (`DataServiceTests`)
 
 ---
 
 ## Phase 3: Query Builder ✅ Completed
 
-**목표**: 논리적 쿼리 인터페이스
+**Goal**: Logical query interface
 
-### 3.1 MorphQueryBuilder 구현
-- [x] `IMorphQueryBuilder` 구현 (`MorphQueryBuilder`)
+### 3.1 MorphQueryBuilder Implementation
+- [x] `IMorphQueryBuilder` implementation (`MorphQueryBuilder`)
 - [x] SELECT, WHERE, JOIN, ORDER BY
-- [x] 집계 함수 (COUNT, SUM, AVG, MIN, MAX)
+- [x] Aggregate functions (COUNT, SUM, AVG, MIN, MAX)
 
-### 3.2 SqlKata 통합
-- [x] 물리적 쿼리 생성 (논리명→물리명 변환)
-- [x] 파라미터 바인딩
+### 3.2 SqlKata Integration
+- [x] Physical query generation (logical → physical name conversion)
+- [x] Parameter binding
 
-### 3.3 페이징
-- [x] Offset 기반 페이징 (Limit/Offset)
-- [x] Cursor 기반 페이징 (After/Before)
+### 3.3 Pagination
+- [x] Offset-based pagination (Limit/Offset)
+- [x] Cursor-based pagination (After/Before)
 
-### 3.4 테스트
-- [x] 통합 테스트 (`QueryBuilderTests`)
+### 3.4 Testing
+- [x] Integration tests (`QueryBuilderTests`)
 
 ---
 
 ## Phase 4: REST API ✅ Completed
 
-**목표**: RESTful API 엔드포인트
+**Goal**: RESTful API endpoints
 
 ### 4.1 Schema API
 - [x] POST /api/schema/tables
 - [x] GET/PATCH/DELETE /api/schema/tables/{name}
-- [x] 컬럼, 관계, 인덱스 관리
+- [x] Column, relation, index management
 
 ### 4.2 Data API
-- [x] GET /api/data/{table} (필터, 정렬, 페이징)
+- [x] GET /api/data/{table} (filter, sort, pagination)
 - [x] GET /api/data/{table}/{id}
 - [x] POST /api/data/{table} (Insert)
 - [x] PATCH /api/data/{table}/{id} (Update)
 - [x] DELETE /api/data/{table}/{id}
 
 ### 4.3 Batch API
-- [x] POST /api/batch/data (혼합 작업)
-- [x] POST /api/batch/data/{table}/insert (대량 삽입)
-- [x] PATCH /api/batch/data/{table} (필터 기반 업데이트)
-- [x] DELETE /api/batch/data/{table} (필터 기반 삭제)
+- [x] POST /api/batch/data (mixed operations)
+- [x] POST /api/batch/data/{table}/insert (bulk insert)
+- [x] PATCH /api/batch/data/{table} (filter-based update)
+- [x] DELETE /api/batch/data/{table} (filter-based delete)
 - [x] PUT /api/batch/data/{table} (Upsert)
 
-**주요 구현**:
-- `SchemaController`: 테이블, 컬럼, 인덱스, 관계 CRUD
-- `DataController`: 데이터 쿼리 및 CRUD
-- `BatchController`: 대량 작업
-- X-Tenant-Id 헤더 기반 테넌트 격리
-- 필터 표현식 (column:operator:value)
+**Key Implementations**:
+- `SchemaController`: Table, column, index, relation CRUD
+- `DataController`: Data query and CRUD
+- `BatchController`: Bulk operations
+- X-Tenant-Id header-based tenant isolation
+- Filter expressions (column:operator:value)
 
 ---
 
 ## Phase 5: GraphQL ✅ Completed
 
-**목표**: HotChocolate 기반 GraphQL
+**Goal**: HotChocolate-based GraphQL
 
-### 5.1 동적 스키마 생성
-- [x] 테이블 → GraphQL Type 매핑 (`DynamicSchemaBuilder`)
-- [x] Query 자동 생성 (`DynamicQuery` - GetTables, GetTable, GetRecords, GetRecord)
-- [x] Mutation 자동 생성 (`DynamicMutation` - CreateRecord, UpdateRecord, DeleteRecord, UpsertRecord, CreateRecords)
-- [x] 테넌트 컨텍스트 지원 (`ITenantContextAccessor`)
+### 5.1 Dynamic Schema Generation
+- [x] Table → GraphQL Type mapping (`DynamicSchemaBuilder`)
+- [x] Query generation (`DynamicQuery` - GetTables, GetTable, GetRecords, GetRecord)
+- [x] Mutation generation (`DynamicMutation` - CreateRecord, UpdateRecord, DeleteRecord, UpsertRecord, CreateRecords)
+- [x] Tenant context support (`ITenantContextAccessor`)
 
-### 5.2 관계 해석
-- [x] FK → GraphQL 관계 필드 (`RelationGraphType`)
-- [x] DataLoader 통합 (`TableByNameDataLoader`, `TableByIdDataLoader`, `RecordByIdDataLoader`, `RelatedRecordsDataLoader`)
+### 5.2 Relation Resolution
+- [x] FK → GraphQL relation fields (`RelationGraphType`)
+- [x] DataLoader integration (`TableByNameDataLoader`, `TableByIdDataLoader`, `RecordByIdDataLoader`, `RelatedRecordsDataLoader`)
 
 ### 5.3 Subscription
-- [x] GraphQL Subscription 지원 (`DynamicSubscription`)
-- [x] 변경 이벤트 스트리밍 (`ISubscriptionEventSender`, `HotChocolateSubscriptionEventSender`)
-- [x] WebSocket 지원 (in-memory subscriptions)
+- [x] GraphQL Subscription support (`DynamicSubscription`)
+- [x] Change event streaming (`ISubscriptionEventSender`, `HotChocolateSubscriptionEventSender`)
+- [x] WebSocket support (in-memory subscriptions)
 
 ---
 
 ## Phase 6: OData
 
-**목표**: OData v4 프로토콜 지원
+**Goal**: OData v4 protocol support
 
-### 6.1 EDM 모델
-- [ ] 동적 $metadata 생성
-- [ ] 엔티티 타입 매핑
+### 6.1 EDM Model
+- [ ] Dynamic $metadata generation
+- [ ] Entity type mapping
 
-### 6.2 쿼리 옵션
+### 6.2 Query Options
 - [ ] $filter, $orderby, $top, $skip
 - [ ] $select, $expand
 - [ ] $count
 
-### 6.3 CUD 작업
+### 6.3 CUD Operations
 - [ ] POST, PATCH, DELETE
-- [ ] 배치 요청
+- [ ] Batch requests
 
 ---
 
 ## Phase 7: Real-time (WebSocket)
 
-**목표**: 실시간 데이터 동기화
+**Goal**: Real-time data synchronization
 
 ### 7.1 SignalR Hub
-- [ ] MorphHub 구현
-- [ ] 테이블 구독/해제
+- [ ] MorphHub implementation
+- [ ] Table subscribe/unsubscribe
 
-### 7.2 변경 감지
+### 7.2 Change Detection
 - [ ] PostgreSQL LISTEN/NOTIFY
-- [ ] 변경 이벤트 브로드캐스트
+- [ ] Change event broadcast
 
-### 7.3 필터링
-- [ ] 구독 필터 지원
-- [ ] 선택적 필드 전송
+### 7.3 Filtering
+- [ ] Subscription filter support
+- [ ] Selective field transmission
 
 ---
 
 ## Phase 8: Webhook
 
-**목표**: 외부 시스템 연동
+**Goal**: External system integration
 
-### 8.1 웹훅 관리
-- [ ] 웹훅 등록/삭제
-- [ ] 이벤트 필터링
+### 8.1 Webhook Management
+- [ ] Webhook registration/deletion
+- [ ] Event filtering
 
-### 8.2 전송
-- [ ] HTTP 콜백 전송
-- [ ] HMAC 서명
-- [ ] 재시도 로직
+### 8.2 Delivery
+- [ ] HTTP callback delivery
+- [ ] HMAC signing
+- [ ] Retry logic
 
-### 8.3 모니터링
-- [ ] 전송 이력
-- [ ] 실패 알림
+### 8.3 Monitoring
+- [ ] Delivery history
+- [ ] Failure notifications
 
 ---
 
 ## Phase 9: Bulk Operations
 
-**목표**: 대량 데이터 처리
+**Goal**: Large-scale data processing
 
 ### 9.1 Import
-- [ ] CSV, JSON, NDJSON 파싱
-- [ ] 스트리밍 처리
-- [ ] Upsert 모드
+- [ ] CSV, JSON, NDJSON parsing
+- [ ] Streaming processing
+- [ ] Upsert mode
 
 ### 9.2 Export
-- [ ] CSV, JSON, XLSX 생성
-- [ ] 필터 기반 내보내기
+- [ ] CSV, JSON, XLSX generation
+- [ ] Filter-based export
 
-### 9.3 진행률
-- [ ] 진행률 추적
-- [ ] 취소 지원
+### 9.3 Progress
+- [ ] Progress tracking
+- [ ] Cancellation support
 
 ---
 
 ## Phase 10: Client SDKs
 
-**목표**: 클라이언트 라이브러리
+**Goal**: Client libraries
 
 ### 10.1 .NET SDK
-- [ ] MorphDB.Client 패키지
-- [ ] 타입 안전 쿼리 빌더
-- [ ] 실시간 구독
+- [ ] MorphDB.Client package
+- [ ] Type-safe query builder
+- [ ] Real-time subscriptions
 
 ### 10.2 TypeScript SDK
-- [ ] @morphdb/client 패키지
-- [ ] React Query 통합
+- [ ] @morphdb/client package
+- [ ] React Query integration
 
 ### 10.3 Python SDK
-- [ ] morphdb-python 패키지
-- [ ] 비동기 지원
+- [ ] morphdb-python package
+- [ ] Async support
 
 ---
 
 ## Phase 11: Security
 
-**목표**: 인증 및 접근 제어
+**Goal**: Authentication and access control
 
-### 11.1 API Key 시스템
-- [ ] anon-key: 공개 읽기 전용
-- [ ] service-key: 전체 접근
-- [ ] 키 관리 API
+### 11.1 API Key System
+- [ ] anon-key: Public read-only
+- [ ] service-key: Full access
+- [ ] Key management API
 
-### 11.2 JWT 인증
-- [ ] JWT Bearer 토큰
-- [ ] 클레임 기반 권한
+### 11.2 JWT Authentication
+- [ ] JWT Bearer tokens
+- [ ] Claim-based permissions
 
 ### 11.3 Row-Level Security
-- [ ] RLS 정책 정의
-- [ ] 테넌트 격리
+- [ ] RLS policy definition
+- [ ] Tenant isolation
 
 ---
 
-## Phase 12: Multi-tenant & Deployment
+## Phase 12: Deployment & Operations
 
-**목표**: 멀티테넌트 및 배포
+**Goal**: Deployment configurations
 
-### 12.1 테넌트 격리
-- [ ] 스키마 기반 격리
-- [ ] 테넌트별 커넥션 풀
+### 12.1 Deployment Options
+- [ ] Docker Compose (PostgreSQL + Redis + pgAdmin)
+- [ ] On-premise Docker Compose (external DB connection)
+- [ ] Kubernetes Helm charts
 
-### 12.2 감사 로깅
-- [ ] 작업 이력
-- [ ] 사용자 추적
+### 12.2 Observability
+- [ ] Health checks
+- [ ] Metrics (Prometheus)
+- [ ] Distributed tracing
 
-### 12.3 배포 구성
-- [ ] SaaS Docker Compose (PostgreSQL + Redis + pgAdmin)
-- [ ] On-premise Docker Compose (외부 DB 연결)
-- [ ] Kubernetes Helm 차트
+### 12.3 Documentation
+- [ ] API documentation (OpenAPI/Swagger)
+- [ ] Developer guides
+- [ ] Sample applications
 
 ---
 
 ## Version Milestones
 
-| Version | Phases | 목표 |
+| Version | Phases | Goal |
 |---------|--------|------|
-| 0.1.0 | 0-3 | Core 기능 완성 |
-| 0.2.0 | 4-6 | API 레이어 완성 |
-| 0.3.0 | 7-8 | Real-time 기능 |
+| 0.1.0 | 0-3 | Core functionality complete |
+| 0.2.0 | 4-6 | API layer complete |
+| 0.3.0 | 7-8 | Real-time features |
 | 0.4.0 | 9-10 | Bulk & SDKs |
 | 0.5.0 | 11-12 | Production Ready (Beta) |
 
 ---
 
+## Scope Definition
+
+### MorphDB (This Repository)
+
+MorphDB is the **open-source core** with MIT license, providing:
+
+| Area | Features |
+|------|----------|
+| Schema | Table, column, relation, index, view management |
+| Naming | logical_name ↔ hash_name mapping |
+| Type | Strong type system, PostgreSQL native types |
+| Validation | NOT NULL, UNIQUE, CHECK, FK constraints |
+| Encryption | Column-level encryption/decryption |
+| Default | DEFAULT values, auto_number, created_at/updated_at |
+| Computed | GENERATED columns, computed fields |
+| Query | Logical query → Physical query transformation |
+| API | REST, GraphQL, OData auto-generation |
+| Realtime | WebSocket-based change subscriptions |
+| Event | Webhook delivery |
+| Bulk | Import/Export |
+
+### Out of Scope (Enterprise/Cloud)
+
+The following features are provided by **MorphDB Enterprise** (commercial license):
+
+| Area | Features |
+|------|----------|
+| Multi-tenancy | Project/Organization management |
+| UI | Admin dashboard |
+| Auth | OIDC/SAML/LDAP integration |
+| Backup | Backup/Recovery |
+| Audit | Audit logging |
+| License | License management |
+
+---
+
 ## Contributing
 
-각 Phase는 feature branch에서 개발 후 PR로 병합합니다.
+Each phase is developed in a feature branch and merged via PR.
 
 ```bash
-git checkout -b feature/phase-1-schema-manager
-# ... 개발 ...
-git push origin feature/phase-1-schema-manager
-# PR 생성
+git checkout -b feature/phase-X-feature-name
+# ... develop ...
+git push origin feature/phase-X-feature-name
+# Create PR
 ```
+
+## License
+
+MIT License
