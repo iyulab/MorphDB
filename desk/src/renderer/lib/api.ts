@@ -221,7 +221,7 @@ export class MorphDBClient {
     })
   }
 
-  // Data
+  // Data (OData operations)
   async queryData(
     tableName: string,
     options?: {
@@ -230,19 +230,48 @@ export class MorphDBClient {
       $orderby?: string
       $filter?: string
       $select?: string
+      $count?: boolean
     }
-  ): Promise<{ value: Record<string, unknown>[] }> {
+  ): Promise<{ value: Record<string, unknown>[]; '@odata.count'?: number }> {
     const params = new URLSearchParams()
     if (options?.$top) params.append('$top', options.$top.toString())
     if (options?.$skip) params.append('$skip', options.$skip.toString())
     if (options?.$orderby) params.append('$orderby', options.$orderby)
     if (options?.$filter) params.append('$filter', options.$filter)
     if (options?.$select) params.append('$select', options.$select)
+    if (options?.$count) params.append('$count', 'true')
 
     const query = params.toString() ? `?${params.toString()}` : ''
-    return this.request<{ value: Record<string, unknown>[] }>(
+    return this.request<{ value: Record<string, unknown>[]; '@odata.count'?: number }>(
       `/odata/${tableName}${query}`
     )
+  }
+
+  async createRecord(
+    tableName: string,
+    data: Record<string, unknown>
+  ): Promise<Record<string, unknown>> {
+    return this.request<Record<string, unknown>>(`/odata/${tableName}`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    })
+  }
+
+  async updateRecord(
+    tableName: string,
+    key: string,
+    data: Record<string, unknown>
+  ): Promise<void> {
+    await this.request<void>(`/odata/${tableName}('${key}')`, {
+      method: 'PATCH',
+      body: JSON.stringify(data)
+    })
+  }
+
+  async deleteRecord(tableName: string, key: string): Promise<void> {
+    await this.request<void>(`/odata/${tableName}('${key}')`, {
+      method: 'DELETE'
+    })
   }
 
   // Health check

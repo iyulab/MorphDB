@@ -3,6 +3,7 @@ import { Database } from 'lucide-react'
 import { useConnectionStore } from '@/stores/connectionStore'
 import { useExplorerStore } from '@/stores/explorerStore'
 import { TableExplorer } from '@/components/explorer/TableExplorer'
+import { TableView } from '@/components/grid/TableView'
 
 export function MainContent(): ReactElement {
   const { activeConnection } = useConnectionStore()
@@ -51,17 +52,14 @@ export function MainContent(): ReactElement {
           <TableExplorer />
         </div>
 
-        {/* Right panel - Data grid placeholder */}
-        <div className="flex-1 p-4">
+        {/* Right panel - Data grid */}
+        <div className="flex-1 overflow-hidden">
           {selectedTable ? (
-            <div className="h-full rounded-lg border border-border bg-card p-4">
-              <h3 className="text-lg font-medium mb-2">{selectedTable}</h3>
-              <p className="text-sm text-muted-foreground">
-                Data grid will be implemented in Phase 24.5
-              </p>
+            <div className="h-full bg-card">
+              <TableView tableName={selectedTable} />
             </div>
           ) : (
-            <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-border">
+            <div className="flex h-full items-center justify-center">
               <p className="text-muted-foreground">Select a table to view data</p>
             </div>
           )}
