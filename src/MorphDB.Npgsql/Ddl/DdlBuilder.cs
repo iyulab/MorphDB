@@ -456,6 +456,21 @@ public static class DdlBuilder
 
             """);
 
+        // _migrations: Migration version tracking
+        sb.Append(CultureInfo.InvariantCulture, $"""
+            CREATE TABLE {QuoteIdentifier(systemSchema)}."_migrations" (
+                "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                "version" INTEGER NOT NULL UNIQUE,
+                "name" VARCHAR(255) NOT NULL,
+                "checksum" VARCHAR(64),
+                "applied_at" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                "duration_ms" BIGINT NOT NULL DEFAULT 0,
+                "is_rolled_back" BOOLEAN NOT NULL DEFAULT false,
+                "rolled_back_at" TIMESTAMPTZ
+            );
+
+            """);
+
         // Indexes for performance
         sb.Append(CultureInfo.InvariantCulture, $"""
             CREATE INDEX "idx__columns_table_id" ON {QuoteIdentifier(systemSchema)}."_columns"("table_id");

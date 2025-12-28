@@ -559,6 +559,263 @@ public sealed record JobProgressApiResponse
 
 #endregion
 
+#region Project API Models
+
+/// <summary>
+/// Request to create a new project.
+/// </summary>
+public sealed record CreateProjectApiRequest
+{
+    /// <summary>
+    /// Human-readable project name.
+    /// </summary>
+    public required string Name { get; init; }
+
+    /// <summary>
+    /// URL-safe unique identifier. If null, will be generated from name.
+    /// </summary>
+    public string? Slug { get; init; }
+
+    /// <summary>
+    /// Optional organization ID for hierarchical multi-tenancy.
+    /// </summary>
+    public Guid? OrganizationId { get; init; }
+
+    /// <summary>
+    /// Optional project settings.
+    /// </summary>
+    public ProjectSettingsApiModel? Settings { get; init; }
+}
+
+/// <summary>
+/// Request to update an existing project.
+/// </summary>
+public sealed record UpdateProjectApiRequest
+{
+    /// <summary>
+    /// New project name (optional).
+    /// </summary>
+    public string? Name { get; init; }
+
+    /// <summary>
+    /// Updated settings (optional). Null means no change.
+    /// </summary>
+    public ProjectSettingsApiModel? Settings { get; init; }
+}
+
+/// <summary>
+/// Project settings API model.
+/// </summary>
+public sealed record ProjectSettingsApiModel
+{
+    public string? DefaultLocale { get; init; }
+    public string? Timezone { get; init; }
+    public bool EnableAuditLog { get; init; } = true;
+    public int? MaxTables { get; init; }
+    public long? MaxStorageBytes { get; init; }
+    public RateLimitSettingsApiModel? RateLimits { get; init; }
+    public Dictionary<string, string>? Metadata { get; init; }
+
+    public static ProjectSettingsApiModel? FromModel(ProjectSettings? settings)
+    {
+        if (settings is null)
+            return null;
+        return new ProjectSettingsApiModel
+        {
+            DefaultLocale = settings.DefaultLocale,
+            Timezone = settings.Timezone,
+            EnableAuditLog = settings.EnableAuditLog,
+            MaxTables = settings.MaxTables,
+            MaxStorageBytes = settings.MaxStorageBytes,
+            RateLimits = RateLimitSettingsApiModel.FromModel(settings.RateLimits),
+            Metadata = settings.Metadata
+        };
+    }
+
+    public ProjectSettings ToModel() => new()
+    {
+        DefaultLocale = DefaultLocale,
+        Timezone = Timezone,
+        EnableAuditLog = EnableAuditLog,
+        MaxTables = MaxTables,
+        MaxStorageBytes = MaxStorageBytes,
+        RateLimits = RateLimits?.ToModel(),
+        Metadata = Metadata
+    };
+}
+
+/// <summary>
+/// Rate limit settings API model.
+/// </summary>
+public sealed record RateLimitSettingsApiModel
+{
+    public int? RequestsPerMinute { get; init; }
+    public int? RequestsPerHour { get; init; }
+    public int? MaxConcurrentConnections { get; init; }
+
+    public static RateLimitSettingsApiModel? FromModel(RateLimitSettings? settings)
+    {
+        if (settings is null)
+            return null;
+        return new RateLimitSettingsApiModel
+        {
+            RequestsPerMinute = settings.RequestsPerMinute,
+            RequestsPerHour = settings.RequestsPerHour,
+            MaxConcurrentConnections = settings.MaxConcurrentConnections
+        };
+    }
+
+    public RateLimitSettings ToModel() => new()
+    {
+        RequestsPerMinute = RequestsPerMinute,
+        RequestsPerHour = RequestsPerHour,
+        MaxConcurrentConnections = MaxConcurrentConnections
+    };
+}
+
+/// <summary>
+/// Project API response.
+/// </summary>
+public sealed record ProjectApiResponse
+{
+    public Guid Id { get; init; }
+    public Guid? OrganizationId { get; init; }
+    public required string Name { get; init; }
+    public required string Slug { get; init; }
+    public required string SystemSchema { get; init; }
+    public required string DataSchema { get; init; }
+    public required string Status { get; init; }
+    public ProjectSettingsApiModel? Settings { get; init; }
+    public DateTimeOffset CreatedAt { get; init; }
+    public DateTimeOffset UpdatedAt { get; init; }
+
+    public static ProjectApiResponse FromModel(Project project) => new()
+    {
+        Id = project.ProjectId,
+        OrganizationId = project.OrganizationId,
+        Name = project.Name,
+        Slug = project.Slug,
+        SystemSchema = project.SystemSchema,
+        DataSchema = project.DataSchema,
+        Status = project.Status.ToString().ToLowerInvariant(),
+        Settings = ProjectSettingsApiModel.FromModel(project.Settings),
+        CreatedAt = project.CreatedAt,
+        UpdatedAt = project.UpdatedAt
+    };
+}
+
+/// <summary>
+/// Project statistics API response.
+/// </summary>
+public sealed record ProjectStatsApiResponse
+{
+    public Guid ProjectId { get; init; }
+    public required SchemaStatsApiResponse SystemSchemaStats { get; init; }
+    public required SchemaStatsApiResponse DataSchemaStats { get; init; }
+    public long TotalSizeBytes { get; init; }
+    public int TotalTableCount { get; init; }
+
+    public static ProjectStatsApiResponse FromModel(ProjectSchemaStats stats) => new()
+    {
+        ProjectId = stats.ProjectId,
+        SystemSchemaStats = SchemaStatsApiResponse.FromModel(stats.SystemSchemaStats),
+        DataSchemaStats = SchemaStatsApiResponse.FromModel(stats.DataSchemaStats),
+        TotalSizeBytes = stats.TotalSizeBytes,
+        TotalTableCount = stats.TotalTableCount
+    };
+}
+
+/// <summary>
+/// Schema statistics API response.
+/// </summary>
+public sealed record SchemaStatsApiResponse
+{
+    public required string SchemaName { get; init; }
+    public int TableCount { get; init; }
+    public int IndexCount { get; init; }
+    public long TotalSizeBytes { get; init; }
+    public long DataSizeBytes { get; init; }
+    public long IndexSizeBytes { get; init; }
+    public DateTimeOffset? LastModified { get; init; }
+
+    public static SchemaStatsApiResponse FromModel(SchemaStats stats) => new()
+    {
+        SchemaName = stats.SchemaName,
+        TableCount = stats.TableCount,
+        IndexCount = stats.IndexCount,
+        TotalSizeBytes = stats.TotalSizeBytes,
+        DataSizeBytes = stats.DataSizeBytes,
+        IndexSizeBytes = stats.IndexSizeBytes,
+        LastModified = stats.LastModified
+    };
+}
+
+/// <summary>
+/// Schema health report API response.
+/// </summary>
+public sealed record SchemaHealthApiResponse
+{
+    public Guid ProjectId { get; init; }
+    public bool IsHealthy { get; init; }
+    public required IReadOnlyList<SchemaHealthIssueApiResponse> Issues { get; init; }
+    public DateTimeOffset CheckedAt { get; init; }
+
+    public static SchemaHealthApiResponse FromModel(SchemaHealthReport report) => new()
+    {
+        ProjectId = report.ProjectId,
+        IsHealthy = report.IsHealthy,
+        Issues = report.Issues.Select(SchemaHealthIssueApiResponse.FromModel).ToList(),
+        CheckedAt = report.CheckedAt
+    };
+}
+
+/// <summary>
+/// Schema health issue API response.
+/// </summary>
+public sealed record SchemaHealthIssueApiResponse
+{
+    public required string Code { get; init; }
+    public required string Message { get; init; }
+    public required string Severity { get; init; }
+    public string? AffectedObject { get; init; }
+
+    public static SchemaHealthIssueApiResponse FromModel(SchemaHealthIssue issue) => new()
+    {
+        Code = issue.Code,
+        Message = issue.Message,
+        Severity = issue.Severity.ToString().ToLowerInvariant(),
+        AffectedObject = issue.AffectedObject
+    };
+}
+
+/// <summary>
+/// Query parameters for project list endpoint.
+/// </summary>
+public sealed record ProjectQueryParameters
+{
+    /// <summary>
+    /// Filter by organization ID.
+    /// </summary>
+    public Guid? OrganizationId { get; init; }
+
+    /// <summary>
+    /// Filter by status.
+    /// </summary>
+    public string? Status { get; init; }
+
+    /// <summary>
+    /// Page number (1-based).
+    /// </summary>
+    public int Page { get; init; } = 1;
+
+    /// <summary>
+    /// Page size (default: 50, max: 100).
+    /// </summary>
+    public int PageSize { get; init; } = 50;
+}
+
+#endregion
+
 #region Helper Extensions
 
 public static class ApiModelExtensions

@@ -138,6 +138,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IProjectRepository, ProjectRepository>();
         services.AddSingleton<IProjectService, ProjectService>();
 
+        // Register migration services (Phase 18: Schema Migration & Provisioning)
+        services.AddSingleton<ISchemaMigrationService, PostgresSchemaMigrationService>();
+
         return services;
     }
 }
