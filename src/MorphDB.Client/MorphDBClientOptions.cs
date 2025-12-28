@@ -1,0 +1,42 @@
+namespace MorphDB.Client;
+
+/// <summary>
+/// Configuration options for the MorphDB client.
+/// </summary>
+public sealed class MorphDBClientOptions
+{
+    /// <summary>
+    /// Tenant ID for multi-tenant operations.
+    /// </summary>
+    public Guid TenantId { get; set; }
+
+    /// <summary>
+    /// API key for authentication.
+    /// </summary>
+    public string? ApiKey { get; set; }
+
+    /// <summary>
+    /// JWT token for authenticated requests.
+    /// </summary>
+    public string? JwtToken { get; set; }
+
+    /// <summary>
+    /// Request timeout. Default is 30 seconds.
+    /// </summary>
+    public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// Number of retry attempts for failed requests. Default is 3.
+    /// </summary>
+    public int RetryCount { get; set; } = 3;
+
+    /// <summary>
+    /// Delay between retry attempts. Default is 1 second.
+    /// </summary>
+    public TimeSpan RetryDelay { get; set; } = TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    /// Custom HTTP message handler for testing or proxy scenarios.
+    /// </summary>
+    public HttpMessageHandler? HttpMessageHandler { get; set; }
+}

@@ -1,0 +1,44 @@
+{
+  "name": "@morphdb/client",
+  "version": "0.1.0",
+  "description": "Official TypeScript client SDK for MorphDB - a PostgreSQL-based dynamic schema database service",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rimraf dist",
+    "prepublishOnly": "npm run clean && npm run build",
+    "test": "jest",
+    "lint": "eslint src --ext .ts"
+  },
+  "keywords": [
+    "morphdb",
+    "database",
+    "sdk",
+    "client",
+    "postgresql",
+    "dynamic-schema",
+    "typescript"
+  ],
+  "author": "iyulab",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/iyulab/morphdb.git"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@microsoft/signalr": "^8.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "rimraf": "^5.0.5",
+    "typescript": "^5.3.3"
+  }
+}
