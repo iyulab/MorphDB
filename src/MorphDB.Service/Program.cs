@@ -2,12 +2,15 @@ using System.Globalization;
 using HealthChecks.UI.Client;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.OpenApi.Models;
+using MorphDB.Core.Abstractions;
 using MorphDB.Core.Encryption;
 using MorphDB.Npgsql;
 using MorphDB.Npgsql.Security;
 using MorphDB.Service.Extensions;
 using MorphDB.Service.GraphQL;
+using MorphDB.Service.Middleware;
 using MorphDB.Service.OData;
+using MorphDB.Service.RateLimiting;
 using MorphDB.Service.Realtime;
 using MorphDB.Service.Security;
 using MorphDB.Service.Services;
@@ -172,6 +175,11 @@ try
         options.BatchSize = 5;
     });
 
+    // Add rate limiting and quota services
+    builder.Services.Configure<RateLimitConfig>(builder.Configuration.GetSection("RateLimiting"));
+    builder.Services.AddSingleton<IRateLimiter, MemoryRateLimiter>();
+    builder.Services.AddSingleton<IQuotaService, MemoryQuotaService>();
+
     // Health checks with dependencies
     var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
     builder.Services.AddHealthChecks()
@@ -224,6 +232,7 @@ try
     app.UseWebSockets(); // Required for GraphQL subscriptions
     app.UseAuthentication();
     app.UseAuthorization();
+    app.UseRateLimiting(); // Rate limiting after auth
 
     app.MapControllers();
     app.MapGraphQL().WithOptions(new HotChocolate.AspNetCore.GraphQLServerOptions

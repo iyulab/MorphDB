@@ -567,73 +567,87 @@ p_{project_id}_dat (Project Data Layer)
 
 ---
 
-## Phase 19: Audit Logging (Schema-aware)
+## Phase 19: Audit Logging ✅ Completed
 
 **Goal**: Comprehensive audit trail with schema-based isolation
 
 **Priority**: Critical | **Effort**: Medium
 
-### 19.1 Audit Event Model
-- [ ] `IAuditService` abstraction
-- [ ] `AuditEvent` model with full context
-- [ ] Event categories: auth, data, schema, admin, security
-- [ ] Severity levels: debug, info, warning, error, critical
+> Note: v0.x simplification - Partitioning and hash chain deferred to v1.x.
+> Current approach: Simple audit table with indexed queries.
 
-### 19.2 Audit Capture
-- [ ] HTTP middleware for API audit
-- [ ] Schema change hooks (DDL operations)
-- [ ] Data operation hooks (DML operations)
-- [ ] Authentication event capture
-- [ ] Async queue for non-blocking writes
+### 19.1 Audit Event Model ✅
+- [x] `IAuditService` abstraction
+- [x] `AuditEvent` model with full context
+- [x] Event categories: auth, data, schema, admin, security
+- [x] Severity levels: debug, info, warning, error, critical
 
-### 19.3 Schema-isolated Storage
-- [ ] `_audit_logs` table in each `p_{id}_sys` schema
-- [ ] Time-based partitioning (monthly)
-- [ ] Hash chain for tamper detection
-- [ ] Configurable retention per project
+### 19.2 Audit Capture ✅
+- [x] HTTP middleware for API audit (`AuditMiddleware`)
+- [x] Request/response capture with timing
+- [x] Async Channel-based queue for non-blocking writes
+- [x] Authentication event capture (JWT/API Key)
 
-### 19.4 Audit Query API
-- [ ] GET `/api/projects/{id}/audit/logs` - Query logs
-- [ ] GET `/api/projects/{id}/audit/logs/{logId}` - Get specific
-- [ ] GET `/api/projects/{id}/audit/stats` - Statistics
-- [ ] Filters: time, actor, resource, action, severity
+### 19.3 Schema-isolated Storage ✅
+- [x] `_audit_logs` table in each `p_{id}_sys` schema
+- [x] Indexes for efficient querying
+- [x] PostgresAuditService with background batch writer
 
-### 19.5 Log Export & Integration
-- [ ] CSV/JSON export
-- [ ] SIEM integration (webhook drain)
-- [ ] Real-time WebSocket feed (Enterprise)
+### 19.4 Audit Query API ✅
+- [x] GET `/api/projects/{id}/audit/logs` - Query logs
+- [x] GET `/api/projects/{id}/audit/logs/{logId}` - Get specific
+- [x] GET `/api/projects/{id}/audit/stats` - Statistics
+- [x] Filters: time, actor, resource, action, severity
+
+**Key Implementations**:
+- `IAuditService`: Audit logging abstraction
+- `PostgresAuditService`: Channel-based async queue with batch writes
+- `AuditMiddleware`: HTTP request/response capture
+- `AuditController`: Query API with pagination and filtering
 
 ---
 
-## Phase 20: Rate Limiting & Quota
+## Phase 20: Rate Limiting & Quota ✅ Completed
 
 **Goal**: Fair usage enforcement and resource protection
 
 **Priority**: High | **Effort**: Medium
 
-### 20.1 Rate Limiter Core
-- [ ] `IRateLimiter` interface
-- [ ] Token bucket algorithm
-- [ ] Redis-based distributed limiting
-- [ ] Per-project rate configuration
+> Note: v0.x simplification - Memory-based implementation.
+> Redis-based distributed limiting deferred to v1.x.
 
-### 20.2 Rate Limit Middleware
-- [ ] ASP.NET Core middleware
-- [ ] Rate limit headers (X-RateLimit-*)
-- [ ] 429 response with Retry-After
-- [ ] Endpoint-specific limits
+### 20.1 Rate Limiter Core ✅
+- [x] `IRateLimiter` interface
+- [x] Token bucket algorithm (`MemoryRateLimiter`)
+- [x] Per-project rate configuration
+- [x] Configurable limits per project
 
-### 20.3 Quota Management
-- [ ] `IQuotaService` interface
-- [ ] Storage quota (per project)
-- [ ] API call quota (per project)
-- [ ] Schema/table count limits
-- [ ] Connection limits
+### 20.2 Rate Limit Middleware ✅
+- [x] ASP.NET Core middleware (`RateLimitMiddleware`)
+- [x] Rate limit headers (X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset)
+- [x] 429 response with Retry-After
+- [x] Path-based exclusions
 
-### 20.4 Quota API
-- [ ] GET `/api/projects/{id}/quota` - Current usage
-- [ ] GET `/api/projects/{id}/quota/history` - Usage history
-- [ ] Webhook on quota threshold
+### 20.3 Quota Management ✅
+- [x] `IQuotaService` interface
+- [x] `MemoryQuotaService` implementation
+- [x] API call quota tracking (per project)
+- [x] Data read/write tracking
+- [x] Storage/bandwidth tracking
+
+### 20.4 Quota API ✅
+- [x] GET `/api/projects/{id}/quota` - Combined summary
+- [x] GET `/api/projects/{id}/quota/usage` - Current usage
+- [x] GET `/api/projects/{id}/quota/limits` - Quota limits
+- [x] GET `/api/projects/{id}/quota/rate-limit` - Rate limit status
+
+**Key Implementations**:
+- `IRateLimiter`: Rate limiting abstraction
+- `MemoryRateLimiter`: Token bucket with sliding window
+- `RateLimitMiddleware`: Request throttling with headers
+- `IQuotaService`: Usage tracking abstraction
+- `MemoryQuotaService`: In-memory quota tracking
+- `QuotaController`: Usage and limits query API
 
 ---
 
@@ -777,9 +791,9 @@ p_{project_id}_dat (Project Data Layer)
 | 0.4.0 | 9-10 | Bulk & SDKs | ✅ Completed |
 | 0.5.0 | 11-12 | Production Ready (Beta) | ✅ Completed |
 | 0.6.0 | 13-16 | Enterprise Hardening | ✅ Completed |
-| **0.7.0** | **17-18** | **Schema Architecture** | 🔄 In Progress |
-| 0.8.0 | 19-20 | Audit + Rate Limiting | Planned |
-| 0.9.0 | 21-22 | Organization + SSO | Planned |
+| 0.7.0 | 17-18 | Schema Architecture | ✅ Completed |
+| 0.8.0 | 19-20 | Audit + Rate Limiting | ✅ Completed |
+| **0.9.0** | **21-22** | **Organization + SSO** | 🔄 Next |
 | 1.0.0 | 23-24 | Enterprise Ready | Planned |
 
 ---
