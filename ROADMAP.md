@@ -753,36 +753,99 @@ p_{project_id}_dat (Project Data Layer)
 
 ---
 
-## Phase 24: Admin Dashboard
+## Phase 24: Desktop Client (MorphDB Studio)
 
-**Goal**: Self-service management and monitoring UI
+**Goal**: Native database management tool like pgAdmin/DBeaver/TablePlus
 
-**Priority**: Medium | **Effort**: High
+**Priority**: High | **Effort**: High
 
-### 24.1 Dashboard Backend
-- [ ] GET `/api/dashboard/overview`
-- [ ] GET `/api/dashboard/metrics`
-- [ ] GET `/api/dashboard/projects`
-- [ ] WebSocket real-time updates
+**Tech Stack**: Electron + Vite + React 19 + TypeScript + Tailwind CSS v4 + shadcn/ui
 
-### 24.2 Monitoring
-- [ ] Query performance metrics
-- [ ] Connection pool status
-- [ ] Storage usage per project
-- [ ] API call statistics
+**Location**: `desk/`
 
-### 24.3 Alerting
-- [ ] `IAlertService` interface
-- [ ] Threshold-based alerts
-- [ ] Notification channels (email, Slack, webhook)
-- [ ] Alert policies
+### 24.1 Foundation & Scaffolding
+- [ ] electron-vite project setup
+- [ ] React 19 + TypeScript configuration
+- [ ] Tailwind CSS v4 + shadcn/ui integration
+- [ ] Project structure (main/renderer/preload)
+- [ ] IPC communication layer
+- [ ] Basic window management (minimize, maximize, close)
+- [ ] Application menu structure
 
-### 24.4 UI Components
-- [ ] Project list with health status
-- [ ] Schema explorer (visual)
-- [ ] Query console
-- [ ] Audit log viewer
-- [ ] Backup management
+### 24.2 Connection Management
+- [ ] Connection profile model (URL, API Key, Tenant ID)
+- [ ] Add/Edit/Delete connection dialog
+- [ ] Connection testing with health check
+- [ ] Secure credential storage (electron-store + encryption)
+- [ ] Multi-connection tabs
+- [ ] Recent connections history
+- [ ] Connection status indicator
+
+### 24.3 Project & Table Explorer
+- [ ] Tree view component (projects → tables)
+- [ ] Lazy loading for large projects
+- [ ] Table metadata sidebar (columns, relations, indexes)
+- [ ] Context menu (Create, Edit, Delete, Refresh)
+- [ ] Search/filter tables
+- [ ] Favorites/pinned tables
+- [ ] Table icon by column count/type
+
+### 24.4 Table CRUD
+- [ ] Create table wizard (name, description)
+- [ ] Edit table properties dialog
+- [ ] Delete table with confirmation
+- [ ] Duplicate table structure
+- [ ] Table structure view (columns, relations)
+- [ ] DDL export (CREATE TABLE statement)
+
+### 24.5 Column Management
+- [ ] Column list view with drag-reorder
+- [ ] Add column dialog (all MorphDB types)
+- [ ] Edit column properties (name, type, nullable, default)
+- [ ] Delete column with impact warning
+- [ ] Column type visualization (icons)
+- [ ] Relation indicator (FK badge)
+
+### 24.6 Data Grid & Record CRUD
+- [ ] Virtualized data grid (tanstack-table + tanstack-virtual)
+- [ ] Pagination with configurable page size
+- [ ] Column sorting (multi-column)
+- [ ] Column filtering (per-type filters)
+- [ ] Inline cell editing with validation
+- [ ] Add new row (empty row at top/bottom)
+- [ ] Delete row(s) with confirmation
+- [ ] Bulk selection and operations
+- [ ] Copy/paste support (cells, rows)
+- [ ] Null value handling
+- [ ] JSON/Array column expansion
+
+### 24.7 Query Console
+- [ ] OData query builder (visual)
+- [ ] GraphQL query editor with syntax highlight
+- [ ] Query execution with timing
+- [ ] Results grid with export
+- [ ] Query history with search
+- [ ] Saved queries per connection
+- [ ] Explain query (if supported)
+
+### 24.8 Import/Export
+- [ ] Import from CSV/JSON/Excel
+- [ ] Export to CSV/JSON/Excel
+- [ ] Column mapping UI
+- [ ] Preview before import
+- [ ] Progress indicator for large files
+- [ ] Bulk job status tracking
+
+### 24.9 Distribution & Polish
+- [ ] Dark/Light theme with system preference
+- [ ] Keyboard shortcuts (Cmd/Ctrl+S, etc.)
+- [ ] Settings management (preferences)
+- [ ] Auto-update (electron-updater)
+- [ ] Cross-platform builds (Windows, macOS, Linux)
+- [ ] Installer/DMG/AppImage packaging
+- [ ] Error handling & crash reporting
+- [ ] Telemetry (opt-in)
+- [ ] Documentation & help
 
 ---
 
@@ -799,7 +862,7 @@ p_{project_id}_dat (Project Data Layer)
 | 0.7.0 | 17-18 | Schema Architecture | ✅ Completed |
 | 0.8.0 | 19-20 | Audit + Rate Limiting | ✅ Completed |
 | **0.9.0** | **21-22** | **Organization + SSO** | ✅ Completed |
-| **1.0.0** | **23-24** | **Enterprise Ready** | 🔄 Next |
+| **1.0.0** | **23-24** | **Backup + Desktop Client** | 🔄 Next |
 
 ---
 
