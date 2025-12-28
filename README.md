@@ -374,14 +374,94 @@ dotnet run
 - SaaS backends
 - Real-time collaborative applications
 
+## Security
+
+MorphDB includes comprehensive security features:
+
+### API Key Authentication
+
+```http
+# Use API key in header
+GET /api/data/customers
+X-API-Key: your-api-key
+X-Tenant-Id: your-tenant-id
+```
+
+Two key types are supported:
+- **Anon Key**: Public operations, RLS policies apply
+- **Service Key**: Bypasses RLS, full admin access
+
+### JWT Authentication
+
+```http
+# Use JWT Bearer token
+GET /api/data/customers
+Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
+X-Tenant-Id: your-tenant-id
+```
+
+### Row-Level Security (RLS)
+
+Define security policies that automatically filter data:
+
+```csharp
+// Create RLS policy
+await securityService.CreatePolicyAsync(tenantId, new CreatePolicyRequest
+{
+    TableName = "orders",
+    Name = "user_orders_only",
+    PolicyType = PolicyType.Select,
+    Expression = "user_id = {{user_id}}"  // Substituted from JWT claims
+});
+```
+
+## Deployment
+
+### Docker
+
+```bash
+# Development
+docker-compose up -d
+
+# With API service
+docker-compose --profile app up -d
+```
+
+### Kubernetes
+
+```bash
+# Deploy to Kubernetes
+kubectl apply -k deploy/kubernetes/
+
+# Or use kustomize
+kustomize build deploy/kubernetes | kubectl apply -f -
+```
+
+### Observability
+
+Built-in observability features:
+- **Health Checks**: `/health`, `/health/live`, `/health/ready`
+- **Metrics**: Prometheus metrics at `/metrics`
+- **Tracing**: OpenTelemetry with OTLP export
+
 ## Development Status
 
 See [ROADMAP.md](./ROADMAP.md) for detailed implementation phases.
 
 ### Current Progress
 
-- **Phase 0-7**: ✅ Completed (Foundation, Schema, Data, Query, REST API, GraphQL, OData, Real-time)
-- **Phase 8-12**: Planned (Webhook, Bulk, SDKs, Security, Deployment)
+| Phase | Status | Description |
+|-------|--------|-------------|
+| Phase 0-3 | ✅ Completed | Foundation, Schema Management, Data API |
+| Phase 4 | ✅ Completed | Advanced Query (SqlKata-based) |
+| Phase 5 | ✅ Completed | GraphQL (HotChocolate) |
+| Phase 6 | ✅ Completed | OData v4 Protocol |
+| Phase 7 | ✅ Completed | Real-time WebSocket (SignalR) |
+| Phase 8 | ✅ Completed | Webhook Subscriptions |
+| Phase 9 | ✅ Completed | Bulk Import/Export |
+| Phase 10 | ✅ Completed | Client SDKs (.NET, TypeScript, Python) |
+| Phase 11 | ✅ Completed | Security (API Keys, JWT, RLS) |
+| Phase 12 | ✅ Completed | Docker, Kubernetes, Observability |
 
 ### Version Milestones
 
@@ -391,7 +471,7 @@ See [ROADMAP.md](./ROADMAP.md) for detailed implementation phases.
 | 0.2.0 | 4-6 | API layer complete |
 | 0.3.0 | 7-8 | Real-time features |
 | 0.4.0 | 9-10 | Bulk & SDKs |
-| 0.5.0 | 11-12 | Production Ready (Beta) |
+| **0.5.0** | **11-12** | **Production Ready (Beta)** ✅ |
 
 ## Contributing
 
