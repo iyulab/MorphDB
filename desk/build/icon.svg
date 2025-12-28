@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366f1"/>
+      <stop offset="100%" style="stop-color:#4f46e5"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  <g fill="white">
+    <!-- Database cylinder -->
+    <ellipse cx="256" cy="160" rx="120" ry="40"/>
+    <rect x="136" y="160" width="240" height="180"/>
+    <ellipse cx="256" cy="340" rx="120" ry="40"/>
+    <!-- Data lines -->
+    <rect x="176" y="200" width="160" height="8" rx="4" opacity="0.6"/>
+    <rect x="176" y="240" width="120" height="8" rx="4" opacity="0.6"/>
+    <rect x="176" y="280" width="140" height="8" rx="4" opacity="0.6"/>
+  </g>
+  <!-- M letter overlay -->
+  <text x="256" y="420" font-family="Arial, sans-serif" font-size="80" font-weight="bold" fill="white" text-anchor="middle">M</text>
+</svg>
