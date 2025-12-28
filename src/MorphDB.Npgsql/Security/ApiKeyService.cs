@@ -1,0 +1,246 @@
+using System.Security.Cryptography;
+using Dapper;
+using MorphDB.Core.Security;
+using Npgsql;
+
+namespace MorphDB.Npgsql.Security;
+
+/// <summary>
+/// PostgreSQL implementation of API key service.
+/// </summary>
+public sealed class ApiKeyService : IApiKeyService
+{
+    private readonly NpgsqlDataSource _dataSource;
+    private const int KeyLength = 32;
+    private const string KeyPrefix = "morphdb_";
+
+    public ApiKeyService(NpgsqlDataSource dataSource)
+    {
+        _dataSource = dataSource;
+    }
+
+    public async Task<(ApiKey Key, string RawKey)> CreateKeyAsync(
+        Guid tenantId,
+        ApiKeyType keyType,
+        string name,
+        string? description = null,
+        DateTimeOffset? expiresAt = null,
+        CancellationToken cancellationToken = default)
+    {
+        // Generate a secure random key
+        var rawKeyBytes = RandomNumberGenerator.GetBytes(KeyLength);
+        var rawKeyBase64 = Convert.ToBase64String(rawKeyBytes)
+            .Replace('+', '-')
+            .Replace('/', '_')
+            .TrimEnd('=');
+
+        var typePrefix = keyType == ApiKeyType.Anon ? "anon_" : "svc_";
+        var rawKey = $"{KeyPrefix}{typePrefix}{rawKeyBase64}";
+        var keyPrefixPart = rawKey[..Math.Min(16, rawKey.Length)];
+        var keyHash = BCrypt.Net.BCrypt.HashPassword(rawKey);
+
+        var apiKey = new ApiKey
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            KeyType = keyType,
+            KeyHash = keyHash,
+            KeyPrefix = keyPrefixPart,
+            Name = name,
+            Description = description,
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+            ExpiresAt = expiresAt
+        };
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO morphdb._morph_api_keys (id, tenant_id, key_type, key_hash, key_prefix, name, description, is_active, created_at, expires_at)
+            VALUES (@Id, @TenantId, @KeyType, @KeyHash, @KeyPrefix, @Name, @Description, @IsActive, @CreatedAt, @ExpiresAt)
+            """,
+            new
+            {
+                apiKey.Id,
+                apiKey.TenantId,
+                KeyType = (int)apiKey.KeyType,
+                apiKey.KeyHash,
+                apiKey.KeyPrefix,
+                apiKey.Name,
+                apiKey.Description,
+                apiKey.IsActive,
+                apiKey.CreatedAt,
+                apiKey.ExpiresAt
+            });
+
+        return (apiKey, rawKey);
+    }
+
+    public async Task<ApiKeyValidationResult> ValidateKeyAsync(
+        string rawKey,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(rawKey))
+        {
+            return ApiKeyValidationResult.Failure("API key is required");
+        }
+
+        if (!rawKey.StartsWith(KeyPrefix, StringComparison.Ordinal))
+        {
+            return ApiKeyValidationResult.Failure("Invalid API key format");
+        }
+
+        var keyPrefix = rawKey[..Math.Min(16, rawKey.Length)];
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        var keys = await connection.QueryAsync<ApiKeyRecord>(
+            """
+            SELECT id, tenant_id, key_type, key_hash, key_prefix, name, description, is_active, created_at, expires_at, last_used_at
+            FROM morphdb._morph_api_keys
+            WHERE key_prefix = @KeyPrefix AND is_active = true
+            """,
+            new { KeyPrefix = keyPrefix });
+
+        foreach (var record in keys)
+        {
+            if (BCrypt.Net.BCrypt.Verify(rawKey, record.KeyHash))
+            {
+                if (record.ExpiresAt.HasValue && record.ExpiresAt.Value < DateTimeOffset.UtcNow)
+                {
+                    return ApiKeyValidationResult.Failure("API key has expired");
+                }
+
+                var apiKey = MapToApiKey(record);
+
+                // Update last used timestamp (fire and forget)
+                _ = UpdateLastUsedAsync(apiKey.Id, cancellationToken);
+
+                return ApiKeyValidationResult.Success(apiKey);
+            }
+        }
+
+        return ApiKeyValidationResult.Failure("Invalid API key");
+    }
+
+    public async Task<IReadOnlyList<ApiKey>> GetKeysAsync(
+        Guid tenantId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        var records = await connection.QueryAsync<ApiKeyRecord>(
+            """
+            SELECT id, tenant_id, key_type, key_hash, key_prefix, name, description, is_active, created_at, expires_at, last_used_at
+            FROM morphdb._morph_api_keys
+            WHERE tenant_id = @TenantId
+            ORDER BY created_at DESC
+            """,
+            new { TenantId = tenantId });
+
+        return records.Select(MapToApiKey).ToList();
+    }
+
+    public async Task RevokeKeyAsync(
+        Guid tenantId,
+        Guid keyId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await connection.ExecuteAsync(
+            """
+            UPDATE morphdb._morph_api_keys
+            SET is_active = false
+            WHERE id = @KeyId AND tenant_id = @TenantId
+            """,
+            new { KeyId = keyId, TenantId = tenantId });
+    }
+
+    public async Task<(ApiKey Key, string RawKey)> RotateKeyAsync(
+        Guid tenantId,
+        Guid keyId,
+        bool revokeOld = true,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        var oldKey = await connection.QueryFirstOrDefaultAsync<ApiKeyRecord>(
+            """
+            SELECT id, tenant_id, key_type, key_hash, key_prefix, name, description, is_active, created_at, expires_at, last_used_at
+            FROM morphdb._morph_api_keys
+            WHERE id = @KeyId AND tenant_id = @TenantId
+            """,
+            new { KeyId = keyId, TenantId = tenantId });
+
+        if (oldKey == null)
+        {
+            throw new InvalidOperationException($"API key {keyId} not found");
+        }
+
+        // Create new key with same properties
+        var result = await CreateKeyAsync(
+            tenantId,
+            (ApiKeyType)oldKey.KeyType,
+            $"{oldKey.Name} (rotated)",
+            oldKey.Description,
+            oldKey.ExpiresAt,
+            cancellationToken);
+
+        // Optionally revoke old key
+        if (revokeOld)
+        {
+            await RevokeKeyAsync(tenantId, keyId, cancellationToken);
+        }
+
+        return result;
+    }
+
+    public async Task UpdateLastUsedAsync(
+        Guid keyId,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+            await connection.ExecuteAsync(
+                """
+                UPDATE morphdb._morph_api_keys
+                SET last_used_at = @LastUsedAt
+                WHERE id = @KeyId
+                """,
+                new { KeyId = keyId, LastUsedAt = DateTimeOffset.UtcNow });
+        }
+        catch
+        {
+            // Ignore errors for last used update
+        }
+    }
+
+    private static ApiKey MapToApiKey(ApiKeyRecord record)
+    {
+        return new ApiKey
+        {
+            Id = record.Id,
+            TenantId = record.TenantId,
+            KeyType = (ApiKeyType)record.KeyType,
+            KeyHash = record.KeyHash,
+            KeyPrefix = record.KeyPrefix,
+            Name = record.Name,
+            Description = record.Description,
+            IsActive = record.IsActive,
+            CreatedAt = record.CreatedAt,
+            ExpiresAt = record.ExpiresAt,
+            LastUsedAt = record.LastUsedAt
+        };
+    }
+
+    private sealed record ApiKeyRecord(
+        Guid Id,
+        Guid TenantId,
+        int KeyType,
+        string KeyHash,
+        string KeyPrefix,
+        string Name,
+        string? Description,
+        bool IsActive,
+        DateTimeOffset CreatedAt,
+        DateTimeOffset? ExpiresAt,
+        DateTimeOffset? LastUsedAt);
+}

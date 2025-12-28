@@ -3,6 +3,7 @@ using Dapper;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
+using MorphDB.Core.Security;
 using MorphDB.Npgsql.Dml;
 using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Query;
@@ -19,28 +20,36 @@ public sealed class PostgresDataService : IMorphDataService
 {
     private readonly NpgsqlDataSource _dataSource;
     private readonly IMetadataRepository _metadataRepository;
+    private readonly ISecurityPolicyService _securityPolicyService;
+    private readonly ISecurityContextAccessor _securityContextAccessor;
     private readonly string _primaryKeyLogicalName;
 
     /// <summary>
     /// Creates a new PostgresDataService.
     /// </summary>
-    /// <param name="dataSource">NpgsqlDataSource for database connections.</param>
-    /// <param name="metadataRepository">Metadata repository for schema lookups.</param>
-    /// <param name="primaryKeyLogicalName">Logical name of the primary key column (default: "id").</param>
     public PostgresDataService(
         NpgsqlDataSource dataSource,
         IMetadataRepository metadataRepository,
+        ISecurityPolicyService securityPolicyService,
+        ISecurityContextAccessor securityContextAccessor,
         string primaryKeyLogicalName = "id")
     {
         _dataSource = dataSource ?? throw new ArgumentNullException(nameof(dataSource));
         _metadataRepository = metadataRepository ?? throw new ArgumentNullException(nameof(metadataRepository));
+        _securityPolicyService = securityPolicyService ?? throw new ArgumentNullException(nameof(securityPolicyService));
+        _securityContextAccessor = securityContextAccessor ?? throw new ArgumentNullException(nameof(securityContextAccessor));
         _primaryKeyLogicalName = primaryKeyLogicalName;
     }
 
     /// <inheritdoc />
     public IMorphQueryBuilder Query(Guid tenantId)
     {
-        return new MorphQueryBuilder(_dataSource, _metadataRepository, tenantId);
+        return new MorphQueryBuilder(
+            _dataSource,
+            _metadataRepository,
+            _securityPolicyService,
+            _securityContextAccessor,
+            tenantId);
     }
 
     /// <inheritdoc />

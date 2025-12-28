@@ -1,6 +1,7 @@
 using Dapper;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Models;
+using MorphDB.Core.Security;
 using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Repositories;
 using Npgsql;
@@ -11,54 +12,79 @@ namespace MorphDB.Npgsql.Query;
 
 /// <summary>
 /// PostgreSQL implementation of IMorphQueryBuilder using SqlKata.
-/// Provides fluent query building with logical-to-physical name translation.
+/// Provides fluent query building with logical-to-physical name translation
+/// and Row-Level Security (RLS) policy enforcement.
 /// </summary>
 public sealed class MorphQueryBuilder : IMorphQueryBuilder
 {
     private readonly NpgsqlDataSource _dataSource;
     private readonly IMetadataRepository _metadataRepository;
+    private readonly ISecurityPolicyService _securityPolicyService;
+    private readonly ISecurityContextAccessor _securityContextAccessor;
     private readonly Guid _tenantId;
 
     /// <summary>
-    /// Creates a new MorphQueryBuilder.
+    /// Creates a new MorphQueryBuilder with security support.
     /// </summary>
     public MorphQueryBuilder(
         NpgsqlDataSource dataSource,
         IMetadataRepository metadataRepository,
+        ISecurityPolicyService securityPolicyService,
+        ISecurityContextAccessor securityContextAccessor,
         Guid tenantId)
     {
         _dataSource = dataSource ?? throw new ArgumentNullException(nameof(dataSource));
         _metadataRepository = metadataRepository ?? throw new ArgumentNullException(nameof(metadataRepository));
+        _securityPolicyService = securityPolicyService ?? throw new ArgumentNullException(nameof(securityPolicyService));
+        _securityContextAccessor = securityContextAccessor ?? throw new ArgumentNullException(nameof(securityContextAccessor));
         _tenantId = tenantId;
     }
 
     /// <inheritdoc />
     public IMorphQuery From(string tableName)
     {
-        return new MorphQuery(_dataSource, _metadataRepository, _tenantId, tableName, null);
+        return new MorphQuery(
+            _dataSource,
+            _metadataRepository,
+            _securityPolicyService,
+            _securityContextAccessor,
+            _tenantId,
+            tableName,
+            null);
     }
 
     /// <inheritdoc />
     public IMorphQuery From(string tableName, string tableAlias)
     {
-        return new MorphQuery(_dataSource, _metadataRepository, _tenantId, tableName, tableAlias);
+        return new MorphQuery(
+            _dataSource,
+            _metadataRepository,
+            _securityPolicyService,
+            _securityContextAccessor,
+            _tenantId,
+            tableName,
+            tableAlias);
     }
 }
 
 /// <summary>
 /// PostgreSQL implementation of IMorphQuery using SqlKata.
 /// Stores query operations with logical names, then builds SQL with physical names at execution.
+/// Automatically applies Row-Level Security (RLS) policies during query execution.
 /// </summary>
 internal sealed class MorphQuery : IMorphQuery
 {
     private readonly NpgsqlDataSource _dataSource;
     private readonly IMetadataRepository _metadataRepository;
+    private readonly ISecurityPolicyService _securityPolicyService;
+    private readonly ISecurityContextAccessor _securityContextAccessor;
     private readonly Guid _tenantId;
     private readonly string _tableName;
     private readonly string? _tableAlias;
     private readonly PostgresCompiler _compiler;
 
     private TableMetadata? _tableMetadata;
+    private string? _rlsExpression;
 
     // Store all query operations with logical names
     private bool _selectAllCalled;
@@ -91,12 +117,16 @@ internal sealed class MorphQuery : IMorphQuery
     internal MorphQuery(
         NpgsqlDataSource dataSource,
         IMetadataRepository metadataRepository,
+        ISecurityPolicyService securityPolicyService,
+        ISecurityContextAccessor securityContextAccessor,
         Guid tenantId,
         string tableName,
         string? tableAlias)
     {
         _dataSource = dataSource;
         _metadataRepository = metadataRepository;
+        _securityPolicyService = securityPolicyService;
+        _securityContextAccessor = securityContextAccessor;
         _tenantId = tenantId;
         _tableName = tableName;
         _tableAlias = tableAlias;
@@ -520,6 +550,12 @@ internal sealed class MorphQuery : IMorphQuery
         // WHERE - Transform logical column names to physical
         ApplyPhysicalWhereConditions(query, _whereConditions, table);
 
+        // Apply RLS expression if available
+        if (!string.IsNullOrEmpty(_rlsExpression))
+        {
+            query.WhereRaw(_rlsExpression);
+        }
+
         // JOIN - would need to resolve joined table metadata too
         // For now, joins are not fully supported with name translation
         foreach (var (joinTable, source, target, isLeft) in _joins)
@@ -808,7 +844,30 @@ internal sealed class MorphQuery : IMorphQuery
         if (_tableMetadata is null)
             throw new InvalidOperationException($"Table '{_tableName}' not found for tenant '{_tenantId}'");
 
+        // Load RLS expression for SELECT operations
+        await LoadRlsExpressionAsync(PolicyType.Select, cancellationToken);
+
         return _tableMetadata;
+    }
+
+    private async Task LoadRlsExpressionAsync(PolicyType policyType, CancellationToken cancellationToken)
+    {
+        if (_rlsExpression is not null)
+            return;
+
+        var securityContext = _securityContextAccessor.ContextOrNull;
+        if (securityContext is null)
+        {
+            // No security context, allow all (anonymous access)
+            return;
+        }
+
+        _rlsExpression = await _securityPolicyService.EvaluatePoliciesAsync(
+            _tenantId,
+            _tableName,
+            policyType,
+            securityContext,
+            cancellationToken);
     }
 
     private static Dictionary<string, object?> MapToLogicalDictionary(

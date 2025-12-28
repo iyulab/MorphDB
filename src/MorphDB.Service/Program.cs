@@ -1,9 +1,12 @@
 using System.Globalization;
+using Microsoft.OpenApi.Models;
 using MorphDB.Npgsql;
+using MorphDB.Npgsql.Security;
 using MorphDB.Service.Extensions;
 using MorphDB.Service.GraphQL;
 using MorphDB.Service.OData;
 using MorphDB.Service.Realtime;
+using MorphDB.Service.Security;
 using MorphDB.Service.Services;
 using Serilog;
 
@@ -33,6 +36,15 @@ try
         options.RedisConnectionString = builder.Configuration.GetConnectionString("Redis");
     });
 
+    // Configure JWT options
+    builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
+
+    // Add authentication
+    builder.Services.AddAuthentication(MorphDBAuthenticationExtensions.SchemeName)
+        .AddMorphDB();
+
+    builder.Services.AddAuthorization();
+
     // Add API services
     builder.Services.AddControllers();
     builder.Services.AddEndpointsApiExplorer();
@@ -43,6 +55,61 @@ try
             Title = "MorphDB API",
             Version = "v1",
             Description = "Dynamic schema database service API"
+        });
+
+        // Add API Key security definition
+        options.AddSecurityDefinition("ApiKey", new OpenApiSecurityScheme
+        {
+            Description = "API Key authentication. Use 'X-API-Key' header with your API key.",
+            Name = "X-API-Key",
+            In = ParameterLocation.Header,
+            Type = SecuritySchemeType.ApiKey,
+            Scheme = "ApiKey"
+        });
+
+        // Add JWT Bearer security definition
+        options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+        {
+            Description = "JWT Bearer authentication. Enter your token in the text input below.",
+            Name = "Authorization",
+            In = ParameterLocation.Header,
+            Type = SecuritySchemeType.Http,
+            Scheme = "bearer",
+            BearerFormat = "JWT"
+        });
+
+        // Add Tenant ID header
+        options.AddSecurityDefinition("TenantId", new OpenApiSecurityScheme
+        {
+            Description = "Tenant ID header for multi-tenant operations.",
+            Name = "X-Tenant-Id",
+            In = ParameterLocation.Header,
+            Type = SecuritySchemeType.ApiKey
+        });
+
+        options.AddSecurityRequirement(new OpenApiSecurityRequirement
+        {
+            {
+                new OpenApiSecurityScheme
+                {
+                    Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "ApiKey" }
+                },
+                Array.Empty<string>()
+            },
+            {
+                new OpenApiSecurityScheme
+                {
+                    Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
+                },
+                Array.Empty<string>()
+            },
+            {
+                new OpenApiSecurityScheme
+                {
+                    Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "TenantId" }
+                },
+                Array.Empty<string>()
+            }
         });
     });
 

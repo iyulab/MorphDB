@@ -1,7 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
 using MorphDB.Core.Abstractions;
+using MorphDB.Core.Security;
 using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Repositories;
+using MorphDB.Npgsql.Security;
 using MorphDB.Npgsql.Services;
 using Npgsql;
 
@@ -45,6 +47,12 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IMorphDataService, PostgresDataService>();
         services.AddSingleton<IWebhookManager, PostgresWebhookManager>();
         services.AddSingleton<IBulkOperationService, PostgresBulkOperationService>();
+
+        // Register security services
+        services.AddSingleton<IApiKeyService, ApiKeyService>();
+        services.AddSingleton<ISecurityPolicyService, SecurityPolicyService>();
+        services.AddSingleton<ISecurityContextAccessor, SecurityContextAccessor>();
+        services.AddSingleton<IJwtService, JwtService>();
 
         return services;
     }

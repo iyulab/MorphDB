@@ -2,6 +2,7 @@ using MorphDB.Core.Abstractions;
 using MorphDB.Core.Models;
 using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Repositories;
+using MorphDB.Npgsql.Security;
 using MorphDB.Npgsql.Services;
 using MorphDB.Tests.Fixtures;
 
@@ -37,7 +38,14 @@ public class QueryBuilderTests
             changeLogger,
             schemaOptions);
 
-        _dataService = new PostgresDataService(fixture.DataSource, _metadataRepository);
+        var securityPolicyService = new SecurityPolicyService(fixture.DataSource);
+        var securityContextAccessor = new SecurityContextAccessor();
+
+        _dataService = new PostgresDataService(
+            fixture.DataSource,
+            _metadataRepository,
+            securityPolicyService,
+            securityContextAccessor);
     }
 
     private async Task<(Guid TenantId, TableMetadata Table)> SetupTestTableWithDataAsync()
