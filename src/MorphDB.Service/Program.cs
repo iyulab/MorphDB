@@ -1,4 +1,6 @@
 using System.Globalization;
+using HealthChecks.UI.Client;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.OpenApi.Models;
 using MorphDB.Npgsql;
 using MorphDB.Npgsql.Security;
@@ -8,6 +10,9 @@ using MorphDB.Service.OData;
 using MorphDB.Service.Realtime;
 using MorphDB.Service.Security;
 using MorphDB.Service.Services;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using Serilog;
 
 Log.Logger = new LoggerConfiguration()
@@ -142,8 +147,42 @@ try
         options.HttpTimeout = TimeSpan.FromSeconds(30);
     });
 
-    // Health checks
-    builder.Services.AddHealthChecks();
+    // Health checks with dependencies
+    var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
+    builder.Services.AddHealthChecks()
+        .AddNpgSql(connectionString, name: "postgresql", tags: ["db", "ready"])
+        .AddRedis(redisConnectionString ?? "localhost:6379", name: "redis", tags: ["cache", "ready"]);
+
+    // OpenTelemetry configuration
+    var serviceName = "MorphDB.Service";
+    var serviceVersion = typeof(Program).Assembly.GetName().Version?.ToString() ?? "1.0.0";
+
+    builder.Services.AddOpenTelemetry()
+        .ConfigureResource(resource => resource
+            .AddService(serviceName: serviceName, serviceVersion: serviceVersion)
+            .AddAttributes(new Dictionary<string, object>
+            {
+                ["deployment.environment"] = builder.Environment.EnvironmentName.ToLowerInvariant()
+            }))
+        .WithTracing(tracing => tracing
+            .AddAspNetCoreInstrumentation(options =>
+            {
+                options.RecordException = true;
+                options.Filter = httpContext =>
+                {
+                    // Don't trace health check endpoints
+                    var path = httpContext.Request.Path.Value ?? "";
+                    return !path.StartsWith("/health", StringComparison.OrdinalIgnoreCase) &&
+                           !path.StartsWith("/metrics", StringComparison.OrdinalIgnoreCase);
+                };
+            })
+            .AddHttpClientInstrumentation()
+            .AddOtlpExporter())
+        .WithMetrics(metrics => metrics
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation()
+            .AddRuntimeInstrumentation()
+            .AddPrometheusExporter());
 
     var app = builder.Build();
 
@@ -166,11 +205,27 @@ try
     {
         Tool = { Enable = app.Environment.IsDevelopment() }
     });
-    app.MapHealthChecks("/health");
-    app.MapMorphHub(); // SignalR hub at /hubs/morph
 
-    // Ready endpoint
-    app.MapGet("/ready", () => Results.Ok(new { status = "ready", timestamp = DateTime.UtcNow }));
+    // Health check endpoints
+    app.MapHealthChecks("/health", new HealthCheckOptions
+    {
+        ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
+    });
+    app.MapHealthChecks("/health/live", new HealthCheckOptions
+    {
+        Predicate = _ => false, // No dependency checks for liveness
+        ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
+    });
+    app.MapHealthChecks("/health/ready", new HealthCheckOptions
+    {
+        Predicate = check => check.Tags.Contains("ready"),
+        ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
+    });
+
+    // Prometheus metrics endpoint
+    app.MapPrometheusScrapingEndpoint("/metrics");
+
+    app.MapMorphHub(); // SignalR hub at /hubs/morph
 
     app.Run();
 }

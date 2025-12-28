@@ -1,8 +1,34 @@
 version: '3.8'
 
 services:
+  # MorphDB API Service
+  api:
+    build:
+      context: .
+      dockerfile: src/MorphDB.Service/Dockerfile
+    container_name: morphdb-api
+    ports:
+      - "8080:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__MorphDB: Host=postgres;Port=5432;Database=morphdb;Username=morph;Password=morph
+      Jwt__SecretKey: MorphDB-Development-Secret-Key-Must-Be-At-Least-32-Characters-Long
+      Jwt__Issuer: MorphDB
+      Jwt__Audience: MorphDB
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    profiles:
+      - app
+
   postgres:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
     container_name: morphdb-postgres
     ports:
       - "5432:5432"

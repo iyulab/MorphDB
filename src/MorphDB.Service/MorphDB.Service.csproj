@@ -27,12 +27,20 @@
 
     <!-- Validation -->
     <PackageReference Include="FluentValidation.AspNetCore" />
-  </ItemGroup>
 
-  <!-- Note: OpenTelemetry packages temporarily removed due to security vulnerability
-       Re-add when fixed version is available:
-       <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
-       <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />
-  -->
+    <!-- Health Checks -->
+    <PackageReference Include="AspNetCore.HealthChecks.NpgSql" />
+    <PackageReference Include="AspNetCore.HealthChecks.Redis" />
+    <PackageReference Include="AspNetCore.HealthChecks.UI.Client" />
+
+    <!-- OpenTelemetry -->
+    <PackageReference Include="OpenTelemetry.Api" />
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Http" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" />
+    <PackageReference Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" />
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" />
+  </ItemGroup>
 
 </Project>

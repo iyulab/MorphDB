@@ -1,0 +1,41 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: morphdb-api
+  namespace: morphdb
+  labels:
+    app.kubernetes.io/name: morphdb
+    app.kubernetes.io/component: api
+  annotations:
+    # Nginx Ingress Controller annotations
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,X-CustomHeader,X-LANG,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,X-Api-Key,Authorization,X-Tenant-Id"
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    # Rate limiting
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+    nginx.ingress.kubernetes.io/limit-connections: "50"
+    # WebSocket support for realtime
+    nginx.ingress.kubernetes.io/websocket-services: "morphdb-api"
+    nginx.ingress.kubernetes.io/proxy-connection-header: "upgrade"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - api.morphdb.example.com
+      secretName: morphdb-tls
+  rules:
+    - host: api.morphdb.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: morphdb-api
+                port:
+                  name: http
