@@ -1,0 +1,95 @@
+name: Release Desktop App
+
+on:
+  push:
+    tags:
+      - 'desk-v*.*.*'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish to GitHub Releases'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  release:
+    runs-on: ${{ matrix.os }}
+
+    permissions:
+      contents: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+            args: --win
+          - os: macos-latest
+            platform: mac
+            args: --mac
+          - os: ubuntu-latest
+            platform: linux
+            args: --linux
+
+    defaults:
+      run:
+        working-directory: desk
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: desk/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript check
+        run: npm run typecheck
+
+      - name: Build Electron app
+        run: npm run build
+
+      # For tag-triggered releases: publish directly to GitHub Releases
+      - name: Build and Publish to GitHub Releases
+        if: startsWith(github.ref, 'refs/tags/desk-v')
+        run: npx electron-builder ${{ matrix.args }} --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # macOS code signing (uncomment when certificates are available)
+          # CSC_LINK: ${{ secrets.MAC_CERTS }}
+          # CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTS_PASSWORD }}
+          # Windows code signing (uncomment when certificates are available)
+          # CSC_LINK: ${{ secrets.WIN_CERTS }}
+          # CSC_KEY_PASSWORD: ${{ secrets.WIN_CERTS_PASSWORD }}
+
+      # For manual/non-tag builds: just build without publishing
+      - name: Build distribution (no publish)
+        if: ${{ !startsWith(github.ref, 'refs/tags/desk-v') }}
+        run: npx electron-builder ${{ matrix.args }} --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Upload artifacts for non-tag builds
+      - name: Upload artifacts
+        if: ${{ !startsWith(github.ref, 'refs/tags/desk-v') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.platform }}
+          path: |
+            desk/dist/*.exe
+            desk/dist/*.dmg
+            desk/dist/*.AppImage
+            desk/dist/*.yml
+            desk/dist/*.blockmap
+          retention-days: 7
