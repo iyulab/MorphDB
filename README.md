@@ -462,16 +462,27 @@ See [ROADMAP.md](./ROADMAP.md) for detailed implementation phases.
 | Phase 10 | ✅ Completed | Client SDKs (.NET, TypeScript, Python) |
 | Phase 11 | ✅ Completed | Security (API Keys, JWT, RLS) |
 | Phase 12 | ✅ Completed | Docker, Kubernetes, Observability |
+| Phase 13 | ✅ Completed | Encryption Testing & Key Rotation |
+| Phase 14 | ✅ Completed | Query Builder JOIN Completion |
+| Phase 15 | ✅ Completed | Webhook Reliability & DLQ |
+| Phase 16 | ✅ Completed | Performance Optimization (Caching) |
+| Phase 17 | ✅ Completed | Schema-based Layer Separation |
+| Phase 18-24 | 🔄 Planned | Enterprise Features |
 
 ### Version Milestones
 
-| Version | Phases | Goal |
-|---------|--------|------|
-| 0.1.0 | 0-3 | Core functionality |
-| 0.2.0 | 4-6 | API layer complete |
-| 0.3.0 | 7-8 | Real-time features |
-| 0.4.0 | 9-10 | Bulk & SDKs |
-| **0.5.0** | **11-12** | **Production Ready (Beta)** ✅ |
+| Version | Phases | Goal | Status |
+|---------|--------|------|--------|
+| 0.1.0 | 0-3 | Core functionality | ✅ |
+| 0.2.0 | 4-6 | API layer complete | ✅ |
+| 0.3.0 | 7-8 | Real-time features | ✅ |
+| 0.4.0 | 9-10 | Bulk & SDKs | ✅ |
+| 0.5.0 | 11-12 | Production Ready (Beta) | ✅ |
+| 0.6.0 | 13-16 | Enterprise Hardening | ✅ |
+| **0.7.0** | **17-18** | **Schema Architecture** | 🔄 In Progress |
+| 0.8.0 | 19-20 | Audit + Rate Limiting | Planned |
+| 0.9.0 | 21-22 | Organization + SSO | Planned |
+| 1.0.0 | 23-24 | Enterprise Ready | Planned |
 
 ## Contributing
 

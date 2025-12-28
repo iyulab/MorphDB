@@ -127,5 +127,34 @@ public interface IBulkOperationService
     /// </summary>
     Task<BulkJobProgress?> GetJobProgressAsync(Guid jobId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Gets pending import jobs for background processing.
+    /// </summary>
+    Task<IReadOnlyList<BulkImportJob>> GetPendingImportJobsAsync(
+        int limit = 10,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets pending export jobs for background processing.
+    /// </summary>
+    Task<IReadOnlyList<BulkExportJob>> GetPendingExportJobsAsync(
+        int limit = 10,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Stores export data to file system or storage.
+    /// </summary>
+    Task StoreExportDataAsync(
+        Guid jobId,
+        Stream dataStream,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets stored export data stream.
+    /// </summary>
+    Task<Stream?> GetStoredExportDataAsync(
+        Guid jobId,
+        CancellationToken cancellationToken = default);
+
     #endregion
 }

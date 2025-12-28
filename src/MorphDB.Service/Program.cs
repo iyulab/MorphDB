@@ -165,6 +165,13 @@ try
         options.HttpTimeout = TimeSpan.FromSeconds(30);
     });
 
+    // Add bulk job processor for background import/export processing
+    builder.Services.AddBulkJobProcessor(options =>
+    {
+        options.PollingInterval = TimeSpan.FromSeconds(5);
+        options.BatchSize = 5;
+    });
+
     // Health checks with dependencies
     var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
     builder.Services.AddHealthChecks()

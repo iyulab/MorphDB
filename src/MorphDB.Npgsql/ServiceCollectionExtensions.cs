@@ -3,9 +3,11 @@ using Microsoft.Extensions.Options;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Encryption;
 using MorphDB.Core.Security;
+using MorphDB.Npgsql.Caching;
 using MorphDB.Npgsql.Encryption;
 using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Repositories;
+using MorphDB.Npgsql.Schema;
 using MorphDB.Npgsql.Security;
 using MorphDB.Npgsql.Services;
 using Npgsql;
@@ -28,8 +30,21 @@ public static class ServiceCollectionExtensions
         var options = new MorphDbNpgsqlOptions();
         configure?.Invoke(options);
 
-        // Register NpgsqlDataSource
-        var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
+        // Build connection string with optimized pooling settings
+        var connStringBuilder = new NpgsqlConnectionStringBuilder(connectionString)
+        {
+            MinPoolSize = options.ConnectionPoolOptions.MinPoolSize,
+            MaxPoolSize = options.ConnectionPoolOptions.MaxPoolSize,
+            ConnectionIdleLifetime = (int)options.ConnectionPoolOptions.ConnectionIdleLifetime.TotalSeconds,
+            ConnectionPruningInterval = (int)options.ConnectionPoolOptions.ConnectionPruningInterval.TotalSeconds,
+            Timeout = (int)options.ConnectionPoolOptions.ConnectionTimeout.TotalSeconds,
+            CommandTimeout = (int)options.ConnectionPoolOptions.CommandTimeout.TotalSeconds,
+            Pooling = options.ConnectionPoolOptions.Enabled,
+            Multiplexing = options.ConnectionPoolOptions.Multiplexing
+        };
+
+        // Register NpgsqlDataSource with optimized settings
+        var dataSourceBuilder = new NpgsqlDataSourceBuilder(connStringBuilder.ConnectionString);
         dataSourceBuilder.EnableDynamicJson();
         var dataSource = dataSourceBuilder.Build();
 
@@ -58,6 +73,7 @@ public static class ServiceCollectionExtensions
 
             services.AddSingleton<IKeyDerivationService, HkdfKeyDerivationService>();
             services.AddSingleton<IDataEncryptionService, AesGcmDataEncryptionService>();
+            services.AddSingleton<IKeyRotationService, KeyRotationService>();
         }
         else
         {
@@ -68,9 +84,46 @@ public static class ServiceCollectionExtensions
         // Register services
         services.AddSingleton<IChangeLogger, ChangeLogger>();
         services.AddSingleton(options.SchemaManagerOptions);
-        services.AddSingleton<ISchemaManager, PostgresSchemaManager>();
+
+        // Register schema manager with optional caching decorator
+        if (!string.IsNullOrEmpty(options.RedisConnectionString) && options.SchemaCacheOptions.Enabled)
+        {
+            // Register Redis distributed cache
+            services.AddStackExchangeRedisCache(redisOptions =>
+            {
+                redisOptions.Configuration = options.RedisConnectionString;
+                redisOptions.InstanceName = options.SchemaCacheOptions.KeyPrefix + ":";
+            });
+
+            // Configure schema cache options
+            services.Configure<SchemaCacheOptions>(cacheOpts =>
+            {
+                cacheOpts.Enabled = options.SchemaCacheOptions.Enabled;
+                cacheOpts.TableCacheDuration = options.SchemaCacheOptions.TableCacheDuration;
+                cacheOpts.TableListCacheDuration = options.SchemaCacheOptions.TableListCacheDuration;
+                cacheOpts.KeyPrefix = options.SchemaCacheOptions.KeyPrefix;
+            });
+
+            // Register cache and decorator
+            services.AddSingleton<ISchemaCache, RedisSchemaCache>();
+            services.AddSingleton<PostgresSchemaManager>();
+            services.AddSingleton<ISchemaManager>(sp =>
+            {
+                var inner = sp.GetRequiredService<PostgresSchemaManager>();
+                var cache = sp.GetRequiredService<ISchemaCache>();
+                var logger = sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<CachingSchemaManagerDecorator>>();
+                return new CachingSchemaManagerDecorator(inner, cache, logger);
+            });
+        }
+        else
+        {
+            // No caching - use direct implementation
+            services.AddSingleton<ISchemaManager, PostgresSchemaManager>();
+        }
+
         services.AddSingleton<IMorphDataService, PostgresDataService>();
         services.AddSingleton<IWebhookManager, PostgresWebhookManager>();
+        services.AddSingleton(options.BulkOperationOptions);
         services.AddSingleton<IBulkOperationService, PostgresBulkOperationService>();
 
         // Register security services
@@ -78,6 +131,12 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISecurityPolicyService, SecurityPolicyService>();
         services.AddSingleton<ISecurityContextAccessor, SecurityContextAccessor>();
         services.AddSingleton<IJwtService, JwtService>();
+
+        // Register project and schema layer services (Phase 17: Schema-based Layer Separation)
+        services.AddSingleton<ISchemaNameResolver, PostgresSchemaNameResolver>();
+        services.AddSingleton<ISchemaLayerService, PostgresSchemaLayerService>();
+        services.AddSingleton<IProjectRepository, ProjectRepository>();
+        services.AddSingleton<IProjectService, ProjectService>();
 
         return services;
     }
@@ -110,7 +169,63 @@ public sealed class MorphDbNpgsqlOptions
     public string? RedisConnectionString { get; set; }
 
     /// <summary>
-    /// Cache expiration time for schema mappings.
+    /// Options for schema caching behavior.
     /// </summary>
-    public TimeSpan SchemaCacheExpiration { get; set; } = TimeSpan.FromMinutes(5);
+    public SchemaCacheOptions SchemaCacheOptions { get; set; } = new();
+
+    /// <summary>
+    /// Options for connection pooling behavior.
+    /// </summary>
+    public ConnectionPoolOptions ConnectionPoolOptions { get; set; } = new();
+
+    /// <summary>
+    /// Options for bulk operations.
+    /// </summary>
+    public BulkOperationOptions BulkOperationOptions { get; set; } = new();
+}
+
+/// <summary>
+/// Options for PostgreSQL connection pooling.
+/// </summary>
+public sealed class ConnectionPoolOptions
+{
+    /// <summary>
+    /// Whether connection pooling is enabled.
+    /// </summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    /// Minimum number of connections in the pool.
+    /// </summary>
+    public int MinPoolSize { get; set; } = 5;
+
+    /// <summary>
+    /// Maximum number of connections in the pool.
+    /// </summary>
+    public int MaxPoolSize { get; set; } = 100;
+
+    /// <summary>
+    /// Time a connection can remain idle before being closed.
+    /// </summary>
+    public TimeSpan ConnectionIdleLifetime { get; set; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// Interval between connection pruning cycles.
+    /// </summary>
+    public TimeSpan ConnectionPruningInterval { get; set; } = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// Timeout for establishing new connections.
+    /// </summary>
+    public TimeSpan ConnectionTimeout { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// Default command execution timeout.
+    /// </summary>
+    public TimeSpan CommandTimeout { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// Whether to use multiplexing for better connection utilization.
+    /// </summary>
+    public bool Multiplexing { get; set; }
 }

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using MorphDB.Core.Models;
 
 namespace MorphDB.Npgsql.Infrastructure;
@@ -74,11 +75,65 @@ public static class TypeMapper
         if (value is null)
             return null;
 
+        // Handle JsonElement from System.Text.Json deserialization
+        if (value is JsonElement jsonElement)
+        {
+            value = ConvertJsonElement(jsonElement, dataType);
+            if (value is null)
+                return null;
+        }
+
         return dataType switch
         {
             MorphDataType.Json or MorphDataType.Array or MorphDataType.MultiSelect or MorphDataType.Attachment
-                => System.Text.Json.JsonSerializer.Serialize(value),
+                => JsonSerializer.Serialize(value),
             _ => value
+        };
+    }
+
+    /// <summary>
+    /// Converts a JsonElement to the appropriate .NET type based on the MorphDataType.
+    /// </summary>
+    private static object? ConvertJsonElement(JsonElement element, MorphDataType dataType)
+    {
+        if (element.ValueKind == JsonValueKind.Null)
+            return null;
+
+        return dataType switch
+        {
+            MorphDataType.Text or MorphDataType.LongText or MorphDataType.Email or
+            MorphDataType.Url or MorphDataType.Phone or MorphDataType.SingleSelect or MorphDataType.Formula
+                => element.GetString(),
+
+            MorphDataType.Integer => element.TryGetInt32(out var intVal) ? intVal : element.GetInt64(),
+
+            MorphDataType.BigInteger => element.GetInt64(),
+
+            MorphDataType.Decimal => element.GetDecimal(),
+
+            MorphDataType.Boolean => element.GetBoolean(),
+
+            MorphDataType.Date or MorphDataType.DateTime or MorphDataType.Time or
+            MorphDataType.CreatedTime or MorphDataType.ModifiedTime
+                => element.ValueKind == JsonValueKind.String
+                    ? DateTime.Parse(element.GetString()!, System.Globalization.CultureInfo.InvariantCulture)
+                    : element.GetDateTime(),
+
+            MorphDataType.Uuid or MorphDataType.Relation or MorphDataType.CreatedBy or MorphDataType.ModifiedBy
+                => element.ValueKind == JsonValueKind.String ? Guid.Parse(element.GetString()!) : element.GetGuid(),
+
+            MorphDataType.Json or MorphDataType.Array or MorphDataType.MultiSelect or
+            MorphDataType.Attachment or MorphDataType.Rollup
+                => element, // Return JsonElement as-is; will be serialized in the switch above
+
+            _ => element.ValueKind switch
+            {
+                JsonValueKind.String => element.GetString(),
+                JsonValueKind.Number => element.TryGetInt64(out var l) ? l : element.GetDecimal(),
+                JsonValueKind.True => true,
+                JsonValueKind.False => false,
+                _ => element.GetRawText()
+            }
         };
     }
 

@@ -91,7 +91,80 @@ public enum DeliveryStatus
     Pending,
     Success,
     Failed,
-    Retrying
+    Retrying,
+    DeadLettered
+}
+
+/// <summary>
+/// Reason why a delivery was moved to the Dead Letter Queue.
+/// </summary>
+public enum DlqReason
+{
+    MaxRetriesExceeded,
+    WebhookDeleted,
+    WebhookInactive,
+    PersistentClientError,
+    InvalidPayload,
+    Manual
+}
+
+/// <summary>
+/// Status of a Dead Letter Queue message.
+/// </summary>
+public enum DlqStatus
+{
+    PendingReview,
+    Resolved,
+    Archived,
+    Replayed
+}
+
+/// <summary>
+/// Represents a message in the Dead Letter Queue.
+/// </summary>
+public sealed class WebhookDlqMessage
+{
+    public Guid DlqId { get; init; }
+    public Guid DeliveryId { get; init; }
+    public Guid WebhookId { get; init; }
+    public Guid TenantId { get; init; }
+    public Guid? RecordId { get; init; }
+    public required WebhookEvent Event { get; init; }
+    public required JsonDocument Payload { get; init; }
+
+    /// <summary>
+    /// The reason this delivery was moved to DLQ.
+    /// </summary>
+    public required DlqReason Reason { get; init; }
+
+    /// <summary>
+    /// Total retry attempts before moving to DLQ.
+    /// </summary>
+    public int AttemptCount { get; init; }
+
+    /// <summary>
+    /// Last HTTP status code received (if any).
+    /// </summary>
+    public int? LastHttpStatusCode { get; init; }
+
+    /// <summary>
+    /// Last error message from delivery attempt.
+    /// </summary>
+    public string? LastErrorMessage { get; init; }
+
+    /// <summary>
+    /// Current DLQ message status.
+    /// </summary>
+    public DlqStatus Status { get; init; }
+
+    /// <summary>
+    /// Notes added during resolution.
+    /// </summary>
+    public string? ResolutionNotes { get; init; }
+
+    public DateTimeOffset DlqAt { get; init; }
+    public DateTimeOffset? ResolvedAt { get; init; }
+    public Guid? ResolvedBy { get; init; }
 }
 
 /// <summary>

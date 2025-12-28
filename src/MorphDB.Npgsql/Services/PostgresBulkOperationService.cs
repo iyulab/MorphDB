@@ -503,6 +503,90 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         return null;
     }
 
+    public async Task<IReadOnlyList<BulkImportJob>> GetPendingImportJobsAsync(
+        int limit = 10,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT job_id, tenant_id, table_id, table_name, format, status,
+                   total_rows, processed_rows, success_count, error_count,
+                   error_message, options, created_at, started_at, completed_at
+            FROM morphdb._morph_import_jobs
+            WHERE status = 'pending'
+            ORDER BY created_at ASC
+            LIMIT @Limit
+            """;
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        var rows = await connection.QueryAsync<ImportJobRow>(sql, new { Limit = limit });
+
+        return rows.Select(MapToImportJob).ToList();
+    }
+
+    public async Task<IReadOnlyList<BulkExportJob>> GetPendingExportJobsAsync(
+        int limit = 10,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT job_id, tenant_id, table_id, table_name, format, status,
+                   total_rows, processed_rows, file_path, file_size,
+                   error_message, options, created_at, started_at, completed_at, expires_at
+            FROM morphdb._morph_export_jobs
+            WHERE status = 'pending'
+            ORDER BY created_at ASC
+            LIMIT @Limit
+            """;
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        var rows = await connection.QueryAsync<ExportJobRow>(sql, new { Limit = limit });
+
+        return rows.Select(MapToExportJob).ToList();
+    }
+
+    public async Task StoreExportDataAsync(
+        Guid jobId,
+        Stream dataStream,
+        CancellationToken cancellationToken = default)
+    {
+        using var ms = new MemoryStream();
+        await dataStream.CopyToAsync(ms, cancellationToken);
+
+        const string sql = """
+            INSERT INTO morphdb._morph_export_data (job_id, data, created_at)
+            VALUES (@JobId, @Data, @CreatedAt)
+            ON CONFLICT (job_id) DO UPDATE SET data = @Data
+            """;
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await connection.ExecuteAsync(sql, new
+        {
+            JobId = jobId,
+            Data = ms.ToArray(),
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+
+        // Update file size in job record
+        const string updateSql = """
+            UPDATE morphdb._morph_export_jobs
+            SET file_size = @FileSize
+            WHERE job_id = @JobId
+            """;
+
+        await connection.ExecuteAsync(updateSql, new { JobId = jobId, FileSize = ms.Length });
+    }
+
+    public async Task<Stream?> GetStoredExportDataAsync(
+        Guid jobId,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = "SELECT data FROM morphdb._morph_export_data WHERE job_id = @JobId";
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        var data = await connection.ExecuteScalarAsync<byte[]>(sql, new { JobId = jobId });
+
+        return data is null ? null : new MemoryStream(data);
+    }
+
     #endregion
 
     #region Private Helpers - Parsing

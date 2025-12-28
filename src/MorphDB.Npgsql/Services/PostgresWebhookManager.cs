@@ -372,6 +372,274 @@ public sealed class PostgresWebhookManager : IWebhookManager
         };
     }
 
+    #region Dead Letter Queue
+
+    public async Task<WebhookDlqMessage> MoveToDlqAsync(
+        MoveToDlqRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var dlqId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+
+        const string sql = """
+            WITH delivery AS (
+                SELECT d.delivery_id, d.webhook_id, d.record_id, d.event, d.payload,
+                       d.attempt_count, d.http_status_code, d.error_message, w.tenant_id
+                FROM morphdb._morph_webhook_deliveries d
+                JOIN morphdb._morph_webhooks w ON d.webhook_id = w.webhook_id
+                WHERE d.delivery_id = @DeliveryId
+            ),
+            update_delivery AS (
+                UPDATE morphdb._morph_webhook_deliveries
+                SET status = 'deadlettered'
+                WHERE delivery_id = @DeliveryId
+            )
+            INSERT INTO morphdb._morph_webhook_dlq (
+                dlq_id, delivery_id, webhook_id, tenant_id, record_id, event, payload,
+                reason, attempt_count, last_http_status_code, last_error_message, status, dlq_at
+            )
+            SELECT @DlqId, d.delivery_id, d.webhook_id, d.tenant_id, d.record_id, d.event, d.payload,
+                   @Reason, d.attempt_count, d.http_status_code, d.error_message, 'pending_review', @DlqAt
+            FROM delivery d
+            RETURNING dlq_id, delivery_id, webhook_id, tenant_id, record_id, event, payload,
+                      reason, attempt_count, last_http_status_code, last_error_message, status,
+                      resolution_notes, dlq_at, resolved_at, resolved_by
+            """;
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        var result = await connection.QuerySingleAsync<DlqRow>(sql, new
+        {
+            DlqId = dlqId,
+            request.DeliveryId,
+            Reason = request.Reason.ToString().ToLowerInvariant(),
+            DlqAt = now
+        });
+
+        return MapToDlqMessage(result);
+    }
+
+    public async Task<WebhookDlqMessage?> GetDlqMessageAsync(
+        Guid dlqId,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT dlq_id, delivery_id, webhook_id, tenant_id, record_id, event, payload,
+                   reason, attempt_count, last_http_status_code, last_error_message, status,
+                   resolution_notes, dlq_at, resolved_at, resolved_by
+            FROM morphdb._morph_webhook_dlq
+            WHERE dlq_id = @DlqId
+            """;
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        var result = await connection.QuerySingleOrDefaultAsync<DlqRow>(sql, new { DlqId = dlqId });
+
+        return result is null ? null : MapToDlqMessage(result);
+    }
+
+    public async Task<IReadOnlyList<WebhookDlqMessage>> ListDlqMessagesAsync(
+        Guid? webhookId = null,
+        DlqStatus? status = null,
+        int limit = 100,
+        int offset = 0,
+        CancellationToken cancellationToken = default)
+    {
+        var sql = """
+            SELECT dlq_id, delivery_id, webhook_id, tenant_id, record_id, event, payload,
+                   reason, attempt_count, last_http_status_code, last_error_message, status,
+                   resolution_notes, dlq_at, resolved_at, resolved_by
+            FROM morphdb._morph_webhook_dlq
+            WHERE 1=1
+            """;
+
+        var parameters = new DynamicParameters();
+
+        if (webhookId.HasValue)
+        {
+            sql += " AND webhook_id = @WebhookId";
+            parameters.Add("WebhookId", webhookId.Value);
+        }
+
+        if (status.HasValue)
+        {
+            sql += " AND status = @Status";
+            parameters.Add("Status", status.Value.ToString().ToLowerInvariant());
+        }
+
+        sql += " ORDER BY dlq_at DESC LIMIT @Limit OFFSET @Offset";
+        parameters.Add("Limit", limit);
+        parameters.Add("Offset", offset);
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        var results = await connection.QueryAsync<DlqRow>(sql, parameters);
+
+        return results.Select(MapToDlqMessage).ToList();
+    }
+
+    public async Task<DlqStatistics> GetDlqStatisticsAsync(
+        Guid tenantId,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT
+                COUNT(*) as total_messages,
+                COUNT(*) FILTER (WHERE status = 'pending_review') as pending_review_count,
+                COUNT(*) FILTER (WHERE status = 'resolved') as resolved_count,
+                COUNT(*) FILTER (WHERE status = 'archived') as archived_count,
+                MIN(dlq_at) FILTER (WHERE status = 'pending_review') as oldest_pending_at
+            FROM morphdb._morph_webhook_dlq
+            WHERE tenant_id = @TenantId
+            """;
+
+        const string byReasonSql = """
+            SELECT reason, COUNT(*) as count
+            FROM morphdb._morph_webhook_dlq
+            WHERE tenant_id = @TenantId AND status = 'pending_review'
+            GROUP BY reason
+            """;
+
+        const string byWebhookSql = """
+            SELECT webhook_id, COUNT(*) as count
+            FROM morphdb._morph_webhook_dlq
+            WHERE tenant_id = @TenantId AND status = 'pending_review'
+            GROUP BY webhook_id
+            """;
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+
+        var stats = await connection.QuerySingleAsync<(int total_messages, int pending_review_count,
+            int resolved_count, int archived_count, DateTimeOffset? oldest_pending_at)>(
+            sql, new { TenantId = tenantId });
+
+        var byReason = await connection.QueryAsync<(string reason, int count)>(byReasonSql, new { TenantId = tenantId });
+        var byWebhook = await connection.QueryAsync<(Guid webhook_id, int count)>(byWebhookSql, new { TenantId = tenantId });
+
+        return new DlqStatistics
+        {
+            TotalMessages = stats.total_messages,
+            PendingReviewCount = stats.pending_review_count,
+            ResolvedCount = stats.resolved_count,
+            ArchivedCount = stats.archived_count,
+            ByReason = byReason.ToDictionary(x => x.reason, x => x.count),
+            ByWebhook = byWebhook.ToDictionary(x => x.webhook_id, x => x.count),
+            OldestPendingAt = stats.oldest_pending_at
+        };
+    }
+
+    public async Task ResolveDlqMessageAsync(
+        ResolveDlqRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            UPDATE morphdb._morph_webhook_dlq
+            SET status = 'resolved',
+                resolution_notes = @ResolutionNotes,
+                resolved_at = @ResolvedAt,
+                resolved_by = @ResolvedBy
+            WHERE dlq_id = @DlqId
+            """;
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await connection.ExecuteAsync(sql, new
+        {
+            request.DlqId,
+            request.ResolutionNotes,
+            ResolvedAt = DateTimeOffset.UtcNow,
+            request.ResolvedBy
+        });
+    }
+
+    public async Task<WebhookDelivery> ReplayDlqMessageAsync(
+        Guid dlqId,
+        CancellationToken cancellationToken = default)
+    {
+        // Get the DLQ message
+        var dlqMessage = await GetDlqMessageAsync(dlqId, cancellationToken);
+        if (dlqMessage is null)
+            throw new InvalidOperationException($"DLQ message {dlqId} not found");
+
+        // Create a new delivery from the DLQ message
+        var newDelivery = await CreateDeliveryAsync(new CreateDeliveryRequest
+        {
+            WebhookId = dlqMessage.WebhookId,
+            RecordId = dlqMessage.RecordId,
+            Event = dlqMessage.Event,
+            Payload = dlqMessage.Payload
+        }, cancellationToken);
+
+        // Mark DLQ message as replayed
+        const string sql = """
+            UPDATE morphdb._morph_webhook_dlq
+            SET status = 'replayed',
+                resolution_notes = COALESCE(resolution_notes, '') || ' [Replayed as delivery ' || @NewDeliveryId || ']',
+                resolved_at = @ResolvedAt
+            WHERE dlq_id = @DlqId
+            """;
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await connection.ExecuteAsync(sql, new
+        {
+            DlqId = dlqId,
+            NewDeliveryId = newDelivery.DeliveryId,
+            ResolvedAt = DateTimeOffset.UtcNow
+        });
+
+        return newDelivery;
+    }
+
+    public async Task<int> ArchiveDlqMessagesAsync(
+        Guid? webhookId = null,
+        DateTimeOffset? olderThan = null,
+        CancellationToken cancellationToken = default)
+    {
+        var sql = """
+            UPDATE morphdb._morph_webhook_dlq
+            SET status = 'archived'
+            WHERE status IN ('pending_review', 'resolved')
+            """;
+
+        var parameters = new DynamicParameters();
+
+        if (webhookId.HasValue)
+        {
+            sql += " AND webhook_id = @WebhookId";
+            parameters.Add("WebhookId", webhookId.Value);
+        }
+
+        if (olderThan.HasValue)
+        {
+            sql += " AND dlq_at < @OlderThan";
+            parameters.Add("OlderThan", olderThan.Value);
+        }
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        return await connection.ExecuteAsync(sql, parameters);
+    }
+
+    private static WebhookDlqMessage MapToDlqMessage(DlqRow row)
+    {
+        return new WebhookDlqMessage
+        {
+            DlqId = row.dlq_id,
+            DeliveryId = row.delivery_id,
+            WebhookId = row.webhook_id,
+            TenantId = row.tenant_id,
+            RecordId = row.record_id,
+            Event = ParseEvent(row.@event),
+            Payload = JsonDocument.Parse(row.payload),
+            Reason = Enum.Parse<DlqReason>(row.reason, ignoreCase: true),
+            AttemptCount = row.attempt_count,
+            LastHttpStatusCode = row.last_http_status_code,
+            LastErrorMessage = row.last_error_message,
+            Status = Enum.Parse<DlqStatus>(row.status, ignoreCase: true),
+            ResolutionNotes = row.resolution_notes,
+            DlqAt = row.dlq_at,
+            ResolvedAt = row.resolved_at,
+            ResolvedBy = row.resolved_by
+        };
+    }
+
+    #endregion
+
     #region Row Types
 
     private sealed record WebhookRow
@@ -406,6 +674,26 @@ public sealed class PostgresWebhookManager : IWebhookManager
         public DateTimeOffset? next_retry_at { get; init; }
         public DateTimeOffset created_at { get; init; }
         public DateTimeOffset? delivered_at { get; init; }
+    }
+
+    private sealed record DlqRow
+    {
+        public Guid dlq_id { get; init; }
+        public Guid delivery_id { get; init; }
+        public Guid webhook_id { get; init; }
+        public Guid tenant_id { get; init; }
+        public Guid? record_id { get; init; }
+        public string @event { get; init; } = null!;
+        public string payload { get; init; } = null!;
+        public string reason { get; init; } = null!;
+        public int attempt_count { get; init; }
+        public int? last_http_status_code { get; init; }
+        public string? last_error_message { get; init; }
+        public string status { get; init; } = null!;
+        public string? resolution_notes { get; init; }
+        public DateTimeOffset dlq_at { get; init; }
+        public DateTimeOffset? resolved_at { get; init; }
+        public Guid? resolved_by { get; init; }
     }
 
     #endregion

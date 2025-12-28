@@ -4,8 +4,8 @@
     <RootNamespace>MorphDB.Tests</RootNamespace>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
-    <!-- Disable naming rules for test methods -->
-    <NoWarn>$(NoWarn);CA1707;CA1711</NoWarn>
+    <!-- Disable common analysis rules for test methods -->
+    <NoWarn>$(NoWarn);CA1707;CA1711;CA1822;CA1859</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

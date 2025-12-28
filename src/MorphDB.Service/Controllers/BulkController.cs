@@ -436,6 +436,14 @@ public sealed class BulkController : ControllerBase
 
             var fileName = $"{job.TableName}_{job.JobId:N}.{extension}";
 
+            // Try to get stored export data first (processed by background service)
+            var storedStream = await _bulkService.GetStoredExportDataAsync(jobId, cancellationToken);
+            if (storedStream != null)
+            {
+                return File(storedStream, contentType, fileName);
+            }
+
+            // Fallback: stream export on-the-fly if not stored
             var stream = new MemoryStream();
             await _bulkService.StreamExportAsync(jobId, stream, cancellationToken);
             stream.Position = 0;

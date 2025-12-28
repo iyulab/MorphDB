@@ -89,6 +89,63 @@ public interface IWebhookManager
     Task<string> RegenerateSecretAsync(
         Guid webhookId,
         CancellationToken cancellationToken = default);
+
+    #region Dead Letter Queue Operations
+
+    /// <summary>
+    /// Moves a failed delivery to the Dead Letter Queue.
+    /// </summary>
+    Task<WebhookDlqMessage> MoveToDlqAsync(
+        MoveToDlqRequest request,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets a DLQ message by ID.
+    /// </summary>
+    Task<WebhookDlqMessage?> GetDlqMessageAsync(
+        Guid dlqId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Lists DLQ messages for a webhook.
+    /// </summary>
+    Task<IReadOnlyList<WebhookDlqMessage>> ListDlqMessagesAsync(
+        Guid? webhookId = null,
+        DlqStatus? status = null,
+        int limit = 100,
+        int offset = 0,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets DLQ statistics for a tenant.
+    /// </summary>
+    Task<DlqStatistics> GetDlqStatisticsAsync(
+        Guid tenantId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Resolves a DLQ message (marks as handled).
+    /// </summary>
+    Task ResolveDlqMessageAsync(
+        ResolveDlqRequest request,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Replays a DLQ message (retries delivery).
+    /// </summary>
+    Task<WebhookDelivery> ReplayDlqMessageAsync(
+        Guid dlqId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Archives old DLQ messages.
+    /// </summary>
+    Task<int> ArchiveDlqMessagesAsync(
+        Guid? webhookId = null,
+        DateTimeOffset? olderThan = null,
+        CancellationToken cancellationToken = default);
+
+    #endregion
 }
 
 #region Request Models
@@ -132,6 +189,33 @@ public sealed record UpdateDeliveryRequest
     public string? ErrorMessage { get; init; }
     public DateTimeOffset? NextRetryAt { get; init; }
     public DateTimeOffset? DeliveredAt { get; init; }
+}
+
+public sealed record MoveToDlqRequest
+{
+    public Guid DeliveryId { get; init; }
+    public required DlqReason Reason { get; init; }
+}
+
+public sealed record ResolveDlqRequest
+{
+    public Guid DlqId { get; init; }
+    public required string ResolutionNotes { get; init; }
+    public Guid? ResolvedBy { get; init; }
+}
+
+/// <summary>
+/// DLQ statistics for monitoring and alerting.
+/// </summary>
+public sealed record DlqStatistics
+{
+    public int TotalMessages { get; init; }
+    public int PendingReviewCount { get; init; }
+    public int ResolvedCount { get; init; }
+    public int ArchivedCount { get; init; }
+    public IReadOnlyDictionary<string, int> ByReason { get; init; } = new Dictionary<string, int>();
+    public IReadOnlyDictionary<Guid, int> ByWebhook { get; init; } = new Dictionary<Guid, int>();
+    public DateTimeOffset? OldestPendingAt { get; init; }
 }
 
 #endregion

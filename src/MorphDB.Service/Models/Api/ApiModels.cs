@@ -386,6 +386,57 @@ public sealed record DeliveryApiResponse
     public DateTimeOffset? DeliveredAt { get; init; }
 }
 
+/// <summary>
+/// Dead Letter Queue message API response.
+/// </summary>
+public sealed record DlqMessageApiResponse
+{
+    public Guid DlqId { get; init; }
+    public Guid DeliveryId { get; init; }
+    public Guid WebhookId { get; init; }
+    public Guid? RecordId { get; init; }
+    public required string Event { get; init; }
+    public required string Reason { get; init; }
+    public int AttemptCount { get; init; }
+    public int? LastHttpStatusCode { get; init; }
+    public string? LastErrorMessage { get; init; }
+    public required string Status { get; init; }
+    public string? ResolutionNotes { get; init; }
+    public DateTimeOffset DlqAt { get; init; }
+    public DateTimeOffset? ResolvedAt { get; init; }
+}
+
+/// <summary>
+/// DLQ statistics API response.
+/// </summary>
+public sealed record DlqStatisticsApiResponse
+{
+    public int TotalMessages { get; init; }
+    public int PendingReviewCount { get; init; }
+    public int ResolvedCount { get; init; }
+    public int ArchivedCount { get; init; }
+    public IReadOnlyDictionary<string, int> ByReason { get; init; } = new Dictionary<string, int>();
+    public IReadOnlyDictionary<Guid, int> ByWebhook { get; init; } = new Dictionary<Guid, int>();
+    public DateTimeOffset? OldestPendingAt { get; init; }
+}
+
+/// <summary>
+/// Request to resolve a DLQ message.
+/// </summary>
+public sealed record ResolveDlqApiRequest
+{
+    public required string ResolutionNotes { get; init; }
+    public Guid? ResolvedBy { get; init; }
+}
+
+/// <summary>
+/// Response for DLQ archive operation.
+/// </summary>
+public sealed record ArchiveDlqApiResponse
+{
+    public int ArchivedCount { get; init; }
+}
+
 #endregion
 
 #region Bulk Import/Export API Models

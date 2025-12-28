@@ -2,7 +2,49 @@
 
 ## Overview
 
-MorphDB is developed in 12 phases. Each phase represents an independently testable functional unit.
+MorphDB is developed in 24 phases. Each phase represents an independently testable functional unit.
+
+---
+
+## Architecture Overview
+
+### Schema-based Multi-tenancy Model (Phase 17+)
+
+```
+morphdb (Global Control Plane)
+├── _organizations        # Organization registry
+├── _projects            # Project registry
+├── _global_config       # Global settings
+└── _schema_migrations   # Migration tracking
+
+p_{project_id}_sys (Project System Layer)
+├── _tables              # Table metadata
+├── _columns             # Column metadata
+├── _relations           # Relation definitions
+├── _indexes             # Index definitions
+├── _api_keys            # API keys for this project
+├── _webhooks            # Webhook configurations
+├── _webhook_deliveries  # Delivery tracking
+├── _security_policies   # RLS policies
+├── _audit_logs          # Audit trail (partitioned)
+├── _import_jobs         # Bulk import jobs
+└── _export_jobs         # Bulk export jobs
+
+p_{project_id}_dat (Project Data Layer)
+├── customers            # User-defined tables (logical names!)
+├── orders               # No hash naming needed
+├── products
+└── ...
+```
+
+### Naming Convention
+
+| Component | Format | Example |
+|-----------|--------|---------|
+| Project System Schema | `p_{id8}_sys` | `p_a1b2c3d4_sys` |
+| Project Data Schema | `p_{id8}_dat` | `p_a1b2c3d4_dat` |
+| System Tables | `_{name}` | `_tables`, `_audit_logs` |
+| User Tables | `{logical_name}` | `customers`, `orders` |
 
 ---
 
@@ -352,6 +394,394 @@ MorphDB is developed in 12 phases. Each phase represents an independently testab
 
 ---
 
+## Phase 13: Encryption Testing & Key Rotation ✅ Completed
+
+**Goal**: Production-ready encryption with comprehensive testing
+
+### 13.1 Encryption Testing
+- [x] Unit tests for `AesGcmDataEncryptionService`
+- [x] Key derivation tests (HKDF-based hierarchy)
+- [x] Tenant/table isolation verification
+- [x] Round-trip encryption/decryption validation
+
+### 13.2 Key Rotation
+- [x] `IKeyRotationService` abstraction
+- [x] `KeyRotationService` implementation
+- [x] Batch re-encryption support
+- [x] Progress tracking and resumption
+- [x] Versioned key management
+
+### 13.3 API Integration
+- [x] `SecurityController` encryption endpoints
+- [x] POST `/api/security/encryption/rotate-key`
+- [x] POST `/api/security/encryption/table/{table}/re-encrypt`
+- [x] GET `/api/security/encryption/status`
+
+---
+
+## Phase 14: Query Builder JOIN Completion ✅ Completed
+
+**Goal**: Full JOIN support with logical name resolution
+
+### 14.1 JOIN Enhancement
+- [x] Joined table metadata resolution
+- [x] Physical name translation for JOIN tables
+- [x] Column resolution across joined tables
+- [x] Cached metadata for joined tables
+
+---
+
+## Phase 15: Webhook Reliability & DLQ ✅ Completed
+
+**Goal**: Production-grade webhook delivery with Dead Letter Queue
+
+### 15.1 Dead Letter Queue
+- [x] `WebhookDlqMessage` model
+- [x] DLQ database table (`_morph_webhook_dlq`)
+- [x] DLQ reasons (MaxRetries, WebhookDeleted, WebhookInactive, PersistentClientError)
+- [x] DLQ status tracking (PendingReview, Resolved, Archived, Replayed)
+
+### 15.2 Enhanced Retry Logic
+- [x] Exponential backoff with jitter
+- [x] Persistent 4xx error detection (immediate DLQ)
+- [x] Inactive webhook handling
+- [x] Configurable retry settings
+
+### 15.3 DLQ API
+- [x] GET `/api/webhooks/dlq` - List DLQ messages
+- [x] GET `/api/webhooks/dlq/stats` - DLQ statistics
+- [x] GET `/api/webhooks/dlq/{dlqId}` - Get DLQ message
+- [x] POST `/api/webhooks/dlq/{dlqId}/resolve` - Resolve DLQ message
+- [x] POST `/api/webhooks/dlq/{dlqId}/replay` - Replay DLQ message
+- [x] POST `/api/webhooks/dlq/archive` - Archive old DLQ messages
+
+---
+
+## Phase 16: Performance Optimization ✅ Completed
+
+**Goal**: Caching and connection pooling for production performance
+
+### 16.1 Schema Caching
+- [x] `ISchemaCache` abstraction
+- [x] `RedisSchemaCache` implementation
+- [x] `CachingSchemaManagerDecorator` pattern
+- [x] Table metadata caching (tenant-isolated)
+- [x] Automatic cache invalidation on schema changes
+
+### 16.2 Connection Pooling
+- [x] `ConnectionPoolOptions` configuration
+- [x] Configurable pool sizes (min/max)
+- [x] Connection idle lifetime management
+- [x] Connection pruning intervals
+- [x] Command timeout settings
+- [x] Optional multiplexing support
+
+### 16.3 Service Registration
+- [x] Conditional Redis cache registration
+- [x] Decorator pattern integration
+- [x] Configuration-driven optimization
+
+---
+
+## Phase 17: Schema-based Layer Separation ✅ Completed
+
+**Goal**: Implement foundational schema-based multi-tenancy architecture
+
+**Priority**: Critical | **Effort**: High
+
+### 17.1 Core Abstractions
+- [x] `ISchemaLayerService` - Schema layer management abstraction
+- [x] `SchemaType` enum (System, Data, Global, Unknown)
+- [x] `SchemaNames` model (SystemSchema, DataSchema)
+- [x] `Project` model with schema references
+
+### 17.2 Schema Naming Service
+- [x] `ISchemaNameResolver` interface
+- [x] `PostgresSchemaNameResolver` implementation
+- [x] Short ID generation (first 8 chars of UUID, lowercase)
+- [x] Schema name validation (PostgreSQL 63-char limit)
+- [x] `TryParseSchemaName` for reverse lookup
+
+### 17.3 DdlBuilder Enhancement
+- [x] Schema-qualified DDL operations
+- [x] `BuildCreateSchema` / `BuildDropSchema`
+- [x] `BuildSystemTablesDdl` for project system tables
+- [x] Schema existence queries
+
+### 17.4 PostgresSchemaLayerService
+- [x] `ProvisionProjectSchemasAsync` - Create both schemas with system tables
+- [x] `DropProjectSchemasAsync` - Remove project schemas
+- [x] `SchemaExistsAsync` / `ProjectSchemasExistAsync`
+- [x] `GetSchemaStatsAsync` / `GetProjectStatsAsync`
+- [x] `ValidateSchemaHealthAsync` - Health check with issue detection
+- [x] `ListManagedSchemasAsync` - List all MorphDB schemas
+
+### 17.5 Project Repository & Service
+- [x] `IProjectRepository` - Project CRUD operations
+- [x] `ProjectRepository` PostgreSQL implementation
+- [x] `IProjectService` - Project lifecycle management
+- [x] `ProjectService` with schema provisioning coordination
+- [x] Project status lifecycle (Provisioning → Active → Suspended/Archived → Deleted)
+
+### 17.6 Database Schema
+- [x] `morphdb._morph_organizations` table
+- [x] `morphdb._morph_projects` table
+- [x] Project-specific system tables template
+- [x] Indexes for efficient queries
+
+### 17.7 Service Registration
+- [x] `ISchemaNameResolver` → `PostgresSchemaNameResolver`
+- [x] `ISchemaLayerService` → `PostgresSchemaLayerService`
+- [x] `IProjectRepository` → `ProjectRepository`
+- [x] `IProjectService` → `ProjectService`
+
+**Key Implementations**:
+- `PostgresSchemaNameResolver`: Schema naming with `p_{id8}_sys` / `p_{id8}_dat` format
+- `PostgresSchemaLayerService`: Full schema lifecycle management
+- `ProjectService`: Project lifecycle with atomic provisioning/cleanup
+- High-performance logging with `LoggerMessage` source generators
+
+---
+
+## Phase 18: Schema Migration & Provisioning
+
+**Goal**: Automated schema lifecycle management
+
+**Priority**: Critical | **Effort**: Medium
+
+### 18.1 Project Provisioner
+- [ ] `IProjectProvisioner` interface
+- [ ] `PostgresProjectProvisioner` implementation
+- [ ] Create system schema with all system tables
+- [ ] Create data schema (empty, ready for user tables)
+- [ ] Idempotent provisioning (re-run safe)
+
+### 18.2 Schema Migration Engine
+- [ ] `ISchemaMigrationService` interface
+- [ ] Migration version tracking per project
+- [ ] Parallel migration across all project schemas
+- [ ] Rollback support
+- [ ] Migration locking (prevent concurrent migrations)
+
+### 18.3 System Table Templates
+- [ ] Template SQL for `_sys` schema tables
+- [ ] Parameterized schema creation scripts
+- [ ] Version-controlled migration files
+
+### 18.4 Project Lifecycle API
+- [ ] POST `/api/projects` - Create project (provisions schemas)
+- [ ] DELETE `/api/projects/{id}` - Delete project (drops schemas)
+- [ ] POST `/api/projects/{id}/migrate` - Run migrations
+- [ ] GET `/api/projects/{id}/status` - Schema health check
+
+### 18.5 Legacy Migration Tool
+- [ ] `IMigrationTool` for existing tenants
+- [ ] Data migration from `public` to `p_{id}_dat`
+- [ ] Metadata migration to `p_{id}_sys`
+- [ ] Validation and rollback
+
+---
+
+## Phase 19: Audit Logging (Schema-aware)
+
+**Goal**: Comprehensive audit trail with schema-based isolation
+
+**Priority**: Critical | **Effort**: Medium
+
+### 19.1 Audit Event Model
+- [ ] `IAuditService` abstraction
+- [ ] `AuditEvent` model with full context
+- [ ] Event categories: auth, data, schema, admin, security
+- [ ] Severity levels: debug, info, warning, error, critical
+
+### 19.2 Audit Capture
+- [ ] HTTP middleware for API audit
+- [ ] Schema change hooks (DDL operations)
+- [ ] Data operation hooks (DML operations)
+- [ ] Authentication event capture
+- [ ] Async queue for non-blocking writes
+
+### 19.3 Schema-isolated Storage
+- [ ] `_audit_logs` table in each `p_{id}_sys` schema
+- [ ] Time-based partitioning (monthly)
+- [ ] Hash chain for tamper detection
+- [ ] Configurable retention per project
+
+### 19.4 Audit Query API
+- [ ] GET `/api/projects/{id}/audit/logs` - Query logs
+- [ ] GET `/api/projects/{id}/audit/logs/{logId}` - Get specific
+- [ ] GET `/api/projects/{id}/audit/stats` - Statistics
+- [ ] Filters: time, actor, resource, action, severity
+
+### 19.5 Log Export & Integration
+- [ ] CSV/JSON export
+- [ ] SIEM integration (webhook drain)
+- [ ] Real-time WebSocket feed (Enterprise)
+
+---
+
+## Phase 20: Rate Limiting & Quota
+
+**Goal**: Fair usage enforcement and resource protection
+
+**Priority**: High | **Effort**: Medium
+
+### 20.1 Rate Limiter Core
+- [ ] `IRateLimiter` interface
+- [ ] Token bucket algorithm
+- [ ] Redis-based distributed limiting
+- [ ] Per-project rate configuration
+
+### 20.2 Rate Limit Middleware
+- [ ] ASP.NET Core middleware
+- [ ] Rate limit headers (X-RateLimit-*)
+- [ ] 429 response with Retry-After
+- [ ] Endpoint-specific limits
+
+### 20.3 Quota Management
+- [ ] `IQuotaService` interface
+- [ ] Storage quota (per project)
+- [ ] API call quota (per project)
+- [ ] Schema/table count limits
+- [ ] Connection limits
+
+### 20.4 Quota API
+- [ ] GET `/api/projects/{id}/quota` - Current usage
+- [ ] GET `/api/projects/{id}/quota/history` - Usage history
+- [ ] Webhook on quota threshold
+
+---
+
+## Phase 21: Organization Hierarchy & RBAC
+
+**Goal**: Enterprise organization and permission management
+
+**Priority**: High | **Effort**: High
+
+### 21.1 Organization Model
+- [ ] `Organization` entity in morphdb schema
+- [ ] `OrganizationMember` with roles
+- [ ] Organization settings and billing link
+- [ ] Organization-level SSO configuration
+
+### 21.2 Project Hierarchy
+- [ ] Projects belong to Organizations
+- [ ] `ProjectMember` with roles
+- [ ] Environment concept (prod/staging/dev)
+- [ ] Project-level settings
+
+### 21.3 RBAC System
+- [ ] `IPermissionService` interface
+- [ ] Built-in roles: owner, admin, developer, viewer
+- [ ] Custom role definitions (Enterprise)
+- [ ] Permission inheritance (org → project)
+
+### 21.4 Organization API
+- [ ] CRUD `/api/organizations`
+- [ ] CRUD `/api/organizations/{id}/members`
+- [ ] CRUD `/api/organizations/{id}/projects`
+- [ ] Role assignment endpoints
+
+---
+
+## Phase 22: OIDC/SAML SSO
+
+**Goal**: Enterprise identity provider integration
+
+**Priority**: High | **Effort**: High
+
+### 22.1 OIDC Support
+- [ ] `IOidcService` interface
+- [ ] Generic OIDC provider
+- [ ] Pre-configured: Google, Microsoft, Auth0, Okta
+- [ ] PKCE flow
+- [ ] Token refresh handling
+
+### 22.2 SAML Support (Enterprise)
+- [ ] `ISamlService` interface
+- [ ] SP metadata generation
+- [ ] IdP configuration
+- [ ] Attribute mapping
+- [ ] JIT provisioning
+
+### 22.3 SSO Configuration API
+- [ ] POST `/api/organizations/{id}/sso/oidc`
+- [ ] POST `/api/organizations/{id}/sso/saml`
+- [ ] GET `/api/organizations/{id}/sso/metadata`
+
+### 22.4 MFA Enhancement
+- [ ] WebAuthn/FIDO2 support
+- [ ] Organization-level MFA enforcement
+- [ ] Backup codes
+
+---
+
+## Phase 23: Backup & PITR (Schema-based)
+
+**Goal**: Data protection with schema-level granularity
+
+**Priority**: Critical | **Effort**: High
+
+### 23.1 Backup Service
+- [ ] `IBackupService` interface
+- [ ] Schema-level backup (`pg_dump -n schema`)
+- [ ] Full project backup (both schemas)
+- [ ] Scheduled backup jobs
+- [ ] On-demand backup API
+
+### 23.2 Storage Backend
+- [ ] S3/GCS/Azure Blob support
+- [ ] Backup encryption (AES-256)
+- [ ] Compression (zstd)
+- [ ] Cross-region storage
+
+### 23.3 Point-in-Time Recovery
+- [ ] WAL archiving per project (Enterprise)
+- [ ] PITR target selection
+- [ ] Recovery to new project
+- [ ] Recovery verification
+
+### 23.4 Backup API
+- [ ] POST `/api/projects/{id}/backups` - Create backup
+- [ ] GET `/api/projects/{id}/backups` - List backups
+- [ ] POST `/api/projects/{id}/backups/{bid}/restore`
+- [ ] DELETE `/api/projects/{id}/backups/{bid}`
+
+---
+
+## Phase 24: Admin Dashboard
+
+**Goal**: Self-service management and monitoring UI
+
+**Priority**: Medium | **Effort**: High
+
+### 24.1 Dashboard Backend
+- [ ] GET `/api/dashboard/overview`
+- [ ] GET `/api/dashboard/metrics`
+- [ ] GET `/api/dashboard/projects`
+- [ ] WebSocket real-time updates
+
+### 24.2 Monitoring
+- [ ] Query performance metrics
+- [ ] Connection pool status
+- [ ] Storage usage per project
+- [ ] API call statistics
+
+### 24.3 Alerting
+- [ ] `IAlertService` interface
+- [ ] Threshold-based alerts
+- [ ] Notification channels (email, Slack, webhook)
+- [ ] Alert policies
+
+### 24.4 UI Components
+- [ ] Project list with health status
+- [ ] Schema explorer (visual)
+- [ ] Query console
+- [ ] Audit log viewer
+- [ ] Backup management
+
+---
+
 ## Version Milestones
 
 | Version | Phases | Goal | Status |
@@ -360,7 +790,64 @@ MorphDB is developed in 12 phases. Each phase represents an independently testab
 | 0.2.0 | 4-6 | API layer complete | ✅ Completed |
 | 0.3.0 | 7-8 | Real-time features | ✅ Completed |
 | 0.4.0 | 9-10 | Bulk & SDKs | ✅ Completed |
-| **0.5.0** | **11-12** | **Production Ready (Beta)** | **✅ Completed** |
+| 0.5.0 | 11-12 | Production Ready (Beta) | ✅ Completed |
+| 0.6.0 | 13-16 | Enterprise Hardening | ✅ Completed |
+| **0.7.0** | **17-18** | **Schema Architecture** | 🔄 In Progress |
+| 0.8.0 | 19-20 | Audit + Rate Limiting | Planned |
+| 0.9.0 | 21-22 | Organization + SSO | Planned |
+| 1.0.0 | 23-24 | Enterprise Ready | Planned |
+
+---
+
+## Migration Path
+
+### For Existing Users
+
+```yaml
+legacy_compatibility:
+  mode: dual_track
+
+  existing_tenants:
+    - Continue working unchanged
+    - Opt-in migration available
+    - No forced migration
+
+  migration_process:
+    1. Create new project with schema-based architecture
+    2. Export data from legacy tenant
+    3. Import to new project
+    4. Verify and switch over
+    5. Decommission legacy tenant
+
+  timeline:
+    - v0.7.0: New projects use schema-based
+    - v0.8.0: Migration tool available
+    - v1.0.0: Legacy mode deprecated notice
+    - v2.0.0: Legacy mode removed
+```
+
+---
+
+## Compliance Targets
+
+| Compliance | Target Version | Key Requirements |
+|------------|----------------|------------------|
+| **GDPR** | 0.8.0 | Audit logs, data export, deletion |
+| **SOC 2 Type I** | 0.9.0 | Security controls, access management |
+| **SOC 2 Type II** | 1.0.0 | 6-month audit period |
+| **HIPAA** | 1.0.0+ | BAA, encryption, audit, access control |
+
+---
+
+## Risk Mitigation
+
+| Risk | Mitigation |
+|------|------------|
+| Schema explosion | Monitoring, cleanup automation |
+| Migration complexity | Dual-mode, gradual rollout |
+| Connection pool issues | Explicit schema in queries |
+| Cross-tenant queries | Strict schema isolation |
+| Performance impact | Benchmarking at each phase |
 
 ---
 

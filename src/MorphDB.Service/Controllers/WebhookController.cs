@@ -293,4 +293,175 @@ public sealed class WebhookController : ControllerBase
             DeliveredAt = delivery.DeliveredAt
         };
     }
+
+    #region Dead Letter Queue Endpoints
+
+    /// <summary>
+    /// Lists DLQ messages for a webhook or all webhooks.
+    /// </summary>
+    [HttpGet("dlq")]
+    [ProducesResponseType(typeof(IEnumerable<DlqMessageApiResponse>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ListDlqMessages(
+        [FromQuery] Guid? webhookId,
+        [FromQuery] string? status,
+        [FromQuery] int limit = 100,
+        [FromQuery] int offset = 0,
+        CancellationToken cancellationToken = default)
+    {
+        DlqStatus? dlqStatus = status is not null
+            ? Enum.Parse<DlqStatus>(status, ignoreCase: true)
+            : null;
+
+        var messages = await _webhookManager.ListDlqMessagesAsync(webhookId, dlqStatus, limit, offset, cancellationToken);
+        return Ok(messages.Select(MapToDlqResponse));
+    }
+
+    /// <summary>
+    /// Gets DLQ statistics for a tenant.
+    /// </summary>
+    [HttpGet("dlq/stats")]
+    [ProducesResponseType(typeof(DlqStatisticsApiResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetDlqStatistics(
+        [FromHeader(Name = "X-Tenant-Id")] Guid tenantId,
+        CancellationToken cancellationToken = default)
+    {
+        if (tenantId == Guid.Empty)
+        {
+            return BadRequest(new ErrorResponse
+            {
+                Error = "InvalidTenant",
+                Message = "X-Tenant-Id header is required"
+            });
+        }
+
+        var stats = await _webhookManager.GetDlqStatisticsAsync(tenantId, cancellationToken);
+        return Ok(new DlqStatisticsApiResponse
+        {
+            TotalMessages = stats.TotalMessages,
+            PendingReviewCount = stats.PendingReviewCount,
+            ResolvedCount = stats.ResolvedCount,
+            ArchivedCount = stats.ArchivedCount,
+            ByReason = stats.ByReason,
+            ByWebhook = stats.ByWebhook,
+            OldestPendingAt = stats.OldestPendingAt
+        });
+    }
+
+    /// <summary>
+    /// Gets a specific DLQ message.
+    /// </summary>
+    [HttpGet("dlq/{dlqId:guid}")]
+    [ProducesResponseType(typeof(DlqMessageApiResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetDlqMessage(
+        Guid dlqId,
+        CancellationToken cancellationToken = default)
+    {
+        var message = await _webhookManager.GetDlqMessageAsync(dlqId, cancellationToken);
+        if (message is null)
+        {
+            return NotFound(new ErrorResponse
+            {
+                Error = "NotFound",
+                Message = $"DLQ message {dlqId} not found"
+            });
+        }
+
+        return Ok(MapToDlqResponse(message));
+    }
+
+    /// <summary>
+    /// Resolves a DLQ message.
+    /// </summary>
+    [HttpPost("dlq/{dlqId:guid}/resolve")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ResolveDlqMessage(
+        Guid dlqId,
+        [FromBody] ResolveDlqApiRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var message = await _webhookManager.GetDlqMessageAsync(dlqId, cancellationToken);
+        if (message is null)
+        {
+            return NotFound(new ErrorResponse
+            {
+                Error = "NotFound",
+                Message = $"DLQ message {dlqId} not found"
+            });
+        }
+
+        await _webhookManager.ResolveDlqMessageAsync(new ResolveDlqRequest
+        {
+            DlqId = dlqId,
+            ResolutionNotes = request.ResolutionNotes,
+            ResolvedBy = request.ResolvedBy
+        }, cancellationToken);
+
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Replays a DLQ message (creates a new delivery attempt).
+    /// </summary>
+    [HttpPost("dlq/{dlqId:guid}/replay")]
+    [ProducesResponseType(typeof(DeliveryApiResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ReplayDlqMessage(
+        Guid dlqId,
+        CancellationToken cancellationToken = default)
+    {
+        var message = await _webhookManager.GetDlqMessageAsync(dlqId, cancellationToken);
+        if (message is null)
+        {
+            return NotFound(new ErrorResponse
+            {
+                Error = "NotFound",
+                Message = $"DLQ message {dlqId} not found"
+            });
+        }
+
+        var delivery = await _webhookManager.ReplayDlqMessageAsync(dlqId, cancellationToken);
+        return Ok(MapToDeliveryResponse(delivery));
+    }
+
+    /// <summary>
+    /// Archives old DLQ messages.
+    /// </summary>
+    [HttpPost("dlq/archive")]
+    [ProducesResponseType(typeof(ArchiveDlqApiResponse), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ArchiveDlqMessages(
+        [FromQuery] Guid? webhookId,
+        [FromQuery] int? olderThanDays,
+        CancellationToken cancellationToken = default)
+    {
+        DateTimeOffset? olderThan = olderThanDays.HasValue
+            ? DateTimeOffset.UtcNow.AddDays(-olderThanDays.Value)
+            : null;
+
+        var archivedCount = await _webhookManager.ArchiveDlqMessagesAsync(webhookId, olderThan, cancellationToken);
+        return Ok(new ArchiveDlqApiResponse { ArchivedCount = archivedCount });
+    }
+
+    private static DlqMessageApiResponse MapToDlqResponse(WebhookDlqMessage message)
+    {
+        return new DlqMessageApiResponse
+        {
+            DlqId = message.DlqId,
+            DeliveryId = message.DeliveryId,
+            WebhookId = message.WebhookId,
+            RecordId = message.RecordId,
+            Event = message.Event.ToString().ToLowerInvariant(),
+            Reason = message.Reason.ToString(),
+            AttemptCount = message.AttemptCount,
+            LastHttpStatusCode = message.LastHttpStatusCode,
+            LastErrorMessage = message.LastErrorMessage,
+            Status = message.Status.ToString(),
+            ResolutionNotes = message.ResolutionNotes,
+            DlqAt = message.DlqAt,
+            ResolvedAt = message.ResolvedAt
+        };
+    }
+
+    #endregion
 }

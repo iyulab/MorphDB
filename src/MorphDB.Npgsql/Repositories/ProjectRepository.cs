@@ -1,0 +1,336 @@
+using System.Text.RegularExpressions;
+using Dapper;
+using MorphDB.Core.Abstractions;
+using MorphDB.Core.Exceptions;
+using MorphDB.Core.Models;
+using Npgsql;
+
+namespace MorphDB.Npgsql.Repositories;
+
+/// <summary>
+/// PostgreSQL repository for managing projects in the global control plane schema (morphdb).
+/// </summary>
+public sealed partial class ProjectRepository : IProjectRepository
+{
+    private readonly NpgsqlDataSource _dataSource;
+    private readonly ISchemaNameResolver _schemaNameResolver;
+    private const string ProjectsTable = "morphdb._morph_projects";
+
+    public ProjectRepository(
+        NpgsqlDataSource dataSource,
+        ISchemaNameResolver schemaNameResolver)
+    {
+        _dataSource = dataSource;
+        _schemaNameResolver = schemaNameResolver;
+    }
+
+    /// <inheritdoc/>
+    public async Task<Project> CreateAsync(
+        CreateProjectRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var projectId = request.ProjectId ?? Guid.NewGuid();
+        var slug = request.Slug ?? GenerateSlug(request.Name);
+        var schemaNames = _schemaNameResolver.GetSchemaNames(projectId);
+
+        // Check slug availability
+        if (!await IsSlugAvailableAsync(slug, cancellationToken))
+        {
+            throw new MorphDbException("DUPLICATE_SLUG", $"Project slug '{slug}' is already in use.");
+        }
+
+        const string sql = """
+            INSERT INTO morphdb._morph_projects (
+                project_id, org_id, name, slug, system_schema, data_schema,
+                settings, status, created_at, updated_at
+            )
+            VALUES (
+                @ProjectId, @OrganizationId, @Name, @Slug, @SystemSchema, @DataSchema,
+                @Settings::jsonb, @Status, NOW(), NOW()
+            )
+            RETURNING *
+            """;
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+
+        var entity = await connection.QuerySingleAsync<ProjectEntity>(sql, new
+        {
+            ProjectId = projectId,
+            request.OrganizationId,
+            request.Name,
+            Slug = slug,
+            schemaNames.SystemSchema,
+            schemaNames.DataSchema,
+            Settings = System.Text.Json.JsonSerializer.Serialize(request.Settings),
+            Status = (int)ProjectStatus.Provisioning
+        });
+
+        return MapToProject(entity);
+    }
+
+    /// <inheritdoc/>
+    public async Task<Project?> GetByIdAsync(
+        Guid projectId,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT * FROM morphdb._morph_projects
+            WHERE project_id = @ProjectId AND status != @DeletedStatus
+            """;
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+
+        var entity = await connection.QuerySingleOrDefaultAsync<ProjectEntity>(sql, new
+        {
+            ProjectId = projectId,
+            DeletedStatus = (int)ProjectStatus.Deleted
+        });
+
+        return entity is null ? null : MapToProject(entity);
+    }
+
+    /// <inheritdoc/>
+    public async Task<Project?> GetBySlugAsync(
+        string slug,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT * FROM morphdb._morph_projects
+            WHERE slug = @Slug AND status != @DeletedStatus
+            """;
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+
+        var entity = await connection.QuerySingleOrDefaultAsync<ProjectEntity>(sql, new
+        {
+            Slug = slug,
+            DeletedStatus = (int)ProjectStatus.Deleted
+        });
+
+        return entity is null ? null : MapToProject(entity);
+    }
+
+    /// <inheritdoc/>
+    public async Task<IReadOnlyList<Project>> ListAsync(
+        Guid? organizationId = null,
+        ProjectStatus? status = null,
+        int offset = 0,
+        int limit = 100,
+        CancellationToken cancellationToken = default)
+    {
+        var sql = """
+            SELECT * FROM morphdb._morph_projects
+            WHERE status != @DeletedStatus
+            """;
+
+        var parameters = new DynamicParameters();
+        parameters.Add("DeletedStatus", (int)ProjectStatus.Deleted);
+        parameters.Add("Offset", offset);
+        parameters.Add("Limit", limit);
+
+        if (organizationId.HasValue)
+        {
+            sql += " AND org_id = @OrganizationId";
+            parameters.Add("OrganizationId", organizationId.Value);
+        }
+
+        if (status.HasValue)
+        {
+            sql += " AND status = @Status";
+            parameters.Add("Status", (int)status.Value);
+        }
+
+        sql += " ORDER BY created_at DESC OFFSET @Offset LIMIT @Limit";
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+
+        var entities = await connection.QueryAsync<ProjectEntity>(sql, parameters);
+
+        return entities.Select(MapToProject).ToList();
+    }
+
+    /// <inheritdoc/>
+    public async Task<Project> UpdateAsync(
+        UpdateProjectRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var existing = await GetByIdAsync(request.ProjectId, cancellationToken)
+            ?? throw new MorphDbException("PROJECT_NOT_FOUND", $"Project with ID '{request.ProjectId}' not found.");
+
+        var updates = new List<string> { "updated_at = NOW()" };
+        var parameters = new DynamicParameters();
+        parameters.Add("ProjectId", request.ProjectId);
+
+        if (request.Name is not null)
+        {
+            updates.Add("name = @Name");
+            parameters.Add("Name", request.Name);
+        }
+
+        if (request.Settings is not null)
+        {
+            updates.Add("settings = @Settings::jsonb");
+            parameters.Add("Settings", System.Text.Json.JsonSerializer.Serialize(request.Settings));
+        }
+
+        var sql = $"""
+            UPDATE morphdb._morph_projects
+            SET {string.Join(", ", updates)}
+            WHERE project_id = @ProjectId
+            RETURNING *
+            """;
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+
+        var entity = await connection.QuerySingleAsync<ProjectEntity>(sql, parameters);
+
+        return MapToProject(entity);
+    }
+
+    /// <inheritdoc/>
+    public async Task UpdateStatusAsync(
+        Guid projectId,
+        ProjectStatus status,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            UPDATE morphdb._morph_projects
+            SET status = @Status, updated_at = NOW()
+            WHERE project_id = @ProjectId
+            """;
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+
+        await connection.ExecuteAsync(sql, new
+        {
+            ProjectId = projectId,
+            Status = (int)status
+        });
+    }
+
+    /// <inheritdoc/>
+    public async Task DeleteAsync(
+        Guid projectId,
+        CancellationToken cancellationToken = default)
+    {
+        await UpdateStatusAsync(projectId, ProjectStatus.Deleted, cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public async Task<bool> IsSlugAvailableAsync(
+        string slug,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT NOT EXISTS(
+                SELECT 1 FROM morphdb._morph_projects
+                WHERE slug = @Slug AND status != @DeletedStatus
+            )
+            """;
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+
+        return await connection.ExecuteScalarAsync<bool>(sql, new
+        {
+            Slug = slug,
+            DeletedStatus = (int)ProjectStatus.Deleted
+        });
+    }
+
+    /// <inheritdoc/>
+    public async Task<int> CountAsync(
+        Guid? organizationId = null,
+        ProjectStatus? status = null,
+        CancellationToken cancellationToken = default)
+    {
+        var sql = "SELECT COUNT(*) FROM morphdb._morph_projects WHERE status != @DeletedStatus";
+
+        var parameters = new DynamicParameters();
+        parameters.Add("DeletedStatus", (int)ProjectStatus.Deleted);
+
+        if (organizationId.HasValue)
+        {
+            sql += " AND org_id = @OrganizationId";
+            parameters.Add("OrganizationId", organizationId.Value);
+        }
+
+        if (status.HasValue)
+        {
+            sql += " AND status = @Status";
+            parameters.Add("Status", (int)status.Value);
+        }
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+
+        return await connection.ExecuteScalarAsync<int>(sql, parameters);
+    }
+
+    private static string GenerateSlug(string name)
+    {
+        // Convert to lowercase, replace spaces with dashes, remove special chars
+        var slug = name.ToLowerInvariant()
+            .Replace(" ", "-")
+            .Replace("_", "-");
+
+        // Remove non-alphanumeric characters except dashes
+        slug = SlugCleanupPattern().Replace(slug, "");
+
+        // Remove consecutive dashes
+        slug = MultipleDashPattern().Replace(slug, "-");
+
+        // Trim dashes from start/end
+        slug = slug.Trim('-');
+
+        // Ensure minimum length
+        if (slug.Length < 3)
+        {
+            slug += "-project";
+        }
+
+        return slug;
+    }
+
+    private static Project MapToProject(ProjectEntity entity)
+    {
+        ProjectSettings? settings = null;
+        if (!string.IsNullOrEmpty(entity.Settings))
+        {
+            settings = System.Text.Json.JsonSerializer.Deserialize<ProjectSettings>(entity.Settings);
+        }
+
+        return new Project
+        {
+            ProjectId = entity.ProjectId,
+            OrganizationId = entity.OrgId,
+            Name = entity.Name,
+            Slug = entity.Slug,
+            SystemSchema = entity.SystemSchema,
+            DataSchema = entity.DataSchema,
+            Settings = settings,
+            Status = (ProjectStatus)entity.Status,
+            CreatedAt = entity.CreatedAt,
+            UpdatedAt = entity.UpdatedAt
+        };
+    }
+
+    [GeneratedRegex(@"[^a-z0-9\-]")]
+    private static partial Regex SlugCleanupPattern();
+
+    [GeneratedRegex(@"-+")]
+    private static partial Regex MultipleDashPattern();
+
+    // Entity class for Dapper mapping
+    private sealed class ProjectEntity
+    {
+        public Guid ProjectId { get; init; }
+        public Guid? OrgId { get; init; }
+        public string Name { get; init; } = default!;
+        public string Slug { get; init; } = default!;
+        public string SystemSchema { get; init; } = default!;
+        public string DataSchema { get; init; } = default!;
+        public string? Settings { get; init; }
+        public int Status { get; init; }
+        public DateTimeOffset CreatedAt { get; init; }
+        public DateTimeOffset UpdatedAt { get; init; }
+    }
+}

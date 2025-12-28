@@ -85,6 +85,7 @@ internal sealed class MorphQuery : IMorphQuery
 
     private TableMetadata? _tableMetadata;
     private string? _rlsExpression;
+    private readonly Dictionary<string, TableMetadata> _joinedTableMetadata = new();
 
     // Store all query operations with logical names
     private bool _selectAllCalled;
@@ -556,18 +557,21 @@ internal sealed class MorphQuery : IMorphQuery
             query.WhereRaw(_rlsExpression);
         }
 
-        // JOIN - would need to resolve joined table metadata too
-        // For now, joins are not fully supported with name translation
-        foreach (var (joinTable, source, target, isLeft) in _joins)
+        // JOIN - resolve physical table and column names
+        foreach (var (joinTableName, sourceColumn, targetColumn, isLeft) in _joins)
         {
-            // TODO: Resolve joined table's physical name
+            var joinTable = await GetJoinedTableMetadataAsync(joinTableName, cancellationToken);
+            var physicalJoinTable = joinTable.PhysicalName;
+            var physicalSourceColumn = GetPhysicalColumnName(sourceColumn, table);
+            var physicalTargetColumn = GetPhysicalColumnName(targetColumn, joinTable);
+
             if (isLeft)
             {
-                query.LeftJoin(joinTable, source, target);
+                query.LeftJoin(physicalJoinTable, physicalSourceColumn, physicalTargetColumn);
             }
             else
             {
-                query.Join(joinTable, source, target);
+                query.Join(physicalJoinTable, physicalSourceColumn, physicalTargetColumn);
             }
         }
 
@@ -848,6 +852,23 @@ internal sealed class MorphQuery : IMorphQuery
         await LoadRlsExpressionAsync(PolicyType.Select, cancellationToken);
 
         return _tableMetadata;
+    }
+
+    private async Task<TableMetadata> GetJoinedTableMetadataAsync(
+        string tableName,
+        CancellationToken cancellationToken)
+    {
+        if (_joinedTableMetadata.TryGetValue(tableName, out var cached))
+            return cached;
+
+        var metadata = await _metadataRepository.GetTableByNameAsync(
+            _tenantId, tableName, includeColumns: true, cancellationToken);
+
+        if (metadata is null)
+            throw new InvalidOperationException($"Joined table '{tableName}' not found for tenant '{_tenantId}'");
+
+        _joinedTableMetadata[tableName] = metadata;
+        return metadata;
     }
 
     private async Task LoadRlsExpressionAsync(PolicyType policyType, CancellationToken cancellationToken)

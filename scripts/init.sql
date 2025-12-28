@@ -137,6 +137,32 @@ CREATE TABLE IF NOT EXISTS morphdb._morph_webhook_deliveries (
     delivered_at TIMESTAMPTZ
 );
 
+-- System table: _morph_webhook_dlq (Dead Letter Queue)
+CREATE TABLE IF NOT EXISTS morphdb._morph_webhook_dlq (
+    dlq_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    delivery_id UUID NOT NULL,
+    webhook_id UUID NOT NULL REFERENCES morphdb._morph_webhooks(webhook_id) ON DELETE CASCADE,
+    tenant_id UUID NOT NULL,
+    record_id UUID,
+    event VARCHAR(20) NOT NULL,
+    payload JSONB NOT NULL,
+    reason VARCHAR(50) NOT NULL,
+    attempt_count INTEGER NOT NULL DEFAULT 0,
+    last_http_status_code INTEGER,
+    last_error_message TEXT,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending_review',
+    resolution_notes TEXT,
+    dlq_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    resolved_at TIMESTAMPTZ,
+    resolved_by UUID
+);
+
+-- Index for DLQ queries
+CREATE INDEX IF NOT EXISTS idx_morph_webhook_dlq_webhook_id ON morphdb._morph_webhook_dlq(webhook_id);
+CREATE INDEX IF NOT EXISTS idx_morph_webhook_dlq_tenant_id ON morphdb._morph_webhook_dlq(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_morph_webhook_dlq_status ON morphdb._morph_webhook_dlq(status);
+CREATE INDEX IF NOT EXISTS idx_morph_webhook_dlq_dlq_at ON morphdb._morph_webhook_dlq(dlq_at);
+
 -- System table: _morph_import_jobs
 CREATE TABLE IF NOT EXISTS morphdb._morph_import_jobs (
     job_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -182,6 +208,53 @@ CREATE TABLE IF NOT EXISTS morphdb._morph_import_data (
     data BYTEA NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- System table: _morph_export_data (temporary storage for export data)
+CREATE TABLE IF NOT EXISTS morphdb._morph_export_data (
+    job_id UUID PRIMARY KEY REFERENCES morphdb._morph_export_jobs(job_id) ON DELETE CASCADE,
+    data BYTEA NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ============================================================================
+-- Phase 17: Schema-based Layer Separation - Global Control Plane Tables
+-- ============================================================================
+
+-- System table: _morph_organizations (for future hierarchical multi-tenancy)
+CREATE TABLE IF NOT EXISTS morphdb._morph_organizations (
+    org_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(100) NOT NULL,
+    slug VARCHAR(100) NOT NULL UNIQUE,
+    owner_id UUID,
+    settings JSONB,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- System table: _morph_projects (central project registry)
+CREATE TABLE IF NOT EXISTS morphdb._morph_projects (
+    project_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    org_id UUID REFERENCES morphdb._morph_organizations(org_id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL,
+    slug VARCHAR(100) NOT NULL UNIQUE,
+    system_schema VARCHAR(63) NOT NULL UNIQUE,
+    data_schema VARCHAR(63) NOT NULL UNIQUE,
+    settings JSONB,
+    status INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Create indexes for projects
+CREATE INDEX IF NOT EXISTS idx_morph_projects_org ON morphdb._morph_projects(org_id);
+CREATE INDEX IF NOT EXISTS idx_morph_projects_status ON morphdb._morph_projects(status);
+CREATE INDEX IF NOT EXISTS idx_morph_projects_slug ON morphdb._morph_projects(slug);
+CREATE INDEX IF NOT EXISTS idx_morph_organizations_slug ON morphdb._morph_organizations(slug);
+
+-- ============================================================================
+-- Legacy Tables (for backward compatibility with tenant-based approach)
+-- ============================================================================
 
 -- Create indexes for system tables
 CREATE INDEX IF NOT EXISTS idx_morph_tables_tenant ON morphdb._morph_tables(tenant_id);

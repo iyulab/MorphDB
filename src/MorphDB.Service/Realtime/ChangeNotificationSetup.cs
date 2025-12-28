@@ -31,6 +31,7 @@ public sealed partial class ChangeNotificationSetup
         await using var dataSource = NpgsqlDataSource.Create(_connectionString);
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
 
+        // Use dynamic column access since MorphDB uses hashed physical column names
         var sql = $"""
             CREATE OR REPLACE FUNCTION {FunctionName}() RETURNS trigger AS $$
             DECLARE
@@ -38,20 +39,35 @@ public sealed partial class ChangeNotificationSetup
                 record_id UUID;
                 tenant_id UUID;
                 table_name TEXT;
+                id_col_name TEXT;
+                tenant_col_name TEXT;
+                row_data JSONB;
             BEGIN
-                -- Get the logical table name from system table
-                SELECT logical_name INTO table_name
-                FROM morphdb._morph_tables
-                WHERE physical_name = TG_TABLE_NAME;
+                -- Get the logical table name and column physical names from system table
+                SELECT t.logical_name INTO table_name
+                FROM morphdb._morph_tables t
+                WHERE t.physical_name = TG_TABLE_NAME;
 
                 -- If not found in system table, use the physical name
                 IF table_name IS NULL THEN
                     table_name := TG_TABLE_NAME;
                 END IF;
 
+                -- Get physical column names for id and tenant_id
+                SELECT c.physical_name INTO id_col_name
+                FROM morphdb._morph_tables t
+                JOIN morphdb._morph_columns c ON c.table_id = t.table_id
+                WHERE t.physical_name = TG_TABLE_NAME AND c.logical_name = 'id';
+
+                SELECT c.physical_name INTO tenant_col_name
+                FROM morphdb._morph_tables t
+                JOIN morphdb._morph_columns c ON c.table_id = t.table_id
+                WHERE t.physical_name = TG_TABLE_NAME AND c.logical_name = 'tenant_id';
+
                 IF TG_OP = 'DELETE' THEN
-                    record_id := OLD.id;
-                    tenant_id := OLD.tenant_id;
+                    row_data := to_jsonb(OLD);
+                    record_id := (row_data ->> id_col_name)::uuid;
+                    tenant_id := (row_data ->> tenant_col_name)::uuid;
                     payload := jsonb_build_object(
                         'tenant_id', tenant_id,
                         'table', table_name,
@@ -60,14 +76,15 @@ public sealed partial class ChangeNotificationSetup
                         'timestamp', NOW()
                     );
                 ELSE
-                    record_id := NEW.id;
-                    tenant_id := NEW.tenant_id;
+                    row_data := to_jsonb(NEW);
+                    record_id := (row_data ->> id_col_name)::uuid;
+                    tenant_id := (row_data ->> tenant_col_name)::uuid;
                     payload := jsonb_build_object(
                         'tenant_id', tenant_id,
                         'table', table_name,
                         'operation', TG_OP,
                         'record_id', record_id,
-                        'data', to_jsonb(NEW),
+                        'data', row_data,
                         'timestamp', NOW()
                     );
                 END IF;

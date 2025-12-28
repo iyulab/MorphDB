@@ -90,13 +90,9 @@ public sealed class WebhookProcessorService : BackgroundService
         {
             WebhookProcessorServiceLogs.WebhookInactive(_logger, delivery.DeliveryId, delivery.WebhookId);
 
-            await webhookManager.UpdateDeliveryAsync(new UpdateDeliveryRequest
-            {
-                DeliveryId = delivery.DeliveryId,
-                Status = DeliveryStatus.Failed,
-                AttemptCount = delivery.AttemptCount + 1,
-                ErrorMessage = "Webhook is inactive or deleted"
-            }, cancellationToken);
+            // Move to DLQ with appropriate reason
+            var dlqReason = webhook is null ? DlqReason.WebhookDeleted : DlqReason.WebhookInactive;
+            await MoveToDlqAsync(webhookManager, delivery, dlqReason, cancellationToken);
 
             return;
         }
@@ -120,6 +116,10 @@ public sealed class WebhookProcessorService : BackgroundService
         {
             WebhookProcessorServiceLogs.MaxRetriesExceeded(_logger, delivery.DeliveryId, newAttemptCount);
 
+            // Determine DLQ reason based on failure type
+            var dlqReason = DeterminesDlqReason(result);
+
+            // Update attempt count first
             await webhookManager.UpdateDeliveryAsync(new UpdateDeliveryRequest
             {
                 DeliveryId = delivery.DeliveryId,
@@ -129,9 +129,32 @@ public sealed class WebhookProcessorService : BackgroundService
                 ResponseBody = result.ResponseBody,
                 ErrorMessage = result.ErrorMessage ?? "Max retries exceeded"
             }, cancellationToken);
+
+            // Move to Dead Letter Queue
+            await MoveToDlqAsync(webhookManager, delivery, dlqReason, cancellationToken);
         }
         else
         {
+            // Check for persistent 4xx client errors (excluding 429 Too Many Requests)
+            if (result.HttpStatusCode is >= 400 and < 500 and not 429)
+            {
+                WebhookProcessorServiceLogs.PersistentClientError(_logger, delivery.DeliveryId, result.HttpStatusCode ?? 0);
+
+                await webhookManager.UpdateDeliveryAsync(new UpdateDeliveryRequest
+                {
+                    DeliveryId = delivery.DeliveryId,
+                    Status = DeliveryStatus.Failed,
+                    AttemptCount = newAttemptCount,
+                    HttpStatusCode = result.HttpStatusCode,
+                    ResponseBody = result.ResponseBody,
+                    ErrorMessage = result.ErrorMessage ?? "Persistent client error"
+                }, cancellationToken);
+
+                // Move to DLQ immediately for 4xx errors
+                await MoveToDlqAsync(webhookManager, delivery, DlqReason.PersistentClientError, cancellationToken);
+                return;
+            }
+
             var nextRetry = CalculateNextRetryTime(newAttemptCount);
             WebhookProcessorServiceLogs.SchedulingRetry(_logger, delivery.DeliveryId, newAttemptCount, nextRetry);
 
@@ -146,6 +169,36 @@ public sealed class WebhookProcessorService : BackgroundService
                 NextRetryAt = nextRetry
             }, cancellationToken);
         }
+    }
+
+    private async Task MoveToDlqAsync(
+        IWebhookManager webhookManager,
+        WebhookDelivery delivery,
+        DlqReason reason,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var dlqMessage = await webhookManager.MoveToDlqAsync(new MoveToDlqRequest
+            {
+                DeliveryId = delivery.DeliveryId,
+                Reason = reason
+            }, cancellationToken);
+
+            WebhookProcessorServiceLogs.MovedToDlq(_logger, delivery.DeliveryId, dlqMessage.DlqId, reason.ToString());
+        }
+        catch (Exception ex)
+        {
+            WebhookProcessorServiceLogs.DlqMoveFailed(_logger, delivery.DeliveryId, ex);
+        }
+    }
+
+    private static DlqReason DeterminesDlqReason(DeliveryResult result)
+    {
+        if (result.HttpStatusCode is >= 400 and < 500)
+            return DlqReason.PersistentClientError;
+
+        return DlqReason.MaxRetriesExceeded;
     }
 
     /// <summary>
@@ -236,4 +289,13 @@ internal static partial class WebhookProcessorServiceLogs
 
     [LoggerMessage(LogLevel.Debug, "Delivery {DeliveryId} attempt {AttemptCount} failed, scheduling retry at {NextRetry}")]
     public static partial void SchedulingRetry(ILogger logger, Guid deliveryId, int attemptCount, DateTimeOffset nextRetry);
+
+    [LoggerMessage(LogLevel.Warning, "Delivery {DeliveryId} received persistent client error (HTTP {StatusCode}), moving to DLQ")]
+    public static partial void PersistentClientError(ILogger logger, Guid deliveryId, int statusCode);
+
+    [LoggerMessage(LogLevel.Information, "Delivery {DeliveryId} moved to DLQ {DlqId} (reason: {Reason})")]
+    public static partial void MovedToDlq(ILogger logger, Guid deliveryId, Guid dlqId, string reason);
+
+    [LoggerMessage(LogLevel.Error, "Failed to move delivery {DeliveryId} to DLQ")]
+    public static partial void DlqMoveFailed(ILogger logger, Guid deliveryId, Exception exception);
 }
