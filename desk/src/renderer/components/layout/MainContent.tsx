@@ -1,7 +1,8 @@
+import { type ReactElement } from 'react'
 import { Database } from 'lucide-react'
 import { useConnectionStore } from '@/stores/connectionStore'
 
-export function MainContent(): JSX.Element {
+export function MainContent(): ReactElement {
   const { activeConnection } = useConnectionStore()
 
   if (!activeConnection) {

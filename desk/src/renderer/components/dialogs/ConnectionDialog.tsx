@@ -1,30 +1,57 @@
-import { useState } from 'react'
+import { useState, useEffect, type ReactElement } from 'react'
 import { X, Loader2, Check, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Label } from '@/components/ui/Label'
 import { useConnectionStore } from '@/stores/connectionStore'
-import type { ConnectionFormData } from '@/types/connection'
+import type { Connection, ConnectionFormData } from '@/types/connection'
 import { cn } from '@/lib/utils'
 
 interface ConnectionDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  editConnection?: Connection | null
 }
 
 type TestStatus = 'idle' | 'testing' | 'success' | 'error'
 
-export function ConnectionDialog({ open, onOpenChange }: ConnectionDialogProps): JSX.Element | null {
-  const { addConnection, setActiveConnection } = useConnectionStore()
+const initialFormData: ConnectionFormData = {
+  name: '',
+  url: 'http://localhost:5000',
+  apiKey: '',
+  tenantId: ''
+}
+
+export function ConnectionDialog({
+  open,
+  onOpenChange,
+  editConnection
+}: ConnectionDialogProps): ReactElement | null {
+  const { addConnection, updateConnection, setActiveConnection, connectToServer } =
+    useConnectionStore()
   const [testStatus, setTestStatus] = useState<TestStatus>('idle')
   const [testError, setTestError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const [formData, setFormData] = useState<ConnectionFormData>({
-    name: '',
-    url: 'http://localhost:5000',
-    apiKey: '',
-    tenantId: ''
-  })
+  const [formData, setFormData] = useState<ConnectionFormData>(initialFormData)
+
+  const isEditMode = !!editConnection
+
+  // Load connection data when editing
+  useEffect(() => {
+    if (editConnection) {
+      setFormData({
+        name: editConnection.name,
+        url: editConnection.url,
+        apiKey: '', // API key is stored securely, user needs to re-enter
+        tenantId: editConnection.tenantId || ''
+      })
+    } else {
+      setFormData(initialFormData)
+    }
+    setTestStatus('idle')
+    setTestError('')
+  }, [editConnection, open])
 
   if (!open) return null
 
@@ -33,19 +60,17 @@ export function ConnectionDialog({ open, onOpenChange }: ConnectionDialogProps):
     setTestError('')
 
     try {
-      const response = await fetch(`${formData.url}/health`, {
-        method: 'GET',
-        headers: {
-          'X-API-Key': formData.apiKey,
-          ...(formData.tenantId && { 'X-Tenant-Id': formData.tenantId })
-        }
-      })
+      const result = await window.api.testConnection(
+        formData.url,
+        formData.apiKey,
+        formData.tenantId || undefined
+      )
 
-      if (response.ok) {
+      if (result.success) {
         setTestStatus('success')
       } else {
         setTestStatus('error')
-        setTestError(`Server returned ${response.status}`)
+        setTestError(result.error || 'Connection failed')
       }
     } catch (err) {
       setTestStatus('error')
@@ -53,37 +78,53 @@ export function ConnectionDialog({ open, onOpenChange }: ConnectionDialogProps):
     }
   }
 
-  const handleSubmit = (e: React.FormEvent): void => {
+  const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault()
+    setIsSubmitting(true)
 
-    const connection = addConnection(formData)
-    setActiveConnection(connection.id)
-    onOpenChange(false)
+    try {
+      if (isEditMode && editConnection) {
+        // Update existing connection
+        await updateConnection(editConnection.id, formData)
+        onOpenChange(false)
+      } else {
+        // Create new connection
+        const connection = await addConnection(formData)
+        setActiveConnection(connection.id)
+        // Try to connect after creating
+        await connectToServer(connection.id)
+        onOpenChange(false)
+      }
 
-    // Reset form
-    setFormData({
-      name: '',
-      url: 'http://localhost:5000',
-      apiKey: '',
-      tenantId: ''
-    })
-    setTestStatus('idle')
+      // Reset form
+      setFormData(initialFormData)
+      setTestStatus('idle')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
-  const isValid = formData.name.trim() && formData.url.trim() && formData.apiKey.trim()
+  const handleClose = (): void => {
+    onOpenChange(false)
+    setFormData(initialFormData)
+    setTestStatus('idle')
+    setTestError('')
+  }
+
+  const isValid =
+    formData.name.trim() &&
+    formData.url.trim() &&
+    (isEditMode || formData.apiKey.trim()) // API key required only for new connections
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
       <div className="w-full max-w-md rounded-lg bg-card p-6 shadow-xl">
         {/* Header */}
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">New Connection</h2>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => onOpenChange(false)}
-          >
+          <h2 className="text-lg font-semibold">
+            {isEditMode ? 'Edit Connection' : 'New Connection'}
+          </h2>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleClose}>
             <X className="h-4 w-4" />
           </Button>
         </div>
@@ -114,14 +155,16 @@ export function ConnectionDialog({ open, onOpenChange }: ConnectionDialogProps):
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="apiKey">API Key</Label>
+            <Label htmlFor="apiKey">
+              API Key {isEditMode && <span className="text-muted-foreground">(leave empty to keep current)</span>}
+            </Label>
             <Input
               id="apiKey"
               type="password"
-              placeholder="Your API key"
+              placeholder={isEditMode ? '••••••••' : 'Your API key'}
               value={formData.apiKey}
               onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
-              required
+              required={!isEditMode}
             />
           </div>
 
@@ -172,12 +215,13 @@ export function ConnectionDialog({ open, onOpenChange }: ConnectionDialogProps):
               type="button"
               variant="outline"
               onClick={handleTest}
-              disabled={!isValid || testStatus === 'testing'}
+              disabled={!formData.url.trim() || !formData.apiKey.trim() || testStatus === 'testing'}
             >
               Test Connection
             </Button>
-            <Button type="submit" disabled={!isValid}>
-              Connect
+            <Button type="submit" disabled={!isValid || isSubmitting}>
+              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isEditMode ? 'Save Changes' : 'Connect'}
             </Button>
           </div>
         </form>

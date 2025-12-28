@@ -1,11 +1,15 @@
+export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
+
 export interface Connection {
   id: string
   name: string
   url: string
-  apiKey: string
+  apiKey: string // Stored securely in main process, not persisted in renderer
   tenantId?: string
   createdAt: string
   lastUsedAt?: string
+  status: ConnectionStatus
+  errorMessage?: string
 }
 
 export interface ConnectionFormData {
