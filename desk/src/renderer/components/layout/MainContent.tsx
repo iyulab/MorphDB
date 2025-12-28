@@ -1,9 +1,12 @@
 import { type ReactElement } from 'react'
 import { Database } from 'lucide-react'
 import { useConnectionStore } from '@/stores/connectionStore'
+import { useExplorerStore } from '@/stores/explorerStore'
+import { TableExplorer } from '@/components/explorer/TableExplorer'
 
 export function MainContent(): ReactElement {
   const { activeConnection } = useConnectionStore()
+  const { selectedTable } = useExplorerStore()
 
   if (!activeConnection) {
     return (
@@ -25,25 +28,43 @@ export function MainContent(): ReactElement {
       <div className="flex h-10 items-center border-b border-border px-4">
         <span className="font-medium text-sm">{activeConnection.name}</span>
         <span className="ml-2 text-xs text-muted-foreground">{activeConnection.url}</span>
+        {activeConnection.status === 'connected' && (
+          <span className="ml-auto inline-flex items-center gap-1.5 text-xs text-success">
+            <span className="h-1.5 w-1.5 rounded-full bg-success" />
+            Connected
+          </span>
+        )}
+        {activeConnection.status === 'connecting' && (
+          <span className="ml-auto text-xs text-warning">Connecting...</span>
+        )}
+        {activeConnection.status === 'error' && (
+          <span className="ml-auto text-xs text-destructive">
+            Error: {activeConnection.errorMessage}
+          </span>
+        )}
       </div>
 
-      {/* Content area - will be replaced with table explorer and data grid */}
+      {/* Content area */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left panel - Table explorer */}
-        <div className="w-64 border-r border-border p-4">
-          <h3 className="mb-2 text-sm font-medium text-muted-foreground">Tables</h3>
-          <p className="text-xs text-muted-foreground">
-            Connect to load tables...
-          </p>
+        <div className="w-64 border-r border-border overflow-hidden flex flex-col">
+          <TableExplorer />
         </div>
 
-        {/* Right panel - Data grid */}
+        {/* Right panel - Data grid placeholder */}
         <div className="flex-1 p-4">
-          <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-border">
-            <p className="text-muted-foreground">
-              Select a table to view data
-            </p>
-          </div>
+          {selectedTable ? (
+            <div className="h-full rounded-lg border border-border bg-card p-4">
+              <h3 className="text-lg font-medium mb-2">{selectedTable}</h3>
+              <p className="text-sm text-muted-foreground">
+                Data grid will be implemented in Phase 24.5
+              </p>
+            </div>
+          ) : (
+            <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-border">
+              <p className="text-muted-foreground">Select a table to view data</p>
+            </div>
+          )}
         </div>
       </div>
     </main>
