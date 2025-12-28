@@ -1,7 +1,17 @@
-import { app, shell, BrowserWindow, ipcMain, Menu, safeStorage } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, Menu, safeStorage, dialog } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { autoUpdater } from 'electron-updater'
 import Store from 'electron-store'
+import log from 'electron-log'
+
+// Configure logging for auto-updater
+log.transports.file.level = 'info'
+autoUpdater.logger = log
+
+// Auto-update configuration
+autoUpdater.autoDownload = false
+autoUpdater.autoInstallOnAppQuit = true
 
 // Initialize secure store for encrypted credentials
 const credentialStore = new Store<Record<string, string>>({
@@ -105,6 +115,21 @@ function createMenu(): void {
         },
         { type: 'separator' },
         {
+          label: 'Check for Updates...',
+          click: () => {
+            if (is.dev) {
+              dialog.showMessageBox(mainWindow!, {
+                type: 'info',
+                title: 'Development Mode',
+                message: 'Auto-update is disabled in development mode.'
+              })
+            } else {
+              autoUpdater.checkForUpdates()
+            }
+          }
+        },
+        { type: 'separator' },
+        {
           label: 'About MorphDB Studio',
           click: () => mainWindow?.webContents.send('menu:about')
         }
@@ -114,6 +139,94 @@ function createMenu(): void {
 
   const menu = Menu.buildFromTemplate(template)
   Menu.setApplicationMenu(menu)
+}
+
+// Auto-updater setup
+function setupAutoUpdater(): void {
+  // Only check for updates in production
+  if (is.dev) {
+    log.info('Skipping auto-update in development mode')
+    return
+  }
+
+  // Check for updates
+  autoUpdater.checkForUpdates().catch((err) => {
+    log.error('Error checking for updates:', err)
+  })
+
+  // Update available
+  autoUpdater.on('update-available', (info) => {
+    log.info('Update available:', info.version)
+    mainWindow?.webContents.send('update:available', {
+      version: info.version,
+      releaseDate: info.releaseDate,
+      releaseNotes: info.releaseNotes
+    })
+
+    dialog
+      .showMessageBox(mainWindow!, {
+        type: 'info',
+        title: 'Update Available',
+        message: `A new version (${info.version}) is available.`,
+        detail: 'Would you like to download it now?',
+        buttons: ['Download', 'Later'],
+        defaultId: 0,
+        cancelId: 1
+      })
+      .then((result) => {
+        if (result.response === 0) {
+          autoUpdater.downloadUpdate()
+        }
+      })
+  })
+
+  // No update available
+  autoUpdater.on('update-not-available', (info) => {
+    log.info('No update available. Current version:', info.version)
+  })
+
+  // Download progress
+  autoUpdater.on('download-progress', (progress) => {
+    log.info(`Download progress: ${progress.percent.toFixed(1)}%`)
+    mainWindow?.webContents.send('update:progress', {
+      percent: progress.percent,
+      bytesPerSecond: progress.bytesPerSecond,
+      transferred: progress.transferred,
+      total: progress.total
+    })
+  })
+
+  // Update downloaded
+  autoUpdater.on('update-downloaded', (info) => {
+    log.info('Update downloaded:', info.version)
+    mainWindow?.webContents.send('update:downloaded', {
+      version: info.version
+    })
+
+    dialog
+      .showMessageBox(mainWindow!, {
+        type: 'info',
+        title: 'Update Ready',
+        message: `Version ${info.version} has been downloaded.`,
+        detail: 'The application will restart to install the update.',
+        buttons: ['Install Now', 'Install on Quit'],
+        defaultId: 0,
+        cancelId: 1
+      })
+      .then((result) => {
+        if (result.response === 0) {
+          autoUpdater.quitAndInstall(false, true)
+        }
+      })
+  })
+
+  // Error handling
+  autoUpdater.on('error', (error) => {
+    log.error('Auto-updater error:', error)
+    mainWindow?.webContents.send('update:error', {
+      message: error.message
+    })
+  })
 }
 
 // App lifecycle
@@ -126,6 +239,11 @@ app.whenReady().then(() => {
 
   createMenu()
   createWindow()
+
+  // Initialize auto-updater after window is ready
+  mainWindow?.once('ready-to-show', () => {
+    setupAutoUpdater()
+  })
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -230,4 +348,35 @@ ipcMain.handle('connection:test', async (_event, url: string, apiKey: string, te
     }
     return { success: false, error: (error as Error).message }
   }
+})
+
+// Auto-update IPC handlers
+ipcMain.handle('update:check', async () => {
+  if (is.dev) {
+    return { available: false, message: 'Auto-update disabled in development' }
+  }
+  try {
+    const result = await autoUpdater.checkForUpdates()
+    return {
+      available: result?.updateInfo?.version !== app.getVersion(),
+      version: result?.updateInfo?.version,
+      releaseDate: result?.updateInfo?.releaseDate
+    }
+  } catch (error) {
+    return { available: false, error: (error as Error).message }
+  }
+})
+
+ipcMain.handle('update:download', async () => {
+  if (is.dev) return { success: false, message: 'Auto-update disabled in development' }
+  try {
+    await autoUpdater.downloadUpdate()
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: (error as Error).message }
+  }
+})
+
+ipcMain.handle('update:install', () => {
+  autoUpdater.quitAndInstall(false, true)
 })
