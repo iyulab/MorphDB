@@ -196,7 +196,8 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
 
         var row = await connection.QuerySingleOrDefaultAsync<AuditLogDto>(sql, new { id = logId });
 
-        if (row is null) return null;
+        if (row is null)
+            return null;
 
         return new AuditLogEntry
         {

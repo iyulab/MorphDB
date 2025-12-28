@@ -180,6 +180,10 @@ try
     builder.Services.AddSingleton<IRateLimiter, MemoryRateLimiter>();
     builder.Services.AddSingleton<IQuotaService, MemoryQuotaService>();
 
+    // Add organization and permission services (Phase 21: Organization & RBAC)
+    builder.Services.AddScoped<IOrganizationService, OrganizationService>();
+    builder.Services.AddSingleton<IPermissionService, PermissionService>();
+
     // Health checks with dependencies
     var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
     builder.Services.AddHealthChecks()

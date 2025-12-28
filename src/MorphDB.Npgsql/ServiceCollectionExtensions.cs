@@ -7,6 +7,7 @@ using MorphDB.Npgsql.Audit;
 using MorphDB.Npgsql.Caching;
 using MorphDB.Npgsql.Encryption;
 using MorphDB.Npgsql.Infrastructure;
+using MorphDB.Npgsql.Organization;
 using MorphDB.Npgsql.Repositories;
 using MorphDB.Npgsql.Schema;
 using MorphDB.Npgsql.Security;
@@ -141,6 +142,10 @@ public static class ServiceCollectionExtensions
 
         // Register audit services (Phase 19: Audit Logging)
         services.AddSingleton<IAuditService, PostgresAuditService>();
+
+        // Register organization repositories (Phase 21: Organization & RBAC)
+        services.AddSingleton<IOrganizationRepository, OrganizationRepository>();
+        services.AddSingleton<IMembershipRepository, MembershipRepository>();
 
         return services;
     }
