@@ -1,0 +1,46 @@
+export interface Connection {
+  id: string
+  name: string
+  url: string
+  apiKey: string
+  tenantId?: string
+  createdAt: string
+  lastUsedAt?: string
+}
+
+export interface ConnectionFormData {
+  name: string
+  url: string
+  apiKey: string
+  tenantId?: string
+}
+
+export interface Project {
+  projectId: string
+  organizationId: string
+  name: string
+  slug: string
+  description?: string
+  environment: string
+  status: string
+  createdAt: string
+}
+
+export interface TableInfo {
+  name: string
+  displayName: string
+  description?: string
+  columnCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ColumnInfo {
+  name: string
+  displayName: string
+  dataType: string
+  isNullable: boolean
+  isPrimaryKey: boolean
+  defaultValue?: string
+  description?: string
+}
