@@ -4,7 +4,6 @@ import {
   ChevronRight,
   ChevronDown,
   RefreshCw,
-  Columns3,
   Key,
   Hash,
   Type,
@@ -16,12 +15,16 @@ import {
   Plus,
   Eye
 } from 'lucide-react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/Button'
 import { MorphDBClient, type TableApiResponse, type ColumnApiResponse } from '@/lib/api'
 import { useConnectionStore } from '@/stores/connectionStore'
 import { useExplorerStore } from '@/stores/explorerStore'
 import { cn } from '@/lib/utils'
+import { CreateTableDialog } from '@/components/dialogs/CreateTableDialog'
+import { ColumnDialog, type ColumnFormData } from '@/components/dialogs/ColumnDialog'
+import { DeleteConfirmationDialog } from '@/components/dialogs/DeleteConfirmationDialog'
+import { RenameDialog } from '@/components/dialogs/RenameDialog'
 
 interface ContextMenuState {
   open: boolean
@@ -43,6 +46,24 @@ function getColumnIcon(dataType: string, isPrimaryKey: boolean): ReactElement {
   return <Type className="h-3.5 w-3.5 text-muted-foreground" />
 }
 
+interface DialogState {
+  createTable: boolean
+  addColumn: { open: boolean; tableName: string }
+  editColumn: { open: boolean; tableName: string; column: ColumnApiResponse | null }
+  deleteTable: { open: boolean; tableName: string }
+  deleteColumn: { open: boolean; tableName: string; columnName: string }
+  renameTable: { open: boolean; tableName: string }
+}
+
+const initialDialogState: DialogState = {
+  createTable: false,
+  addColumn: { open: false, tableName: '' },
+  editColumn: { open: false, tableName: '', column: null },
+  deleteTable: { open: false, tableName: '' },
+  deleteColumn: { open: false, tableName: '', columnName: '' },
+  renameTable: { open: false, tableName: '' }
+}
+
 export function TableExplorer(): ReactElement {
   const { activeConnection, getApiKey } = useConnectionStore()
   const {
@@ -53,6 +74,8 @@ export function TableExplorer(): ReactElement {
     setTables
   } = useExplorerStore()
 
+  const queryClient = useQueryClient()
+
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
     open: false,
     type: null,
@@ -60,6 +83,9 @@ export function TableExplorer(): ReactElement {
     x: 0,
     y: 0
   })
+
+  const [dialogs, setDialogs] = useState<DialogState>(initialDialogState)
+  const [currentTableForColumn, setCurrentTableForColumn] = useState<string>('')
 
   const contextMenuRef = useRef<HTMLDivElement>(null)
 
@@ -96,6 +122,112 @@ export function TableExplorer(): ReactElement {
       setTables(tables)
     }
   }, [tables, setTables])
+
+  // Helper to create API client
+  const createClient = async (): Promise<MorphDBClient | null> => {
+    if (!activeConnection) return null
+    const apiKey = await getApiKey(activeConnection.id)
+    if (!apiKey) return null
+    return new MorphDBClient({
+      url: activeConnection.url,
+      apiKey,
+      tenantId: activeConnection.tenantId
+    })
+  }
+
+  // Create table mutation
+  const createTableMutation = useMutation({
+    mutationFn: async ({ name, columns }: { name: string; columns: { name: string; type: string; nullable: boolean; unique: boolean; indexed: boolean; isPrimaryKey: boolean }[] }) => {
+      const client = await createClient()
+      if (!client) throw new Error('No active connection')
+      return client.createTable({
+        name,
+        columns: columns.map((col) => ({
+          name: col.name,
+          dataType: col.type,
+          isNullable: col.nullable,
+          isUnique: col.unique,
+          isIndexed: col.indexed,
+          isPrimaryKey: col.isPrimaryKey
+        }))
+      }, activeConnection?.tenantId)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tables', activeConnection?.id] })
+    }
+  })
+
+  // Delete table mutation
+  const deleteTableMutation = useMutation({
+    mutationFn: async (tableName: string) => {
+      const client = await createClient()
+      if (!client) throw new Error('No active connection')
+      return client.deleteTable(tableName, activeConnection?.tenantId)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tables', activeConnection?.id] })
+    }
+  })
+
+  // Rename table mutation
+  const renameTableMutation = useMutation({
+    mutationFn: async ({ oldName, newName }: { oldName: string; newName: string }) => {
+      const client = await createClient()
+      if (!client) throw new Error('No active connection')
+      return client.renameTable(oldName, newName, activeConnection?.tenantId)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tables', activeConnection?.id] })
+    }
+  })
+
+  // Add column mutation
+  const addColumnMutation = useMutation({
+    mutationFn: async ({ tableName, data }: { tableName: string; data: ColumnFormData }) => {
+      const client = await createClient()
+      if (!client) throw new Error('No active connection')
+      return client.addColumn(tableName, {
+        name: data.name,
+        dataType: data.type,
+        isNullable: data.nullable,
+        isUnique: data.unique,
+        isIndexed: data.indexed,
+        defaultValue: data.defaultValue || undefined
+      }, activeConnection?.tenantId)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tables', activeConnection?.id] })
+    }
+  })
+
+  // Update column mutation
+  const updateColumnMutation = useMutation({
+    mutationFn: async ({ tableName, columnName, data }: { tableName: string; columnName: string; data: ColumnFormData }) => {
+      const client = await createClient()
+      if (!client) throw new Error('No active connection')
+      return client.updateColumn(tableName, columnName, {
+        isNullable: data.nullable,
+        isUnique: data.unique,
+        isIndexed: data.indexed,
+        defaultValue: data.defaultValue || undefined
+      }, activeConnection?.tenantId)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tables', activeConnection?.id] })
+    }
+  })
+
+  // Delete column mutation
+  const deleteColumnMutation = useMutation({
+    mutationFn: async ({ tableName, columnName }: { tableName: string; columnName: string }) => {
+      const client = await createClient()
+      if (!client) throw new Error('No active connection')
+      return client.deleteColumn(tableName, columnName, activeConnection?.tenantId)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tables', activeConnection?.id] })
+    }
+  })
 
   // Close context menu on outside click
   useEffect(() => {
@@ -137,7 +269,7 @@ export function TableExplorer(): ReactElement {
     setContextMenu({ open: false, type: null, target: null, x: 0, y: 0 })
   }
 
-  // Placeholder actions for context menu
+  // Context menu actions
   const handleViewData = (): void => {
     if (contextMenu.type === 'table' && contextMenu.target) {
       setSelectedTable((contextMenu.target as TableApiResponse).name)
@@ -148,6 +280,99 @@ export function TableExplorer(): ReactElement {
   const handleRefresh = (): void => {
     refetch()
     closeContextMenu()
+  }
+
+  const handleAddColumn = (): void => {
+    if (contextMenu.type === 'table' && contextMenu.target) {
+      const tableName = (contextMenu.target as TableApiResponse).name
+      setCurrentTableForColumn(tableName)
+      setDialogs((prev) => ({ ...prev, addColumn: { open: true, tableName } }))
+    }
+    closeContextMenu()
+  }
+
+  const handleRenameTable = (): void => {
+    if (contextMenu.type === 'table' && contextMenu.target) {
+      const tableName = (contextMenu.target as TableApiResponse).name
+      setDialogs((prev) => ({ ...prev, renameTable: { open: true, tableName } }))
+    }
+    closeContextMenu()
+  }
+
+  const handleDeleteTable = (): void => {
+    if (contextMenu.type === 'table' && contextMenu.target) {
+      const tableName = (contextMenu.target as TableApiResponse).name
+      setDialogs((prev) => ({ ...prev, deleteTable: { open: true, tableName } }))
+    }
+    closeContextMenu()
+  }
+
+  const handleEditColumn = (): void => {
+    if (contextMenu.type === 'column' && contextMenu.target) {
+      const column = contextMenu.target as ColumnApiResponse
+      // Find the parent table for this column
+      const parentTable = tables?.find((t) => t.columns.some((c) => c.id === column.id))
+      if (parentTable) {
+        setCurrentTableForColumn(parentTable.name)
+        setDialogs((prev) => ({
+          ...prev,
+          editColumn: { open: true, tableName: parentTable.name, column }
+        }))
+      }
+    }
+    closeContextMenu()
+  }
+
+  const handleDeleteColumn = (): void => {
+    if (contextMenu.type === 'column' && contextMenu.target) {
+      const column = contextMenu.target as ColumnApiResponse
+      const parentTable = tables?.find((t) => t.columns.some((c) => c.id === column.id))
+      if (parentTable) {
+        setDialogs((prev) => ({
+          ...prev,
+          deleteColumn: { open: true, tableName: parentTable.name, columnName: column.name }
+        }))
+      }
+    }
+    closeContextMenu()
+  }
+
+  // Dialog handlers
+  const handleCreateTableSubmit = async (tableName: string, columns: { id: string; name: string; type: string; nullable: boolean; unique: boolean; indexed: boolean; isPrimaryKey: boolean }[]): Promise<void> => {
+    await createTableMutation.mutateAsync({ name: tableName, columns })
+  }
+
+  const handleColumnSubmit = async (data: ColumnFormData): Promise<void> => {
+    if (dialogs.editColumn.open && dialogs.editColumn.column) {
+      await updateColumnMutation.mutateAsync({
+        tableName: dialogs.editColumn.tableName,
+        columnName: dialogs.editColumn.column.name,
+        data
+      })
+    } else if (dialogs.addColumn.open) {
+      await addColumnMutation.mutateAsync({
+        tableName: dialogs.addColumn.tableName,
+        data
+      })
+    }
+  }
+
+  const handleDeleteTableConfirm = async (): Promise<void> => {
+    await deleteTableMutation.mutateAsync(dialogs.deleteTable.tableName)
+  }
+
+  const handleDeleteColumnConfirm = async (): Promise<void> => {
+    await deleteColumnMutation.mutateAsync({
+      tableName: dialogs.deleteColumn.tableName,
+      columnName: dialogs.deleteColumn.columnName
+    })
+  }
+
+  const handleRenameTableSubmit = async (newName: string): Promise<void> => {
+    await renameTableMutation.mutateAsync({
+      oldName: dialogs.renameTable.tableName,
+      newName
+    })
   }
 
   if (!activeConnection) {
@@ -178,16 +403,27 @@ export function TableExplorer(): ReactElement {
         <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
           Tables
         </h3>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6"
-          onClick={() => refetch()}
-          disabled={isLoading}
-          title="Refresh"
-        >
-          <RefreshCw className={cn('h-3.5 w-3.5', isLoading && 'animate-spin')} />
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            onClick={() => setDialogs((prev) => ({ ...prev, createTable: true }))}
+            title="Create Table"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            onClick={() => refetch()}
+            disabled={isLoading}
+            title="Refresh"
+          >
+            <RefreshCw className={cn('h-3.5 w-3.5', isLoading && 'animate-spin')} />
+          </Button>
+        </div>
       </div>
 
       {/* Tree View */}
@@ -319,21 +555,21 @@ export function TableExplorer(): ReactElement {
               </button>
               <div className="my-1 h-px bg-border" />
               <button
-                onClick={closeContextMenu}
+                onClick={handleAddColumn}
                 className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
               >
                 <Plus className="h-4 w-4" />
                 Add Column
               </button>
               <button
-                onClick={closeContextMenu}
+                onClick={handleRenameTable}
                 className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
               >
                 <Pencil className="h-4 w-4" />
                 Rename
               </button>
               <button
-                onClick={closeContextMenu}
+                onClick={handleDeleteTable}
                 className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent text-destructive"
               >
                 <Trash2 className="h-4 w-4" />
@@ -344,14 +580,14 @@ export function TableExplorer(): ReactElement {
           {contextMenu.type === 'column' && (
             <>
               <button
-                onClick={closeContextMenu}
+                onClick={handleEditColumn}
                 className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
               >
                 <Pencil className="h-4 w-4" />
                 Edit Column
               </button>
               <button
-                onClick={closeContextMenu}
+                onClick={handleDeleteColumn}
                 className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent text-destructive"
               >
                 <Trash2 className="h-4 w-4" />
@@ -361,6 +597,67 @@ export function TableExplorer(): ReactElement {
           )}
         </div>
       )}
+
+      {/* Dialogs */}
+      <CreateTableDialog
+        open={dialogs.createTable}
+        onOpenChange={(open) => setDialogs((prev) => ({ ...prev, createTable: open }))}
+        onSubmit={handleCreateTableSubmit}
+      />
+
+      <ColumnDialog
+        open={dialogs.addColumn.open}
+        onOpenChange={(open) =>
+          setDialogs((prev) => ({ ...prev, addColumn: { ...prev.addColumn, open } }))
+        }
+        tableName={dialogs.addColumn.tableName}
+        column={null}
+        onSubmit={handleColumnSubmit}
+      />
+
+      <ColumnDialog
+        open={dialogs.editColumn.open}
+        onOpenChange={(open) =>
+          setDialogs((prev) => ({ ...prev, editColumn: { ...prev.editColumn, open } }))
+        }
+        tableName={dialogs.editColumn.tableName}
+        column={dialogs.editColumn.column}
+        onSubmit={handleColumnSubmit}
+      />
+
+      <DeleteConfirmationDialog
+        open={dialogs.deleteTable.open}
+        onOpenChange={(open) =>
+          setDialogs((prev) => ({ ...prev, deleteTable: { ...prev.deleteTable, open } }))
+        }
+        title="Delete Table"
+        description="This will permanently delete the table and all its data. This action cannot be undone."
+        itemName={dialogs.deleteTable.tableName}
+        requireTypedConfirmation={true}
+        onConfirm={handleDeleteTableConfirm}
+      />
+
+      <DeleteConfirmationDialog
+        open={dialogs.deleteColumn.open}
+        onOpenChange={(open) =>
+          setDialogs((prev) => ({ ...prev, deleteColumn: { ...prev.deleteColumn, open } }))
+        }
+        title="Delete Column"
+        description={`This will permanently delete the column "${dialogs.deleteColumn.columnName}" and all its data.`}
+        itemName={dialogs.deleteColumn.columnName}
+        requireTypedConfirmation={false}
+        onConfirm={handleDeleteColumnConfirm}
+      />
+
+      <RenameDialog
+        open={dialogs.renameTable.open}
+        onOpenChange={(open) =>
+          setDialogs((prev) => ({ ...prev, renameTable: { ...prev.renameTable, open } }))
+        }
+        title="Rename Table"
+        currentName={dialogs.renameTable.tableName}
+        onSubmit={handleRenameTableSubmit}
+      />
     </div>
   )
 }

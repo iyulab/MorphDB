@@ -40,6 +40,39 @@ export interface ColumnApiResponse {
   description?: string
 }
 
+// Request DTOs
+export interface CreateTableRequest {
+  name: string
+  displayName?: string
+  description?: string
+  columns: CreateColumnRequest[]
+}
+
+export interface CreateColumnRequest {
+  name: string
+  displayName?: string
+  dataType: string
+  isNullable?: boolean
+  isUnique?: boolean
+  isIndexed?: boolean
+  isPrimaryKey?: boolean
+  defaultValue?: string
+  description?: string
+}
+
+export interface UpdateColumnRequest {
+  displayName?: string
+  isNullable?: boolean
+  isUnique?: boolean
+  isIndexed?: boolean
+  defaultValue?: string
+  description?: string
+}
+
+export interface RenameTableRequest {
+  newName: string
+}
+
 export interface ConnectionConfig {
   url: string
   apiKey: string
@@ -110,6 +143,82 @@ export class MorphDBClient {
       headers['X-Tenant-Id'] = tenantId
     }
     return this.request<TableApiResponse>(`/api/schema/tables/${name}`, { headers })
+  }
+
+  async createTable(data: CreateTableRequest, tenantId?: string): Promise<TableApiResponse> {
+    const headers: Record<string, string> = {}
+    if (tenantId) {
+      headers['X-Tenant-Id'] = tenantId
+    }
+    return this.request<TableApiResponse>('/api/schema/tables', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(data)
+    })
+  }
+
+  async renameTable(name: string, newName: string, tenantId?: string): Promise<TableApiResponse> {
+    const headers: Record<string, string> = {}
+    if (tenantId) {
+      headers['X-Tenant-Id'] = tenantId
+    }
+    return this.request<TableApiResponse>(`/api/schema/tables/${name}/rename`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ newName })
+    })
+  }
+
+  async deleteTable(name: string, tenantId?: string): Promise<void> {
+    const headers: Record<string, string> = {}
+    if (tenantId) {
+      headers['X-Tenant-Id'] = tenantId
+    }
+    await this.request<void>(`/api/schema/tables/${name}`, {
+      method: 'DELETE',
+      headers
+    })
+  }
+
+  // Columns
+  async addColumn(tableName: string, data: CreateColumnRequest, tenantId?: string): Promise<ColumnApiResponse> {
+    const headers: Record<string, string> = {}
+    if (tenantId) {
+      headers['X-Tenant-Id'] = tenantId
+    }
+    return this.request<ColumnApiResponse>(`/api/schema/tables/${tableName}/columns`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(data)
+    })
+  }
+
+  async updateColumn(
+    tableName: string,
+    columnName: string,
+    data: UpdateColumnRequest,
+    tenantId?: string
+  ): Promise<ColumnApiResponse> {
+    const headers: Record<string, string> = {}
+    if (tenantId) {
+      headers['X-Tenant-Id'] = tenantId
+    }
+    return this.request<ColumnApiResponse>(`/api/schema/tables/${tableName}/columns/${columnName}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify(data)
+    })
+  }
+
+  async deleteColumn(tableName: string, columnName: string, tenantId?: string): Promise<void> {
+    const headers: Record<string, string> = {}
+    if (tenantId) {
+      headers['X-Tenant-Id'] = tenantId
+    }
+    await this.request<void>(`/api/schema/tables/${tableName}/columns/${columnName}`, {
+      method: 'DELETE',
+      headers
+    })
   }
 
   // Data
