@@ -720,36 +720,50 @@ p_{project_id}_dat (Project Data Layer)
 
 ---
 
-## Phase 23: Backup & PITR (Schema-based)
+## Phase 23: Backup & PITR (Schema-based) ✅ Completed
 
 **Goal**: Data protection with schema-level granularity
 
 **Priority**: Critical | **Effort**: High
 
+> Note: v0.x simplification - Cloud storage and PITR deferred to v1.x.
+> Current approach: Local storage with pg_dump/psql for backup/restore.
+
 ### 23.1 Backup Service
-- [ ] `IBackupService` interface
-- [ ] Schema-level backup (`pg_dump -n schema`)
-- [ ] Full project backup (both schemas)
-- [ ] Scheduled backup jobs
-- [ ] On-demand backup API
+- [x] `IBackupService` interface
+- [x] Schema-level backup (`pg_dump -n schema`)
+- [x] Full project backup (both schemas)
+- [ ] Scheduled backup jobs - v1.x
+- [x] On-demand backup API
 
 ### 23.2 Storage Backend
-- [ ] S3/GCS/Azure Blob support
-- [ ] Backup encryption (AES-256)
-- [ ] Compression (zstd)
-- [ ] Cross-region storage
+- [x] Local storage support
+- [ ] S3/GCS/Azure Blob support - v1.x
+- [x] Backup compression (Gzip via pg_dump -Z)
+- [x] SHA-256 checksum verification
+- [ ] Cross-region storage - v1.x
 
 ### 23.3 Point-in-Time Recovery
-- [ ] WAL archiving per project (Enterprise)
-- [ ] PITR target selection
-- [ ] Recovery to new project
-- [ ] Recovery verification
+- [ ] WAL archiving per project (Enterprise) - v1.x
+- [ ] PITR target selection - v1.x
+- [ ] Recovery to new project - v1.x
+- [ ] Recovery verification - v1.x
+
+> Note: PITR requires WAL archiving infrastructure, deferred to v1.x.
 
 ### 23.4 Backup API
-- [ ] POST `/api/projects/{id}/backups` - Create backup
-- [ ] GET `/api/projects/{id}/backups` - List backups
-- [ ] POST `/api/projects/{id}/backups/{bid}/restore`
-- [ ] DELETE `/api/projects/{id}/backups/{bid}`
+- [x] POST `/api/projects/{id}/backups` - Create backup
+- [x] GET `/api/projects/{id}/backups` - List backups
+- [x] GET `/api/projects/{id}/backups/{bid}` - Get backup
+- [x] POST `/api/projects/{id}/backups/{bid}/restore` - Restore backup
+- [x] GET `/api/projects/{id}/backups/{bid}/download` - Download backup file
+- [x] DELETE `/api/projects/{id}/backups/{bid}` - Delete backup
+
+**Key Implementations**:
+- `IBackupService`: Backup lifecycle abstraction
+- `BackupService`: pg_dump/psql execution with async processing
+- `BackupRepository`: Backup metadata persistence
+- `BackupController`: REST API with permission checks
 
 ---
 
@@ -862,7 +876,8 @@ p_{project_id}_dat (Project Data Layer)
 | 0.7.0 | 17-18 | Schema Architecture | ✅ Completed |
 | 0.8.0 | 19-20 | Audit + Rate Limiting | ✅ Completed |
 | **0.9.0** | **21-22** | **Organization + SSO** | ✅ Completed |
-| **1.0.0** | **23-24** | **Backup + Desktop Client** | 🔄 Next |
+| **0.10.0** | **23** | **Backup & PITR** | ✅ Completed |
+| **1.0.0** | **24** | **Desktop Client (MorphDB Studio)** | 🔄 Next |
 
 ---
 
