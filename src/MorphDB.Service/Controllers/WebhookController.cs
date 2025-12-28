@@ -100,10 +100,22 @@ public sealed class WebhookController : ControllerBase
     [HttpGet("{webhookId:guid}")]
     [ProducesResponseType(typeof(WebhookApiResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetWebhook(Guid webhookId, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetWebhook(
+        Guid webhookId,
+        [FromHeader(Name = "X-Tenant-Id")] Guid tenantId,
+        CancellationToken cancellationToken)
     {
+        if (tenantId == Guid.Empty)
+        {
+            return BadRequest(new ErrorResponse
+            {
+                Error = "InvalidTenant",
+                Message = "X-Tenant-Id header is required"
+            });
+        }
+
         var webhook = await _webhookManager.GetWebhookAsync(webhookId, cancellationToken);
-        if (webhook is null)
+        if (webhook is null || webhook.TenantId != tenantId)
         {
             return NotFound(new ErrorResponse
             {
@@ -147,10 +159,20 @@ public sealed class WebhookController : ControllerBase
     public async Task<IActionResult> UpdateWebhook(
         Guid webhookId,
         [FromBody] UpdateWebhookApiRequest request,
+        [FromHeader(Name = "X-Tenant-Id")] Guid tenantId,
         CancellationToken cancellationToken)
     {
+        if (tenantId == Guid.Empty)
+        {
+            return BadRequest(new ErrorResponse
+            {
+                Error = "InvalidTenant",
+                Message = "X-Tenant-Id header is required"
+            });
+        }
+
         var existing = await _webhookManager.GetWebhookAsync(webhookId, cancellationToken);
-        if (existing is null)
+        if (existing is null || existing.TenantId != tenantId)
         {
             return NotFound(new ErrorResponse
             {
@@ -179,10 +201,22 @@ public sealed class WebhookController : ControllerBase
     [HttpDelete("{webhookId:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> DeleteWebhook(Guid webhookId, CancellationToken cancellationToken)
+    public async Task<IActionResult> DeleteWebhook(
+        Guid webhookId,
+        [FromHeader(Name = "X-Tenant-Id")] Guid tenantId,
+        CancellationToken cancellationToken)
     {
+        if (tenantId == Guid.Empty)
+        {
+            return BadRequest(new ErrorResponse
+            {
+                Error = "InvalidTenant",
+                Message = "X-Tenant-Id header is required"
+            });
+        }
+
         var existing = await _webhookManager.GetWebhookAsync(webhookId, cancellationToken);
-        if (existing is null)
+        if (existing is null || existing.TenantId != tenantId)
         {
             return NotFound(new ErrorResponse
             {
@@ -204,10 +238,22 @@ public sealed class WebhookController : ControllerBase
     [HttpPost("{webhookId:guid}/regenerate-secret")]
     [ProducesResponseType(typeof(RegenerateSecretResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> RegenerateSecret(Guid webhookId, CancellationToken cancellationToken)
+    public async Task<IActionResult> RegenerateSecret(
+        Guid webhookId,
+        [FromHeader(Name = "X-Tenant-Id")] Guid tenantId,
+        CancellationToken cancellationToken)
     {
+        if (tenantId == Guid.Empty)
+        {
+            return BadRequest(new ErrorResponse
+            {
+                Error = "InvalidTenant",
+                Message = "X-Tenant-Id header is required"
+            });
+        }
+
         var existing = await _webhookManager.GetWebhookAsync(webhookId, cancellationToken);
-        if (existing is null)
+        if (existing is null || existing.TenantId != tenantId)
         {
             return NotFound(new ErrorResponse
             {
@@ -231,12 +277,22 @@ public sealed class WebhookController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetDeliveryHistory(
         Guid webhookId,
+        [FromHeader(Name = "X-Tenant-Id")] Guid tenantId,
         [FromQuery] int limit = 50,
         [FromQuery] int offset = 0,
         CancellationToken cancellationToken = default)
     {
+        if (tenantId == Guid.Empty)
+        {
+            return BadRequest(new ErrorResponse
+            {
+                Error = "InvalidTenant",
+                Message = "X-Tenant-Id header is required"
+            });
+        }
+
         var existing = await _webhookManager.GetWebhookAsync(webhookId, cancellationToken);
-        if (existing is null)
+        if (existing is null || existing.TenantId != tenantId)
         {
             return NotFound(new ErrorResponse
             {

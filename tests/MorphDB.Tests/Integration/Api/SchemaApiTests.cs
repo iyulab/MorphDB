@@ -103,9 +103,9 @@ public class SchemaApiTests
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<PagedResponse<TableApiResponse>>();
+        var result = await response.Content.ReadFromJsonAsync<IReadOnlyList<TableApiResponse>>();
         result.Should().NotBeNull();
-        result!.Data.Should().NotBeEmpty();
+        result!.Should().NotBeEmpty();
     }
 
     [Fact]
@@ -181,10 +181,10 @@ public class SchemaApiTests
         var response = await _client.PostAsJsonAsync($"/api/schema/tables/{tableName}/columns", addColumnRequest);
 
         // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
 
-        var table = await response.Content.ReadFromJsonAsync<TableApiResponse>();
-        table!.Columns.Should().Contain(c => c.Name == "description");
+        var column = await response.Content.ReadFromJsonAsync<ColumnApiResponse>();
+        column!.Name.Should().Be("description");
     }
 
     #endregion
@@ -214,10 +214,10 @@ public class SchemaApiTests
         var response = await _client.PostAsJsonAsync($"/api/schema/tables/{tableName}/indexes", createIndexRequest);
 
         // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
 
-        var table = await response.Content.ReadFromJsonAsync<TableApiResponse>();
-        table!.Indexes.Should().Contain(i => i.Name == "idx_email");
+        var index = await response.Content.ReadFromJsonAsync<IndexApiResponse>();
+        index!.Name.Should().Be("idx_email");
     }
 
     #endregion

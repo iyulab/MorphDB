@@ -29,12 +29,18 @@ public sealed class PostgresWebhookManager : IWebhookManager
         var events = request.Events.Select(e => e.ToString().ToLowerInvariant()).ToArray();
 
         const string sql = """
-            INSERT INTO morphdb._morph_webhooks (
-                webhook_id, tenant_id, table_id, logical_name, url, secret, events, filter, headers, created_at, updated_at
-            ) VALUES (
-                @WebhookId, @TenantId, @TableId, @LogicalName, @Url, @Secret, @Events, @Filter::jsonb, @Headers::jsonb, @CreatedAt, @UpdatedAt
+            WITH inserted AS (
+                INSERT INTO morphdb._morph_webhooks (
+                    webhook_id, tenant_id, table_id, logical_name, url, secret, events, filter, headers, created_at, updated_at
+                ) VALUES (
+                    @WebhookId, @TenantId, @TableId, @LogicalName, @Url, @Secret, @Events, @Filter::jsonb, @Headers::jsonb, @CreatedAt, @UpdatedAt
+                )
+                RETURNING *
             )
-            RETURNING webhook_id, tenant_id, table_id, logical_name, url, secret, events, filter, headers, is_active, created_at, updated_at
+            SELECT i.webhook_id, i.tenant_id, i.table_id, i.logical_name, i.url, i.secret, i.events,
+                   i.filter, i.headers, i.is_active, i.created_at, i.updated_at, t.logical_name as table_logical_name
+            FROM inserted i
+            JOIN morphdb._morph_tables t ON i.table_id = t.table_id
             """;
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
