@@ -1,5 +1,6 @@
 using System.Globalization;
 using MorphDB.Npgsql;
+using MorphDB.Service.Extensions;
 using MorphDB.Service.GraphQL;
 using MorphDB.Service.OData;
 using MorphDB.Service.Realtime;
@@ -65,6 +66,14 @@ try
 
     // Add real-time services (SignalR + PostgreSQL LISTEN/NOTIFY)
     builder.Services.AddMorphDbRealtime();
+
+    // Add webhook delivery services
+    builder.Services.AddWebhookDelivery(options =>
+    {
+        options.PollingInterval = TimeSpan.FromSeconds(5);
+        options.MaxRetries = 5;
+        options.HttpTimeout = TimeSpan.FromSeconds(30);
+    });
 
     // Health checks
     builder.Services.AddHealthChecks();

@@ -317,6 +317,77 @@ public sealed record BatchOperationResult
 
 #endregion
 
+#region Webhook API Models
+
+/// <summary>
+/// Request to create a webhook.
+/// </summary>
+public sealed record CreateWebhookApiRequest
+{
+    public required string Name { get; init; }
+    public required string Table { get; init; }
+    public required string Url { get; init; }
+    public IReadOnlyList<string>? Events { get; init; }
+    public System.Text.Json.JsonDocument? Filter { get; init; }
+    public System.Text.Json.JsonDocument? Headers { get; init; }
+}
+
+/// <summary>
+/// Request to update a webhook.
+/// </summary>
+public sealed record UpdateWebhookApiRequest
+{
+    public string? Url { get; init; }
+    public IReadOnlyList<string>? Events { get; init; }
+    public System.Text.Json.JsonDocument? Filter { get; init; }
+    public System.Text.Json.JsonDocument? Headers { get; init; }
+    public bool? IsActive { get; init; }
+}
+
+/// <summary>
+/// Webhook API response.
+/// </summary>
+public sealed record WebhookApiResponse
+{
+    public Guid Id { get; init; }
+    public required string Name { get; init; }
+    public required string Table { get; init; }
+    public required string Url { get; init; }
+    public string? Secret { get; init; }
+    public required IReadOnlyList<string> Events { get; init; }
+    public System.Text.Json.JsonDocument? Filter { get; init; }
+    public System.Text.Json.JsonDocument? Headers { get; init; }
+    public bool IsActive { get; init; }
+    public DateTimeOffset CreatedAt { get; init; }
+    public DateTimeOffset UpdatedAt { get; init; }
+}
+
+/// <summary>
+/// Response for secret regeneration.
+/// </summary>
+public sealed record RegenerateSecretResponse
+{
+    public required string Secret { get; init; }
+}
+
+/// <summary>
+/// Webhook delivery API response.
+/// </summary>
+public sealed record DeliveryApiResponse
+{
+    public Guid Id { get; init; }
+    public required string Event { get; init; }
+    public Guid? RecordId { get; init; }
+    public required string Status { get; init; }
+    public int AttemptCount { get; init; }
+    public int? HttpStatusCode { get; init; }
+    public string? ErrorMessage { get; init; }
+    public DateTimeOffset CreatedAt { get; init; }
+    public DateTimeOffset? DeliveredAt { get; init; }
+}
+
+#endregion
+
 #region Helper Extensions
 
 public static class ApiModelExtensions

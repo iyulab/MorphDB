@@ -42,6 +42,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IChangeLogger, ChangeLogger>();
         services.AddSingleton(options.SchemaManagerOptions);
         services.AddSingleton<ISchemaManager, PostgresSchemaManager>();
+        services.AddSingleton<IMorphDataService, PostgresDataService>();
+        services.AddSingleton<IWebhookManager, PostgresWebhookManager>();
 
         return services;
     }

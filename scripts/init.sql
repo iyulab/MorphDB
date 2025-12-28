@@ -103,6 +103,40 @@ CREATE TABLE IF NOT EXISTS morphdb._morph_api_keys (
     UNIQUE (key_hash)
 );
 
+-- System table: _morph_webhooks
+CREATE TABLE IF NOT EXISTS morphdb._morph_webhooks (
+    webhook_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID NOT NULL,
+    table_id UUID NOT NULL REFERENCES morphdb._morph_tables(table_id) ON DELETE CASCADE,
+    logical_name VARCHAR(255) NOT NULL,
+    url VARCHAR(2048) NOT NULL,
+    secret VARCHAR(64) NOT NULL,
+    events VARCHAR(20)[] NOT NULL DEFAULT ARRAY['insert', 'update', 'delete'],
+    filter JSONB,
+    headers JSONB,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (tenant_id, logical_name)
+);
+
+-- System table: _morph_webhook_deliveries
+CREATE TABLE IF NOT EXISTS morphdb._morph_webhook_deliveries (
+    delivery_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    webhook_id UUID NOT NULL REFERENCES morphdb._morph_webhooks(webhook_id) ON DELETE CASCADE,
+    record_id UUID,
+    event VARCHAR(20) NOT NULL,
+    payload JSONB NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    attempt_count INTEGER NOT NULL DEFAULT 0,
+    http_status_code INTEGER,
+    response_body TEXT,
+    error_message TEXT,
+    next_retry_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    delivered_at TIMESTAMPTZ
+);
+
 -- Create indexes for system tables
 CREATE INDEX IF NOT EXISTS idx_morph_tables_tenant ON morphdb._morph_tables(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_morph_columns_table ON morphdb._morph_columns(table_id);
@@ -111,6 +145,11 @@ CREATE INDEX IF NOT EXISTS idx_morph_relations_target ON morphdb._morph_relation
 CREATE INDEX IF NOT EXISTS idx_morph_changelog_table ON morphdb._morph_changelog(table_id);
 CREATE INDEX IF NOT EXISTS idx_morph_api_keys_tenant ON morphdb._morph_api_keys(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_morph_api_keys_prefix ON morphdb._morph_api_keys(key_prefix);
+CREATE INDEX IF NOT EXISTS idx_morph_webhooks_tenant ON morphdb._morph_webhooks(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_morph_webhooks_table ON morphdb._morph_webhooks(table_id);
+CREATE INDEX IF NOT EXISTS idx_morph_webhook_deliveries_webhook ON morphdb._morph_webhook_deliveries(webhook_id);
+CREATE INDEX IF NOT EXISTS idx_morph_webhook_deliveries_status ON morphdb._morph_webhook_deliveries(status) WHERE status IN ('pending', 'retrying');
+CREATE INDEX IF NOT EXISTS idx_morph_webhook_deliveries_next_retry ON morphdb._morph_webhook_deliveries(next_retry_at) WHERE next_retry_at IS NOT NULL;
 
 -- Create function for schema change notifications
 CREATE OR REPLACE FUNCTION morphdb.notify_schema_change()
