@@ -137,6 +137,52 @@ CREATE TABLE IF NOT EXISTS morphdb._morph_webhook_deliveries (
     delivered_at TIMESTAMPTZ
 );
 
+-- System table: _morph_import_jobs
+CREATE TABLE IF NOT EXISTS morphdb._morph_import_jobs (
+    job_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID NOT NULL,
+    table_id UUID NOT NULL REFERENCES morphdb._morph_tables(table_id) ON DELETE CASCADE,
+    table_name VARCHAR(255) NOT NULL,
+    format VARCHAR(20) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    total_rows BIGINT NOT NULL DEFAULT 0,
+    processed_rows BIGINT NOT NULL DEFAULT 0,
+    success_count BIGINT NOT NULL DEFAULT 0,
+    error_count BIGINT NOT NULL DEFAULT 0,
+    error_message TEXT,
+    options JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    started_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ
+);
+
+-- System table: _morph_export_jobs
+CREATE TABLE IF NOT EXISTS morphdb._morph_export_jobs (
+    job_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID NOT NULL,
+    table_id UUID NOT NULL REFERENCES morphdb._morph_tables(table_id) ON DELETE CASCADE,
+    table_name VARCHAR(255) NOT NULL,
+    format VARCHAR(20) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    total_rows BIGINT NOT NULL DEFAULT 0,
+    processed_rows BIGINT NOT NULL DEFAULT 0,
+    file_path VARCHAR(1024),
+    file_size BIGINT,
+    error_message TEXT,
+    options JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    started_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ,
+    expires_at TIMESTAMPTZ
+);
+
+-- System table: _morph_import_data (temporary storage for import data)
+CREATE TABLE IF NOT EXISTS morphdb._morph_import_data (
+    job_id UUID PRIMARY KEY REFERENCES morphdb._morph_import_jobs(job_id) ON DELETE CASCADE,
+    data BYTEA NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Create indexes for system tables
 CREATE INDEX IF NOT EXISTS idx_morph_tables_tenant ON morphdb._morph_tables(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_morph_columns_table ON morphdb._morph_columns(table_id);
@@ -150,6 +196,11 @@ CREATE INDEX IF NOT EXISTS idx_morph_webhooks_table ON morphdb._morph_webhooks(t
 CREATE INDEX IF NOT EXISTS idx_morph_webhook_deliveries_webhook ON morphdb._morph_webhook_deliveries(webhook_id);
 CREATE INDEX IF NOT EXISTS idx_morph_webhook_deliveries_status ON morphdb._morph_webhook_deliveries(status) WHERE status IN ('pending', 'retrying');
 CREATE INDEX IF NOT EXISTS idx_morph_webhook_deliveries_next_retry ON morphdb._morph_webhook_deliveries(next_retry_at) WHERE next_retry_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_morph_import_jobs_tenant ON morphdb._morph_import_jobs(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_morph_import_jobs_status ON morphdb._morph_import_jobs(status) WHERE status IN ('pending', 'processing');
+CREATE INDEX IF NOT EXISTS idx_morph_export_jobs_tenant ON morphdb._morph_export_jobs(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_morph_export_jobs_status ON morphdb._morph_export_jobs(status) WHERE status IN ('pending', 'processing');
+CREATE INDEX IF NOT EXISTS idx_morph_export_jobs_expires ON morphdb._morph_export_jobs(expires_at) WHERE expires_at IS NOT NULL;
 
 -- Create function for schema change notifications
 CREATE OR REPLACE FUNCTION morphdb.notify_schema_change()

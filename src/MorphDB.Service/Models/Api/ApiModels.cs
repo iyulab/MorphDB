@@ -388,6 +388,126 @@ public sealed record DeliveryApiResponse
 
 #endregion
 
+#region Bulk Import/Export API Models
+
+/// <summary>
+/// Request to start a CSV import.
+/// </summary>
+public sealed record CsvImportApiRequest
+{
+    public char Delimiter { get; init; } = ',';
+    public bool HasHeader { get; init; } = true;
+    public string? DateFormat { get; init; }
+    public bool TrimWhitespace { get; init; } = true;
+    public string NullHandling { get; init; } = "empty-as-null";
+    public string DuplicateHandling { get; init; } = "insert";
+    public IReadOnlyList<string>? KeyColumns { get; init; }
+}
+
+/// <summary>
+/// Request to start a JSON import.
+/// </summary>
+public sealed record JsonImportApiRequest
+{
+    public string? DateFormat { get; init; }
+    public string DuplicateHandling { get; init; } = "insert";
+    public IReadOnlyList<string>? KeyColumns { get; init; }
+}
+
+/// <summary>
+/// Request to start a CSV export.
+/// </summary>
+public sealed record CsvExportApiRequest
+{
+    public char Delimiter { get; init; } = ',';
+    public bool IncludeHeader { get; init; } = true;
+    public string? DateFormat { get; init; }
+    public IReadOnlyList<string>? Columns { get; init; }
+    public string? Filter { get; init; }
+    public string? OrderBy { get; init; }
+}
+
+/// <summary>
+/// Request to start a JSON export.
+/// </summary>
+public sealed record JsonExportApiRequest
+{
+    public bool Pretty { get; init; }
+    public string? DateFormat { get; init; }
+    public IReadOnlyList<string>? Columns { get; init; }
+    public string? Filter { get; init; }
+    public string? OrderBy { get; init; }
+}
+
+/// <summary>
+/// Request to start an XLSX export.
+/// </summary>
+public sealed record XlsxExportApiRequest
+{
+    public string SheetName { get; init; } = "Data";
+    public bool IncludeHeader { get; init; } = true;
+    public IReadOnlyList<string>? Columns { get; init; }
+    public string? Filter { get; init; }
+    public string? OrderBy { get; init; }
+}
+
+/// <summary>
+/// Import job API response.
+/// </summary>
+public sealed record ImportJobApiResponse
+{
+    public Guid JobId { get; init; }
+    public required string TableName { get; init; }
+    public required string Format { get; init; }
+    public required string Status { get; init; }
+    public long TotalRows { get; init; }
+    public long ProcessedRows { get; init; }
+    public long SuccessCount { get; init; }
+    public long ErrorCount { get; init; }
+    public string? ErrorMessage { get; init; }
+    public DateTimeOffset CreatedAt { get; init; }
+    public DateTimeOffset? StartedAt { get; init; }
+    public DateTimeOffset? CompletedAt { get; init; }
+    public double PercentComplete => TotalRows > 0 ? (double)ProcessedRows / TotalRows * 100 : 0;
+}
+
+/// <summary>
+/// Export job API response.
+/// </summary>
+public sealed record ExportJobApiResponse
+{
+    public Guid JobId { get; init; }
+    public required string TableName { get; init; }
+    public required string Format { get; init; }
+    public required string Status { get; init; }
+    public long TotalRows { get; init; }
+    public long ProcessedRows { get; init; }
+    public long? FileSize { get; init; }
+    public string? ErrorMessage { get; init; }
+    public DateTimeOffset CreatedAt { get; init; }
+    public DateTimeOffset? StartedAt { get; init; }
+    public DateTimeOffset? CompletedAt { get; init; }
+    public DateTimeOffset? ExpiresAt { get; init; }
+    public double PercentComplete => TotalRows > 0 ? (double)ProcessedRows / TotalRows * 100 : 0;
+}
+
+/// <summary>
+/// Job progress API response.
+/// </summary>
+public sealed record JobProgressApiResponse
+{
+    public Guid JobId { get; init; }
+    public required string Status { get; init; }
+    public long TotalRows { get; init; }
+    public long ProcessedRows { get; init; }
+    public long SuccessCount { get; init; }
+    public long ErrorCount { get; init; }
+    public double PercentComplete { get; init; }
+    public TimeSpan? EstimatedTimeRemaining { get; init; }
+}
+
+#endregion
+
 #region Helper Extensions
 
 public static class ApiModelExtensions
