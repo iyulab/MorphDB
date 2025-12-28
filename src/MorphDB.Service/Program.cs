@@ -190,6 +190,10 @@ try
     builder.Services.AddSingleton<ISsoConfigurationService, SsoConfigurationService>();
     builder.Services.AddSingleton<ISsoAuthenticationService, SsoAuthenticationService>();
 
+    // Add backup services (Phase 23: Backup & PITR)
+    builder.Services.Configure<BackupOptions>(builder.Configuration.GetSection("Backup"));
+    builder.Services.AddSingleton<IBackupService, BackupService>();
+
     // Health checks with dependencies
     var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
     builder.Services.AddHealthChecks()

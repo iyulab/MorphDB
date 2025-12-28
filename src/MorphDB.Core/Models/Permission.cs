@@ -33,6 +33,7 @@ public static class Permissions
         public const string ManageSchema = "project:manage_schema";
         public const string ManageWebhooks = "project:manage_webhooks";
         public const string ManageApiKeys = "project:manage_api_keys";
+        public const string ManageBackups = "project:manage_backups";
         public const string ViewAuditLogs = "project:view_audit_logs";
     }
 
@@ -147,6 +148,7 @@ public static class RolePermissions
         Permissions.Project.ManageSchema,
         Permissions.Project.ManageWebhooks,
         Permissions.Project.ManageApiKeys,
+        Permissions.Project.ManageBackups,
         Permissions.Project.ViewAuditLogs,
         // All data permissions
         Permissions.Data.Read,

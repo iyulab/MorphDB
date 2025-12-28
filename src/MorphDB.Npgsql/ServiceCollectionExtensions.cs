@@ -4,6 +4,7 @@ using MorphDB.Core.Abstractions;
 using MorphDB.Core.Encryption;
 using MorphDB.Core.Security;
 using MorphDB.Npgsql.Audit;
+using MorphDB.Npgsql.Backup;
 using MorphDB.Npgsql.Caching;
 using MorphDB.Npgsql.Encryption;
 using MorphDB.Npgsql.Infrastructure;
@@ -149,6 +150,9 @@ public static class ServiceCollectionExtensions
 
         // Register SSO repository (Phase 22: OIDC SSO)
         services.AddSingleton<ISsoConfigurationRepository, SsoConfigurationRepository>();
+
+        // Register backup repository (Phase 23: Backup & PITR)
+        services.AddSingleton<IBackupRepository, BackupRepository>();
 
         return services;
     }

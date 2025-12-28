@@ -102,12 +102,38 @@ public static class OrganizationSchema
 
         CREATE INDEX IF NOT EXISTS idx_sso_configs_org ON morphdb._morph_sso_configurations (organization_id);
         CREATE INDEX IF NOT EXISTS idx_sso_configs_active ON morphdb._morph_sso_configurations (organization_id, status) WHERE status = 1;
+
+        -- Backup management (Phase 23)
+        CREATE TABLE IF NOT EXISTS morphdb._morph_backups (
+            backup_id UUID PRIMARY KEY,
+            project_id UUID NOT NULL REFERENCES morphdb._morph_projects(project_id) ON DELETE CASCADE,
+            name VARCHAR(255) NOT NULL,
+            description TEXT,
+            backup_type INTEGER NOT NULL DEFAULT 0,
+            status INTEGER NOT NULL DEFAULT 0,
+            size_bytes BIGINT NOT NULL DEFAULT 0,
+            storage_path TEXT,
+            storage_type INTEGER NOT NULL DEFAULT 0,
+            compression INTEGER NOT NULL DEFAULT 1,
+            checksum VARCHAR(128),
+            error_message TEXT,
+            initiated_by VARCHAR(255),
+            metadata JSONB,
+            started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            completed_at TIMESTAMPTZ,
+            expires_at TIMESTAMPTZ
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_backups_project ON morphdb._morph_backups (project_id);
+        CREATE INDEX IF NOT EXISTS idx_backups_status ON morphdb._morph_backups (status);
+        CREATE INDEX IF NOT EXISTS idx_backups_expires ON morphdb._morph_backups (expires_at) WHERE expires_at IS NOT NULL;
         """;
 
     /// <summary>
     /// Drops the organization and membership tables.
     /// </summary>
     public const string DropOrganizationTables = """
+        DROP TABLE IF EXISTS morphdb._morph_backups;
         DROP TABLE IF EXISTS morphdb._morph_sso_configurations;
         DROP TABLE IF EXISTS morphdb._morph_organization_invitations;
         DROP TABLE IF EXISTS morphdb._morph_project_members;
