@@ -78,12 +78,37 @@ public static class OrganizationSchema
         CREATE INDEX IF NOT EXISTS idx_org_invitations_token ON morphdb._morph_organization_invitations (token) WHERE status = 0;
         CREATE INDEX IF NOT EXISTS idx_org_invitations_org ON morphdb._morph_organization_invitations (organization_id);
         CREATE INDEX IF NOT EXISTS idx_org_invitations_email ON morphdb._morph_organization_invitations (email);
+
+        -- SSO configurations table
+        CREATE TABLE IF NOT EXISTS morphdb._morph_sso_configurations (
+            sso_config_id UUID PRIMARY KEY,
+            organization_id UUID NOT NULL REFERENCES morphdb._morph_organizations(organization_id) ON DELETE CASCADE,
+            name VARCHAR(255) NOT NULL,
+            provider_type INTEGER NOT NULL DEFAULT 0,
+            authority VARCHAR(1024) NOT NULL,
+            client_id VARCHAR(255) NOT NULL,
+            client_secret_encrypted TEXT,
+            scopes TEXT[] NOT NULL DEFAULT ARRAY['openid', 'profile', 'email'],
+            allowed_domains TEXT[],
+            claim_mappings JSONB,
+            auto_provision_users BOOLEAN NOT NULL DEFAULT TRUE,
+            default_role INTEGER NOT NULL DEFAULT 10,
+            status INTEGER NOT NULL DEFAULT 0,
+            last_error TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            last_used_at TIMESTAMPTZ
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_sso_configs_org ON morphdb._morph_sso_configurations (organization_id);
+        CREATE INDEX IF NOT EXISTS idx_sso_configs_active ON morphdb._morph_sso_configurations (organization_id, status) WHERE status = 1;
         """;
 
     /// <summary>
     /// Drops the organization and membership tables.
     /// </summary>
     public const string DropOrganizationTables = """
+        DROP TABLE IF EXISTS morphdb._morph_sso_configurations;
         DROP TABLE IF EXISTS morphdb._morph_organization_invitations;
         DROP TABLE IF EXISTS morphdb._morph_project_members;
         DROP TABLE IF EXISTS morphdb._morph_organization_members;

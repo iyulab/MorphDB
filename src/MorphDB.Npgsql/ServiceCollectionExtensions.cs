@@ -147,6 +147,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IOrganizationRepository, OrganizationRepository>();
         services.AddSingleton<IMembershipRepository, MembershipRepository>();
 
+        // Register SSO repository (Phase 22: OIDC SSO)
+        services.AddSingleton<ISsoConfigurationRepository, SsoConfigurationRepository>();
+
         return services;
     }
 }

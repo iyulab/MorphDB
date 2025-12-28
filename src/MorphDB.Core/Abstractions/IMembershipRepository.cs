@@ -32,6 +32,14 @@ public interface IMembershipRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Gets an organization member by email.
+    /// </summary>
+    Task<OrganizationMember?> GetOrganizationMemberByEmailAsync(
+        Guid organizationId,
+        string email,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Lists members of an organization.
     /// </summary>
     Task<IReadOnlyList<OrganizationMember>> ListOrganizationMembersAsync(

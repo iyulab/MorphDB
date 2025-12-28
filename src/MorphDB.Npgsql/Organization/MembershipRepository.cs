@@ -85,6 +85,23 @@ public sealed class MembershipRepository : IMembershipRepository
     }
 
     /// <inheritdoc/>
+    public async Task<OrganizationMember?> GetOrganizationMemberByEmailAsync(
+        Guid organizationId,
+        string email,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT * FROM morphdb._morph_organization_members
+            WHERE organization_id = @OrganizationId AND LOWER(email) = LOWER(@Email)
+            """;
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        var entity = await connection.QuerySingleOrDefaultAsync<OrgMemberEntity>(sql, new { OrganizationId = organizationId, Email = email });
+
+        return entity is null ? null : MapToOrgMember(entity);
+    }
+
+    /// <inheritdoc/>
     public async Task<IReadOnlyList<OrganizationMember>> ListOrganizationMembersAsync(
         Guid organizationId,
         MembershipStatus? status = null,

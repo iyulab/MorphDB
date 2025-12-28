@@ -184,6 +184,12 @@ try
     builder.Services.AddScoped<IOrganizationService, OrganizationService>();
     builder.Services.AddSingleton<IPermissionService, PermissionService>();
 
+    // Add SSO services (Phase 22: OIDC SSO)
+    builder.Services.AddHttpClient("OidcDiscovery");
+    builder.Services.AddHttpClient("OidcToken");
+    builder.Services.AddSingleton<ISsoConfigurationService, SsoConfigurationService>();
+    builder.Services.AddSingleton<ISsoAuthenticationService, SsoAuthenticationService>();
+
     // Health checks with dependencies
     var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
     builder.Services.AddHealthChecks()
