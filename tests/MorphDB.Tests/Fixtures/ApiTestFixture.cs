@@ -4,7 +4,9 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Npgsql;
 
 namespace MorphDB.Tests.Fixtures;
 
@@ -45,6 +47,15 @@ public sealed class ApiTestFixture : IAsyncLifetime
 
                 builder.ConfigureTestServices(services =>
                 {
+                    // CRITICAL: Replace the NpgsqlDataSource singleton with one using the test connection string.
+                    // The original DataSource was built at startup with the CI environment's connection string,
+                    // but we need to use the Testcontainers PostgreSQL connection string.
+                    services.RemoveAll<NpgsqlDataSource>();
+                    var testDataSourceBuilder = new NpgsqlDataSourceBuilder(_postgresFixture.ConnectionString);
+                    testDataSourceBuilder.EnableDynamicJson();
+                    var testDataSource = testDataSourceBuilder.Build();
+                    services.AddSingleton(testDataSource);
+
                     // Remove background services that poll specific system tables
                     // These services start before the test fixture can initialize the schema
                     // Note: PostgresChangeListener is NOT removed because it's needed for realtime tests
