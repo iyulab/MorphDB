@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Encryption;
 using MorphDB.Core.Security;
+using MorphDB.Npgsql.Audit;
 using MorphDB.Npgsql.Caching;
 using MorphDB.Npgsql.Encryption;
 using MorphDB.Npgsql.Infrastructure;
@@ -137,6 +138,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISchemaLayerService, PostgresSchemaLayerService>();
         services.AddSingleton<IProjectRepository, ProjectRepository>();
         services.AddSingleton<IProjectService, ProjectService>();
+
+        // Register audit services (Phase 19: Audit Logging)
+        services.AddSingleton<IAuditService, PostgresAuditService>();
 
         return services;
     }

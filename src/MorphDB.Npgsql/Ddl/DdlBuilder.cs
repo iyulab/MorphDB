@@ -456,6 +456,30 @@ public static class DdlBuilder
 
             """);
 
+        // _audit_logs: Audit trail for compliance and security
+        sb.Append(CultureInfo.InvariantCulture, $"""
+            CREATE TABLE {QuoteIdentifier(systemSchema)}."_audit_logs" (
+                "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                "category" SMALLINT NOT NULL,
+                "action" VARCHAR(100) NOT NULL,
+                "severity" SMALLINT NOT NULL DEFAULT 1,
+                "actor_id" VARCHAR(100),
+                "actor_type" VARCHAR(20),
+                "resource_type" VARCHAR(50),
+                "resource_id" VARCHAR(100),
+                "http_method" VARCHAR(10),
+                "request_path" VARCHAR(500),
+                "status_code" INTEGER,
+                "ip_address" VARCHAR(45),
+                "user_agent" VARCHAR(500),
+                "duration_ms" BIGINT,
+                "metadata" JSONB,
+                "error_message" TEXT,
+                "timestamp" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+
+            """);
+
         // Indexes for performance
         sb.Append(CultureInfo.InvariantCulture, $"""
             CREATE INDEX "idx__columns_table_id" ON {QuoteIdentifier(systemSchema)}."_columns"("table_id");
@@ -464,6 +488,9 @@ public static class DdlBuilder
             CREATE INDEX "idx__relations_target" ON {QuoteIdentifier(systemSchema)}."_relations"("target_table_id");
             CREATE INDEX "idx__schema_changelog_table" ON {QuoteIdentifier(systemSchema)}."_schema_changelog"("table_id");
             CREATE INDEX "idx__schema_changelog_created" ON {QuoteIdentifier(systemSchema)}."_schema_changelog"("created_at" DESC);
+            CREATE INDEX "idx__audit_logs_timestamp" ON {QuoteIdentifier(systemSchema)}."_audit_logs"("timestamp" DESC);
+            CREATE INDEX "idx__audit_logs_category" ON {QuoteIdentifier(systemSchema)}."_audit_logs"("category", "timestamp" DESC);
+            CREATE INDEX "idx__audit_logs_actor" ON {QuoteIdentifier(systemSchema)}."_audit_logs"("actor_id", "timestamp" DESC);
             """);
 
         return sb.ToString();
