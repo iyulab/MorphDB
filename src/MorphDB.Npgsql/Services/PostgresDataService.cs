@@ -1,6 +1,8 @@
 using System.Dynamic;
 using Dapper;
+using Microsoft.Extensions.Options;
 using MorphDB.Core.Abstractions;
+using MorphDB.Core.Encryption;
 using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
 using MorphDB.Core.Security;
@@ -14,7 +16,8 @@ namespace MorphDB.Npgsql.Services;
 
 /// <summary>
 /// PostgreSQL implementation of IMorphDataService.
-/// Handles CRUD operations with logical-to-physical name translation.
+/// Handles CRUD operations with logical-to-physical name translation
+/// and transparent data encryption.
 /// </summary>
 public sealed class PostgresDataService : IMorphDataService
 {
@@ -22,6 +25,8 @@ public sealed class PostgresDataService : IMorphDataService
     private readonly IMetadataRepository _metadataRepository;
     private readonly ISecurityPolicyService _securityPolicyService;
     private readonly ISecurityContextAccessor _securityContextAccessor;
+    private readonly IDataEncryptionService? _encryptionService;
+    private readonly DataEncryptionOptions _encryptionOptions;
     private readonly string _primaryKeyLogicalName;
 
     /// <summary>
@@ -32,12 +37,16 @@ public sealed class PostgresDataService : IMorphDataService
         IMetadataRepository metadataRepository,
         ISecurityPolicyService securityPolicyService,
         ISecurityContextAccessor securityContextAccessor,
+        IDataEncryptionService? encryptionService = null,
+        IOptions<DataEncryptionOptions>? encryptionOptions = null,
         string primaryKeyLogicalName = "id")
     {
         _dataSource = dataSource ?? throw new ArgumentNullException(nameof(dataSource));
         _metadataRepository = metadataRepository ?? throw new ArgumentNullException(nameof(metadataRepository));
         _securityPolicyService = securityPolicyService ?? throw new ArgumentNullException(nameof(securityPolicyService));
         _securityContextAccessor = securityContextAccessor ?? throw new ArgumentNullException(nameof(securityContextAccessor));
+        _encryptionService = encryptionService;
+        _encryptionOptions = encryptionOptions?.Value ?? new DataEncryptionOptions();
         _primaryKeyLogicalName = primaryKeyLogicalName;
     }
 
@@ -71,7 +80,10 @@ public sealed class PostgresDataService : IMorphDataService
         if (result is null)
             return null;
 
-        return MapToLogicalDictionary(result, table.Columns);
+        var mapped = MapToLogicalDictionary(result, table.Columns);
+
+        // Decrypt encrypted columns
+        return DecryptRowData(tenantId, tableName, mapped, table.Columns);
     }
 
     /// <inheritdoc />
@@ -86,8 +98,11 @@ public sealed class PostgresDataService : IMorphDataService
         // Ensure tenant_id is set
         var dataWithTenant = EnsureTenantId(data, tenantId);
 
+        // Encrypt data before storing
+        var encryptedData = EncryptRowData(tenantId, tableName, dataWithTenant, table.Columns);
+
         // Map logical names to physical and prepare parameters
-        var (columns, parameters, values) = PrepareInsertParameters(dataWithTenant, table.Columns);
+        var (columns, parameters, values) = PrepareInsertParameters(encryptedData, table.Columns);
 
         var sql = DmlBuilder.BuildInsert(table.PhysicalName, columns, parameters);
 
@@ -95,7 +110,10 @@ public sealed class PostgresDataService : IMorphDataService
         var result = await connection.QuerySingleAsync<dynamic>(
             new CommandDefinition(sql, values, cancellationToken: cancellationToken));
 
-        return MapToLogicalDictionary(result, table.Columns);
+        var mapped = MapToLogicalDictionary(result, table.Columns);
+
+        // Return decrypted data to the caller
+        return DecryptRowData(tenantId, tableName, mapped, table.Columns);
     }
 
     /// <inheritdoc />
@@ -109,8 +127,11 @@ public sealed class PostgresDataService : IMorphDataService
         var table = await GetTableWithColumnsAsync(tenantId, tableName, cancellationToken);
         var idColumn = GetPrimaryKeyColumn(table);
 
+        // Encrypt data before storing
+        var encryptedData = EncryptRowData(tenantId, tableName, data, table.Columns);
+
         // Map logical names to physical and prepare parameters
-        var (setColumns, values) = PrepareUpdateParameters(data, table.Columns);
+        var (setColumns, values) = PrepareUpdateParameters(encryptedData, table.Columns);
         values.id = id;
 
         var whereClause = DmlBuilder.BuildIdWhereClause(idColumn.PhysicalName);
@@ -123,7 +144,10 @@ public sealed class PostgresDataService : IMorphDataService
         if (result is null)
             throw new NotFoundException($"Record with id '{id}' not found in table '{tableName}'");
 
-        return MapToLogicalDictionary(result, table.Columns);
+        var mapped = MapToLogicalDictionary(result, table.Columns);
+
+        // Return decrypted data to the caller
+        return DecryptRowData(tenantId, tableName, mapped, table.Columns);
     }
 
     /// <inheritdoc />
@@ -171,13 +195,20 @@ public sealed class PostgresDataService : IMorphDataService
             {
                 // Ensure tenant_id is set for each record
                 var recordWithTenant = EnsureTenantId(record, tenantId);
-                var (columns, parameters, values) = PrepareInsertParameters(recordWithTenant, table.Columns);
+
+                // Encrypt data before storing
+                var encryptedRecord = EncryptRowData(tenantId, tableName, recordWithTenant, table.Columns);
+
+                var (columns, parameters, values) = PrepareInsertParameters(encryptedRecord, table.Columns);
                 var sql = DmlBuilder.BuildInsert(table.PhysicalName, columns, parameters);
 
                 var result = await connection.QuerySingleAsync<dynamic>(
                     new CommandDefinition(sql, values, transaction: transaction, cancellationToken: cancellationToken));
 
-                results.Add(MapToLogicalDictionary(result, table.Columns));
+                var mapped = MapToLogicalDictionary(result, table.Columns);
+
+                // Return decrypted data to the caller
+                results.Add(DecryptRowData(tenantId, tableName, mapped, table.Columns));
             }
 
             await transaction.CommitAsync(cancellationToken);
@@ -294,8 +325,11 @@ public sealed class PostgresDataService : IMorphDataService
         // Ensure tenant_id is set
         var dataWithTenant = EnsureTenantId(data, tenantId);
 
+        // Encrypt data before storing
+        var encryptedData = EncryptRowData(tenantId, tableName, dataWithTenant, table.Columns);
+
         // Prepare insert parameters
-        var (columns, parameters, values) = PrepareInsertParameters(dataWithTenant, table.Columns);
+        var (columns, parameters, values) = PrepareInsertParameters(encryptedData, table.Columns);
 
         var sql = DmlBuilder.BuildUpsert(table.PhysicalName, columns, parameters, physicalKeyColumns);
 
@@ -303,7 +337,10 @@ public sealed class PostgresDataService : IMorphDataService
         var result = await connection.QuerySingleAsync<dynamic>(
             new CommandDefinition(sql, values, cancellationToken: cancellationToken));
 
-        return MapToLogicalDictionary(result, table.Columns);
+        var mapped = MapToLogicalDictionary(result, table.Columns);
+
+        // Return decrypted data to the caller
+        return DecryptRowData(tenantId, tableName, mapped, table.Columns);
     }
 
     #region Private Helper Methods
@@ -453,6 +490,100 @@ public sealed class PostgresDataService : IMorphDataService
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Encrypts row data for storage.
+    /// Only encrypts columns that are marked for encryption or configured for auto-encryption.
+    /// </summary>
+    private IDictionary<string, object?> EncryptRowData(
+        Guid tenantId,
+        string tableName,
+        IDictionary<string, object?> data,
+        IReadOnlyList<ColumnMetadata> columns)
+    {
+        if (_encryptionService is null || !_encryptionService.IsEnabled)
+            return data;
+
+        // Determine which columns should be encrypted
+        var encryptedColumnNames = GetEncryptedColumnNames(columns);
+
+        if (encryptedColumnNames.Count == 0)
+            return data;
+
+        return _encryptionService.EncryptRow(tenantId, tableName, data, encryptedColumnNames);
+    }
+
+    /// <summary>
+    /// Decrypts row data for retrieval.
+    /// </summary>
+    private IDictionary<string, object?> DecryptRowData(
+        Guid tenantId,
+        string tableName,
+        IDictionary<string, object?> data,
+        IReadOnlyList<ColumnMetadata> columns)
+    {
+        if (_encryptionService is null || !_encryptionService.IsEnabled)
+            return data;
+
+        // Determine which columns should be decrypted
+        var encryptedColumnNames = GetEncryptedColumnNames(columns);
+
+        if (encryptedColumnNames.Count == 0)
+            return data;
+
+        return _encryptionService.DecryptRow(tenantId, tableName, data, encryptedColumnNames);
+    }
+
+    /// <summary>
+    /// Gets the set of column names that should be encrypted.
+    /// </summary>
+    private HashSet<string> GetEncryptedColumnNames(IReadOnlyList<ColumnMetadata> columns)
+    {
+        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var column in columns)
+        {
+            // Skip excluded columns (id, tenant_id, timestamps, etc.)
+            if (_encryptionOptions.ExcludedColumns.Contains(column.LogicalName))
+                continue;
+
+            // Include if explicitly marked as encrypted
+            if (column.IsEncrypted)
+            {
+                result.Add(column.LogicalName);
+                continue;
+            }
+
+            // Include if encrypt all by default is enabled and column type is encryptable
+            if (_encryptionOptions.EncryptAllByDefault && IsEncryptableDataType(column.DataType))
+            {
+                result.Add(column.LogicalName);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Determines if a data type is suitable for encryption.
+    /// </summary>
+    private static bool IsEncryptableDataType(MorphDataType dataType)
+    {
+        return dataType switch
+        {
+            MorphDataType.Text => true,
+            MorphDataType.LongText => true,
+            MorphDataType.Email => true,
+            MorphDataType.Phone => true,
+            MorphDataType.Url => true,
+            MorphDataType.Json => true,
+            MorphDataType.Integer => true,
+            MorphDataType.BigInteger => true,
+            MorphDataType.Decimal => true,
+            // Don't encrypt: Boolean, Date/Time, UUID (used for joins), relations, computed fields
+            _ => false
+        };
     }
 
     #endregion

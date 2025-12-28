@@ -1,6 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using MorphDB.Core.Abstractions;
+using MorphDB.Core.Encryption;
 using MorphDB.Core.Security;
+using MorphDB.Npgsql.Encryption;
 using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Repositories;
 using MorphDB.Npgsql.Security;
@@ -40,6 +43,28 @@ public static class ServiceCollectionExtensions
         // Register repositories
         services.AddSingleton<IMetadataRepository, MetadataRepository>();
 
+        // Register encryption services (if configured)
+        if (options.EncryptionOptions is not null && !string.IsNullOrEmpty(options.EncryptionOptions.MasterKey))
+        {
+            services.Configure<DataEncryptionOptions>(opt =>
+            {
+                opt.Enabled = options.EncryptionOptions.Enabled;
+                opt.MasterKey = options.EncryptionOptions.MasterKey;
+                opt.KeyVersion = options.EncryptionOptions.KeyVersion;
+                opt.Algorithm = options.EncryptionOptions.Algorithm;
+                opt.EncryptAllByDefault = options.EncryptionOptions.EncryptAllByDefault;
+                opt.ExcludedColumns = options.EncryptionOptions.ExcludedColumns;
+            });
+
+            services.AddSingleton<IKeyDerivationService, HkdfKeyDerivationService>();
+            services.AddSingleton<IDataEncryptionService, AesGcmDataEncryptionService>();
+        }
+        else
+        {
+            // Register default encryption options even when encryption is disabled
+            services.Configure<DataEncryptionOptions>(opt => opt.Enabled = false);
+        }
+
         // Register services
         services.AddSingleton<IChangeLogger, ChangeLogger>();
         services.AddSingleton(options.SchemaManagerOptions);
@@ -72,6 +97,12 @@ public sealed class MorphDbNpgsqlOptions
     /// Options for schema manager behavior.
     /// </summary>
     public SchemaManagerOptions SchemaManagerOptions { get; set; } = new();
+
+    /// <summary>
+    /// Options for data encryption.
+    /// Set MasterKey to enable automatic encryption.
+    /// </summary>
+    public DataEncryptionOptions? EncryptionOptions { get; set; }
 
     /// <summary>
     /// Redis connection string for distributed caching.

@@ -2,6 +2,7 @@ using System.Globalization;
 using HealthChecks.UI.Client;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.OpenApi.Models;
+using MorphDB.Core.Encryption;
 using MorphDB.Npgsql;
 using MorphDB.Npgsql.Security;
 using MorphDB.Service.Extensions;
@@ -36,9 +37,26 @@ try
     var connectionString = builder.Configuration.GetConnectionString("MorphDB")
         ?? throw new InvalidOperationException("Connection string 'MorphDB' not found.");
 
+    // Configure encryption from settings
+    var encryptionSection = builder.Configuration.GetSection("Encryption");
+    var encryptionOptions = new DataEncryptionOptions();
+    encryptionSection.Bind(encryptionOptions);
+
     builder.Services.AddMorphDbNpgsql(connectionString, options =>
     {
         options.RedisConnectionString = builder.Configuration.GetConnectionString("Redis");
+
+        // Enable encryption if master key is configured
+        if (!string.IsNullOrEmpty(encryptionOptions.MasterKey))
+        {
+            options.EncryptionOptions = encryptionOptions;
+            Log.Information("Data encryption enabled (Algorithm: {Algorithm}, KeyVersion: {KeyVersion})",
+                encryptionOptions.Algorithm, encryptionOptions.KeyVersion);
+        }
+        else
+        {
+            Log.Information("Data encryption disabled (no master key configured)");
+        }
     });
 
     // Configure JWT options
