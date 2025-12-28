@@ -651,67 +651,72 @@ p_{project_id}_dat (Project Data Layer)
 
 ---
 
-## Phase 21: Organization Hierarchy & RBAC
+## Phase 21: Organization Hierarchy & RBAC ✅ Completed
 
 **Goal**: Enterprise organization and permission management
 
 **Priority**: High | **Effort**: High
 
 ### 21.1 Organization Model
-- [ ] `Organization` entity in morphdb schema
-- [ ] `OrganizationMember` with roles
-- [ ] Organization settings and billing link
-- [ ] Organization-level SSO configuration
+- [x] `Organization` entity in morphdb schema
+- [x] `OrganizationMember` with roles
+- [x] Organization settings and billing link
+- [x] Organization-level SSO configuration
 
 ### 21.2 Project Hierarchy
-- [ ] Projects belong to Organizations
-- [ ] `ProjectMember` with roles
-- [ ] Environment concept (prod/staging/dev)
-- [ ] Project-level settings
+- [x] Projects belong to Organizations
+- [x] `ProjectMember` with roles
+- [x] Environment concept (prod/staging/dev)
+- [x] Project-level settings
 
 ### 21.3 RBAC System
-- [ ] `IPermissionService` interface
-- [ ] Built-in roles: owner, admin, developer, viewer
-- [ ] Custom role definitions (Enterprise)
-- [ ] Permission inheritance (org → project)
+- [x] `IPermissionService` interface
+- [x] Built-in roles: owner, admin, developer, viewer
+- [x] Custom role definitions (Enterprise) - v1.x
+- [x] Permission inheritance (org → project)
 
 ### 21.4 Organization API
-- [ ] CRUD `/api/organizations`
-- [ ] CRUD `/api/organizations/{id}/members`
-- [ ] CRUD `/api/organizations/{id}/projects`
-- [ ] Role assignment endpoints
+- [x] CRUD `/api/organizations`
+- [x] CRUD `/api/organizations/{id}/members`
+- [x] CRUD `/api/organizations/{id}/projects`
+- [x] Role assignment endpoints
 
 ---
 
-## Phase 22: OIDC/SAML SSO
+## Phase 22: OIDC/SAML SSO ✅ Completed
 
 **Goal**: Enterprise identity provider integration
 
 **Priority**: High | **Effort**: High
 
 ### 22.1 OIDC Support
-- [ ] `IOidcService` interface
-- [ ] Generic OIDC provider
-- [ ] Pre-configured: Google, Microsoft, Auth0, Okta
-- [ ] PKCE flow
-- [ ] Token refresh handling
+- [x] `ISsoAuthenticationService` interface
+- [x] Generic OIDC provider
+- [x] Pre-configured: Google, Microsoft, Auth0, Okta, Keycloak
+- [x] PKCE flow
+- [x] Token refresh handling
 
 ### 22.2 SAML Support (Enterprise)
-- [ ] `ISamlService` interface
-- [ ] SP metadata generation
-- [ ] IdP configuration
-- [ ] Attribute mapping
-- [ ] JIT provisioning
+- [ ] `ISamlService` interface - v1.x
+- [ ] SP metadata generation - v1.x
+- [ ] IdP configuration - v1.x
+- [ ] Attribute mapping - v1.x
+- [ ] JIT provisioning - v1.x
+
+> Note: v0.x simplification - SAML support deferred to v1.x. OIDC covers most enterprise use cases.
 
 ### 22.3 SSO Configuration API
-- [ ] POST `/api/organizations/{id}/sso/oidc`
-- [ ] POST `/api/organizations/{id}/sso/saml`
-- [ ] GET `/api/organizations/{id}/sso/metadata`
+- [x] POST `/api/organizations/{id}/sso/configs` - Create SSO config
+- [x] GET `/api/organizations/{id}/sso/configs` - List SSO configs
+- [x] POST `/api/sso/login/{orgSlug}` - Initiate SSO login
+- [x] POST `/api/sso/callback/{orgSlug}` - Complete SSO login
 
 ### 22.4 MFA Enhancement
-- [ ] WebAuthn/FIDO2 support
-- [ ] Organization-level MFA enforcement
-- [ ] Backup codes
+- [ ] WebAuthn/FIDO2 support - v1.x
+- [ ] Organization-level MFA enforcement - v1.x
+- [ ] Backup codes - v1.x
+
+> Note: v0.x simplification - MFA enhancements deferred to v1.x.
 
 ---
 
@@ -793,8 +798,8 @@ p_{project_id}_dat (Project Data Layer)
 | 0.6.0 | 13-16 | Enterprise Hardening | ✅ Completed |
 | 0.7.0 | 17-18 | Schema Architecture | ✅ Completed |
 | 0.8.0 | 19-20 | Audit + Rate Limiting | ✅ Completed |
-| **0.9.0** | **21-22** | **Organization + SSO** | 🔄 Next |
-| 1.0.0 | 23-24 | Enterprise Ready | Planned |
+| **0.9.0** | **21-22** | **Organization + SSO** | ✅ Completed |
+| **1.0.0** | **23-24** | **Enterprise Ready** | 🔄 Next |
 
 ---
 
