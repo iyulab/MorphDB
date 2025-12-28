@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Exceptions;
 using MorphDB.Service.Models.Api;
+using MorphDB.Service.OData;
 using MorphDB.Service.Realtime;
 
 namespace MorphDB.Service.Controllers;
@@ -35,15 +36,18 @@ public sealed class SchemaController : ControllerBase
     private readonly ISchemaManager _schemaManager;
     private readonly ILogger<SchemaController> _logger;
     private readonly ChangeNotificationSetup _changeNotificationSetup;
+    private readonly IEdmModelProvider _edmModelProvider;
 
     public SchemaController(
         ISchemaManager schemaManager,
         ILogger<SchemaController> logger,
-        ChangeNotificationSetup changeNotificationSetup)
+        ChangeNotificationSetup changeNotificationSetup,
+        IEdmModelProvider edmModelProvider)
     {
         _schemaManager = schemaManager;
         _logger = logger;
         _changeNotificationSetup = changeNotificationSetup;
+        _edmModelProvider = edmModelProvider;
     }
 
     #region Tables
@@ -91,6 +95,9 @@ public sealed class SchemaController : ControllerBase
 
             // Create notification trigger for realtime updates
             await _changeNotificationSetup.CreateTriggerForTableAsync(table.PhysicalName, cancellationToken);
+
+            // Invalidate cached EDM model so OData picks up the new table
+            _edmModelProvider.InvalidateModel(tenantId);
 
             SchemaControllerLogs.TableCreated(_logger, table.LogicalName, tenantId);
 
@@ -214,6 +221,10 @@ public sealed class SchemaController : ControllerBase
             };
 
             var updatedTable = await _schemaManager.UpdateTableAsync(updateRequest, cancellationToken);
+
+            // Invalidate cached EDM model so OData picks up schema changes
+            _edmModelProvider.InvalidateModel(tenantId);
+
             return Ok(TableApiResponse.FromMetadata(updatedTable));
         }
         catch (ConcurrencyException ex)
@@ -267,6 +278,10 @@ public sealed class SchemaController : ControllerBase
             }
 
             await _schemaManager.DeleteTableAsync(table.TableId, cancellationToken);
+
+            // Invalidate cached EDM model so OData picks up schema changes
+            _edmModelProvider.InvalidateModel(tenantId);
+
             SchemaControllerLogs.TableDeleted(_logger, name, tenantId);
 
             return NoContent();
@@ -334,6 +349,9 @@ public sealed class SchemaController : ControllerBase
             var column = await _schemaManager.AddColumnAsync(addRequest, cancellationToken);
             var response = ColumnApiResponse.FromMetadata(column);
 
+            // Invalidate cached EDM model so OData picks up schema changes
+            _edmModelProvider.InvalidateModel(tenantId);
+
             SchemaControllerLogs.ColumnAdded(_logger, column.LogicalName, tableName);
 
             return Created($"/api/schema/columns/{column.ColumnId}", response);
@@ -378,6 +396,10 @@ public sealed class SchemaController : ControllerBase
             };
 
             var column = await _schemaManager.UpdateColumnAsync(updateRequest, cancellationToken);
+
+            // Invalidate all cached EDM models (column operations don't have tenant context)
+            _edmModelProvider.InvalidateAll();
+
             return Ok(ColumnApiResponse.FromMetadata(column));
         }
         catch (NotFoundException ex)
@@ -409,6 +431,10 @@ public sealed class SchemaController : ControllerBase
         try
         {
             await _schemaManager.DeleteColumnAsync(id, cancellationToken);
+
+            // Invalidate all cached EDM models (column operations don't have tenant context)
+            _edmModelProvider.InvalidateAll();
+
             return NoContent();
         }
         catch (NotFoundException ex)
@@ -488,6 +514,9 @@ public sealed class SchemaController : ControllerBase
             var index = await _schemaManager.CreateIndexAsync(createRequest, cancellationToken);
             var response = IndexApiResponse.FromMetadata(index);
 
+            // Invalidate cached EDM model so OData picks up schema changes
+            _edmModelProvider.InvalidateModel(tenantId);
+
             SchemaControllerLogs.IndexCreated(_logger, index.LogicalName, tableName);
 
             return Created($"/api/schema/indexes/{index.IndexId}", response);
@@ -513,6 +542,10 @@ public sealed class SchemaController : ControllerBase
         try
         {
             await _schemaManager.DeleteIndexAsync(id, cancellationToken);
+
+            // Invalidate all cached EDM models (index operations don't have tenant context)
+            _edmModelProvider.InvalidateAll();
+
             return NoContent();
         }
         catch (NotFoundException ex)
@@ -607,6 +640,9 @@ public sealed class SchemaController : ControllerBase
             var relation = await _schemaManager.CreateRelationAsync(createRequest, cancellationToken);
             var response = RelationApiResponse.FromMetadata(relation);
 
+            // Invalidate cached EDM model so OData picks up schema changes
+            _edmModelProvider.InvalidateModel(tenantId);
+
             SchemaControllerLogs.RelationCreated(_logger, relation.LogicalName);
 
             return Created($"/api/schema/relations/{relation.RelationId}", response);
@@ -632,6 +668,10 @@ public sealed class SchemaController : ControllerBase
         try
         {
             await _schemaManager.DeleteRelationAsync(id, cancellationToken);
+
+            // Invalidate all cached EDM models (relation operations don't have tenant context)
+            _edmModelProvider.InvalidateAll();
+
             return NoContent();
         }
         catch (NotFoundException ex)

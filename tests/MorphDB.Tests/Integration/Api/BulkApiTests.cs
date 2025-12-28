@@ -62,13 +62,10 @@ public class BulkApiTests
         // Arrange
         var tableName = await SetupTestTableAsync();
         var csvContent = "name,email,age,is_active\nAlice,alice@test.com,25,true\nBob,bob@test.com,30,false";
-        var content = new MultipartFormDataContent();
-        content.Add(new StringContent(csvContent), "file", "test.csv");
-        content.Add(new StringContent(","), "delimiter");
-        content.Add(new StringContent("true"), "hasHeader");
+        var content = new StringContent(csvContent, Encoding.UTF8, "text/csv");
 
         // Act
-        var response = await _client.PostAsync($"/api/bulk/{tableName}/import/csv", content);
+        var response = await _client.PostAsync($"/api/bulk/{tableName}/import/csv?delimiter=,&hasHeader=true", content);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);
@@ -87,13 +84,10 @@ public class BulkApiTests
         // Arrange
         var tableName = await SetupTestTableAsync();
         var csvContent = "name;email;age;is_active\nCharlie;charlie@test.com;28;true";
-        var content = new MultipartFormDataContent();
-        content.Add(new StringContent(csvContent), "file", "test.csv");
-        content.Add(new StringContent(";"), "delimiter");
-        content.Add(new StringContent("true"), "hasHeader");
+        var content = new StringContent(csvContent, Encoding.UTF8, "text/csv");
 
         // Act
-        var response = await _client.PostAsync($"/api/bulk/{tableName}/import/csv", content);
+        var response = await _client.PostAsync($"/api/bulk/{tableName}/import/csv?delimiter=;&hasHeader=true", content);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);
@@ -104,10 +98,10 @@ public class BulkApiTests
     {
         // Arrange
         var tableName = await SetupTestTableAsync();
-        var content = new MultipartFormDataContent();
+        var content = new StringContent(string.Empty, Encoding.UTF8, "text/csv");
 
         // Act
-        var response = await _client.PostAsync($"/api/bulk/{tableName}/import/csv", content);
+        var response = await _client.PostAsync($"/api/bulk/{tableName}/import/csv?delimiter=,&hasHeader=true", content);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -128,8 +122,7 @@ public class BulkApiTests
                 {"name": "Eve", "email": "eve@test.com", "age": 28, "is_active": false}
             ]
             """;
-        var content = new MultipartFormDataContent();
-        content.Add(new StringContent(jsonContent), "file", "test.json");
+        var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
 
         // Act
         var response = await _client.PostAsync($"/api/bulk/{tableName}/import/json", content);
@@ -151,8 +144,7 @@ public class BulkApiTests
             {"name": "Frank", "email": "frank@test.com", "age": 40, "is_active": true}
             {"name": "Grace", "email": "grace@test.com", "age": 33, "is_active": true}
             """;
-        var content = new MultipartFormDataContent();
-        content.Add(new StringContent(ndjsonContent), "file", "test.ndjson");
+        var content = new StringContent(ndjsonContent, Encoding.UTF8, "application/x-ndjson");
 
         // Act
         var response = await _client.PostAsync($"/api/bulk/{tableName}/import/ndjson", content);
@@ -275,12 +267,9 @@ public class BulkApiTests
         // Arrange
         var tableName = await SetupTestTableAsync();
         var csvContent = "name,email,age,is_active\nTest,test@test.com,25,true";
-        var content = new MultipartFormDataContent();
-        content.Add(new StringContent(csvContent), "file", "test.csv");
-        content.Add(new StringContent(","), "delimiter");
-        content.Add(new StringContent("true"), "hasHeader");
+        var content = new StringContent(csvContent, Encoding.UTF8, "text/csv");
 
-        var importResponse = await _client.PostAsync($"/api/bulk/{tableName}/import/csv", content);
+        var importResponse = await _client.PostAsync($"/api/bulk/{tableName}/import/csv?delimiter=,&hasHeader=true", content);
         var importJob = await importResponse.Content.ReadFromJsonAsync<ImportJobApiResponse>();
 
         // Act
@@ -352,16 +341,13 @@ public class BulkApiTests
             csvLines.AppendLine(CultureInfo.InvariantCulture, $"User{i},user{i}@test.com,{20 + i % 50},true");
         }
 
-        var content = new MultipartFormDataContent();
-        content.Add(new StringContent(csvLines.ToString()), "file", "test.csv");
-        content.Add(new StringContent(","), "delimiter");
-        content.Add(new StringContent("true"), "hasHeader");
+        var content = new StringContent(csvLines.ToString(), Encoding.UTF8, "text/csv");
 
-        var importResponse = await _client.PostAsync($"/api/bulk/{tableName}/import/csv", content);
+        var importResponse = await _client.PostAsync($"/api/bulk/{tableName}/import/csv?delimiter=,&hasHeader=true", content);
         var importJob = await importResponse.Content.ReadFromJsonAsync<ImportJobApiResponse>();
 
         // Act
-        var response = await _client.PostAsync($"/api/bulk/import/{importJob!.JobId}/cancel", null);
+        var response = await _client.PostAsync($"/api/bulk/jobs/{importJob!.JobId}/cancel", null);
 
         // Assert
         // Job might be already completed (fast processing) or cancelled
@@ -380,7 +366,7 @@ public class BulkApiTests
         var exportJob = await exportResponse.Content.ReadFromJsonAsync<ExportJobApiResponse>();
 
         // Act
-        var response = await _client.PostAsync($"/api/bulk/export/{exportJob!.JobId}/cancel", null);
+        var response = await _client.PostAsync($"/api/bulk/jobs/{exportJob!.JobId}/cancel", null);
 
         // Assert
         // Job might be already completed (fast processing) or cancelled
@@ -448,11 +434,10 @@ public class BulkApiTests
     {
         // Arrange
         var csvContent = "name,email,age,is_active\nTest,test@test.com,25,true";
-        var content = new MultipartFormDataContent();
-        content.Add(new StringContent(csvContent), "file", "test.csv");
+        var content = new StringContent(csvContent, Encoding.UTF8, "text/csv");
 
         // Act
-        var response = await _client.PostAsync("/api/bulk/nonexistent_table/import/csv", content);
+        var response = await _client.PostAsync("/api/bulk/nonexistent_table/import/csv?delimiter=,&hasHeader=true", content);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
