@@ -30,13 +30,9 @@ public sealed class ApiTestFixture : IAsyncLifetime
         _factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
             {
-                builder.ConfigureAppConfiguration((context, config) =>
-                {
-                    config.AddInMemoryCollection(new Dictionary<string, string?>
-                    {
-                        ["ConnectionStrings:MorphDB"] = _postgresFixture.ConnectionString
-                    });
-                });
+                // Use UseSetting to override connection string at the highest priority level
+                // This ensures it takes precedence over environment variables from CI
+                builder.UseSetting("ConnectionStrings:MorphDB", _postgresFixture.ConnectionString);
 
                 builder.ConfigureServices(services =>
                 {
@@ -49,8 +45,9 @@ public sealed class ApiTestFixture : IAsyncLifetime
 
                 builder.ConfigureTestServices(services =>
                 {
-                    // Remove background services that require database schema
+                    // Remove background services that poll specific system tables
                     // These services start before the test fixture can initialize the schema
+                    // Note: PostgresChangeListener is NOT removed because it's needed for realtime tests
                     var hostedServiceDescriptors = services
                         .Where(d => d.ServiceType == typeof(IHostedService))
                         .ToList();
@@ -58,9 +55,9 @@ public sealed class ApiTestFixture : IAsyncLifetime
                     foreach (var descriptor in hostedServiceDescriptors)
                     {
                         var implementationType = descriptor.ImplementationType?.Name ?? descriptor.ServiceType.Name;
+                        // Only remove services that poll _morph_webhook_deliveries and _morph_export_jobs tables
                         if (implementationType.Contains("WebhookProcessor") ||
-                            implementationType.Contains("BulkJobProcessor") ||
-                            implementationType.Contains("PostgresChangeListener"))
+                            implementationType.Contains("BulkJobProcessor"))
                         {
                             services.Remove(descriptor);
                         }
