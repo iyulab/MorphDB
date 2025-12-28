@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace MorphDB.Tests.Fixtures;
 
@@ -48,7 +49,22 @@ public sealed class ApiTestFixture : IAsyncLifetime
 
                 builder.ConfigureTestServices(services =>
                 {
-                    // Override output formatter for test compatibility
+                    // Remove background services that require database schema
+                    // These services start before the test fixture can initialize the schema
+                    var hostedServiceDescriptors = services
+                        .Where(d => d.ServiceType == typeof(IHostedService))
+                        .ToList();
+
+                    foreach (var descriptor in hostedServiceDescriptors)
+                    {
+                        var implementationType = descriptor.ImplementationType?.Name ?? descriptor.ServiceType.Name;
+                        if (implementationType.Contains("WebhookProcessor") ||
+                            implementationType.Contains("BulkJobProcessor") ||
+                            implementationType.Contains("PostgresChangeListener"))
+                        {
+                            services.Remove(descriptor);
+                        }
+                    }
                 });
             });
 
@@ -64,6 +80,20 @@ public sealed class ApiTestFixture : IAsyncLifetime
         client.DefaultRequestHeaders.Add("X-Tenant-Id", tenantId.ToString());
         return client;
     }
+
+    /// <summary>
+    /// Creates an HttpMessageHandler for SignalR HubConnection tests.
+    /// This handler routes requests through the test server.
+    /// </summary>
+    public HttpMessageHandler CreateHandler()
+    {
+        return _factory!.Server.CreateHandler();
+    }
+
+    /// <summary>
+    /// Gets the base address of the test server.
+    /// </summary>
+    public Uri BaseAddress => _factory!.Server.BaseAddress;
 
     public Task DisposeAsync()
     {

@@ -28,17 +28,14 @@ public class MorphHubTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        var hubUrl = _httpClient.BaseAddress + "hubs/morph";
+        var hubUrl = new Uri(_fixture.Api.BaseAddress, "hubs/morph").ToString();
 
         _hubConnection = new HubConnectionBuilder()
             .WithUrl(hubUrl, options =>
             {
                 options.Headers.Add("X-Tenant-Id", _fixture.Api.TenantId.ToString());
-                options.HttpMessageHandlerFactory = _ => _fixture.Api.CreateClientWithTenant(_fixture.Api.TenantId)
-                    .GetType()
-                    .GetField("_handler", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?
-                    .GetValue(_fixture.Api.CreateClientWithTenant(_fixture.Api.TenantId)) as HttpMessageHandler
-                    ?? new HttpClientHandler();
+                // Use the test server's handler to route SignalR requests through the test server
+                options.HttpMessageHandlerFactory = _ => _fixture.Api.CreateHandler();
             })
             .Build();
 
