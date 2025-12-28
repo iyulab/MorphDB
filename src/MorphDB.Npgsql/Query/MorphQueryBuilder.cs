@@ -440,6 +440,41 @@ internal sealed class MorphQuery : IMorphQuery
             kvp => (object?)kvp.Value);
     }
 
+    /// <inheritdoc />
+    public async Task<(string WhereSql, IDictionary<string, object?> Parameters)> GetPhysicalWhereClauseAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (_whereConditions.Count == 0)
+        {
+            return ("", new Dictionary<string, object?>());
+        }
+
+        var table = await GetTableMetadataAsync(cancellationToken);
+
+        // Build a query with just the WHERE clause to extract it
+        var query = new SqlKataQuery(table.PhysicalName);
+        ApplyPhysicalWhereConditions(query, _whereConditions, table);
+
+        var compiled = _compiler.Compile(query);
+
+        // Extract WHERE clause from compiled SQL (format: "SELECT * FROM table WHERE ...")
+        var sql = compiled.Sql;
+        var whereIndex = sql.IndexOf("WHERE", StringComparison.OrdinalIgnoreCase);
+        if (whereIndex < 0)
+        {
+            return ("", new Dictionary<string, object?>());
+        }
+
+        // Extract everything after "WHERE "
+        var whereSql = sql[(whereIndex + 6)..].Trim();
+
+        var parameters = compiled.NamedBindings.ToDictionary(
+            kvp => kvp.Key,
+            kvp => (object?)kvp.Value);
+
+        return (whereSql, parameters);
+    }
+
     /// <summary>
     /// Builds a SqlKata query using logical names (for debugging/ToSql).
     /// </summary>

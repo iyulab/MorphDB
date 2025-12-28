@@ -23,7 +23,7 @@ public class BatchApiTests
         _client = fixture.Api.Client;
     }
 
-    private async Task<string> SetupTestTableAsync()
+    private async Task<string> SetupTestTableAsync(bool emailUnique = false)
     {
         var tableName = $"batch_test_{Guid.NewGuid():N}"[..30];
         await _client.PostAsJsonAsync("/api/schema/tables", new CreateTableApiRequest
@@ -32,7 +32,7 @@ public class BatchApiTests
             Columns =
             [
                 new CreateColumnApiRequest { Name = "name", Type = "text", Nullable = false },
-                new CreateColumnApiRequest { Name = "email", Type = "text", Nullable = false },
+                new CreateColumnApiRequest { Name = "email", Type = "text", Nullable = false, Unique = emailUnique },
                 new CreateColumnApiRequest { Name = "score", Type = "integer", Nullable = true }
             ]
         });
@@ -292,8 +292,8 @@ public class BatchApiTests
     [Fact]
     public async Task Upsert_NewRecord_ShouldInsert()
     {
-        // Arrange
-        var tableName = await SetupTestTableAsync();
+        // Arrange - Upsert requires unique constraint on key columns
+        var tableName = await SetupTestTableAsync(emailUnique: true);
         var request = new UpsertRequest
         {
             Data = new Dictionary<string, object?>
@@ -318,8 +318,8 @@ public class BatchApiTests
     [Fact]
     public async Task Upsert_ExistingRecord_ShouldUpdate()
     {
-        // Arrange
-        var tableName = await SetupTestTableAsync();
+        // Arrange - Upsert requires unique constraint on key columns
+        var tableName = await SetupTestTableAsync(emailUnique: true);
 
         // Insert first
         await _client.PostAsJsonAsync($"/api/data/{tableName}", new Dictionary<string, object?>
@@ -353,8 +353,8 @@ public class BatchApiTests
     [Fact]
     public async Task Upsert_WithoutKeyColumns_ShouldReturnBadRequest()
     {
-        // Arrange
-        var tableName = await SetupTestTableAsync();
+        // Arrange - Even though test expects BadRequest, we set up table consistently
+        var tableName = await SetupTestTableAsync(emailUnique: true);
         var request = new UpsertRequest
         {
             Data = new Dictionary<string, object?>

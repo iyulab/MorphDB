@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Exceptions;
 using MorphDB.Service.Models.Api;
+using MorphDB.Service.Realtime;
 
 namespace MorphDB.Service.Controllers;
 
@@ -33,11 +34,16 @@ public sealed class SchemaController : ControllerBase
 {
     private readonly ISchemaManager _schemaManager;
     private readonly ILogger<SchemaController> _logger;
+    private readonly ChangeNotificationSetup _changeNotificationSetup;
 
-    public SchemaController(ISchemaManager schemaManager, ILogger<SchemaController> logger)
+    public SchemaController(
+        ISchemaManager schemaManager,
+        ILogger<SchemaController> logger,
+        ChangeNotificationSetup changeNotificationSetup)
     {
         _schemaManager = schemaManager;
         _logger = logger;
+        _changeNotificationSetup = changeNotificationSetup;
     }
 
     #region Tables
@@ -82,6 +88,9 @@ public sealed class SchemaController : ControllerBase
 
             var table = await _schemaManager.CreateTableAsync(createRequest, cancellationToken);
             var response = TableApiResponse.FromMetadata(table);
+
+            // Create notification trigger for realtime updates
+            await _changeNotificationSetup.CreateTriggerForTableAsync(table.PhysicalName, cancellationToken);
 
             SchemaControllerLogs.TableCreated(_logger, table.LogicalName, tenantId);
 

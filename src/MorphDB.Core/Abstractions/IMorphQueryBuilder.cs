@@ -170,6 +170,13 @@ public interface IMorphQuery
     /// Gets the query parameters for debugging.
     /// </summary>
     IDictionary<string, object?> GetParameters();
+
+    /// <summary>
+    /// Gets the physical WHERE clause SQL and parameters for batch operations.
+    /// Returns the WHERE clause without the "WHERE" keyword.
+    /// </summary>
+    Task<(string WhereSql, IDictionary<string, object?> Parameters)> GetPhysicalWhereClauseAsync(
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>

@@ -235,9 +235,8 @@ public sealed class PostgresDataService : IMorphDataService
         // Map logical names to physical and prepare parameters
         var (setColumns, values) = PrepareUpdateParameters(data, table.Columns);
 
-        // Get WHERE clause SQL from the query
-        var whereSql = ExtractWhereClause(whereClause);
-        var whereParams = whereClause.GetParameters();
+        // Get physical WHERE clause SQL from the query
+        var (whereSql, whereParams) = await whereClause.GetPhysicalWhereClauseAsync(cancellationToken);
 
         // Merge parameters
         var valuesDict = (IDictionary<string, object?>)values;
@@ -264,11 +263,13 @@ public sealed class PostgresDataService : IMorphDataService
     {
         var table = await GetTableWithColumnsAsync(tenantId, tableName, cancellationToken);
 
-        // Get WHERE clause SQL from the query
-        var whereSql = ExtractWhereClause(whereClause);
-        var whereParams = whereClause.GetParameters();
+        // Get physical WHERE clause SQL from the query
+        var (whereSql, whereParams) = await whereClause.GetPhysicalWhereClauseAsync(cancellationToken);
 
-        var sql = $"DELETE FROM {table.PhysicalName} {whereSql}";
+        // Build DELETE statement with WHERE clause if present
+        var sql = string.IsNullOrEmpty(whereSql)
+            ? $"DELETE FROM {table.PhysicalName}"
+            : $"DELETE FROM {table.PhysicalName} WHERE {whereSql}";
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         var affectedRows = await connection.ExecuteAsync(
@@ -298,7 +299,14 @@ public sealed class PostgresDataService : IMorphDataService
             }
         }
 
-        return fullSql[whereIndex..endIndex].Trim();
+        // Extract the WHERE clause and strip the "WHERE" keyword since BuildBatchUpdate adds it
+        var whereClause = fullSql[whereIndex..endIndex].Trim();
+        if (whereClause.StartsWith("WHERE", StringComparison.OrdinalIgnoreCase))
+        {
+            whereClause = whereClause[5..].TrimStart(); // Remove "WHERE" and leading whitespace
+        }
+
+        return whereClause;
     }
 
     /// <inheritdoc />
