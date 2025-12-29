@@ -224,6 +224,63 @@ public sealed class PostgresFixture : IAsyncLifetime
         CREATE INDEX IF NOT EXISTS idx_morph_export_jobs_tenant ON morphdb._morph_export_jobs(tenant_id);
         CREATE INDEX IF NOT EXISTS idx_morph_export_jobs_status ON morphdb._morph_export_jobs(status) WHERE status IN ('pending', 'processing');
         CREATE INDEX IF NOT EXISTS idx_morph_export_jobs_expires ON morphdb._morph_export_jobs(expires_at) WHERE expires_at IS NOT NULL;
+
+        -- System table: _morph_projects (Phase 17-18: Project-based multi-tenancy)
+        CREATE TABLE IF NOT EXISTS morphdb._morph_projects (
+            project_id UUID PRIMARY KEY,
+            org_id UUID,
+            name VARCHAR(255) NOT NULL,
+            slug VARCHAR(255) NOT NULL UNIQUE,
+            system_schema VARCHAR(63) NOT NULL,
+            data_schema VARCHAR(63) NOT NULL,
+            settings JSONB,
+            status INTEGER NOT NULL DEFAULT 0,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_morph_projects_org ON morphdb._morph_projects(org_id) WHERE org_id IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS idx_morph_projects_slug ON morphdb._morph_projects(slug);
+        CREATE INDEX IF NOT EXISTS idx_morph_projects_status ON morphdb._morph_projects(status) WHERE status NOT IN (6);
+
+        -- System table: _morph_organizations (Phase 21)
+        CREATE TABLE IF NOT EXISTS morphdb._morph_organizations (
+            organization_id UUID PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            slug VARCHAR(255) NOT NULL UNIQUE,
+            description TEXT,
+            settings JSONB,
+            status INTEGER NOT NULL DEFAULT 1,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_organizations_slug ON morphdb._morph_organizations(slug);
+        CREATE INDEX IF NOT EXISTS idx_organizations_status ON morphdb._morph_organizations(status) WHERE status != 3;
+
+        -- System table: _morph_api_keys (Phase 11: Security)
+        CREATE TABLE IF NOT EXISTS morphdb._morph_api_keys (
+            key_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            tenant_id UUID NOT NULL,
+            key_type INTEGER NOT NULL DEFAULT 0,
+            key_hash VARCHAR(255) NOT NULL UNIQUE,
+            key_prefix VARCHAR(8) NOT NULL,
+            name VARCHAR(255) NOT NULL,
+            description TEXT,
+            scopes TEXT[],
+            allowed_ips TEXT[],
+            rate_limit INTEGER,
+            expires_at TIMESTAMPTZ,
+            is_active BOOLEAN NOT NULL DEFAULT true,
+            last_used_at TIMESTAMPTZ,
+            usage_count BIGINT NOT NULL DEFAULT 0,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_api_keys_tenant ON morphdb._morph_api_keys(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON morphdb._morph_api_keys(key_hash);
+        CREATE INDEX IF NOT EXISTS idx_api_keys_prefix ON morphdb._morph_api_keys(key_prefix);
         """;
 
     public async Task DisposeAsync()

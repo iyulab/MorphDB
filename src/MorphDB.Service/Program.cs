@@ -265,6 +265,7 @@ try
     app.UseAuthentication();
     app.UseAuthorization();
     app.UseRateLimiting(); // Rate limiting after auth
+    app.UseAuditLogging(); // Audit logging captures all requests including rate-limited ones
 
     app.MapControllers();
     app.MapGraphQL().WithOptions(new HotChocolate.AspNetCore.GraphQLServerOptions

@@ -380,8 +380,7 @@ public static class DdlBuilder
                 "descriptor" JSONB,
                 "is_active" BOOLEAN NOT NULL DEFAULT true,
                 "created_at" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                "updated_at" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                UNIQUE("logical_name") WHERE is_active = true
+                "updated_at" TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
 
             """);
@@ -482,6 +481,7 @@ public static class DdlBuilder
 
         // Indexes for performance
         sb.Append(CultureInfo.InvariantCulture, $"""
+            CREATE UNIQUE INDEX "idx__tables_logical_name_active" ON {QuoteIdentifier(systemSchema)}."_tables"("logical_name") WHERE is_active = true;
             CREATE INDEX "idx__columns_table_id" ON {QuoteIdentifier(systemSchema)}."_columns"("table_id");
             CREATE INDEX "idx__indexes_table_id" ON {QuoteIdentifier(systemSchema)}."_indexes"("table_id");
             CREATE INDEX "idx__relations_source" ON {QuoteIdentifier(systemSchema)}."_relations"("source_table_id");
