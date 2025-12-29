@@ -21,6 +21,7 @@ public sealed class MorphQueryBuilder : IMorphQueryBuilder
     private readonly IMetadataRepository _metadataRepository;
     private readonly ISecurityPolicyService _securityPolicyService;
     private readonly ISecurityContextAccessor _securityContextAccessor;
+    private readonly ILookupResolver? _lookupResolver;
     private readonly Guid _tenantId;
 
     /// <summary>
@@ -31,12 +32,14 @@ public sealed class MorphQueryBuilder : IMorphQueryBuilder
         IMetadataRepository metadataRepository,
         ISecurityPolicyService securityPolicyService,
         ISecurityContextAccessor securityContextAccessor,
-        Guid tenantId)
+        Guid tenantId,
+        ILookupResolver? lookupResolver = null)
     {
         _dataSource = dataSource ?? throw new ArgumentNullException(nameof(dataSource));
         _metadataRepository = metadataRepository ?? throw new ArgumentNullException(nameof(metadataRepository));
         _securityPolicyService = securityPolicyService ?? throw new ArgumentNullException(nameof(securityPolicyService));
         _securityContextAccessor = securityContextAccessor ?? throw new ArgumentNullException(nameof(securityContextAccessor));
+        _lookupResolver = lookupResolver;
         _tenantId = tenantId;
     }
 
@@ -48,6 +51,7 @@ public sealed class MorphQueryBuilder : IMorphQueryBuilder
             _metadataRepository,
             _securityPolicyService,
             _securityContextAccessor,
+            _lookupResolver,
             _tenantId,
             tableName,
             null);
@@ -61,6 +65,7 @@ public sealed class MorphQueryBuilder : IMorphQueryBuilder
             _metadataRepository,
             _securityPolicyService,
             _securityContextAccessor,
+            _lookupResolver,
             _tenantId,
             tableName,
             tableAlias);
@@ -71,6 +76,7 @@ public sealed class MorphQueryBuilder : IMorphQueryBuilder
 /// PostgreSQL implementation of IMorphQuery using SqlKata.
 /// Stores query operations with logical names, then builds SQL with physical names at execution.
 /// Automatically applies Row-Level Security (RLS) policies during query execution.
+/// Supports automatic lookup column expansion via JOINs.
 /// </summary>
 internal sealed class MorphQuery : IMorphQuery
 {
@@ -78,6 +84,7 @@ internal sealed class MorphQuery : IMorphQuery
     private readonly IMetadataRepository _metadataRepository;
     private readonly ISecurityPolicyService _securityPolicyService;
     private readonly ISecurityContextAccessor _securityContextAccessor;
+    private readonly ILookupResolver? _lookupResolver;
     private readonly Guid _tenantId;
     private readonly string _tableName;
     private readonly string? _tableAlias;
@@ -86,6 +93,7 @@ internal sealed class MorphQuery : IMorphQuery
     private TableMetadata? _tableMetadata;
     private string? _rlsExpression;
     private readonly Dictionary<string, TableMetadata> _joinedTableMetadata = new();
+    private LookupQueryExpansion? _lookupExpansion;
 
     // Store all query operations with logical names
     private bool _selectAllCalled;
@@ -120,6 +128,7 @@ internal sealed class MorphQuery : IMorphQuery
         IMetadataRepository metadataRepository,
         ISecurityPolicyService securityPolicyService,
         ISecurityContextAccessor securityContextAccessor,
+        ILookupResolver? lookupResolver,
         Guid tenantId,
         string tableName,
         string? tableAlias)
@@ -128,6 +137,7 @@ internal sealed class MorphQuery : IMorphQuery
         _metadataRepository = metadataRepository;
         _securityPolicyService = securityPolicyService;
         _securityContextAccessor = securityContextAccessor;
+        _lookupResolver = lookupResolver;
         _tenantId = tenantId;
         _tableName = tableName;
         _tableAlias = tableAlias;
@@ -569,13 +579,20 @@ internal sealed class MorphQuery : IMorphQuery
 
     /// <summary>
     /// Builds a SqlKata query with physical names for actual execution.
+    /// Uses "base_table" as alias when lookup expansion is present.
     /// </summary>
     private async Task<SqlKataQuery> BuildPhysicalQueryAsync(CancellationToken cancellationToken)
     {
         var table = await GetTableMetadataAsync(cancellationToken);
         var query = new SqlKataQuery(table.PhysicalName);
 
-        if (!string.IsNullOrEmpty(_tableAlias))
+        // Use base_table alias when lookup expansion is present
+        var useBaseTableAlias = _lookupExpansion?.HasExpansion == true;
+        if (useBaseTableAlias)
+        {
+            query.As("base_table");
+        }
+        else if (!string.IsNullOrEmpty(_tableAlias))
         {
             query.As(_tableAlias);
         }
@@ -584,12 +601,26 @@ internal sealed class MorphQuery : IMorphQuery
         // The calling method (CountAsync, SumAsync, etc.) will handle the aggregate
 
         // WHERE - Transform logical column names to physical
-        ApplyPhysicalWhereConditions(query, _whereConditions, table);
+        ApplyPhysicalWhereConditions(query, _whereConditions, table, useBaseTableAlias ? "base_table" : null);
 
         // Apply RLS expression if available
         if (!string.IsNullOrEmpty(_rlsExpression))
         {
             query.WhereRaw(_rlsExpression);
+        }
+
+        // Add lookup JOINs from expansion using structured join info
+        if (_lookupExpansion?.Joins.Count > 0)
+        {
+            foreach (var join in _lookupExpansion.Joins)
+            {
+                // SqlKata LeftJoin with aliased table
+                // Format: LEFT JOIN "target" AS alias ON base_table."source_col" = alias."target_col"
+                query.LeftJoin(
+                    $"{join.TargetTablePhysical} AS {join.TargetTableAlias}",
+                    $"base_table.{join.SourceColumnPhysical}",
+                    $"{join.TargetTableAlias}.{join.TargetColumnPhysical}");
+            }
         }
 
         // JOIN - resolve physical table and column names
@@ -600,13 +631,16 @@ internal sealed class MorphQuery : IMorphQuery
             var physicalSourceColumn = GetPhysicalColumnName(sourceColumn, table);
             var physicalTargetColumn = GetPhysicalColumnName(targetColumn, joinTable);
 
+            // Add table prefix when using base_table alias
+            var sourceRef = useBaseTableAlias ? $"base_table.{physicalSourceColumn}" : physicalSourceColumn;
+
             if (isLeft)
             {
-                query.LeftJoin(physicalJoinTable, physicalSourceColumn, physicalTargetColumn);
+                query.LeftJoin(physicalJoinTable, sourceRef, physicalTargetColumn);
             }
             else
             {
-                query.Join(physicalJoinTable, physicalSourceColumn, physicalTargetColumn);
+                query.Join(physicalJoinTable, sourceRef, physicalTargetColumn);
             }
         }
 
@@ -614,13 +648,14 @@ internal sealed class MorphQuery : IMorphQuery
         foreach (var (column, descending) in _orderByClauses)
         {
             var physicalColumn = GetPhysicalColumnName(column, table);
+            var columnRef = useBaseTableAlias ? $"base_table.{physicalColumn}" : physicalColumn;
             if (descending)
             {
-                query.OrderByDesc(physicalColumn);
+                query.OrderByDesc(columnRef);
             }
             else
             {
-                query.OrderBy(physicalColumn);
+                query.OrderBy(columnRef);
             }
         }
 
@@ -628,7 +663,11 @@ internal sealed class MorphQuery : IMorphQuery
         if (_groupByColumns.Count > 0)
         {
             var physicalGroupBy = _groupByColumns
-                .Select(c => GetPhysicalColumnName(c, table))
+                .Select(c =>
+                {
+                    var physCol = GetPhysicalColumnName(c, table);
+                    return useBaseTableAlias ? $"base_table.{physCol}" : physCol;
+                })
                 .ToArray();
             query.GroupBy(physicalGroupBy);
         }
@@ -637,8 +676,9 @@ internal sealed class MorphQuery : IMorphQuery
         foreach (var condition in _havingConditions)
         {
             var physicalColumn = GetPhysicalColumnName(condition.Column, table);
+            var columnRef = useBaseTableAlias ? $"base_table.{physicalColumn}" : physicalColumn;
             var (sqlOp, value) = GetSqlOperator(condition.Operator, condition.Value);
-            query.HavingRaw($"{physicalColumn} {sqlOp} ?", value);
+            query.HavingRaw($"{columnRef} {sqlOp} ?", value);
         }
 
         // LIMIT/OFFSET
@@ -659,26 +699,65 @@ internal sealed class MorphQuery : IMorphQuery
         CancellationToken cancellationToken)
     {
         var table = await GetTableMetadataAsync(cancellationToken);
+
+        // Build lookup expansion for lookup columns
+        await BuildLookupExpansionAsync(table, cancellationToken);
+
         var query = await BuildPhysicalQueryAsync(cancellationToken);
+
+        // Determine if we're using base_table alias (only when lookups are present)
+        var hasLookups = _lookupExpansion?.HasExpansion == true;
 
         // Add SELECT clause
         if (_selectAllCalled || (_selectedColumns.Count == 0 && _aggregates.Count == 0))
         {
-            query.Select("*");
+            if (hasLookups)
+            {
+                // Select all base table columns with alias
+                query.Select("base_table.*");
+
+                // Add lookup column expressions
+                foreach (var (logicalName, selectExpr) in _lookupExpansion!.SelectExpressions)
+                {
+                    query.SelectRaw($"{selectExpr} AS \"{logicalName}\"");
+                }
+            }
+            else
+            {
+                // Standard SELECT * without alias
+                query.Select("*");
+            }
         }
         else if (_selectedColumns.Count > 0)
         {
-            var physicalColumns = _selectedColumns
-                .Select(c => GetPhysicalColumnName(c, table))
-                .ToArray();
-            query.Select(physicalColumns);
+            foreach (var column in _selectedColumns)
+            {
+                // Check if this is a lookup column with expansion
+                if (_lookupExpansion?.SelectExpressions.TryGetValue(column, out var lookupExpr) == true)
+                {
+                    query.SelectRaw($"{lookupExpr} AS \"{column}\"");
+                }
+                else
+                {
+                    var physicalColumn = GetPhysicalColumnName(column, table);
+                    if (hasLookups)
+                    {
+                        query.Select($"base_table.{physicalColumn}");
+                    }
+                    else
+                    {
+                        query.Select(physicalColumn);
+                    }
+                }
+            }
         }
 
         // Aggregates
         foreach (var (function, column, alias) in _aggregates)
         {
             var physicalColumn = GetPhysicalColumnName(column, table);
-            var aggExpr = BuildAggregateExpression(function, physicalColumn);
+            var columnRef = hasLookups ? $"base_table.{physicalColumn}" : physicalColumn;
+            var aggExpr = BuildAggregateExpression(function, columnRef);
             if (!string.IsNullOrEmpty(alias))
             {
                 query.SelectRaw($"{aggExpr} AS {alias}");
@@ -693,6 +772,44 @@ internal sealed class MorphQuery : IMorphQuery
         return (compiled.Sql, compiled.NamedBindings);
     }
 
+    /// <summary>
+    /// Builds lookup expansion for columns that are lookup type.
+    /// </summary>
+    private async Task BuildLookupExpansionAsync(TableMetadata table, CancellationToken cancellationToken)
+    {
+        if (_lookupResolver is null)
+            return;
+
+        // Find lookup columns that need expansion
+        var lookupColumns = new List<LookupColumnInfo>();
+
+        foreach (var column in table.Columns)
+        {
+            if (column.LookupConfig is null)
+                continue;
+
+            // If SelectAll or this column is in the selected columns
+            if (_selectAllCalled || _selectedColumns.Count == 0 || _selectedColumns.Contains(column.LogicalName))
+            {
+                lookupColumns.Add(new LookupColumnInfo
+                {
+                    ColumnName = column.LogicalName,
+                    Config = column.LookupConfig,
+                    DataType = column.DataType
+                });
+            }
+        }
+
+        if (lookupColumns.Count == 0)
+            return;
+
+        _lookupExpansion = await _lookupResolver.BuildLookupExpansionAsync(
+            _tenantId,
+            table,
+            lookupColumns,
+            cancellationToken);
+    }
+
     private static void ApplyWhereConditions(SqlKataQuery query, List<WhereCondition> conditions)
     {
         foreach (var condition in conditions)
@@ -704,12 +821,16 @@ internal sealed class MorphQuery : IMorphQuery
     private static void ApplyPhysicalWhereConditions(
         SqlKataQuery query,
         List<WhereCondition> conditions,
-        TableMetadata table)
+        TableMetadata table,
+        string? tableAlias = null)
     {
         foreach (var condition in conditions)
         {
             var physicalColumn = GetPhysicalColumnName(condition.Column, table);
-            ApplyWhereCondition(query, physicalColumn, condition);
+            var columnRef = string.IsNullOrEmpty(tableAlias)
+                ? physicalColumn
+                : $"{tableAlias}.{physicalColumn}";
+            ApplyWhereCondition(query, columnRef, condition);
         }
     }
 

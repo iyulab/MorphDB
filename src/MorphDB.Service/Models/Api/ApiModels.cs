@@ -172,6 +172,12 @@ public sealed record CreateColumnApiRequest
     public bool Unique { get; init; }
     public bool Indexed { get; init; }
     public string? Default { get; init; }
+
+    /// <summary>
+    /// Configuration for lookup fields that reference related table data.
+    /// When set, creates a virtual lookup column instead of a physical column.
+    /// </summary>
+    public LookupConfigApiRequest? Lookup { get; init; }
 }
 
 /// <summary>
@@ -194,6 +200,67 @@ public sealed record AddColumnApiRequest
     public bool Unique { get; init; }
     public bool Indexed { get; init; }
     public string? Default { get; init; }
+
+    /// <summary>
+    /// Configuration for lookup fields that reference related table data.
+    /// When set, creates a virtual lookup column instead of a physical column.
+    /// </summary>
+    public LookupConfigApiRequest? Lookup { get; init; }
+}
+
+/// <summary>
+/// Configuration for lookup fields in API requests.
+/// </summary>
+public sealed record LookupConfigApiRequest
+{
+    /// <summary>
+    /// The relation column in this table (foreign key column name).
+    /// </summary>
+    public required string RelationColumn { get; init; }
+
+    /// <summary>
+    /// The target table to look up from.
+    /// </summary>
+    public required string TargetTable { get; init; }
+
+    /// <summary>
+    /// The column to retrieve from the target table.
+    /// </summary>
+    public required string TargetColumn { get; init; }
+
+    /// <summary>
+    /// Action when the referenced record is deleted: set-null, preserve, or clear.
+    /// Default: set-null.
+    /// </summary>
+    public string OnDelete { get; init; } = "set-null";
+
+    /// <summary>
+    /// Whether to support multiple values (when relation is one-to-many).
+    /// </summary>
+    public bool AllowMultiple { get; init; }
+
+    /// <summary>
+    /// Converts to core LookupColumnConfig model.
+    /// </summary>
+    public LookupColumnConfig ToModel() => new()
+    {
+        RelationColumn = RelationColumn,
+        TargetTable = TargetTable,
+        TargetColumn = TargetColumn,
+        OnDelete = ParseOnDeleteAction(OnDelete),
+        AllowMultiple = AllowMultiple
+    };
+
+    private static LookupDeleteAction ParseOnDeleteAction(string action)
+    {
+        return action.ToLowerInvariant().Replace("-", "").Replace("_", "") switch
+        {
+            "setnull" => LookupDeleteAction.SetNull,
+            "preserve" => LookupDeleteAction.Preserve,
+            "clear" => LookupDeleteAction.Clear,
+            _ => LookupDeleteAction.SetNull
+        };
+    }
 }
 
 /// <summary>
@@ -280,6 +347,16 @@ public sealed record ColumnApiResponse
     public string? Default { get; init; }
     public int Position { get; init; }
 
+    /// <summary>
+    /// Whether this is a derived/virtual column (lookup, rollup, formula).
+    /// </summary>
+    public bool IsDerived { get; init; }
+
+    /// <summary>
+    /// Lookup configuration if this is a lookup column.
+    /// </summary>
+    public LookupConfigApiResponse? Lookup { get; init; }
+
     public static ColumnApiResponse FromMetadata(ColumnMetadata column) => new()
     {
         Id = column.ColumnId,
@@ -290,7 +367,51 @@ public sealed record ColumnApiResponse
         PrimaryKey = column.IsPrimaryKey,
         Indexed = column.IsIndexed,
         Default = column.DefaultValue,
-        Position = column.OrdinalPosition
+        Position = column.OrdinalPosition,
+        IsDerived = column.IsDerived,
+        Lookup = column.LookupConfig != null
+            ? LookupConfigApiResponse.FromModel(column.LookupConfig)
+            : null
+    };
+}
+
+/// <summary>
+/// Lookup configuration in API responses.
+/// </summary>
+public sealed record LookupConfigApiResponse
+{
+    /// <summary>
+    /// The relation column in this table (foreign key column name).
+    /// </summary>
+    public required string RelationColumn { get; init; }
+
+    /// <summary>
+    /// The target table to look up from.
+    /// </summary>
+    public required string TargetTable { get; init; }
+
+    /// <summary>
+    /// The column to retrieve from the target table.
+    /// </summary>
+    public required string TargetColumn { get; init; }
+
+    /// <summary>
+    /// Action when the referenced record is deleted.
+    /// </summary>
+    public required string OnDelete { get; init; }
+
+    /// <summary>
+    /// Whether multiple values are supported.
+    /// </summary>
+    public bool AllowMultiple { get; init; }
+
+    public static LookupConfigApiResponse FromModel(LookupColumnConfig config) => new()
+    {
+        RelationColumn = config.RelationColumn,
+        TargetTable = config.TargetTable,
+        TargetColumn = config.TargetColumn,
+        OnDelete = config.OnDelete.ToString().ToLowerInvariant(),
+        AllowMultiple = config.AllowMultiple
     };
 }
 

@@ -80,6 +80,11 @@ public sealed class PostgresFixture : IAsyncLifetime
             check_expr TEXT,
             ordinal_position INTEGER NOT NULL,
             descriptor JSONB,
+            -- Virtual/Derived column configurations (Phase 11+)
+            lookup_config JSONB,
+            rollup_config JSONB,
+            formula_config JSONB,
+            computed_config JSONB,
             is_active BOOLEAN NOT NULL DEFAULT true,
             UNIQUE (table_id, logical_name),
             UNIQUE (table_id, physical_name)

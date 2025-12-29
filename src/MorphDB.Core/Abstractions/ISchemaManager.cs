@@ -171,6 +171,12 @@ public sealed record CreateColumnRequest
     public bool IsPrimaryKey { get; init; }
     public bool IsIndexed { get; init; }
     public string? DefaultValue { get; init; }
+
+    /// <summary>
+    /// Configuration for lookup fields that reference related table data.
+    /// When set, the column becomes a virtual lookup column.
+    /// </summary>
+    public LookupColumnConfig? LookupConfig { get; init; }
 }
 
 public sealed record AddColumnRequest
@@ -183,6 +189,12 @@ public sealed record AddColumnRequest
     public bool IsIndexed { get; init; }
     public string? DefaultValue { get; init; }
     public int ExpectedVersion { get; init; }
+
+    /// <summary>
+    /// Configuration for lookup fields that reference related table data.
+    /// When set, the column becomes a virtual lookup column.
+    /// </summary>
+    public LookupColumnConfig? LookupConfig { get; init; }
 }
 
 public sealed record UpdateColumnRequest

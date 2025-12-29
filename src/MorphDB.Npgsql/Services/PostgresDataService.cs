@@ -25,6 +25,7 @@ public sealed class PostgresDataService : IMorphDataService
     private readonly IMetadataRepository _metadataRepository;
     private readonly ISecurityPolicyService _securityPolicyService;
     private readonly ISecurityContextAccessor _securityContextAccessor;
+    private readonly ILookupResolver? _lookupResolver;
     private readonly IDataEncryptionService? _encryptionService;
     private readonly DataEncryptionOptions _encryptionOptions;
     private readonly string _primaryKeyLogicalName;
@@ -37,6 +38,7 @@ public sealed class PostgresDataService : IMorphDataService
         IMetadataRepository metadataRepository,
         ISecurityPolicyService securityPolicyService,
         ISecurityContextAccessor securityContextAccessor,
+        ILookupResolver? lookupResolver = null,
         IDataEncryptionService? encryptionService = null,
         IOptions<DataEncryptionOptions>? encryptionOptions = null,
         string primaryKeyLogicalName = "id")
@@ -45,6 +47,7 @@ public sealed class PostgresDataService : IMorphDataService
         _metadataRepository = metadataRepository ?? throw new ArgumentNullException(nameof(metadataRepository));
         _securityPolicyService = securityPolicyService ?? throw new ArgumentNullException(nameof(securityPolicyService));
         _securityContextAccessor = securityContextAccessor ?? throw new ArgumentNullException(nameof(securityContextAccessor));
+        _lookupResolver = lookupResolver;
         _encryptionService = encryptionService;
         _encryptionOptions = encryptionOptions?.Value ?? new DataEncryptionOptions();
         _primaryKeyLogicalName = primaryKeyLogicalName;
@@ -58,7 +61,8 @@ public sealed class PostgresDataService : IMorphDataService
             _metadataRepository,
             _securityPolicyService,
             _securityContextAccessor,
-            tenantId);
+            tenantId,
+            _lookupResolver);
     }
 
     /// <inheritdoc />

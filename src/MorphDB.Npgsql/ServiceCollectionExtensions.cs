@@ -135,6 +135,7 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<IMorphDataService, PostgresDataService>();
         services.AddSingleton<IViewManager, PostgresViewManager>();
+        services.AddSingleton<ILookupResolver, PostgresLookupResolver>();
         services.AddSingleton<IWebhookManager, PostgresWebhookManager>();
         services.AddSingleton(options.BulkOperationOptions);
         services.AddSingleton<IBulkOperationService, PostgresBulkOperationService>();

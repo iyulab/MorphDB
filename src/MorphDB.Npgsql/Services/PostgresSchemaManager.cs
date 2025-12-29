@@ -153,8 +153,18 @@ public sealed class PostgresSchemaManager : ISchemaManager
             ValidateLogicalName(colReq.LogicalName);
 
             var columnId = Guid.NewGuid();
-            var physicalColName = _nameHasher.GenerateColumnName(tableId, colReq.LogicalName);
-            var nativeType = TypeMapper.ToNativeType(colReq.DataType);
+
+            // Check if this is a virtual column (lookup, rollup, formula)
+            var isVirtualColumn = colReq.LookupConfig != null;
+
+            // Virtual columns don't have a physical column in the database
+            var physicalColName = isVirtualColumn
+                ? $"virtual_{colReq.LogicalName}"
+                : _nameHasher.GenerateColumnName(tableId, colReq.LogicalName);
+
+            var nativeType = isVirtualColumn
+                ? "virtual"
+                : TypeMapper.ToNativeType(colReq.DataType);
 
             var column = new ColumnMetadata
             {
@@ -170,11 +180,17 @@ public sealed class PostgresSchemaManager : ISchemaManager
                 IsIndexed = colReq.IsIndexed,
                 DefaultValue = colReq.DefaultValue,
                 OrdinalPosition = ordinal++,
-                IsActive = true
+                IsActive = true,
+                LookupConfig = colReq.LookupConfig
             };
 
             columns.Add(column);
-            columnDefinitions.Add(ColumnDefinition.FromMetadata(column));
+
+            // Only add physical columns to DDL
+            if (!isVirtualColumn)
+            {
+                columnDefinitions.Add(ColumnDefinition.FromMetadata(column));
+            }
         }
 
         // Create table metadata with system column options
@@ -432,9 +448,19 @@ public sealed class PostgresSchemaManager : ISchemaManager
             cancellationToken);
 
         var columnId = Guid.NewGuid();
-        var physicalColName = _nameHasher.GenerateColumnName(request.TableId, request.LogicalName);
-        var nativeType = TypeMapper.ToNativeType(request.DataType);
         var ordinalPosition = await _repository.GetNextOrdinalPositionAsync(request.TableId, cancellationToken);
+
+        // Check if this is a virtual column (lookup, rollup, formula)
+        var isVirtualColumn = request.LookupConfig != null;
+
+        // Virtual columns don't have a physical column in the database
+        var physicalColName = isVirtualColumn
+            ? $"virtual_{request.LogicalName}"
+            : _nameHasher.GenerateColumnName(request.TableId, request.LogicalName);
+
+        var nativeType = isVirtualColumn
+            ? "virtual"
+            : TypeMapper.ToNativeType(request.DataType);
 
         var column = new ColumnMetadata
         {
@@ -449,47 +475,51 @@ public sealed class PostgresSchemaManager : ISchemaManager
             IsIndexed = request.IsIndexed,
             DefaultValue = request.DefaultValue,
             OrdinalPosition = ordinalPosition,
-            IsActive = true
+            IsActive = true,
+            LookupConfig = request.LookupConfig
         };
 
-        var columnDef = ColumnDefinition.FromMetadata(column);
-
-        // Execute DDL
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-
-        try
+        // Only execute DDL for physical columns
+        if (!isVirtualColumn)
         {
-            var addColumnSql = DdlBuilder.BuildAddColumn(table.PhysicalName, columnDef);
-            await connection.ExecuteAsync(addColumnSql, transaction: transaction);
+            var columnDef = ColumnDefinition.FromMetadata(column);
 
-            if (request.IsUnique)
-            {
-                var uniqueSql = DdlBuilder.BuildAddUniqueConstraint(
-                    table.PhysicalName,
-                    $"uq_{table.PhysicalName}_{physicalColName}",
-                    physicalColName);
-                await connection.ExecuteAsync(uniqueSql, transaction: transaction);
-            }
+            await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
-            if (request.IsIndexed && !request.IsUnique)
+            try
             {
-                var indexSql = DdlBuilder.BuildCreateIndex(new IndexDefinition
+                var addColumnSql = DdlBuilder.BuildAddColumn(table.PhysicalName, columnDef);
+                await connection.ExecuteAsync(addColumnSql, transaction: transaction);
+
+                if (request.IsUnique)
                 {
-                    PhysicalName = $"idx_{table.PhysicalName}_{physicalColName}",
-                    TablePhysicalName = table.PhysicalName,
-                    Columns = [new IndexColumnInfo { ColumnId = columnId, PhysicalName = physicalColName }],
-                    IndexType = TypeMapper.GetRecommendedIndexType(request.DataType)
-                });
-                await connection.ExecuteAsync(indexSql, transaction: transaction);
-            }
+                    var uniqueSql = DdlBuilder.BuildAddUniqueConstraint(
+                        table.PhysicalName,
+                        $"uq_{table.PhysicalName}_{physicalColName}",
+                        physicalColName);
+                    await connection.ExecuteAsync(uniqueSql, transaction: transaction);
+                }
 
-            await transaction.CommitAsync(cancellationToken);
-        }
-        catch
-        {
-            await transaction.RollbackAsync(cancellationToken);
-            throw;
+                if (request.IsIndexed && !request.IsUnique)
+                {
+                    var indexSql = DdlBuilder.BuildCreateIndex(new IndexDefinition
+                    {
+                        PhysicalName = $"idx_{table.PhysicalName}_{physicalColName}",
+                        TablePhysicalName = table.PhysicalName,
+                        Columns = [new IndexColumnInfo { ColumnId = columnId, PhysicalName = physicalColName }],
+                        IndexType = TypeMapper.GetRecommendedIndexType(request.DataType)
+                    });
+                    await connection.ExecuteAsync(indexSql, transaction: transaction);
+                }
+
+                await transaction.CommitAsync(cancellationToken);
+            }
+            catch
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                throw;
+            }
         }
 
         // Insert metadata and increment version
@@ -506,7 +536,8 @@ public sealed class PostgresSchemaManager : ISchemaManager
             {
                 column.LogicalName,
                 column.PhysicalName,
-                DataType = request.DataType.ToString()
+                DataType = request.DataType.ToString(),
+                IsVirtual = isVirtualColumn
             }
         }, cancellationToken);
 

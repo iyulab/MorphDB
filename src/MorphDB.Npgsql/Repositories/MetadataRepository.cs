@@ -180,14 +180,17 @@ public sealed class MetadataRepository : IMetadataRepository
             INSERT INTO morphdb._morph_columns
                 (column_id, table_id, logical_name, physical_name, data_type, native_type,
                  is_nullable, is_unique, is_primary_key, is_indexed, is_encrypted,
-                 default_value, check_expr, ordinal_position, descriptor)
+                 default_value, check_expr, ordinal_position, descriptor,
+                 lookup_config, rollup_config, formula_config, computed_config)
             VALUES
                 (@ColumnId, @TableId, @LogicalName, @PhysicalName, @DataType, @NativeType,
                  @IsNullable, @IsUnique, @IsPrimaryKey, @IsIndexed, @IsEncrypted,
-                 @DefaultValue, @CheckExpression, @OrdinalPosition, @Descriptor::jsonb)
+                 @DefaultValue, @CheckExpression, @OrdinalPosition, @Descriptor::jsonb,
+                 @LookupConfig::jsonb, @RollupConfig::jsonb, @FormulaConfig::jsonb, @ComputedConfig::jsonb)
             RETURNING column_id, table_id, logical_name, physical_name, data_type, native_type,
                       is_nullable, is_unique, is_primary_key, is_indexed, is_encrypted,
-                      default_value, check_expr, ordinal_position, descriptor, is_active
+                      default_value, check_expr, ordinal_position, descriptor,
+                      lookup_config, rollup_config, formula_config, computed_config, is_active
             """;
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
@@ -207,7 +210,11 @@ public sealed class MetadataRepository : IMetadataRepository
             column.DefaultValue,
             column.CheckExpression,
             column.OrdinalPosition,
-            Descriptor = column.Descriptor?.RootElement.GetRawText()
+            Descriptor = column.Descriptor?.RootElement.GetRawText(),
+            LookupConfig = SerializeConfig(column.LookupConfig),
+            RollupConfig = SerializeConfig(column.RollupConfig),
+            FormulaConfig = SerializeConfig(column.FormulaConfig),
+            ComputedConfig = SerializeConfig(column.ComputedConfig)
         });
 
         return MapToColumnMetadata(result);
@@ -220,7 +227,8 @@ public sealed class MetadataRepository : IMetadataRepository
         const string sql = """
             SELECT column_id, table_id, logical_name, physical_name, data_type, native_type,
                    is_nullable, is_unique, is_primary_key, is_indexed, is_encrypted,
-                   default_value, check_expr, ordinal_position, descriptor, is_active
+                   default_value, check_expr, ordinal_position, descriptor,
+                   lookup_config, rollup_config, formula_config, computed_config, is_active
             FROM morphdb._morph_columns
             WHERE column_id = @ColumnId AND is_active = true
             """;
@@ -238,7 +246,8 @@ public sealed class MetadataRepository : IMetadataRepository
         const string sql = """
             SELECT column_id, table_id, logical_name, physical_name, data_type, native_type,
                    is_nullable, is_unique, is_primary_key, is_indexed, is_encrypted,
-                   default_value, check_expr, ordinal_position, descriptor, is_active
+                   default_value, check_expr, ordinal_position, descriptor,
+                   lookup_config, rollup_config, formula_config, computed_config, is_active
             FROM morphdb._morph_columns
             WHERE table_id = @TableId AND is_active = true
             ORDER BY ordinal_position
@@ -547,6 +556,10 @@ public sealed class MetadataRepository : IMetadataRepository
         CheckExpression = row.check_expr,
         OrdinalPosition = row.ordinal_position,
         Descriptor = row.descriptor is not null ? JsonDocument.Parse(row.descriptor) : null,
+        LookupConfig = DeserializeConfig<LookupColumnConfig>(row.lookup_config),
+        RollupConfig = DeserializeConfig<RollupColumnConfig>(row.rollup_config),
+        FormulaConfig = DeserializeConfig<FormulaColumnConfig>(row.formula_config),
+        ComputedConfig = DeserializeConfig<ComputedColumnConfig>(row.computed_config),
         IsActive = row.is_active
     };
 
@@ -634,6 +647,18 @@ public sealed class MetadataRepository : IMetadataRepository
         _ => OnUpdateAction.NoAction
     };
 
+    private static readonly JsonSerializerOptions s_jsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = false
+    };
+
+    private static string? SerializeConfig<T>(T? config) where T : class
+        => config is null ? null : JsonSerializer.Serialize(config, s_jsonOptions);
+
+    private static T? DeserializeConfig<T>(string? json) where T : class
+        => string.IsNullOrEmpty(json) ? null : JsonSerializer.Deserialize<T>(json, s_jsonOptions);
+
     #endregion
 
     #region Row Types
@@ -675,6 +700,10 @@ public sealed class MetadataRepository : IMetadataRepository
         public string? check_expr { get; set; }
         public int ordinal_position { get; set; }
         public string? descriptor { get; set; }
+        public string? lookup_config { get; set; }
+        public string? rollup_config { get; set; }
+        public string? formula_config { get; set; }
+        public string? computed_config { get; set; }
         public bool is_active { get; set; }
     }
 
