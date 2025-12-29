@@ -55,6 +55,42 @@ public sealed class ColumnMetadata
     /// Example: "_deleted_at IS NULL"
     /// </summary>
     public string? UniqueCondition { get; init; }
+
+    // Computed/Derived Column Properties
+
+    /// <summary>
+    /// Configuration for computed columns (PostgreSQL GENERATED columns).
+    /// Only set when DataType implies a computed column.
+    /// </summary>
+    public ComputedColumnConfig? ComputedConfig { get; init; }
+
+    /// <summary>
+    /// Configuration for lookup fields that reference related table data.
+    /// Only set when DataType is Relation with lookup enabled.
+    /// </summary>
+    public LookupColumnConfig? LookupConfig { get; init; }
+
+    /// <summary>
+    /// Configuration for rollup fields that aggregate related records.
+    /// Only set when DataType is Rollup.
+    /// </summary>
+    public RollupColumnConfig? RollupConfig { get; init; }
+
+    /// <summary>
+    /// Configuration for formula fields with expression evaluation.
+    /// Only set when DataType is Formula.
+    /// </summary>
+    public FormulaColumnConfig? FormulaConfig { get; init; }
+
+    /// <summary>
+    /// Whether this column is a derived type (computed, lookup, rollup, or formula).
+    /// Derived columns are read-only and computed from other data.
+    /// </summary>
+    public bool IsDerived =>
+        ComputedConfig != null ||
+        LookupConfig != null ||
+        RollupConfig != null ||
+        FormulaConfig != null;
 }
 
 /// <summary>
@@ -105,8 +141,10 @@ public enum MorphDataType
     SingleSelect,
     MultiSelect,
     Relation,
+    Lookup,
     Rollup,
     Formula,
+    Computed,
     Attachment,
     CreatedTime,
     ModifiedTime,

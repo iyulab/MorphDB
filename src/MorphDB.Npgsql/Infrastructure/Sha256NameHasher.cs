@@ -33,6 +33,13 @@ public sealed class Sha256NameHasher : INameHasher
         return $"idx_{hash}";
     }
 
+    public string GenerateViewName(Guid tenantId, string logicalName)
+    {
+        var input = $"{tenantId}:view:{logicalName}";
+        var hash = ComputeHash(input);
+        return $"view_{hash}";
+    }
+
     public string GenerateConstraintName(string prefix, Guid tableId, string logicalName)
     {
         var input = $"{tableId}:{prefix}:{logicalName}";

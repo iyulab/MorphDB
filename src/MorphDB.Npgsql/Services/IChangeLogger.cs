@@ -49,5 +49,70 @@ public enum SchemaOperation
     CreateIndex,
     DeleteIndex,
     CreateRelation,
-    DeleteRelation
+    DeleteRelation,
+    CreateView,
+    UpdateView,
+    DeleteView,
+    RefreshView
+}
+
+/// <summary>
+/// Extension methods for IChangeLogger to support view operations.
+/// </summary>
+public static class ChangeLoggerViewExtensions
+{
+    public static Task LogViewCreatedAsync(
+        this IChangeLogger logger,
+        Guid viewId,
+        string viewName,
+        CancellationToken cancellationToken = default)
+    {
+        return logger.LogChangeAsync(new SchemaChangeEntry
+        {
+            TableId = viewId, // Using TableId field for ViewId
+            Operation = SchemaOperation.CreateView,
+            Changes = new { viewName }
+        }, cancellationToken);
+    }
+
+    public static Task LogViewUpdatedAsync(
+        this IChangeLogger logger,
+        Guid viewId,
+        string? viewName,
+        CancellationToken cancellationToken = default)
+    {
+        return logger.LogChangeAsync(new SchemaChangeEntry
+        {
+            TableId = viewId,
+            Operation = SchemaOperation.UpdateView,
+            Changes = new { viewName }
+        }, cancellationToken);
+    }
+
+    public static Task LogViewDeletedAsync(
+        this IChangeLogger logger,
+        Guid viewId,
+        string viewName,
+        CancellationToken cancellationToken = default)
+    {
+        return logger.LogChangeAsync(new SchemaChangeEntry
+        {
+            TableId = viewId,
+            Operation = SchemaOperation.DeleteView,
+            Changes = new { viewName }
+        }, cancellationToken);
+    }
+
+    public static Task LogViewRefreshedAsync(
+        this IChangeLogger logger,
+        Guid viewId,
+        CancellationToken cancellationToken = default)
+    {
+        return logger.LogChangeAsync(new SchemaChangeEntry
+        {
+            TableId = viewId,
+            Operation = SchemaOperation.RefreshView,
+            Changes = new { refreshedAt = DateTimeOffset.UtcNow }
+        }, cancellationToken);
+    }
 }

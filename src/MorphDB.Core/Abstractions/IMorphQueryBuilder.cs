@@ -195,7 +195,12 @@ public enum FilterOperator
     ILike,
     Contains,
     StartsWith,
-    EndsWith
+    EndsWith,
+    In,
+    NotIn,
+    IsNull,
+    IsNotNull,
+    Between
 }
 
 /// <summary>

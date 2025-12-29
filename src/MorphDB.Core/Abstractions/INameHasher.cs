@@ -24,6 +24,12 @@ public interface INameHasher
     string GenerateIndexName(Guid tableId, string logicalName);
 
     /// <summary>
+    /// Generates a physical view name.
+    /// Format: view_{hash}
+    /// </summary>
+    string GenerateViewName(Guid tenantId, string logicalName);
+
+    /// <summary>
     /// Generates a physical constraint name.
     /// Format: chk_{hash} or fk_{hash}
     /// </summary>

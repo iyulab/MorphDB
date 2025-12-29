@@ -360,6 +360,92 @@ public static class DdlBuilder
 
     #endregion
 
+    #region View Operations
+
+    /// <summary>
+    /// Builds a CREATE VIEW statement.
+    /// </summary>
+    public static string BuildCreateView(
+        string physicalName,
+        string selectStatement,
+        string? schema = null)
+    {
+        var qualifiedName = QualifyName(physicalName, schema);
+        return $"CREATE VIEW {qualifiedName} AS\n{selectStatement}";
+    }
+
+    /// <summary>
+    /// Builds a CREATE OR REPLACE VIEW statement.
+    /// </summary>
+    public static string BuildCreateOrReplaceView(
+        string physicalName,
+        string selectStatement,
+        string? schema = null)
+    {
+        var qualifiedName = QualifyName(physicalName, schema);
+        return $"CREATE OR REPLACE VIEW {qualifiedName} AS\n{selectStatement}";
+    }
+
+    /// <summary>
+    /// Builds a CREATE MATERIALIZED VIEW statement.
+    /// </summary>
+    public static string BuildCreateMaterializedView(
+        string physicalName,
+        string selectStatement,
+        string? schema = null,
+        bool withData = true)
+    {
+        var qualifiedName = QualifyName(physicalName, schema);
+        var withDataClause = withData ? "WITH DATA" : "WITH NO DATA";
+        return $"CREATE MATERIALIZED VIEW {qualifiedName} AS\n{selectStatement}\n{withDataClause}";
+    }
+
+    /// <summary>
+    /// Builds a DROP VIEW statement.
+    /// </summary>
+    public static string BuildDropView(string physicalName, string? schema = null, bool cascade = false)
+    {
+        var qualifiedName = QualifyName(physicalName, schema);
+        var cascadeClause = cascade ? " CASCADE" : "";
+        return $"DROP VIEW IF EXISTS {qualifiedName}{cascadeClause}";
+    }
+
+    /// <summary>
+    /// Builds a DROP MATERIALIZED VIEW statement.
+    /// </summary>
+    public static string BuildDropMaterializedView(string physicalName, string? schema = null, bool cascade = false)
+    {
+        var qualifiedName = QualifyName(physicalName, schema);
+        var cascadeClause = cascade ? " CASCADE" : "";
+        return $"DROP MATERIALIZED VIEW IF EXISTS {qualifiedName}{cascadeClause}";
+    }
+
+    /// <summary>
+    /// Builds a REFRESH MATERIALIZED VIEW statement.
+    /// </summary>
+    public static string BuildRefreshMaterializedView(string physicalName, string? schema = null, bool concurrent = false)
+    {
+        var qualifiedName = QualifyName(physicalName, schema);
+        var concurrentClause = concurrent ? "CONCURRENTLY " : "";
+        return $"REFRESH MATERIALIZED VIEW {concurrentClause}{qualifiedName}";
+    }
+
+    /// <summary>
+    /// Builds a CREATE UNIQUE INDEX statement for materialized view (required for CONCURRENTLY refresh).
+    /// </summary>
+    public static string BuildMaterializedViewUniqueIndex(
+        string indexName,
+        string viewPhysicalName,
+        IReadOnlyList<string> columns,
+        string? schema = null)
+    {
+        var qualifiedViewName = QualifyName(viewPhysicalName, schema);
+        var columnList = string.Join(", ", columns.Select(QuoteIdentifier));
+        return $"CREATE UNIQUE INDEX {QuoteIdentifier(indexName)} ON {qualifiedViewName} ({columnList})";
+    }
+
+    #endregion
+
     #region System Tables DDL
 
     /// <summary>
@@ -479,6 +565,42 @@ public static class DdlBuilder
 
             """);
 
+        // _views: View metadata
+        sb.Append(CultureInfo.InvariantCulture, $"""
+            CREATE TABLE {QuoteIdentifier(systemSchema)}."_views" (
+                "view_id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                "tenant_id" UUID NOT NULL,
+                "logical_name" VARCHAR(255) NOT NULL,
+                "physical_name" VARCHAR(63) NOT NULL,
+                "definition" JSONB NOT NULL,
+                "is_materialized" BOOLEAN NOT NULL DEFAULT false,
+                "refresh_policy" VARCHAR(20) NOT NULL DEFAULT 'OnDemand',
+                "refresh_schedule" TEXT,
+                "last_refreshed_at" TIMESTAMPTZ,
+                "is_stale" BOOLEAN NOT NULL DEFAULT false,
+                "descriptor" JSONB,
+                "is_active" BOOLEAN NOT NULL DEFAULT true,
+                "created_at" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                "updated_at" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+
+            """);
+
+        // _view_columns: View column metadata
+        sb.Append(CultureInfo.InvariantCulture, $"""
+            CREATE TABLE {QuoteIdentifier(systemSchema)}."_view_columns" (
+                "column_id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                "view_id" UUID NOT NULL REFERENCES {QuoteIdentifier(systemSchema)}."_views"("view_id") ON DELETE CASCADE,
+                "logical_name" VARCHAR(255) NOT NULL,
+                "data_type" VARCHAR(50) NOT NULL,
+                "is_computed" BOOLEAN NOT NULL DEFAULT false,
+                "expression" TEXT,
+                "ordinal_position" INTEGER NOT NULL,
+                "created_at" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+
+            """);
+
         // Indexes for performance
         sb.Append(CultureInfo.InvariantCulture, $"""
             CREATE UNIQUE INDEX "idx__tables_logical_name_active" ON {QuoteIdentifier(systemSchema)}."_tables"("logical_name") WHERE is_active = true;
@@ -491,6 +613,8 @@ public static class DdlBuilder
             CREATE INDEX "idx__audit_logs_timestamp" ON {QuoteIdentifier(systemSchema)}."_audit_logs"("timestamp" DESC);
             CREATE INDEX "idx__audit_logs_category" ON {QuoteIdentifier(systemSchema)}."_audit_logs"("category", "timestamp" DESC);
             CREATE INDEX "idx__audit_logs_actor" ON {QuoteIdentifier(systemSchema)}."_audit_logs"("actor_id", "timestamp" DESC);
+            CREATE UNIQUE INDEX "idx__views_logical_name_active" ON {QuoteIdentifier(systemSchema)}."_views"("tenant_id", "logical_name") WHERE is_active = true;
+            CREATE INDEX "idx__view_columns_view_id" ON {QuoteIdentifier(systemSchema)}."_view_columns"("view_id");
             """);
 
         return sb.ToString();

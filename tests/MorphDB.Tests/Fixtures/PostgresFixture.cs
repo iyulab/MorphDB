@@ -281,6 +281,39 @@ public sealed class PostgresFixture : IAsyncLifetime
         CREATE INDEX IF NOT EXISTS idx_api_keys_tenant ON morphdb._morph_api_keys(tenant_id);
         CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON morphdb._morph_api_keys(key_hash);
         CREATE INDEX IF NOT EXISTS idx_api_keys_prefix ON morphdb._morph_api_keys(key_prefix);
+
+        -- System table: _morph_views (Phase 10: Views)
+        CREATE TABLE IF NOT EXISTS morphdb._morph_views (
+            view_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            tenant_id UUID NOT NULL,
+            logical_name VARCHAR(255) NOT NULL,
+            physical_name VARCHAR(63) NOT NULL UNIQUE,
+            definition JSONB NOT NULL,
+            is_materialized BOOLEAN NOT NULL DEFAULT false,
+            refresh_policy VARCHAR(20) NOT NULL DEFAULT 'OnDemand',
+            refresh_schedule TEXT,
+            last_refreshed_at TIMESTAMPTZ,
+            is_stale BOOLEAN NOT NULL DEFAULT false,
+            descriptor JSONB,
+            is_active BOOLEAN NOT NULL DEFAULT true,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE (tenant_id, logical_name)
+        );
+
+        -- System table: _morph_view_columns (Phase 10: Views)
+        CREATE TABLE IF NOT EXISTS morphdb._morph_view_columns (
+            column_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            view_id UUID NOT NULL REFERENCES morphdb._morph_views(view_id) ON DELETE CASCADE,
+            logical_name VARCHAR(255) NOT NULL,
+            data_type VARCHAR(50) NOT NULL,
+            is_computed BOOLEAN NOT NULL DEFAULT false,
+            expression TEXT,
+            ordinal_position INTEGER NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_morph_views_tenant ON morphdb._morph_views(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_morph_view_columns_view ON morphdb._morph_view_columns(view_id);
         """;
 
     public async Task DisposeAsync()

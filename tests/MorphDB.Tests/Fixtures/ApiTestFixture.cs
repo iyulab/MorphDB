@@ -120,6 +120,13 @@ public sealed class ApiTestFixture : IAsyncLifetime
                     services.RemoveAll<IBulkOperationService>();
                     services.AddSingleton<IBulkOperationService, PostgresBulkOperationService>();
 
+                    // View services
+                    services.RemoveAll<IViewMetadataRepository>();
+                    services.AddSingleton<IViewMetadataRepository, ViewMetadataRepository>();
+
+                    services.RemoveAll<IViewManager>();
+                    services.AddSingleton<IViewManager, PostgresViewManager>();
+
                     // Project and schema layer services
                     services.RemoveAll<ISchemaNameResolver>();
                     services.AddSingleton<ISchemaNameResolver, PostgresSchemaNameResolver>();

@@ -1021,3 +1021,366 @@ public static class ApiModelExtensions
 }
 
 #endregion
+
+#region View API Models
+
+/// <summary>
+/// Request to create a new view.
+/// </summary>
+public sealed record CreateViewApiRequest
+{
+    /// <summary>
+    /// User-facing name for the view.
+    /// </summary>
+    public required string Name { get; init; }
+
+    /// <summary>
+    /// Primary base table for the view.
+    /// </summary>
+    public required string BaseTable { get; init; }
+
+    /// <summary>
+    /// Columns to include in the view.
+    /// </summary>
+    public IReadOnlyList<ViewColumnApiSpec> Columns { get; init; } = [];
+
+    /// <summary>
+    /// Additional tables joined to the base table.
+    /// </summary>
+    public IReadOnlyList<ViewJoinApiSpec>? Joins { get; init; }
+
+    /// <summary>
+    /// Filter conditions applied to the view.
+    /// </summary>
+    public IReadOnlyList<ViewFilterApiSpec>? Filters { get; init; }
+
+    /// <summary>
+    /// Group by columns for aggregate views.
+    /// </summary>
+    public IReadOnlyList<string>? GroupBy { get; init; }
+
+    /// <summary>
+    /// Default ordering for view results.
+    /// </summary>
+    public IReadOnlyList<ViewOrderApiSpec>? OrderBy { get; init; }
+
+    /// <summary>
+    /// Maximum number of rows.
+    /// </summary>
+    public int? Limit { get; init; }
+
+    /// <summary>
+    /// Whether to include only distinct rows.
+    /// </summary>
+    public bool Distinct { get; init; }
+
+    /// <summary>
+    /// When true, create a materialized view.
+    /// </summary>
+    public bool Materialized { get; init; }
+
+    /// <summary>
+    /// Refresh policy for materialized views: OnDemand, Scheduled, or Incremental.
+    /// </summary>
+    public string? RefreshPolicy { get; init; }
+
+    /// <summary>
+    /// Cron expression for scheduled refresh.
+    /// </summary>
+    public string? RefreshSchedule { get; init; }
+
+    /// <summary>
+    /// Optional description or metadata.
+    /// </summary>
+    public string? Description { get; init; }
+}
+
+/// <summary>
+/// Column specification for view definition.
+/// </summary>
+public sealed record ViewColumnApiSpec
+{
+    /// <summary>
+    /// Source column reference (table.column or just column for base table).
+    /// </summary>
+    public string? Source { get; init; }
+
+    /// <summary>
+    /// Computed expression (e.g., "price * quantity").
+    /// </summary>
+    public string? Expression { get; init; }
+
+    /// <summary>
+    /// Output column alias (required).
+    /// </summary>
+    public required string Alias { get; init; }
+
+    /// <summary>
+    /// Data type of the output column.
+    /// </summary>
+    public string? DataType { get; init; }
+
+    /// <summary>
+    /// Aggregation function: Count, Sum, Avg, Min, Max, ArrayAgg, StringAgg, First, Last.
+    /// </summary>
+    public string? Aggregation { get; init; }
+}
+
+/// <summary>
+/// Join specification for view definition.
+/// </summary>
+public sealed record ViewJoinApiSpec
+{
+    /// <summary>
+    /// Table to join.
+    /// </summary>
+    public required string Table { get; init; }
+
+    /// <summary>
+    /// Alias for the joined table.
+    /// </summary>
+    public string? Alias { get; init; }
+
+    /// <summary>
+    /// Type of join: Inner, Left, Right, Full, Cross.
+    /// </summary>
+    public string JoinType { get; init; } = "Left";
+
+    /// <summary>
+    /// Join condition (e.g., "orders.customer_id = customers._id").
+    /// </summary>
+    public required string Condition { get; init; }
+}
+
+/// <summary>
+/// Filter specification for view definition.
+/// </summary>
+public sealed record ViewFilterApiSpec
+{
+    /// <summary>
+    /// Column or expression to filter on.
+    /// </summary>
+    public required string Field { get; init; }
+
+    /// <summary>
+    /// Comparison operator: eq, neq, gt, gte, lt, lte, like, ilike, in, notin, isnull, isnotnull, between, contains, startswith, endswith.
+    /// </summary>
+    public required string Operator { get; init; }
+
+    /// <summary>
+    /// Value to compare against.
+    /// </summary>
+    public object? Value { get; init; }
+
+    /// <summary>
+    /// Logical operator for combining with other filters: And, Or.
+    /// </summary>
+    public string LogicalOp { get; init; } = "And";
+}
+
+/// <summary>
+/// Order specification for view definition.
+/// </summary>
+public sealed record ViewOrderApiSpec
+{
+    /// <summary>
+    /// Column to order by.
+    /// </summary>
+    public required string Column { get; init; }
+
+    /// <summary>
+    /// Whether to order descending.
+    /// </summary>
+    public bool Descending { get; init; }
+
+    /// <summary>
+    /// Null ordering: First or Last.
+    /// </summary>
+    public string NullOrdering { get; init; } = "Last";
+}
+
+/// <summary>
+/// Request to update a view.
+/// </summary>
+public sealed record UpdateViewApiRequest
+{
+    /// <summary>
+    /// New name for the view.
+    /// </summary>
+    public string? Name { get; init; }
+
+    /// <summary>
+    /// Updated columns.
+    /// </summary>
+    public IReadOnlyList<ViewColumnApiSpec>? Columns { get; init; }
+
+    /// <summary>
+    /// Updated joins.
+    /// </summary>
+    public IReadOnlyList<ViewJoinApiSpec>? Joins { get; init; }
+
+    /// <summary>
+    /// Updated filters.
+    /// </summary>
+    public IReadOnlyList<ViewFilterApiSpec>? Filters { get; init; }
+
+    /// <summary>
+    /// Updated group by columns.
+    /// </summary>
+    public IReadOnlyList<string>? GroupBy { get; init; }
+
+    /// <summary>
+    /// Updated ordering.
+    /// </summary>
+    public IReadOnlyList<ViewOrderApiSpec>? OrderBy { get; init; }
+
+    /// <summary>
+    /// Updated limit.
+    /// </summary>
+    public int? Limit { get; init; }
+
+    /// <summary>
+    /// Updated distinct setting.
+    /// </summary>
+    public bool? Distinct { get; init; }
+
+    /// <summary>
+    /// Updated refresh policy.
+    /// </summary>
+    public string? RefreshPolicy { get; init; }
+
+    /// <summary>
+    /// Updated refresh schedule.
+    /// </summary>
+    public string? RefreshSchedule { get; init; }
+
+    /// <summary>
+    /// Updated description.
+    /// </summary>
+    public string? Description { get; init; }
+}
+
+/// <summary>
+/// View API response.
+/// </summary>
+public sealed record ViewApiResponse
+{
+    public Guid Id { get; init; }
+    public required string Name { get; init; }
+    public required string BaseTable { get; init; }
+    public IReadOnlyList<ViewColumnApiResponse> Columns { get; init; } = [];
+    public IReadOnlyList<ViewJoinApiSpec>? Joins { get; init; }
+    public IReadOnlyList<ViewFilterApiSpec>? Filters { get; init; }
+    public IReadOnlyList<string>? GroupBy { get; init; }
+    public IReadOnlyList<ViewOrderApiSpec>? OrderBy { get; init; }
+    public int? Limit { get; init; }
+    public bool Distinct { get; init; }
+    public bool IsMaterialized { get; init; }
+    public string? RefreshPolicy { get; init; }
+    public string? RefreshSchedule { get; init; }
+    public DateTimeOffset? LastRefreshedAt { get; init; }
+    public bool IsStale { get; init; }
+    public DateTimeOffset CreatedAt { get; init; }
+    public DateTimeOffset UpdatedAt { get; init; }
+
+    public static ViewApiResponse FromMetadata(ViewMetadata view)
+    {
+        return new ViewApiResponse
+        {
+            Id = view.ViewId,
+            Name = view.LogicalName,
+            BaseTable = view.Definition.BaseTable,
+            Columns = view.Columns.Select(c => new ViewColumnApiResponse
+            {
+                Name = c.LogicalName,
+                DataType = c.DataType.ToString(),
+                IsComputed = c.IsComputed,
+                Expression = c.Expression
+            }).ToList(),
+            Joins = view.Definition.Joins.Select(j => new ViewJoinApiSpec
+            {
+                Table = j.Table,
+                Alias = j.Alias,
+                JoinType = j.JoinType.ToString(),
+                Condition = j.Condition
+            }).ToList(),
+            Filters = view.Definition.Filters.Select(f => new ViewFilterApiSpec
+            {
+                Field = f.Field,
+                Operator = f.Operator.ToString(),
+                Value = f.Value,
+                LogicalOp = f.LogicalOp.ToString()
+            }).ToList(),
+            GroupBy = view.Definition.GroupBy.ToList(),
+            OrderBy = view.Definition.OrderBy.Select(o => new ViewOrderApiSpec
+            {
+                Column = o.Column,
+                Descending = o.Descending,
+                NullOrdering = o.NullOrdering.ToString()
+            }).ToList(),
+            Limit = view.Definition.Limit,
+            Distinct = view.Definition.Distinct,
+            IsMaterialized = view.IsMaterialized,
+            RefreshPolicy = view.RefreshPolicy.ToString(),
+            RefreshSchedule = view.RefreshSchedule,
+            LastRefreshedAt = view.LastRefreshedAt,
+            IsStale = view.IsStale,
+            CreatedAt = view.CreatedAt,
+            UpdatedAt = view.UpdatedAt
+        };
+    }
+}
+
+/// <summary>
+/// View column API response.
+/// </summary>
+public sealed record ViewColumnApiResponse
+{
+    public required string Name { get; init; }
+    public required string DataType { get; init; }
+    public bool IsComputed { get; init; }
+    public string? Expression { get; init; }
+}
+
+/// <summary>
+/// Query parameters for view data endpoint.
+/// </summary>
+public sealed record ViewQueryApiParameters
+{
+    /// <summary>
+    /// Comma-separated list of columns to select.
+    /// </summary>
+    public string? Select { get; init; }
+
+    /// <summary>
+    /// Filter expression (column:op:value format).
+    /// </summary>
+    public string? Filter { get; init; }
+
+    /// <summary>
+    /// Order by columns (column:asc or column:desc).
+    /// </summary>
+    public string? OrderBy { get; init; }
+
+    /// <summary>
+    /// Number of rows to skip.
+    /// </summary>
+    public int? Skip { get; init; }
+
+    /// <summary>
+    /// Number of rows to take.
+    /// </summary>
+    public int? Take { get; init; }
+}
+
+/// <summary>
+/// View query result API response.
+/// </summary>
+public sealed record ViewQueryApiResponse
+{
+    public required IReadOnlyList<IDictionary<string, object?>> Data { get; init; }
+    public long TotalCount { get; init; }
+    public bool HasMore { get; init; }
+}
+
+#endregion

@@ -68,6 +68,7 @@ public static class ServiceCollectionExtensions
 
         // Register repositories
         services.AddSingleton<IMetadataRepository, MetadataRepository>();
+        services.AddSingleton<IViewMetadataRepository, ViewMetadataRepository>();
 
         // Register encryption services (if configured)
         if (options.EncryptionOptions is not null && !string.IsNullOrEmpty(options.EncryptionOptions.MasterKey))
@@ -133,6 +134,7 @@ public static class ServiceCollectionExtensions
         }
 
         services.AddSingleton<IMorphDataService, PostgresDataService>();
+        services.AddSingleton<IViewManager, PostgresViewManager>();
         services.AddSingleton<IWebhookManager, PostgresWebhookManager>();
         services.AddSingleton(options.BulkOperationOptions);
         services.AddSingleton<IBulkOperationService, PostgresBulkOperationService>();
