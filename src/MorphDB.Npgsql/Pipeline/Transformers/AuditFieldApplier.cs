@@ -8,8 +8,8 @@ namespace MorphDB.Npgsql.Pipeline.Transformers;
 /// </summary>
 public sealed class AuditFieldApplier : ITransformer
 {
-    private const string CreatedByColumn = "_created_by";
-    private const string UpdatedByColumn = "_updated_by";
+    private static readonly string CreatedByColumn = SystemColumns.CreatedBy;
+    private static readonly string UpdatedByColumn = SystemColumns.UpdatedBy;
 
     public int Order => PipelineOrder.AuditFieldApplier;
 

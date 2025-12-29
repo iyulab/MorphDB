@@ -99,7 +99,7 @@ public sealed class ForeignKeyValidator : IValidator
         // For soft-delete enabled tables, exclude deleted records
         if (targetTable.SoftDeleteEnabled)
         {
-            sql += " AND _deleted_at IS NULL";
+            sql += $" AND {SystemColumns.DeletedAt} IS NULL";
         }
 
         sql += ")";

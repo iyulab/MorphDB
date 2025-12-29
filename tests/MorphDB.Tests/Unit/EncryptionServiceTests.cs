@@ -454,7 +454,7 @@ public class EncryptionServiceTests
         var service = CreateEncryptionService();
         var data = new Dictionary<string, object?>
         {
-            ["id"] = Guid.NewGuid(),
+            ["_id"] = Guid.NewGuid(),
             ["email"] = "test@example.com",
             ["phone"] = "123-456-7890",
             ["name"] = "John Doe"
@@ -465,7 +465,7 @@ public class EncryptionServiceTests
         var result = service.EncryptRow(TenantId, "customers", data, encryptedColumns);
 
         // Assert
-        result["id"].Should().Be(data["id"]); // Not encrypted
+        result["_id"].Should().Be(data["_id"]); // Not encrypted
         result["name"].Should().Be(data["name"]); // Not encrypted
         result["email"].Should().BeOfType<string>();
         ((string)result["email"]!).Should().StartWith("$MORPH$v1$");
@@ -482,7 +482,7 @@ public class EncryptionServiceTests
         var encryptedEmail = service.Encrypt(TenantId, "customers", "email", "test@example.com");
         var data = new Dictionary<string, object?>
         {
-            ["id"] = Guid.NewGuid(),
+            ["_id"] = Guid.NewGuid(),
             ["email"] = encryptedEmail,
             ["name"] = "John Doe"
         };
@@ -492,7 +492,7 @@ public class EncryptionServiceTests
 
         // Assert
         result["email"].Should().Be("test@example.com");
-        result["id"].Should().Be(data["id"]);
+        result["_id"].Should().Be(data["_id"]);
         result["name"].Should().Be(data["name"]);
     }
 
@@ -503,7 +503,7 @@ public class EncryptionServiceTests
         var service = CreateEncryptionService();
         var originalData = new Dictionary<string, object?>
         {
-            ["id"] = Guid.NewGuid(),
+            ["_id"] = Guid.NewGuid(),
             ["email"] = "secret@example.com",
             ["phone"] = "555-1234",
             ["public_info"] = "visible"
@@ -518,7 +518,7 @@ public class EncryptionServiceTests
         decrypted["email"].Should().Be("secret@example.com");
         decrypted["phone"].Should().Be("555-1234");
         decrypted["public_info"].Should().Be("visible");
-        decrypted["id"].Should().Be(originalData["id"]);
+        decrypted["_id"].Should().Be(originalData["_id"]);
     }
 
     [Fact]

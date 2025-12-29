@@ -67,22 +67,85 @@ public sealed class PostgresSchemaManager : ISchemaManager
         var columnDefinitions = new List<ColumnDefinition>();
         var ordinal = 1;
 
-        // Add system columns first
-        var idColumn = CreateSystemColumn(tableId, "id", MorphDataType.Uuid, ordinal++, isPrimaryKey: true);
-        columns.Add(idColumn);
-        columnDefinitions.Add(ColumnDefinition.FromMetadata(idColumn) with { DefaultExpression = "uuid_generate_v4()" });
+        // Get system column options (defaults if not specified)
+        var sysOpts = request.SystemColumns ?? new SystemColumnOptions();
 
-        var tenantColumn = CreateSystemColumn(tableId, "tenant_id", MorphDataType.Uuid, ordinal++);
+        // Add Core system columns (always present, cannot be disabled)
+        // _id: UUID v7 primary key (generated in application, not DB)
+        var idColumn = CreateSystemColumn(tableId, SystemColumns.Id, MorphDataType.Uuid, ordinal++, isPrimaryKey: true);
+        columns.Add(idColumn);
+        columnDefinitions.Add(ColumnDefinition.FromMetadata(idColumn));
+
+        // tenant_id: Internal column for multi-tenancy (not exposed to API)
+        var tenantColumn = CreateSystemColumn(tableId, SystemColumns.TenantId, MorphDataType.Uuid, ordinal++);
         columns.Add(tenantColumn);
         columnDefinitions.Add(ColumnDefinition.FromMetadata(tenantColumn));
 
-        var createdAtColumn = CreateSystemColumn(tableId, "created_at", MorphDataType.CreatedTime, ordinal++);
+        // _created_at: Immutable creation timestamp
+        var createdAtColumn = CreateSystemColumn(tableId, SystemColumns.CreatedAt, MorphDataType.CreatedTime, ordinal++);
         columns.Add(createdAtColumn);
-        columnDefinitions.Add(ColumnDefinition.FromMetadata(createdAtColumn));
+        columnDefinitions.Add(ColumnDefinition.FromMetadata(createdAtColumn) with { DefaultExpression = "CURRENT_TIMESTAMP" });
 
-        var updatedAtColumn = CreateSystemColumn(tableId, "updated_at", MorphDataType.ModifiedTime, ordinal++);
+        // _updated_at: Auto-updated modification timestamp
+        var updatedAtColumn = CreateSystemColumn(tableId, SystemColumns.UpdatedAt, MorphDataType.ModifiedTime, ordinal++);
         columns.Add(updatedAtColumn);
-        columnDefinitions.Add(ColumnDefinition.FromMetadata(updatedAtColumn));
+        columnDefinitions.Add(ColumnDefinition.FromMetadata(updatedAtColumn) with { DefaultExpression = "CURRENT_TIMESTAMP" });
+
+        // Add Standard columns based on options
+        if (sysOpts.VersioningEnabled)
+        {
+            var versionColumn = CreateSystemColumn(tableId, SystemColumns.Version, MorphDataType.Integer, ordinal++);
+            columns.Add(versionColumn);
+            columnDefinitions.Add(ColumnDefinition.FromMetadata(versionColumn) with { DefaultExpression = "1" });
+        }
+
+        if (sysOpts.AuditFieldsEnabled)
+        {
+            var createdByColumn = CreateSystemColumn(tableId, SystemColumns.CreatedBy, MorphDataType.Uuid, ordinal++, isNullable: true);
+            columns.Add(createdByColumn);
+            columnDefinitions.Add(ColumnDefinition.FromMetadata(createdByColumn));
+
+            var updatedByColumn = CreateSystemColumn(tableId, SystemColumns.UpdatedBy, MorphDataType.Uuid, ordinal++, isNullable: true);
+            columns.Add(updatedByColumn);
+            columnDefinitions.Add(ColumnDefinition.FromMetadata(updatedByColumn));
+        }
+
+        // Add Optional columns based on options
+        if (sysOpts.SoftDeleteEnabled)
+        {
+            var deletedAtColumn = CreateSystemColumn(tableId, SystemColumns.DeletedAt, MorphDataType.DateTime, ordinal++, isNullable: true);
+            columns.Add(deletedAtColumn);
+            columnDefinitions.Add(ColumnDefinition.FromMetadata(deletedAtColumn));
+
+            var deletedByColumn = CreateSystemColumn(tableId, SystemColumns.DeletedBy, MorphDataType.Uuid, ordinal++, isNullable: true);
+            columns.Add(deletedByColumn);
+            columnDefinitions.Add(ColumnDefinition.FromMetadata(deletedByColumn));
+        }
+
+        if (sysOpts.OwnershipEnabled)
+        {
+            var ownerColumn = CreateSystemColumn(tableId, SystemColumns.OwnerId, MorphDataType.Uuid, ordinal++, isNullable: true);
+            columns.Add(ownerColumn);
+            columnDefinitions.Add(ColumnDefinition.FromMetadata(ownerColumn));
+        }
+
+        if (sysOpts.HierarchyEnabled)
+        {
+            var parentColumn = CreateSystemColumn(tableId, SystemColumns.ParentId, MorphDataType.Uuid, ordinal++, isNullable: true);
+            columns.Add(parentColumn);
+            columnDefinitions.Add(ColumnDefinition.FromMetadata(parentColumn));
+
+            var sortOrderColumn = CreateSystemColumn(tableId, SystemColumns.SortOrder, MorphDataType.Integer, ordinal++, isNullable: true);
+            columns.Add(sortOrderColumn);
+            columnDefinitions.Add(ColumnDefinition.FromMetadata(sortOrderColumn) with { DefaultExpression = "0" });
+        }
+
+        if (sysOpts.SourceTrackingEnabled)
+        {
+            var sourceIdColumn = CreateSystemColumn(tableId, SystemColumns.SourceId, MorphDataType.Text, ordinal++, isNullable: true);
+            columns.Add(sourceIdColumn);
+            columnDefinitions.Add(ColumnDefinition.FromMetadata(sourceIdColumn));
+        }
 
         // Add user-defined columns
         foreach (var colReq in request.Columns)
@@ -114,7 +177,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
             columnDefinitions.Add(ColumnDefinition.FromMetadata(column));
         }
 
-        // Create table metadata
+        // Create table metadata with system column options
         var tableMetadata = new TableMetadata
         {
             TableId = tableId,
@@ -125,7 +188,16 @@ public sealed class PostgresSchemaManager : ISchemaManager
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
             IsActive = true,
-            Columns = columns
+            Columns = columns,
+            // Standard column options
+            TimestampsEnabled = true, // Always enabled (Core)
+            VersioningEnabled = sysOpts.VersioningEnabled,
+            AuditFieldsEnabled = sysOpts.AuditFieldsEnabled,
+            // Optional column options
+            SoftDeleteEnabled = sysOpts.SoftDeleteEnabled,
+            OwnershipEnabled = sysOpts.OwnershipEnabled,
+            HierarchyEnabled = sysOpts.HierarchyEnabled,
+            SourceTrackingEnabled = sysOpts.SourceTrackingEnabled
         };
 
         // Execute DDL and insert metadata in a transaction
@@ -210,7 +282,15 @@ public sealed class PostgresSchemaManager : ISchemaManager
             CreatedAt = insertedTable.CreatedAt,
             UpdatedAt = insertedTable.UpdatedAt,
             IsActive = insertedTable.IsActive,
-            Columns = columns
+            Columns = columns,
+            // System column options
+            TimestampsEnabled = true,
+            VersioningEnabled = sysOpts.VersioningEnabled,
+            AuditFieldsEnabled = sysOpts.AuditFieldsEnabled,
+            SoftDeleteEnabled = sysOpts.SoftDeleteEnabled,
+            OwnershipEnabled = sysOpts.OwnershipEnabled,
+            HierarchyEnabled = sysOpts.HierarchyEnabled,
+            SourceTrackingEnabled = sysOpts.SourceTrackingEnabled
         };
     }
 
@@ -783,15 +863,17 @@ public sealed class PostgresSchemaManager : ISchemaManager
 
     #region Private Helpers
 
-    private ColumnMetadata CreateSystemColumn(
+    private static ColumnMetadata CreateSystemColumn(
         Guid tableId,
         string logicalName,
         MorphDataType dataType,
         int ordinalPosition,
-        bool isPrimaryKey = false)
+        bool isPrimaryKey = false,
+        bool isNullable = false)
     {
         var columnId = Guid.NewGuid();
-        var physicalName = _nameHasher.GenerateColumnName(tableId, logicalName);
+        // System columns are NOT hashed - physical name equals logical name
+        var physicalName = logicalName;
         var nativeType = TypeMapper.ToNativeType(dataType);
 
         return new ColumnMetadata
@@ -802,8 +884,9 @@ public sealed class PostgresSchemaManager : ISchemaManager
             PhysicalName = physicalName,
             DataType = dataType,
             NativeType = nativeType,
-            IsNullable = false,
+            IsNullable = isNullable,
             IsPrimaryKey = isPrimaryKey,
+            IsSystemColumn = true,
             OrdinalPosition = ordinalPosition,
             IsActive = true
         };

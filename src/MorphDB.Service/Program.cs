@@ -86,7 +86,10 @@ try
     });
 
     // Add API services
-    builder.Services.AddControllers();
+    builder.Services.AddControllers(options =>
+    {
+        options.Filters.Add<MorphDB.Service.Filters.TenantExceptionFilter>();
+    });
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen(options =>
     {

@@ -18,6 +18,13 @@ public sealed class ColumnMetadata
     public bool IsPrimaryKey { get; init; }
     public bool IsIndexed { get; init; }
     public bool IsEncrypted { get; init; }
+
+    /// <summary>
+    /// When true, this is a system-managed column (prefixed with _).
+    /// System columns are not hashed and have physical name = logical name.
+    /// </summary>
+    public bool IsSystemColumn { get; init; }
+
     public string? DefaultValue { get; init; }
     public string? CheckExpression { get; init; }
     public int OrdinalPosition { get; init; }

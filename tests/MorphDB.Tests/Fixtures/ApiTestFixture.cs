@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using MorphDB.Core.Abstractions;
+using MorphDB.Core.Models;
 using MorphDB.Core.Security;
 using MorphDB.Npgsql.Audit;
 using MorphDB.Npgsql.Backup;
@@ -108,6 +109,8 @@ public sealed class ApiTestFixture : IAsyncLifetime
                     services.RemoveAll<IWebhookManager>();
                     services.AddSingleton<IWebhookManager, PostgresWebhookManager>();
 
+                    services.RemoveAll<BulkOperationOptions>();
+                    services.AddSingleton(new BulkOperationOptions());
                     services.RemoveAll<IBulkOperationService>();
                     services.AddSingleton<IBulkOperationService, PostgresBulkOperationService>();
 

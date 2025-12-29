@@ -16,6 +16,11 @@ public interface IEdmModelProvider
     Task<IEdmModel> GetModelAsync(Guid tenantId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Gets the EDM model with entity set to table name mapping for the specified tenant.
+    /// </summary>
+    Task<EdmModelBuildResult> GetModelWithMappingAsync(Guid tenantId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Invalidates the cached model for the specified tenant.
     /// </summary>
     void InvalidateModel(Guid tenantId);
@@ -46,9 +51,15 @@ public sealed class CachingEdmModelProvider : IEdmModelProvider
 
     public async Task<IEdmModel> GetModelAsync(Guid tenantId, CancellationToken cancellationToken = default)
     {
+        var result = await GetModelWithMappingAsync(tenantId, cancellationToken);
+        return result.Model;
+    }
+
+    public async Task<EdmModelBuildResult> GetModelWithMappingAsync(Guid tenantId, CancellationToken cancellationToken = default)
+    {
         if (_cache.TryGetValue(tenantId, out var cached) && !cached.IsExpired)
         {
-            return cached.Model;
+            return cached.Result;
         }
 
         // Create a scope to resolve scoped dependencies
@@ -56,10 +67,10 @@ public sealed class CachingEdmModelProvider : IEdmModelProvider
         var schemaManager = scope.ServiceProvider.GetRequiredService<ISchemaManager>();
         var tables = await schemaManager.ListTablesAsync(tenantId, cancellationToken);
 
-        var model = DynamicEdmModelBuilder.BuildModel(tables);
-        _cache[tenantId] = new CachedModel(model, DateTimeOffset.UtcNow.Add(_cacheExpiration));
+        var result = DynamicEdmModelBuilder.BuildModelWithMapping(tables);
+        _cache[tenantId] = new CachedModel(result, DateTimeOffset.UtcNow.Add(_cacheExpiration));
 
-        return model;
+        return result;
     }
 
     public void InvalidateModel(Guid tenantId)
@@ -74,13 +85,13 @@ public sealed class CachingEdmModelProvider : IEdmModelProvider
 
     private sealed class CachedModel
     {
-        public IEdmModel Model { get; }
+        public EdmModelBuildResult Result { get; }
         public DateTimeOffset ExpiresAt { get; }
         public bool IsExpired => DateTimeOffset.UtcNow >= ExpiresAt;
 
-        public CachedModel(IEdmModel model, DateTimeOffset expiresAt)
+        public CachedModel(EdmModelBuildResult result, DateTimeOffset expiresAt)
         {
-            Model = model;
+            Result = result;
             ExpiresAt = expiresAt;
         }
     }

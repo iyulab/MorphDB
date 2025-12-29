@@ -6,19 +6,19 @@
 
 ## Version History
 
-| Version | Phases | Status | Release Date |
-|---------|--------|--------|--------------|
-| 0.1.0 | 0-3: Core functionality | ✅ Complete | 2024-Q4 |
-| 0.2.0 | 4-6: API layer (GraphQL, OData) | ✅ Complete | 2024-Q4 |
-| 0.3.0 | 7-8: Real-time features | ✅ Complete | 2024-Q4 |
-| 0.4.0 | 9-10: Bulk & SDKs | ✅ Complete | 2024-Q4 |
-| 0.5.0 | 11-12: Production Ready (Beta) | ✅ Complete | 2024-Q4 |
-| 0.6.0 | 13-16: Enterprise Hardening | ✅ Complete | 2025-Q1 |
-| 0.7.0 | 17-18: Schema Architecture | ✅ Complete | 2025-Q1 |
-| 0.7.5 | 18.5: Virtual Constraints | ✅ Complete | 2025-Q1 |
-| 0.8.0 | 19-20: Audit + Rate Limiting | 🔄 In Progress | 2025-Q1 |
-| 0.9.0 | 21-22: Organization + SSO | 📋 Planned | 2025-Q2 |
-| 1.0.0 | 23-24: Enterprise Ready | 📋 Planned | 2025-Q2 |
+| Version | Phases | Status |
+|---------|--------|--------|
+| 0.1.0 | 0-3: Core functionality | ✅ Complete |
+| 0.2.0 | 4-6: API layer (GraphQL, OData) | ✅ Complete |
+| 0.3.0 | 7-8: Real-time features | ✅ Complete |
+| 0.4.0 | 9-10: Bulk & SDKs | ✅ Complete |
+| 0.5.0 | 11-12: Production Ready (Beta) | ✅ Complete |
+| 0.6.0 | 13-16: Enterprise Hardening | ✅ Complete |
+| 0.7.0 | 17-18: Schema Architecture | ✅ Complete |
+| 0.7.5 | 18.5: Virtual Constraints | ✅ Complete |
+| 0.8.0 | 18.6-20: System Columns + Audit + Rate Limiting | 🔄 In Progress |
+| 0.9.0 | 21-22: Organization + SSO | 📋 Planned |
+| 1.0.0 | 23-24: Enterprise Ready | 📋 Planned |
 
 ---
 
@@ -26,15 +26,21 @@
 
 **Active Version**: v0.8.0 (Audit + Rate Limiting)
 
+### Completed in Current Version
+
+| Phase | Task | Status |
+|-------|------|--------|
+| 18.6 | System Columns (Core/Standard/Optional) | ✅ Complete |
+
 ### Immediate Tasks
 
 | Priority | Task | Status | Assigned |
 |----------|------|--------|----------|
-| 🔴 Critical | Audit log infrastructure | 📋 Planned | - |
-| 🔴 Critical | API rate limiting (token bucket) | 📋 Planned | - |
-| 🟡 High | Usage metrics collection | 📋 Planned | - |
-| 🟡 High | WritePipeline integration with DataController | 📋 Planned | - |
-| 🟢 Normal | Unit tests for Virtual Constraint pipeline | 📋 Planned | - |
+| 🔴 Critical | Audit log infrastructure (Phase 19) | 📋 Planned | - |
+| 🔴 Critical | API rate limiting - token bucket (Phase 20) | 📋 Planned | - |
+| 🟡 High | Async audit writer service | 📋 Planned | - |
+| 🟡 High | Rate limit middleware per-tenant | 📋 Planned | - |
+| 🟢 Normal | Audit log query API | 📋 Planned | - |
 
 ---
 
@@ -154,12 +160,54 @@ Write Request → Transformers → Validators → Executor → PostgreSQL
 
 ---
 
-### 🔄 In Progress: v0.8.0 (Audit + Rate Limiting)
+### 🔄 In Progress: v0.8.0 (Audit + Rate Limiting + System Columns)
 
 | Phase | Description | Status | Tasks |
 |-------|-------------|--------|-------|
+| 18.6 | **System Columns** | ✅ Complete | Core/Standard/Optional layers |
 | 19 | **Audit Logging** | 📋 Planned | Change tracking, compliance |
 | 20 | **Rate Limiting** | 📋 Planned | API throttling, quotas |
+
+#### Phase 18.6: System Columns Architecture ✅
+
+**Goal**: 4계층 시스템 컬럼 구조로 일관된 데이터 관리 제공
+
+**Design Document**: `docs/SYSTEM_COLUMNS.md`
+
+| Layer | Columns | Description | Status |
+|-------|---------|-------------|--------|
+| Core | `_id`, `_created_at`, `_updated_at` | 모든 테이블 필수, 비활성화 불가 | ✅ |
+| Standard | `_version`, `_created_by`, `_updated_by` | 기본 활성화, 비활성화 가능 | ✅ |
+| Optional | Soft Delete, Ownership, Sort Order, Source | 명시적 활성화 필요 | ✅ |
+| Extension | Workflow, Search, Analytics, ACL 등 | 플러그인 방식 확장 (v1.x) | 📋 |
+
+| Task | Priority | Status | Notes |
+|------|----------|--------|-------|
+| System columns design doc 작성 | 🔴 Critical | ✅ | `docs/SYSTEM_COLUMNS.md` |
+| Core 컬럼 자동 생성 (DdlBuilder) | 🔴 Critical | ✅ | `_id` UUID v7, timestamps |
+| Standard 컬럼 옵션화 | 🟡 High | ✅ | TableMetadata.SystemColumnOptions |
+| SystemColumnOptions API 노출 | 🟡 High | ✅ | CreateTableRequest 확장 |
+| Optional 컬럼 Transformer 추가 | 🟢 Normal | ✅ | IdApplier, OwnerApplier, SortOrderApplier |
+| `_` prefix 검증 (사용자 컬럼 차단) | 🟡 High | ✅ | ColumnMetadata validation |
+| 통합 테스트 및 API 호환성 | 🟡 High | ✅ | 330/333 tests passing |
+
+**Physical vs Virtual 처리**:
+| Column | Physical | Virtual | Rationale |
+|--------|:--------:|:-------:|-----------|
+| `_id` | ✓ | | PK, 인덱스 최적화 핵심 |
+| `_created_at`, `_updated_at` | ✓ | | DB 트리거로 신뢰성 보장 |
+| `_version` | ✓ (컬럼) | ✓ (검증) | 동시성 제어 |
+| `_created_by`, `_updated_by` | | ✓ | API 컨텍스트 의존 |
+| `_deleted_at`, `_deleted_by` | | ✓ | Soft delete 연동 |
+| `_owner_id`, `_sort_order` 등 | | ✓ | 비즈니스 로직 의존 |
+
+**Key Implementation Details**:
+- **Core columns**: Auto-generated in `PostgresSchemaManager.CreateTableAsync()` via `DdlBuilder`
+- **Transformers**: `IdApplier`, `TimestampApplier`, `VersionApplier`, `AuditFieldApplier`, `OwnerApplier`, `SortOrderApplier`
+- **API Models**: `SystemColumnOptions` in `CreateTableApiRequest`, response includes system column config
+- **GraphQL/OData**: Dynamic schema generation respects `_id` as primary key
+
+---
 
 #### Phase 19: Audit Logging
 

@@ -28,10 +28,14 @@ public sealed partial class ODataQueryHandler
         string entitySetName,
         IEdmModel model,
         ODataQueryOptions options,
+        IReadOnlyDictionary<string, string>? entitySetToTableNameMap = null,
         CancellationToken cancellationToken = default)
     {
-        // Find the table by entity set name (PascalCase to logical name)
-        var tableName = ToLogicalName(entitySetName);
+        // Find the table by entity set name - use mapping if available, otherwise fall back to conversion
+        var tableName = entitySetToTableNameMap != null &&
+                        entitySetToTableNameMap.TryGetValue(entitySetName, out var mappedName)
+            ? mappedName
+            : ToLogicalName(entitySetName);
         var table = await _schemaManager.GetTableAsync(tenantId, tableName, cancellationToken);
         if (table == null)
         {
@@ -111,9 +115,14 @@ public sealed partial class ODataQueryHandler
         string entitySetName,
         Guid id,
         ODataQueryOptions options,
+        IReadOnlyDictionary<string, string>? entitySetToTableNameMap = null,
         CancellationToken cancellationToken = default)
     {
-        var tableName = ToLogicalName(entitySetName);
+        // Use mapping if available, otherwise fall back to conversion
+        var tableName = entitySetToTableNameMap != null &&
+                        entitySetToTableNameMap.TryGetValue(entitySetName, out var mappedName)
+            ? mappedName
+            : ToLogicalName(entitySetName);
         var record = await _dataService.GetByIdAsync(tenantId, tableName, id, cancellationToken);
 
         if (record == null)
@@ -126,8 +135,8 @@ public sealed partial class ODataQueryHandler
                 .Select(c => c.Trim().ToLowerInvariant())
                 .ToHashSet();
 
-            // Always include id
-            columns.Add("id");
+            // Always include _id
+            columns.Add("_id");
 
             var filtered = new Dictionary<string, object?>();
             foreach (var kvp in record)
@@ -254,8 +263,29 @@ public sealed partial class ODataQueryHandler
     private static string ToLogicalName(string entitySetName)
     {
         // Convert PascalCase to snake_case
-        return string.Concat(entitySetName.Select((c, i) =>
-            i > 0 && char.IsUpper(c) ? "_" + char.ToLowerInvariant(c) : char.ToLowerInvariant(c).ToString()));
+        // Also handles digits following lowercase letters (e.g., "Test123" -> "test_123")
+        var result = new System.Text.StringBuilder();
+        for (int i = 0; i < entitySetName.Length; i++)
+        {
+            var c = entitySetName[i];
+            if (i > 0)
+            {
+                // Insert underscore before uppercase letter
+                if (char.IsUpper(c))
+                {
+                    result.Append('_');
+                    result.Append(char.ToLowerInvariant(c));
+                    continue;
+                }
+                // Insert underscore before digit following a lowercase letter
+                if (char.IsDigit(c) && char.IsLower(entitySetName[i - 1]))
+                {
+                    result.Append('_');
+                }
+            }
+            result.Append(char.ToLowerInvariant(c));
+        }
+        return result.ToString();
     }
 
     [GeneratedRegex(@"^(?<column>\w+)\s+(?<op>eq|ne|gt|ge|lt|le)\s+(?<value>'[^']*'|\d+\.?\d*|true|false|null|[0-9a-f-]{36})$", RegexOptions.IgnoreCase)]

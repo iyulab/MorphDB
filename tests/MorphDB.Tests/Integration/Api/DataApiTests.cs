@@ -74,7 +74,7 @@ public class DataApiTests
         var customId = Guid.NewGuid();
         var data = new Dictionary<string, object?>
         {
-            ["id"] = customId,
+            ["_id"] = customId,
             ["name"] = "Jane Doe",
             ["email"] = "jane@example.com",
             ["age"] = 25,

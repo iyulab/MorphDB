@@ -92,7 +92,8 @@ public sealed class SchemaController : ControllerBase
                     IsUnique = c.Unique,
                     IsIndexed = c.Indexed,
                     DefaultValue = c.Default
-                }).ToList()
+                }).ToList(),
+                SystemColumns = request.SystemColumns?.ToOptions()
             };
 
             var table = await _schemaManager.CreateTableAsync(createRequest, cancellationToken);

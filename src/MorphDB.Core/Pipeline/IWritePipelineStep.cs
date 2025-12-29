@@ -43,10 +43,13 @@ public interface ITransformer : IWritePipelineStep
 public static class PipelineOrder
 {
     // Transformers (run first to prepare data)
+    public const int IdApplier = 50;           // UUID v7 generation (first)
     public const int DefaultValueApplier = 100;
     public const int TimestampApplier = 200;
     public const int VersionApplier = 300;
     public const int AuditFieldApplier = 400;
+    public const int OwnerApplier = 450;       // _owner_id from SecurityContext
+    public const int SortOrderApplier = 475;   // _sort_order auto-generation
     public const int ComputedFieldApplier = 500;
 
     // Validators (run after transformers)

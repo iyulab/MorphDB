@@ -9,8 +9,8 @@ namespace MorphDB.Npgsql.Pipeline.Transformers;
 /// </summary>
 public sealed class SoftDeleteApplier : ITransformer
 {
-    private const string DeletedAtColumn = "_deleted_at";
-    private const string DeletedByColumn = "_deleted_by";
+    private static readonly string DeletedAtColumn = SystemColumns.DeletedAt;
+    private static readonly string DeletedByColumn = SystemColumns.DeletedBy;
 
     // Run early in delete operations
     public int Order => 50;

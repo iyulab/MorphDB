@@ -102,7 +102,7 @@ public class DataServiceTests
 
         var data = new Dictionary<string, object?>
         {
-            ["id"] = id,
+            ["_id"] = id,
             ["email"] = "test@example.com",
             ["name"] = "Test User",
             ["age"] = 25,
@@ -114,7 +114,7 @@ public class DataServiceTests
 
         // Assert
         result.Should().NotBeNull();
-        result["id"].Should().Be(id);
+        result["_id"].Should().Be(id);
         result["email"].Should().Be("test@example.com");
         result["name"].Should().Be("Test User");
         result["age"].Should().Be(25);
@@ -131,7 +131,7 @@ public class DataServiceTests
 
         var data = new Dictionary<string, object?>
         {
-            ["id"] = id,
+            ["_id"] = id,
             ["email"] = "test@example.com",
             ["name"] = null, // Nullable
             ["age"] = null,  // Nullable
@@ -142,7 +142,7 @@ public class DataServiceTests
         var result = await _dataService.InsertAsync(tenantId, table.LogicalName, data);
 
         // Assert
-        result["id"].Should().Be(id);
+        result["_id"].Should().Be(id);
         result["name"].Should().BeNull();
         result["age"].Should().BeNull();
     }
@@ -156,7 +156,7 @@ public class DataServiceTests
 
         var data = new Dictionary<string, object?>
         {
-            ["id"] = Guid.NewGuid(),
+            ["_id"] = Guid.NewGuid(),
             ["email"] = "test@example.com",
             ["nonexistent_column"] = "value", // This column doesn't exist
             ["is_active"] = true
@@ -181,7 +181,7 @@ public class DataServiceTests
 
         await _dataService.InsertAsync(tenantId, table.LogicalName, new Dictionary<string, object?>
         {
-            ["id"] = id,
+            ["_id"] = id,
             ["email"] = "find@example.com",
             ["name"] = "Find Me",
             ["is_active"] = true
@@ -192,7 +192,7 @@ public class DataServiceTests
 
         // Assert
         result.Should().NotBeNull();
-        result!["id"].Should().Be(id);
+        result!["_id"].Should().Be(id);
         result["email"].Should().Be("find@example.com");
         result["name"].Should().Be("Find Me");
     }
@@ -237,7 +237,7 @@ public class DataServiceTests
 
         await _dataService.InsertAsync(tenantId, table.LogicalName, new Dictionary<string, object?>
         {
-            ["id"] = id,
+            ["_id"] = id,
             ["email"] = "old@example.com",
             ["name"] = "Old Name",
             ["is_active"] = true
@@ -252,7 +252,7 @@ public class DataServiceTests
 
         // Assert
         result.Should().NotBeNull();
-        result["id"].Should().Be(id);
+        result["_id"].Should().Be(id);
         result["email"].Should().Be("new@example.com");
         result["name"].Should().Be("New Name");
         result["is_active"].Should().Be(true); // Unchanged
@@ -288,7 +288,7 @@ public class DataServiceTests
 
         await _dataService.InsertAsync(tenantId, table.LogicalName, new Dictionary<string, object?>
         {
-            ["id"] = id,
+            ["_id"] = id,
             ["email"] = "delete@example.com",
             ["is_active"] = true
         });
@@ -333,21 +333,21 @@ public class DataServiceTests
         {
             new Dictionary<string, object?>
             {
-                ["id"] = Guid.NewGuid(),
+                ["_id"] = Guid.NewGuid(),
                 ["email"] = "user1@example.com",
                 ["name"] = "User 1",
                 ["is_active"] = true
             },
             new Dictionary<string, object?>
             {
-                ["id"] = Guid.NewGuid(),
+                ["_id"] = Guid.NewGuid(),
                 ["email"] = "user2@example.com",
                 ["name"] = "User 2",
                 ["is_active"] = false
             },
             new Dictionary<string, object?>
             {
-                ["id"] = Guid.NewGuid(),
+                ["_id"] = Guid.NewGuid(),
                 ["email"] = "user3@example.com",
                 ["name"] = "User 3",
                 ["is_active"] = true
@@ -392,18 +392,18 @@ public class DataServiceTests
 
         var data = new Dictionary<string, object?>
         {
-            ["id"] = id,
+            ["_id"] = id,
             ["email"] = "upsert@example.com",
             ["name"] = "Upsert User",
             ["is_active"] = true
         };
 
         // Act
-        var result = await _dataService.UpsertAsync(tenantId, table.LogicalName, data, ["id"]);
+        var result = await _dataService.UpsertAsync(tenantId, table.LogicalName, data, ["_id"]);
 
         // Assert
         result.Should().NotBeNull();
-        result["id"].Should().Be(id);
+        result["_id"].Should().Be(id);
         result["email"].Should().Be("upsert@example.com");
     }
 
@@ -418,7 +418,7 @@ public class DataServiceTests
         // Insert first
         await _dataService.InsertAsync(tenantId, table.LogicalName, new Dictionary<string, object?>
         {
-            ["id"] = id,
+            ["_id"] = id,
             ["email"] = "old@example.com",
             ["name"] = "Old Name",
             ["is_active"] = true
@@ -427,18 +427,18 @@ public class DataServiceTests
         // Upsert with same ID
         var data = new Dictionary<string, object?>
         {
-            ["id"] = id,
+            ["_id"] = id,
             ["email"] = "new@example.com",
             ["name"] = "New Name",
             ["is_active"] = false
         };
 
         // Act
-        var result = await _dataService.UpsertAsync(tenantId, table.LogicalName, data, ["id"]);
+        var result = await _dataService.UpsertAsync(tenantId, table.LogicalName, data, ["_id"]);
 
         // Assert
         result.Should().NotBeNull();
-        result["id"].Should().Be(id);
+        result["_id"].Should().Be(id);
         result["email"].Should().Be("new@example.com");
         result["name"].Should().Be("New Name");
         result["is_active"].Should().Be(false);
@@ -453,7 +453,7 @@ public class DataServiceTests
 
         var data = new Dictionary<string, object?>
         {
-            ["id"] = Guid.NewGuid(),
+            ["_id"] = Guid.NewGuid(),
             ["email"] = "test@example.com",
             ["is_active"] = true
         };

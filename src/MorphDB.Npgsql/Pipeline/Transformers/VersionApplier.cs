@@ -8,7 +8,7 @@ namespace MorphDB.Npgsql.Pipeline.Transformers;
 /// </summary>
 public sealed class VersionApplier : ITransformer
 {
-    private const string VersionColumn = "_version";
+    private static readonly string VersionColumn = SystemColumns.Version;
 
     public int Order => PipelineOrder.VersionApplier;
 

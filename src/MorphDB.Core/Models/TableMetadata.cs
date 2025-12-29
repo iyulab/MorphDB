@@ -44,4 +44,24 @@ public sealed class TableMetadata
     /// When true, _created_by and _updated_by are auto-managed.
     /// </summary>
     public bool AuditFieldsEnabled { get; init; }
+
+    // Optional System Column Properties
+
+    /// <summary>
+    /// When true, _owner_id column is added for row-level ownership.
+    /// Enables ownership-based access control and filtering.
+    /// </summary>
+    public bool OwnershipEnabled { get; init; }
+
+    /// <summary>
+    /// When true, _parent_id and _sort_order columns are added for hierarchical data.
+    /// Supports tree structures like folders, categories, nested comments.
+    /// </summary>
+    public bool HierarchyEnabled { get; init; }
+
+    /// <summary>
+    /// When true, _source_id column is added for external system tracking.
+    /// Used for sync operations and external system integration.
+    /// </summary>
+    public bool SourceTrackingEnabled { get; init; }
 }

@@ -107,6 +107,52 @@ public sealed record CreateTableRequest
     public Guid TenantId { get; init; }
     public required string LogicalName { get; init; }
     public IReadOnlyList<CreateColumnRequest> Columns { get; init; } = [];
+
+    /// <summary>
+    /// Options for system columns. If null, defaults are applied.
+    /// </summary>
+    public SystemColumnOptions? SystemColumns { get; init; }
+}
+
+/// <summary>
+/// Configuration options for system columns when creating a table.
+/// Core columns (_id, _created_at, _updated_at) are always included.
+/// </summary>
+public sealed record SystemColumnOptions
+{
+    // Standard columns (default: enabled)
+
+    /// <summary>
+    /// Enable _version column for optimistic locking. Default: true.
+    /// </summary>
+    public bool VersioningEnabled { get; init; } = true;
+
+    /// <summary>
+    /// Enable _created_by and _updated_by columns. Default: false.
+    /// </summary>
+    public bool AuditFieldsEnabled { get; init; }
+
+    // Optional columns (default: disabled)
+
+    /// <summary>
+    /// Enable _deleted_at and _deleted_by for soft delete. Default: false.
+    /// </summary>
+    public bool SoftDeleteEnabled { get; init; }
+
+    /// <summary>
+    /// Enable _owner_id for row-level ownership. Default: false.
+    /// </summary>
+    public bool OwnershipEnabled { get; init; }
+
+    /// <summary>
+    /// Enable _parent_id and _sort_order for hierarchical data. Default: false.
+    /// </summary>
+    public bool HierarchyEnabled { get; init; }
+
+    /// <summary>
+    /// Enable _source_id for external system tracking. Default: false.
+    /// </summary>
+    public bool SourceTrackingEnabled { get; init; }
 }
 
 public sealed record UpdateTableRequest

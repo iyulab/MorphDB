@@ -4,6 +4,18 @@ using MorphDB.Core.Models;
 namespace MorphDB.Service.OData;
 
 /// <summary>
+/// Result of building an EDM model, including the name mapping.
+/// </summary>
+public sealed class EdmModelBuildResult
+{
+    public required IEdmModel Model { get; init; }
+    /// <summary>
+    /// Maps entity set name (PascalCase) to logical table name (snake_case).
+    /// </summary>
+    public required IReadOnlyDictionary<string, string> EntitySetToTableNameMap { get; init; }
+}
+
+/// <summary>
 /// Builds OData EDM models dynamically from MorphDB table metadata.
 /// </summary>
 public static class DynamicEdmModelBuilder
@@ -13,7 +25,16 @@ public static class DynamicEdmModelBuilder
     /// </summary>
     public static IEdmModel BuildModel(IReadOnlyList<TableMetadata> tables)
     {
+        return BuildModelWithMapping(tables).Model;
+    }
+
+    /// <summary>
+    /// Builds an EDM model with entity set to table name mapping.
+    /// </summary>
+    public static EdmModelBuildResult BuildModelWithMapping(IReadOnlyList<TableMetadata> tables)
+    {
         var model = new EdmModel();
+        var entitySetToTableName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         var entityContainer = new EdmEntityContainer("MorphDB", "MorphDBContainer");
         model.AddElement(entityContainer);
@@ -26,12 +47,15 @@ public static class DynamicEdmModelBuilder
             var entityTypeName = ToPascalCase(table.LogicalName);
             var entityType = new EdmEntityType("MorphDB", entityTypeName);
 
-            // Add system properties
-            var idProperty = entityType.AddStructuralProperty("id", EdmPrimitiveTypeKind.Guid, false);
+            // Store mapping from entity set name to logical table name
+            entitySetToTableName[entityTypeName] = table.LogicalName;
+
+            // Add system properties with underscore prefix
+            var idProperty = entityType.AddStructuralProperty("_id", EdmPrimitiveTypeKind.Guid, false);
             entityType.AddKeys(idProperty);
             entityType.AddStructuralProperty("tenant_id", EdmPrimitiveTypeKind.Guid, false);
-            entityType.AddStructuralProperty("created_at", EdmPrimitiveTypeKind.DateTimeOffset, true);
-            entityType.AddStructuralProperty("updated_at", EdmPrimitiveTypeKind.DateTimeOffset, true);
+            entityType.AddStructuralProperty("_created_at", EdmPrimitiveTypeKind.DateTimeOffset, true);
+            entityType.AddStructuralProperty("_updated_at", EdmPrimitiveTypeKind.DateTimeOffset, true);
 
             // Add user-defined columns
             foreach (var column in table.Columns.Where(c => c.IsActive && !IsSystemColumn(c.LogicalName)))
@@ -101,7 +125,11 @@ public static class DynamicEdmModelBuilder
             }
         }
 
-        return model;
+        return new EdmModelBuildResult
+        {
+            Model = model,
+            EntitySetToTableNameMap = entitySetToTableName
+        };
     }
 
     /// <summary>
@@ -142,7 +170,7 @@ public static class DynamicEdmModelBuilder
 
     private static bool IsSystemColumn(string columnName)
     {
-        return columnName is "id" or "tenant_id" or "created_at" or "updated_at";
+        return columnName is "_id" or "tenant_id" or "_created_at" or "_updated_at" or "_version";
     }
 
     private static string ToPascalCase(string name)

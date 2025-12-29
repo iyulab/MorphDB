@@ -174,10 +174,13 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddWritePipeline(this IServiceCollection services)
     {
         // Register Transformers (data modification before write)
+        services.AddSingleton<ITransformer, IdApplier>();         // UUID v7 generation
         services.AddSingleton<ITransformer, DefaultValueApplier>();
         services.AddSingleton<ITransformer, TimestampApplier>();
         services.AddSingleton<ITransformer, VersionApplier>();
         services.AddSingleton<ITransformer, AuditFieldApplier>();
+        services.AddSingleton<ITransformer, OwnerApplier>();      // Ownership: _owner_id
+        services.AddSingleton<ITransformer, SortOrderApplier>();  // Hierarchy: _sort_order
         services.AddSingleton<ITransformer, SoftDeleteApplier>();
 
         // Register Validators (virtual constraint enforcement)

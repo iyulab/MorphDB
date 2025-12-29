@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using MorphDB.Core.Abstractions;
+using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
 using MorphDB.Service.Models.Api;
 
@@ -71,9 +72,21 @@ public sealed class BulkController : ControllerBase
                 new { jobId = job.JobId },
                 ToImportJobResponse(job));
         }
+        catch (TableNotFoundException ex)
+        {
+            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
+        }
+        catch (NotFoundException ex)
+        {
+            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
+        }
         catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
         {
             return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_TENANT" });
+        }
+        catch (ArgumentException ex) when (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
+        {
+            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message });
         }
         catch (Exception ex)
         {
@@ -116,9 +129,21 @@ public sealed class BulkController : ControllerBase
                 new { jobId = job.JobId },
                 ToImportJobResponse(job));
         }
+        catch (TableNotFoundException ex)
+        {
+            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
+        }
+        catch (NotFoundException ex)
+        {
+            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
+        }
         catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
         {
             return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_TENANT" });
+        }
+        catch (ArgumentException ex) when (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
+        {
+            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message });
         }
         catch (Exception ex)
         {
@@ -161,9 +186,21 @@ public sealed class BulkController : ControllerBase
                 new { jobId = job.JobId },
                 ToImportJobResponse(job));
         }
+        catch (TableNotFoundException ex)
+        {
+            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
+        }
+        catch (NotFoundException ex)
+        {
+            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
+        }
         catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
         {
             return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_TENANT" });
+        }
+        catch (ArgumentException ex) when (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
+        {
+            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message });
         }
         catch (Exception ex)
         {
@@ -263,9 +300,21 @@ public sealed class BulkController : ControllerBase
                 new { jobId = job.JobId },
                 ToExportJobResponse(job));
         }
+        catch (TableNotFoundException ex)
+        {
+            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
+        }
+        catch (NotFoundException ex)
+        {
+            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
+        }
         catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
         {
             return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_TENANT" });
+        }
+        catch (ArgumentException ex) when (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
+        {
+            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message });
         }
         catch (Exception ex)
         {
@@ -304,9 +353,21 @@ public sealed class BulkController : ControllerBase
                 new { jobId = job.JobId },
                 ToExportJobResponse(job));
         }
+        catch (TableNotFoundException ex)
+        {
+            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
+        }
+        catch (NotFoundException ex)
+        {
+            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
+        }
         catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
         {
             return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_TENANT" });
+        }
+        catch (ArgumentException ex) when (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
+        {
+            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message });
         }
         catch (Exception ex)
         {
@@ -345,9 +406,21 @@ public sealed class BulkController : ControllerBase
                 new { jobId = job.JobId },
                 ToExportJobResponse(job));
         }
+        catch (TableNotFoundException ex)
+        {
+            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
+        }
+        catch (NotFoundException ex)
+        {
+            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
+        }
         catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
         {
             return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_TENANT" });
+        }
+        catch (ArgumentException ex) when (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
+        {
+            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message });
         }
         catch (Exception ex)
         {

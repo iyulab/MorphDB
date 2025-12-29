@@ -119,12 +119,12 @@ public sealed class BatchController : ControllerBase
                 });
             }
 
-            // Generate IDs for records that don't have them
+            // Generate IDs for records that don't have them - using UUID v7
             foreach (var record in records)
             {
-                if (!record.ContainsKey("id"))
+                if (!record.ContainsKey("_id"))
                 {
-                    record["id"] = Guid.NewGuid();
+                    record["_id"] = Guid.CreateVersion7();
                 }
             }
 
@@ -132,12 +132,12 @@ public sealed class BatchController : ControllerBase
 
             var results = insertedRecords.Select((record, index) =>
             {
-                var id = record.TryGetValue("id", out var idValue) && idValue is Guid guid ? guid : Guid.Empty;
+                var id = record.TryGetValue("_id", out var idValue) && idValue is Guid guid ? guid : Guid.Empty;
                 return new BatchOperationResult
                 {
                     Index = index,
                     Success = true,
-                    Data = new Dictionary<string, object?> { ["id"] = id },
+                    Data = new Dictionary<string, object?> { ["_id"] = id },
                     AffectedRows = 1
                 };
             }).ToList();
@@ -312,16 +312,16 @@ public sealed class BatchController : ControllerBase
                 });
             }
 
-            // Generate ID if not provided
-            if (!request.Data.ContainsKey("id"))
+            // Generate ID if not provided - using UUID v7
+            if (!request.Data.ContainsKey("_id"))
             {
-                request.Data["id"] = Guid.NewGuid();
+                request.Data["_id"] = Guid.CreateVersion7();
             }
 
             var result = await _dataService.UpsertAsync(
                 tenantId, table, request.Data, request.KeyColumns.ToArray(), cancellationToken);
 
-            var id = result.TryGetValue("id", out var idValue) && idValue is Guid guid ? guid : Guid.Empty;
+            var id = result.TryGetValue("_id", out var idValue) && idValue is Guid guid ? guid : Guid.Empty;
 
             var response = new DataRecordResponse
             {
@@ -394,20 +394,20 @@ public sealed class BatchController : ControllerBase
             };
         }
 
-        // Generate ID if not provided
-        if (!operation.Data.ContainsKey("id"))
+        // Generate ID if not provided - using UUID v7
+        if (!operation.Data.ContainsKey("_id"))
         {
-            operation.Data["id"] = Guid.NewGuid();
+            operation.Data["_id"] = Guid.CreateVersion7();
         }
 
         var result = await _dataService.InsertAsync(tenantId, operation.Table, operation.Data, cancellationToken);
-        var id = result.TryGetValue("id", out var idValue) && idValue is Guid guid ? guid : Guid.Empty;
+        var id = result.TryGetValue("_id", out var idValue) && idValue is Guid guid ? guid : Guid.Empty;
 
         return new BatchOperationResult
         {
             Index = index,
             Success = true,
-            Data = new Dictionary<string, object?> { ["id"] = id },
+            Data = new Dictionary<string, object?> { ["_id"] = id },
             AffectedRows = 1
         };
     }
@@ -445,7 +445,7 @@ public sealed class BatchController : ControllerBase
         {
             Index = index,
             Success = true,
-            Data = new Dictionary<string, object?> { ["id"] = operation.Id },
+            Data = new Dictionary<string, object?> { ["_id"] = operation.Id },
             AffectedRows = 1
         };
     }
@@ -473,7 +473,7 @@ public sealed class BatchController : ControllerBase
         {
             Index = index,
             Success = deleted,
-            Data = new Dictionary<string, object?> { ["id"] = operation.Id },
+            Data = new Dictionary<string, object?> { ["_id"] = operation.Id },
             AffectedRows = deleted ? 1 : 0
         };
     }
@@ -504,21 +504,21 @@ public sealed class BatchController : ControllerBase
             };
         }
 
-        // Generate ID if not provided
-        if (!operation.Data.ContainsKey("id"))
+        // Generate ID if not provided - using UUID v7
+        if (!operation.Data.ContainsKey("_id"))
         {
-            operation.Data["id"] = Guid.NewGuid();
+            operation.Data["_id"] = Guid.CreateVersion7();
         }
 
         var result = await _dataService.UpsertAsync(
             tenantId, operation.Table, operation.Data, operation.KeyColumns.ToArray(), cancellationToken);
-        var id = result.TryGetValue("id", out var idValue) && idValue is Guid guid ? guid : Guid.Empty;
+        var id = result.TryGetValue("_id", out var idValue) && idValue is Guid guid ? guid : Guid.Empty;
 
         return new BatchOperationResult
         {
             Index = index,
             Success = true,
-            Data = new Dictionary<string, object?> { ["id"] = id },
+            Data = new Dictionary<string, object?> { ["_id"] = id },
             AffectedRows = 1
         };
     }

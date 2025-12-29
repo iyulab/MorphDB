@@ -123,7 +123,7 @@ public sealed class DynamicQuery
         }
         else
         {
-            query = query.OrderByDesc("created_at");
+            query = query.OrderByDesc("_created_at");
         }
 
         // Get total count
@@ -137,7 +137,7 @@ public sealed class DynamicQuery
         if (!string.IsNullOrEmpty(after))
         {
             var cursorValue = DecodeCursor(after);
-            query = query.After("id", cursorValue, pageSize);
+            query = query.After("_id", cursorValue, pageSize);
         }
         else
         {
@@ -285,14 +285,14 @@ public sealed class DynamicQuery
         {
             Id = GetRecordId(r),
             Data = r,
-            CreatedAt = r.TryGetValue("created_at", out var createdAt) && createdAt is DateTimeOffset ca ? ca : null,
-            UpdatedAt = r.TryGetValue("updated_at", out var updatedAt) && updatedAt is DateTimeOffset ua ? ua : null
+            CreatedAt = r.TryGetValue("_created_at", out var createdAt) && createdAt is DateTimeOffset ca ? ca : null,
+            UpdatedAt = r.TryGetValue("_updated_at", out var updatedAt) && updatedAt is DateTimeOffset ua ? ua : null
         };
     }
 
     private static Guid GetRecordId(IDictionary<string, object?> r)
     {
-        return r.TryGetValue("id", out var idValue) && idValue is Guid id ? id : Guid.Empty;
+        return r.TryGetValue("_id", out var idValue) && idValue is Guid id ? id : Guid.Empty;
     }
 }
 

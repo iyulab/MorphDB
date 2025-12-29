@@ -94,7 +94,7 @@ public class BulkApiTests
     }
 
     [Fact]
-    public async Task ImportCsv_WithoutFile_ShouldReturnBadRequest()
+    public async Task ImportCsv_WithEmptyContent_ShouldCreateJobWithZeroRows()
     {
         // Arrange
         var tableName = await SetupTestTableAsync();
@@ -103,8 +103,12 @@ public class BulkApiTests
         // Act
         var response = await _client.PostAsync($"/api/bulk/{tableName}/import/csv?delimiter=,&hasHeader=true", content);
 
-        // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        // Assert - empty content is accepted and creates a job (with 0 rows to process)
+        response.StatusCode.Should().Be(HttpStatusCode.Accepted);
+
+        var result = await response.Content.ReadFromJsonAsync<ImportJobApiResponse>();
+        result.Should().NotBeNull();
+        result!.TotalRows.Should().Be(0);
     }
 
     #endregion
@@ -350,8 +354,8 @@ public class BulkApiTests
         var response = await _client.PostAsync($"/api/bulk/jobs/{importJob!.JobId}/cancel", null);
 
         // Assert
-        // Job might be already completed (fast processing) or cancelled
-        response.StatusCode.Should().BeOneOf(HttpStatusCode.OK, HttpStatusCode.BadRequest);
+        // Job might be already completed (fast processing), not found (already processed), or cancelled (204 NoContent)
+        response.StatusCode.Should().BeOneOf(HttpStatusCode.NoContent, HttpStatusCode.NotFound, HttpStatusCode.BadRequest);
     }
 
     [Fact]
@@ -369,8 +373,8 @@ public class BulkApiTests
         var response = await _client.PostAsync($"/api/bulk/jobs/{exportJob!.JobId}/cancel", null);
 
         // Assert
-        // Job might be already completed (fast processing) or cancelled
-        response.StatusCode.Should().BeOneOf(HttpStatusCode.OK, HttpStatusCode.BadRequest);
+        // Job might be already completed (fast processing), not found (already processed), or cancelled (204 NoContent)
+        response.StatusCode.Should().BeOneOf(HttpStatusCode.NoContent, HttpStatusCode.NotFound, HttpStatusCode.BadRequest);
     }
 
     #endregion

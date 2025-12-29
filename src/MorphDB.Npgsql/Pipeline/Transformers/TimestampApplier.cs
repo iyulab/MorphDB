@@ -8,8 +8,8 @@ namespace MorphDB.Npgsql.Pipeline.Transformers;
 /// </summary>
 public sealed class TimestampApplier : ITransformer
 {
-    private const string CreatedAtColumn = "_created_at";
-    private const string UpdatedAtColumn = "_updated_at";
+    private static readonly string CreatedAtColumn = SystemColumns.CreatedAt;
+    private static readonly string UpdatedAtColumn = SystemColumns.UpdatedAt;
 
     public int Order => PipelineOrder.TimestampApplier;
 

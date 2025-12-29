@@ -89,7 +89,7 @@ public sealed class DataController : ControllerBase
 
             var records = results.Select(r => new DataRecordResponse
             {
-                Id = r.TryGetValue("id", out var id) && id is Guid guid ? guid : Guid.Empty,
+                Id = r.TryGetValue("_id", out var id) && id is Guid guid ? guid : Guid.Empty,
                 Data = r
             }).ToList();
 
@@ -186,14 +186,14 @@ public sealed class DataController : ControllerBase
         {
             var tenantId = GetTenantId();
 
-            // Generate ID if not provided
-            if (!data.ContainsKey("id"))
+            // Generate ID if not provided - IdApplier will auto-generate with UUID v7
+            if (!data.ContainsKey("_id"))
             {
-                data["id"] = Guid.NewGuid();
+                data["_id"] = Guid.CreateVersion7();
             }
 
             var result = await _dataService.InsertAsync(tenantId, table, data, cancellationToken);
-            var id = result.TryGetValue("id", out var idValue) && idValue is Guid guid ? guid : Guid.Empty;
+            var id = result.TryGetValue("_id", out var idValue) && idValue is Guid guid ? guid : Guid.Empty;
 
             var response = new DataRecordResponse
             {

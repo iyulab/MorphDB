@@ -47,6 +47,118 @@ public sealed record CreateTableApiRequest
 {
     public required string Name { get; init; }
     public IReadOnlyList<CreateColumnApiRequest> Columns { get; init; } = [];
+
+    /// <summary>
+    /// Configuration for system columns. If null, defaults are applied:
+    /// - Core columns (_id, _created_at, _updated_at): Always enabled
+    /// - Versioning (_version): Enabled by default
+    /// - Other columns: Disabled by default
+    /// </summary>
+    public SystemColumnOptionsApiRequest? SystemColumns { get; init; }
+}
+
+/// <summary>
+/// Configuration options for system columns in API requests.
+/// </summary>
+public sealed record SystemColumnOptionsApiRequest
+{
+    /// <summary>
+    /// Enable _version column for optimistic locking. Default: true.
+    /// </summary>
+    public bool Versioning { get; init; } = true;
+
+    /// <summary>
+    /// Enable _created_by and _updated_by columns. Default: false.
+    /// </summary>
+    public bool AuditFields { get; init; }
+
+    /// <summary>
+    /// Enable _deleted_at and _deleted_by for soft delete. Default: false.
+    /// </summary>
+    public bool SoftDelete { get; init; }
+
+    /// <summary>
+    /// Enable _owner_id for row-level ownership. Default: false.
+    /// </summary>
+    public bool Ownership { get; init; }
+
+    /// <summary>
+    /// Enable _parent_id and _sort_order for hierarchical data. Default: false.
+    /// </summary>
+    public bool Hierarchy { get; init; }
+
+    /// <summary>
+    /// Enable _source_id for external system tracking. Default: false.
+    /// </summary>
+    public bool SourceTracking { get; init; }
+
+    /// <summary>
+    /// Converts API model to Core SystemColumnOptions.
+    /// </summary>
+    public SystemColumnOptions ToOptions() => new()
+    {
+        VersioningEnabled = Versioning,
+        AuditFieldsEnabled = AuditFields,
+        SoftDeleteEnabled = SoftDelete,
+        OwnershipEnabled = Ownership,
+        HierarchyEnabled = Hierarchy,
+        SourceTrackingEnabled = SourceTracking
+    };
+}
+
+/// <summary>
+/// System column configuration in API responses.
+/// </summary>
+public sealed record SystemColumnOptionsApiResponse
+{
+    /// <summary>
+    /// Whether timestamps (_created_at, _updated_at) are auto-managed.
+    /// </summary>
+    public bool Timestamps { get; init; }
+
+    /// <summary>
+    /// Whether _version column for optimistic locking is enabled.
+    /// </summary>
+    public bool Versioning { get; init; }
+
+    /// <summary>
+    /// Whether _created_by and _updated_by columns are enabled.
+    /// </summary>
+    public bool AuditFields { get; init; }
+
+    /// <summary>
+    /// Whether _deleted_at and _deleted_by for soft delete are enabled.
+    /// </summary>
+    public bool SoftDelete { get; init; }
+
+    /// <summary>
+    /// Whether _owner_id for row-level ownership is enabled.
+    /// </summary>
+    public bool Ownership { get; init; }
+
+    /// <summary>
+    /// Whether _parent_id and _sort_order for hierarchical data are enabled.
+    /// </summary>
+    public bool Hierarchy { get; init; }
+
+    /// <summary>
+    /// Whether _source_id for external system tracking is enabled.
+    /// </summary>
+    public bool SourceTracking { get; init; }
+
+    /// <summary>
+    /// Creates response from TableMetadata.
+    /// </summary>
+    public static SystemColumnOptionsApiResponse FromMetadata(TableMetadata table) => new()
+    {
+        Timestamps = table.TimestampsEnabled,
+        Versioning = table.VersioningEnabled,
+        AuditFields = table.AuditFieldsEnabled,
+        SoftDelete = table.SoftDeleteEnabled,
+        Ownership = table.OwnershipEnabled,
+        Hierarchy = table.HierarchyEnabled,
+        SourceTracking = table.SourceTrackingEnabled
+    };
 }
 
 /// <summary>
@@ -134,6 +246,11 @@ public sealed record TableApiResponse
     public IReadOnlyList<IndexApiResponse> Indexes { get; init; } = [];
     public IReadOnlyList<RelationApiResponse> Relations { get; init; } = [];
 
+    /// <summary>
+    /// System column configuration for this table.
+    /// </summary>
+    public SystemColumnOptionsApiResponse SystemColumns { get; init; } = new();
+
     public static TableApiResponse FromMetadata(TableMetadata table) => new()
     {
         Id = table.TableId,
@@ -143,7 +260,8 @@ public sealed record TableApiResponse
         UpdatedAt = table.UpdatedAt,
         Columns = table.Columns.Select(ColumnApiResponse.FromMetadata).ToList(),
         Indexes = table.Indexes.Select(IndexApiResponse.FromMetadata).ToList(),
-        Relations = table.Relations.Select(RelationApiResponse.FromMetadata).ToList()
+        Relations = table.Relations.Select(RelationApiResponse.FromMetadata).ToList(),
+        SystemColumns = SystemColumnOptionsApiResponse.FromMetadata(table)
     };
 }
 

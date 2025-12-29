@@ -70,27 +70,27 @@ public class QueryBuilderTests
         {
             new Dictionary<string, object?>
             {
-                ["id"] = Guid.NewGuid(), ["name"] = "Alice", ["email"] = "alice@example.com",
+                ["_id"] = Guid.NewGuid(), ["name"] = "Alice", ["email"] = "alice@example.com",
                 ["age"] = 25, ["score"] = 85.5m, ["is_active"] = true
             },
             new Dictionary<string, object?>
             {
-                ["id"] = Guid.NewGuid(), ["name"] = "Bob", ["email"] = "bob@example.com",
+                ["_id"] = Guid.NewGuid(), ["name"] = "Bob", ["email"] = "bob@example.com",
                 ["age"] = 30, ["score"] = 92.0m, ["is_active"] = true
             },
             new Dictionary<string, object?>
             {
-                ["id"] = Guid.NewGuid(), ["name"] = "Charlie", ["email"] = "charlie@example.com",
+                ["_id"] = Guid.NewGuid(), ["name"] = "Charlie", ["email"] = "charlie@example.com",
                 ["age"] = 35, ["score"] = 78.5m, ["is_active"] = false
             },
             new Dictionary<string, object?>
             {
-                ["id"] = Guid.NewGuid(), ["name"] = "Diana", ["email"] = "diana@example.com",
+                ["_id"] = Guid.NewGuid(), ["name"] = "Diana", ["email"] = "diana@example.com",
                 ["age"] = 28, ["score"] = 95.0m, ["is_active"] = true
             },
             new Dictionary<string, object?>
             {
-                ["id"] = Guid.NewGuid(), ["name"] = "Eve", ["email"] = "eve@example.com",
+                ["_id"] = Guid.NewGuid(), ["name"] = "Eve", ["email"] = "eve@example.com",
                 ["age"] = 22, ["score"] = 88.5m, ["is_active"] = true
             }
         };

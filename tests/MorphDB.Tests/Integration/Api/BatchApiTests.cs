@@ -243,14 +243,14 @@ public class BatchApiTests
         var id2 = Guid.NewGuid();
         await _client.PostAsJsonAsync($"/api/data/{tableName}", new Dictionary<string, object?>
         {
-            ["id"] = id1,
+            ["_id"] = id1,
             ["name"] = "User 1",
             ["email"] = "u1@example.com",
             ["score"] = 10
         });
         await _client.PostAsJsonAsync($"/api/data/{tableName}", new Dictionary<string, object?>
         {
-            ["id"] = id2,
+            ["_id"] = id2,
             ["name"] = "User 2",
             ["email"] = "u2@example.com",
             ["score"] = 20

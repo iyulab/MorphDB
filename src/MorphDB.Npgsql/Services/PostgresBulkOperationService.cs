@@ -54,10 +54,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         var jobId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
 
-        // Store the stream for processing
-        await StoreImportDataAsync(jobId, dataStream, cancellationToken);
-
-        // Create job record
+        // Create job record first (required for foreign key constraint)
         var job = new BulkImportJob
         {
             JobId = jobId,
@@ -71,6 +68,10 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         };
 
         await SaveImportJobAsync(job, cancellationToken);
+
+        // Store the stream for processing (after job record exists)
+        await StoreImportDataAsync(jobId, dataStream, cancellationToken);
+
         return job;
     }
 
@@ -89,8 +90,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         var jobId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
 
-        await StoreImportDataAsync(jobId, dataStream, cancellationToken);
-
+        // Create job record first (required for foreign key constraint)
         var job = new BulkImportJob
         {
             JobId = jobId,
@@ -104,6 +104,10 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         };
 
         await SaveImportJobAsync(job, cancellationToken);
+
+        // Store the stream for processing (after job record exists)
+        await StoreImportDataAsync(jobId, dataStream, cancellationToken);
+
         return job;
     }
 
@@ -122,8 +126,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         var jobId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
 
-        await StoreImportDataAsync(jobId, dataStream, cancellationToken);
-
+        // Create job record first (required for foreign key constraint)
         var job = new BulkImportJob
         {
             JobId = jobId,
@@ -137,6 +140,10 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         };
 
         await SaveImportJobAsync(job, cancellationToken);
+
+        // Store the stream for processing (after job record exists)
+        await StoreImportDataAsync(jobId, dataStream, cancellationToken);
+
         return job;
     }
 

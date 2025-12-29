@@ -268,6 +268,16 @@ public sealed record WriteOptions
     public bool ApplyAuditFields { get; init; } = true;
 
     /// <summary>
+    /// When true, auto-manages _owner_id for ownership-enabled tables.
+    /// </summary>
+    public bool ApplyOwnership { get; init; } = true;
+
+    /// <summary>
+    /// When true, auto-manages _sort_order for hierarchy-enabled tables.
+    /// </summary>
+    public bool ApplySortOrder { get; init; } = true;
+
+    /// <summary>
     /// When true, validation is deferred until after all rows are inserted.
     /// Useful for bulk imports where post-import validation is preferred.
     /// </summary>

@@ -119,15 +119,15 @@ public sealed class RecordByIdDataLoader : BatchDataLoader<RecordKey, IDictionar
             var records = await _dataService.Query(tenantId)
                 .From(tableName)
                 .SelectAll()
-                .WhereIn("id", ids.Cast<object>())
+                .WhereIn("_id", ids.Cast<object>())
                 .ToListAsync(cancellationToken);
 
             // Map results
             foreach (var key in group)
             {
                 var record = records.FirstOrDefault(r =>
-                    r.ContainsKey("id") &&
-                    r["id"] is Guid id &&
+                    r.ContainsKey("_id") &&
+                    r["_id"] is Guid id &&
                     id == key.RecordId);
                 result[key] = record;
             }

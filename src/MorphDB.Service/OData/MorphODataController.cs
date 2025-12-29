@@ -86,7 +86,7 @@ public sealed partial class MorphODataController : ControllerBase
         try
         {
             var tenantId = _tenantAccessor.TenantId;
-            var model = await _modelProvider.GetModelAsync(tenantId, cancellationToken);
+            var modelResult = await _modelProvider.GetModelWithMappingAsync(tenantId, cancellationToken);
 
             var options = new ODataQueryOptions
             {
@@ -102,8 +102,9 @@ public sealed partial class MorphODataController : ControllerBase
             var result = await _queryHandler.ExecuteQueryAsync(
                 tenantId,
                 entitySet,
-                model,
+                modelResult.Model,
                 options,
+                modelResult.EntitySetToTableNameMap,
                 cancellationToken);
 
             // Format as OData response
@@ -145,6 +146,7 @@ public sealed partial class MorphODataController : ControllerBase
         try
         {
             var tenantId = _tenantAccessor.TenantId;
+            var modelResult = await _modelProvider.GetModelWithMappingAsync(tenantId, cancellationToken);
 
             var options = new ODataQueryOptions
             {
@@ -157,6 +159,7 @@ public sealed partial class MorphODataController : ControllerBase
                 entitySet,
                 key,
                 options,
+                modelResult.EntitySetToTableNameMap,
                 cancellationToken);
 
             if (entity == null)
@@ -195,9 +198,17 @@ public sealed partial class MorphODataController : ControllerBase
         try
         {
             var tenantId = _tenantAccessor.TenantId;
-            var tableName = ToLogicalName(entitySet);
+            var modelResult = await _modelProvider.GetModelWithMappingAsync(tenantId, cancellationToken);
+            var tableName = ResolveTableName(entitySet, modelResult.EntitySetToTableNameMap);
 
             var data = JsonElementToDictionary(body);
+
+            // Generate _id if not provided
+            if (!data.ContainsKey("_id"))
+            {
+                data["_id"] = Guid.CreateVersion7();
+            }
+
             var result = await _dataService.InsertAsync(tenantId, tableName, data, cancellationToken);
 
             var response = new ODataSingleResponse
@@ -206,7 +217,7 @@ public sealed partial class MorphODataController : ControllerBase
                 Value = result
             };
 
-            var id = result.TryGetValue("id", out var idValue) && idValue is Guid guidId ? guidId : Guid.Empty;
+            var id = result.TryGetValue("_id", out var idValue) && idValue is Guid guidId ? guidId : Guid.Empty;
             return Created($"/odata/{entitySet}({id})", response);
         }
         catch (InvalidOperationException ex)
@@ -229,7 +240,8 @@ public sealed partial class MorphODataController : ControllerBase
         try
         {
             var tenantId = _tenantAccessor.TenantId;
-            var tableName = ToLogicalName(entitySet);
+            var modelResult = await _modelProvider.GetModelWithMappingAsync(tenantId, cancellationToken);
+            var tableName = ResolveTableName(entitySet, modelResult.EntitySetToTableNameMap);
 
             var data = JsonElementToDictionary(body);
             var result = await _dataService.UpdateAsync(tenantId, tableName, key, data, cancellationToken);
@@ -261,7 +273,8 @@ public sealed partial class MorphODataController : ControllerBase
         try
         {
             var tenantId = _tenantAccessor.TenantId;
-            var tableName = ToLogicalName(entitySet);
+            var modelResult = await _modelProvider.GetModelWithMappingAsync(tenantId, cancellationToken);
+            var tableName = ResolveTableName(entitySet, modelResult.EntitySetToTableNameMap);
 
             var deleted = await _dataService.DeleteAsync(tenantId, tableName, key, cancellationToken);
             if (!deleted)
@@ -289,11 +302,12 @@ public sealed partial class MorphODataController : ControllerBase
         try
         {
             var tenantId = _tenantAccessor.TenantId;
+            var modelResult = await _modelProvider.GetModelWithMappingAsync(tenantId, cancellationToken);
             var responses = new List<ODataBatchResponseItem>();
 
             foreach (var request in batchRequest.Requests)
             {
-                var response = await ExecuteBatchItemAsync(tenantId, request, cancellationToken);
+                var response = await ExecuteBatchItemAsync(tenantId, request, modelResult.EntitySetToTableNameMap, cancellationToken);
                 responses.Add(response);
             }
 
@@ -308,11 +322,12 @@ public sealed partial class MorphODataController : ControllerBase
     private async Task<ODataBatchResponseItem> ExecuteBatchItemAsync(
         Guid tenantId,
         ODataBatchRequestItem request,
+        IReadOnlyDictionary<string, string> entitySetToTableNameMap,
         CancellationToken cancellationToken)
     {
         try
         {
-            var tableName = ToLogicalName(request.EntitySet);
+            var tableName = ResolveTableName(request.EntitySet, entitySetToTableNameMap);
 
             switch (request.Method.ToUpperInvariant())
             {
@@ -320,6 +335,11 @@ public sealed partial class MorphODataController : ControllerBase
                     var insertData = request.Body != null
                         ? JsonElementToDictionary(request.Body.Value)
                         : new Dictionary<string, object?>();
+                    // Generate _id if not provided
+                    if (!insertData.ContainsKey("_id"))
+                    {
+                        insertData["_id"] = Guid.CreateVersion7();
+                    }
                     var insertResult = await _dataService.InsertAsync(tenantId, tableName, insertData, cancellationToken);
                     return new ODataBatchResponseItem
                     {
@@ -458,11 +478,29 @@ public sealed partial class MorphODataController : ControllerBase
         };
     }
 
-    private static string ToLogicalName(string entitySetName)
+    /// <summary>
+    /// Resolves the table name from the entity set name using the mapping.
+    /// Falls back to simple lowercase conversion if mapping not found.
+    /// </summary>
+    private static string ResolveTableName(string entitySetName, IReadOnlyDictionary<string, string> mapping)
     {
-        // Convert PascalCase to snake_case
-        return string.Concat(entitySetName.Select((c, i) =>
-            i > 0 && char.IsUpper(c) ? "_" + char.ToLowerInvariant(c) : char.ToLowerInvariant(c).ToString()));
+        if (mapping.TryGetValue(entitySetName, out var tableName))
+        {
+            return tableName;
+        }
+
+        // Fallback: convert PascalCase to snake_case (may be lossy for complex names)
+        var result = new System.Text.StringBuilder();
+        for (int i = 0; i < entitySetName.Length; i++)
+        {
+            var c = entitySetName[i];
+            if (i > 0 && char.IsUpper(c))
+            {
+                result.Append('_');
+            }
+            result.Append(char.ToLowerInvariant(c));
+        }
+        return result.ToString();
     }
 }
 

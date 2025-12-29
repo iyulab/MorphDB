@@ -10,7 +10,7 @@ namespace MorphDB.Tests.Integration;
 
 /// <summary>
 /// Integration tests for PostgresSchemaManager.
-/// Note: SchemaManager automatically adds system columns (id, tenant_id, created_at, updated_at).
+/// Note: SchemaManager automatically adds system columns (_id, tenant_id, _created_at, _updated_at, _version).
 /// Tests should only include user-defined columns in CreateTableRequest.
 /// </summary>
 [Collection("PostgreSQL")]
@@ -76,12 +76,13 @@ public class SchemaManagerTests
         result.LogicalName.Should().Be(request.LogicalName);
         result.PhysicalName.Should().StartWith("tbl_");
 
-        // 4 system columns + 2 user columns = 6 total
-        result.Columns.Should().HaveCount(6);
-        result.Columns.Should().Contain(c => c.LogicalName == "id" && c.IsPrimaryKey);
+        // 5 system columns + 2 user columns = 7 total
+        result.Columns.Should().HaveCount(7);
+        result.Columns.Should().Contain(c => c.LogicalName == "_id" && c.IsPrimaryKey);
         result.Columns.Should().Contain(c => c.LogicalName == "tenant_id");
-        result.Columns.Should().Contain(c => c.LogicalName == "created_at");
-        result.Columns.Should().Contain(c => c.LogicalName == "updated_at");
+        result.Columns.Should().Contain(c => c.LogicalName == "_created_at");
+        result.Columns.Should().Contain(c => c.LogicalName == "_updated_at");
+        result.Columns.Should().Contain(c => c.LogicalName == "_version");
         result.Columns.Should().Contain(c => c.LogicalName == "email");
         result.Columns.Should().Contain(c => c.LogicalName == "name");
 
@@ -89,7 +90,7 @@ public class SchemaManagerTests
         var storedTable = await _metadataRepository.GetTableByIdAsync(result.TableId, includeColumns: true);
         storedTable.Should().NotBeNull();
         storedTable!.LogicalName.Should().Be(request.LogicalName);
-        storedTable.Columns.Should().HaveCount(6);
+        storedTable.Columns.Should().HaveCount(7);
     }
 
     [Fact]
@@ -257,7 +258,7 @@ public class SchemaManagerTests
         });
 
         var sourceColumn = ordersTable.Columns.First(c => c.LogicalName == "customer_id");
-        var targetColumn = customersTable.Columns.First(c => c.LogicalName == "id");
+        var targetColumn = customersTable.Columns.First(c => c.LogicalName == "_id");
 
         var createRelationRequest = new CreateRelationRequest
         {
@@ -314,8 +315,8 @@ public class SchemaManagerTests
         result.Should().NotBeNull();
         result!.TableId.Should().Be(created.TableId);
         result.LogicalName.Should().Be(createTableRequest.LogicalName);
-        // 4 system columns + 1 user column = 5 total
-        result.Columns.Should().HaveCount(5);
+        // 5 system columns + 1 user column = 6 total
+        result.Columns.Should().HaveCount(6);
     }
 
     [Fact]
