@@ -1,3 +1,5 @@
+using MorphDB.Core.Abstractions;
+
 namespace MorphDB.Service.Realtime;
 
 /// <summary>
@@ -20,8 +22,9 @@ public static class RealtimeServiceExtensions
         // Add subscription manager (singleton for shared state across connections)
         services.AddSingleton<SubscriptionManager>();
 
-        // Add change notification setup
+        // Add change notification setup (implements ITableNotificationTriggerManager)
         services.AddSingleton<ChangeNotificationSetup>();
+        services.AddSingleton<ITableNotificationTriggerManager>(sp => sp.GetRequiredService<ChangeNotificationSetup>());
 
         // Add hosted services
         services.AddHostedService<ChangeNotificationInitializer>();

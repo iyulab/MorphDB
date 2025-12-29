@@ -99,8 +99,8 @@ public sealed class SchemaController : ControllerBase
             var table = await _schemaManager.CreateTableAsync(createRequest, cancellationToken);
             var response = TableApiResponse.FromMetadata(table);
 
-            // Create notification trigger for realtime updates
-            await _changeNotificationSetup.CreateTriggerForTableAsync(table.PhysicalName, cancellationToken);
+            // Create notification trigger for realtime updates (using schema-qualified table name)
+            await _changeNotificationSetup.CreateTriggerAsync(tenantId, table.PhysicalName, cancellationToken);
 
             // Invalidate cached EDM model so OData picks up the new table
             _edmModelProvider.InvalidateModel(tenantId);

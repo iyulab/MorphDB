@@ -181,7 +181,7 @@ public sealed partial class PostgresChangeListener : BackgroundService
     private static partial void LogNotificationError(ILogger logger, Exception exception);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Change received: {Operation} on {Table}, record {RecordId}")]
-    private static partial void LogChangeReceived(ILogger logger, string operation, string table, Guid recordId);
+    private static partial void LogChangeReceived(ILogger logger, string operation, string table, Guid? recordId);
 }
 
 /// <summary>
@@ -192,7 +192,7 @@ internal sealed class DatabaseChangeEvent
     public Guid TenantId { get; init; }
     public required string Table { get; init; }
     public required string Operation { get; init; }
-    public Guid RecordId { get; init; }
+    public Guid? RecordId { get; init; }
     public IDictionary<string, object?>? Data { get; init; }
     public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
 }

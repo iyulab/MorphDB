@@ -186,7 +186,7 @@ public interface IMorphHubClient
 public sealed class RecordChangedMessage
 {
     public required string Table { get; init; }
-    public required Guid RecordId { get; init; }
+    public Guid? RecordId { get; init; }
     public required string Operation { get; init; }
     public required IDictionary<string, object?> Data { get; init; }
     public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
@@ -198,7 +198,7 @@ public sealed class RecordChangedMessage
 public sealed class RecordDeletedMessage
 {
     public required string Table { get; init; }
-    public required Guid RecordId { get; init; }
+    public Guid? RecordId { get; init; }
     public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
 }
 

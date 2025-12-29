@@ -1,3 +1,4 @@
+using MorphDB.Core.Abstractions;
 using Npgsql;
 
 namespace MorphDB.Service.Realtime;
@@ -5,7 +6,7 @@ namespace MorphDB.Service.Realtime;
 /// <summary>
 /// Sets up PostgreSQL triggers for change notifications.
 /// </summary>
-public sealed partial class ChangeNotificationSetup
+public sealed partial class ChangeNotificationSetup : ITableNotificationTriggerManager
 {
     private const string ChannelName = "morphdb_changes";
     private const string FunctionName = "morphdb.notify_change";
@@ -31,45 +32,43 @@ public sealed partial class ChangeNotificationSetup
         await using var dataSource = NpgsqlDataSource.Create(_connectionString);
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
 
-        // Use dynamic column access since MorphDB uses hashed physical column names
+        // Use the global morphdb._morph_tables to look up table metadata by physical name.
+        // This works regardless of which schema the data table is created in.
+        // Note: System columns use _id (Phase 18.6)
         var sql = $"""
             CREATE OR REPLACE FUNCTION {FunctionName}() RETURNS trigger AS $$
             DECLARE
                 payload JSONB;
                 record_id UUID;
-                tenant_id UUID;
+                project_id UUID;
                 table_name TEXT;
+                table_id_val UUID;
                 id_col_name TEXT;
-                tenant_col_name TEXT;
                 row_data JSONB;
             BEGIN
-                -- Get the logical table name and column physical names from system table
-                SELECT t.logical_name INTO table_name
+                -- Look up the table directly from global morphdb._morph_tables using physical name
+                SELECT t.tenant_id, t.logical_name, t.table_id
+                INTO project_id, table_name, table_id_val
                 FROM morphdb._morph_tables t
-                WHERE t.physical_name = TG_TABLE_NAME;
+                WHERE t.physical_name = TG_TABLE_NAME AND t.is_active = true;
 
-                -- If not found in system table, use the physical name
-                IF table_name IS NULL THEN
-                    table_name := TG_TABLE_NAME;
+                -- If not found, skip notification (orphaned table or not a MorphDB managed table)
+                IF project_id IS NULL THEN
+                    RETURN COALESCE(NEW, OLD);
                 END IF;
 
-                -- Get physical column names for id and tenant_id
+                -- Get physical column name for _id from morphdb._morph_columns
                 SELECT c.physical_name INTO id_col_name
-                FROM morphdb._morph_tables t
-                JOIN morphdb._morph_columns c ON c.table_id = t.table_id
-                WHERE t.physical_name = TG_TABLE_NAME AND c.logical_name = 'id';
-
-                SELECT c.physical_name INTO tenant_col_name
-                FROM morphdb._morph_tables t
-                JOIN morphdb._morph_columns c ON c.table_id = t.table_id
-                WHERE t.physical_name = TG_TABLE_NAME AND c.logical_name = 'tenant_id';
+                FROM morphdb._morph_columns c
+                WHERE c.table_id = table_id_val AND c.logical_name = '_id' AND c.is_active = true;
 
                 IF TG_OP = 'DELETE' THEN
                     row_data := to_jsonb(OLD);
-                    record_id := (row_data ->> id_col_name)::uuid;
-                    tenant_id := (row_data ->> tenant_col_name)::uuid;
+                    IF id_col_name IS NOT NULL THEN
+                        record_id := (row_data ->> id_col_name)::uuid;
+                    END IF;
                     payload := jsonb_build_object(
-                        'tenant_id', tenant_id,
+                        'tenant_id', project_id,
                         'table', table_name,
                         'operation', TG_OP,
                         'record_id', record_id,
@@ -77,10 +76,11 @@ public sealed partial class ChangeNotificationSetup
                     );
                 ELSE
                     row_data := to_jsonb(NEW);
-                    record_id := (row_data ->> id_col_name)::uuid;
-                    tenant_id := (row_data ->> tenant_col_name)::uuid;
+                    IF id_col_name IS NOT NULL THEN
+                        record_id := (row_data ->> id_col_name)::uuid;
+                    END IF;
                     payload := jsonb_build_object(
-                        'tenant_id', tenant_id,
+                        'tenant_id', project_id,
                         'table', table_name,
                         'operation', TG_OP,
                         'record_id', record_id,
@@ -188,6 +188,59 @@ public sealed partial class ChangeNotificationSetup
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Created notification triggers for {Count} tables")]
     private static partial void LogAllTriggersCreated(ILogger logger, int count);
+
+    /// <summary>
+    /// Creates a notification trigger for a table in a project.
+    /// Uses the physical table name directly since tables are created in the public schema.
+    /// </summary>
+    public async Task CreateTriggerAsync(Guid projectId, string physicalTableName, CancellationToken cancellationToken = default)
+    {
+        // Note: projectId is kept for future schema-qualified table support
+        // Currently tables are created in public schema, so we use unqualified names
+        await using var dataSource = NpgsqlDataSource.Create(_connectionString);
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+
+        var triggerName = $"{TriggerPrefix}{physicalTableName}";
+
+        // Drop existing trigger if exists
+        var dropSql = $"DROP TRIGGER IF EXISTS \"{triggerName}\" ON \"{physicalTableName}\"";
+        await using (var dropCmd = new NpgsqlCommand(dropSql, connection))
+        {
+            await dropCmd.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        // Create new trigger
+        var createSql = $"""
+            CREATE TRIGGER "{triggerName}"
+            AFTER INSERT OR UPDATE OR DELETE ON "{physicalTableName}"
+            FOR EACH ROW
+            EXECUTE FUNCTION {FunctionName}();
+            """;
+
+        await using var createCmd = new NpgsqlCommand(createSql, connection);
+        await createCmd.ExecuteNonQueryAsync(cancellationToken);
+
+        LogTriggerCreated(_logger, triggerName, physicalTableName);
+    }
+
+    /// <summary>
+    /// Removes the notification trigger from a table in a project.
+    /// Uses the physical table name directly since tables are created in the public schema.
+    /// </summary>
+    public async Task RemoveTriggerAsync(Guid projectId, string physicalTableName, CancellationToken cancellationToken = default)
+    {
+        // Note: projectId is kept for future schema-qualified table support
+        await using var dataSource = NpgsqlDataSource.Create(_connectionString);
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+
+        var triggerName = $"{TriggerPrefix}{physicalTableName}";
+        var sql = $"DROP TRIGGER IF EXISTS \"{triggerName}\" ON \"{physicalTableName}\"";
+
+        await using var cmd = new NpgsqlCommand(sql, connection);
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+
+        LogTriggerRemoved(_logger, triggerName, physicalTableName);
+    }
 }
 
 /// <summary>
