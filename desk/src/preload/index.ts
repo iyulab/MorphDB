@@ -69,13 +69,9 @@ const api = {
       ipcRenderer.invoke('credentials:has', connectionId)
   },
 
-  // Connection testing
-  testConnection: (
-    url: string,
-    apiKey: string,
-    tenantId?: string
-  ): Promise<ConnectionTestResult> =>
-    ipcRenderer.invoke('connection:test', url, apiKey, tenantId),
+  // Connection testing (tenant ID is automatically resolved from API key)
+  testConnection: (url: string, apiKey: string): Promise<ConnectionTestResult> =>
+    ipcRenderer.invoke('connection:test', url, apiKey),
 
   // Menu event listeners
   onMenuNewConnection: (callback: () => void): (() => void) => {

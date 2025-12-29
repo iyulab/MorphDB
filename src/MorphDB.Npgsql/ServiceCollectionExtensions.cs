@@ -1,3 +1,4 @@
+using Dapper;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using MorphDB.Core.Abstractions;
@@ -30,6 +31,9 @@ public static class ServiceCollectionExtensions
         string connectionString,
         Action<MorphDbNpgsqlOptions>? configure = null)
     {
+        // Configure Dapper to map snake_case column names to PascalCase properties
+        DefaultTypeMap.MatchNamesWithUnderscores = true;
+
         var options = new MorphDbNpgsqlOptions();
         configure?.Invoke(options);
 

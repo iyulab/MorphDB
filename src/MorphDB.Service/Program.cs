@@ -71,6 +71,20 @@ try
 
     builder.Services.AddAuthorization();
 
+    // Add CORS for development (allows Electron dev server and other local clients)
+    builder.Services.AddCors(options =>
+    {
+        options.AddPolicy("Development", policy =>
+        {
+            policy.SetIsOriginAllowed(origin =>
+                    new Uri(origin).Host == "localhost" ||
+                    new Uri(origin).Host == "127.0.0.1")
+                .AllowAnyMethod()
+                .AllowAnyHeader()
+                .AllowCredentials();
+        });
+    });
+
     // Add API services
     builder.Services.AddControllers();
     builder.Services.AddEndpointsApiExplorer();
@@ -240,6 +254,7 @@ try
     {
         app.UseSwagger();
         app.UseSwaggerUI();
+        app.UseCors("Development"); // Enable CORS for development
     }
 
     app.UseHttpsRedirection();
@@ -253,6 +268,31 @@ try
     {
         Tool = { Enable = app.Environment.IsDevelopment() }
     });
+
+    // Development-only bootstrap endpoint for creating initial API key
+    if (app.Environment.IsDevelopment())
+    {
+        app.MapPost("/api/dev/bootstrap", async (MorphDB.Core.Security.IApiKeyService apiKeyService) =>
+        {
+            var tenantId = Guid.NewGuid();
+            var (key, rawKey) = await apiKeyService.CreateKeyAsync(
+                tenantId,
+                MorphDB.Core.Security.ApiKeyType.Service,
+                "Development Key",
+                "Auto-generated development API key");
+
+            return Results.Ok(new
+            {
+                message = "Development API key created successfully",
+                tenantId = tenantId.ToString(),
+                apiKey = rawKey,
+                keyId = key.Id,
+                warning = "This endpoint is only available in Development mode"
+            });
+        }).AllowAnonymous();
+
+        Log.Information("Development bootstrap endpoint enabled: POST /api/dev/bootstrap");
+    }
 
     // Health check endpoints
     app.MapHealthChecks("/health", new HealthCheckOptions

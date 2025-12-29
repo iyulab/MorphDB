@@ -89,17 +89,17 @@ CREATE TABLE IF NOT EXISTS morphdb._morph_changelog (
 
 -- System table: _morph_api_keys
 CREATE TABLE IF NOT EXISTS morphdb._morph_api_keys (
-    key_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tenant_id UUID NOT NULL,
-    key_type VARCHAR(20) NOT NULL CHECK (key_type IN ('anon', 'service')),
-    key_hash VARCHAR(64) NOT NULL,
+    key_type INTEGER NOT NULL DEFAULT 0,
+    key_hash VARCHAR(255) NOT NULL,
     key_prefix VARCHAR(50) NOT NULL,
-    name VARCHAR(100),
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
     is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     expires_at TIMESTAMPTZ,
     last_used_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    metadata JSONB,
     UNIQUE (key_hash)
 );
 

@@ -18,8 +18,7 @@ type TestStatus = 'idle' | 'testing' | 'success' | 'error'
 const initialFormData: ConnectionFormData = {
   name: '',
   url: 'http://localhost:5000',
-  apiKey: '',
-  tenantId: ''
+  apiKey: ''
 }
 
 export function ConnectionDialog({
@@ -43,8 +42,7 @@ export function ConnectionDialog({
       setFormData({
         name: editConnection.name,
         url: editConnection.url,
-        apiKey: '', // API key is stored securely, user needs to re-enter
-        tenantId: editConnection.tenantId || ''
+        apiKey: '' // API key is stored securely, user needs to re-enter
       })
     } else {
       setFormData(initialFormData)
@@ -62,8 +60,7 @@ export function ConnectionDialog({
     try {
       const result = await window.api.testConnection(
         formData.url,
-        formData.apiKey,
-        formData.tenantId || undefined
+        formData.apiKey
       )
 
       if (result.success) {
@@ -165,16 +162,6 @@ export function ConnectionDialog({
               value={formData.apiKey}
               onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
               required={!isEditMode}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="tenantId">Tenant ID (optional)</Label>
-            <Input
-              id="tenantId"
-              placeholder="default"
-              value={formData.tenantId}
-              onChange={(e) => setFormData({ ...formData, tenantId: e.target.value })}
             />
           </div>
 

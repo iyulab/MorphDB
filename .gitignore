@@ -61,6 +61,7 @@ docker-compose.override.yml
 .env
 .env.local
 .env.*.local
+.dev-credentials
 appsettings.Development.json
 appsettings.Local.json
 

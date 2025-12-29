@@ -95,7 +95,10 @@ public sealed class ApiKeyService : IApiKeyService
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         var keys = await connection.QueryAsync<ApiKeyRecord>(
             """
-            SELECT id, tenant_id, key_type, key_hash, key_prefix, name, description, is_active, created_at, expires_at, last_used_at
+            SELECT id AS "Id", tenant_id AS "TenantId", key_type AS "KeyType", key_hash AS "KeyHash",
+                   key_prefix AS "KeyPrefix", name AS "Name", description AS "Description",
+                   is_active AS "IsActive", created_at AS "CreatedAt", expires_at AS "ExpiresAt",
+                   last_used_at AS "LastUsedAt"
             FROM morphdb._morph_api_keys
             WHERE key_prefix = @KeyPrefix AND is_active = true
             """,
@@ -129,7 +132,10 @@ public sealed class ApiKeyService : IApiKeyService
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         var records = await connection.QueryAsync<ApiKeyRecord>(
             """
-            SELECT id, tenant_id, key_type, key_hash, key_prefix, name, description, is_active, created_at, expires_at, last_used_at
+            SELECT id AS "Id", tenant_id AS "TenantId", key_type AS "KeyType", key_hash AS "KeyHash",
+                   key_prefix AS "KeyPrefix", name AS "Name", description AS "Description",
+                   is_active AS "IsActive", created_at AS "CreatedAt", expires_at AS "ExpiresAt",
+                   last_used_at AS "LastUsedAt"
             FROM morphdb._morph_api_keys
             WHERE tenant_id = @TenantId
             ORDER BY created_at DESC
@@ -163,7 +169,10 @@ public sealed class ApiKeyService : IApiKeyService
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         var oldKey = await connection.QueryFirstOrDefaultAsync<ApiKeyRecord>(
             """
-            SELECT id, tenant_id, key_type, key_hash, key_prefix, name, description, is_active, created_at, expires_at, last_used_at
+            SELECT id AS "Id", tenant_id AS "TenantId", key_type AS "KeyType", key_hash AS "KeyHash",
+                   key_prefix AS "KeyPrefix", name AS "Name", description AS "Description",
+                   is_active AS "IsActive", created_at AS "CreatedAt", expires_at AS "ExpiresAt",
+                   last_used_at AS "LastUsedAt"
             FROM morphdb._morph_api_keys
             WHERE id = @KeyId AND tenant_id = @TenantId
             """,
@@ -231,16 +240,18 @@ public sealed class ApiKeyService : IApiKeyService
         };
     }
 
-    private sealed record ApiKeyRecord(
-        Guid Id,
-        Guid TenantId,
-        int KeyType,
-        string KeyHash,
-        string KeyPrefix,
-        string Name,
-        string? Description,
-        bool IsActive,
-        DateTimeOffset CreatedAt,
-        DateTimeOffset? ExpiresAt,
-        DateTimeOffset? LastUsedAt);
+    private sealed class ApiKeyRecord
+    {
+        public Guid Id { get; set; }
+        public Guid TenantId { get; set; }
+        public int KeyType { get; set; }
+        public string KeyHash { get; set; } = string.Empty;
+        public string KeyPrefix { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public bool IsActive { get; set; }
+        public DateTimeOffset CreatedAt { get; set; }
+        public DateTimeOffset? ExpiresAt { get; set; }
+        public DateTimeOffset? LastUsedAt { get; set; }
+    }
 }

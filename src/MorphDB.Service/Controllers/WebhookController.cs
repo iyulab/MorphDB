@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Models;
 using MorphDB.Service.Models.Api;
+using MorphDB.Service.Services;
 
 namespace MorphDB.Service.Controllers;
 
@@ -28,15 +29,28 @@ public sealed class WebhookController : ControllerBase
     private readonly IWebhookManager _webhookManager;
     private readonly ISchemaManager _schemaManager;
     private readonly ILogger<WebhookController> _logger;
+    private readonly ITenantContextAccessor _tenantContext;
 
     public WebhookController(
         IWebhookManager webhookManager,
         ISchemaManager schemaManager,
-        ILogger<WebhookController> logger)
+        ILogger<WebhookController> logger,
+        ITenantContextAccessor tenantContext)
     {
         _webhookManager = webhookManager;
         _schemaManager = schemaManager;
         _logger = logger;
+        _tenantContext = tenantContext;
+    }
+
+    private Guid GetTenantId()
+    {
+        var tenantId = _tenantContext.TenantIdOrNull;
+        if (!tenantId.HasValue || tenantId.Value == Guid.Empty)
+        {
+            throw new UnauthorizedAccessException("Valid API key is required");
+        }
+        return tenantId.Value;
     }
 
     /// <summary>
@@ -48,17 +62,9 @@ public sealed class WebhookController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> CreateWebhook(
         [FromBody] CreateWebhookApiRequest request,
-        [FromHeader(Name = "X-Tenant-Id")] Guid tenantId,
         CancellationToken cancellationToken)
     {
-        if (tenantId == Guid.Empty)
-        {
-            return BadRequest(new ErrorResponse
-            {
-                Error = "InvalidTenant",
-                Message = "X-Tenant-Id header is required"
-            });
-        }
+        var tenantId = GetTenantId();
 
         // Validate table exists
         var table = await _schemaManager.GetTableAsync(tenantId, request.Table, cancellationToken);
@@ -102,18 +108,9 @@ public sealed class WebhookController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetWebhook(
         Guid webhookId,
-        [FromHeader(Name = "X-Tenant-Id")] Guid tenantId,
         CancellationToken cancellationToken)
     {
-        if (tenantId == Guid.Empty)
-        {
-            return BadRequest(new ErrorResponse
-            {
-                Error = "InvalidTenant",
-                Message = "X-Tenant-Id header is required"
-            });
-        }
-
+        var tenantId = GetTenantId();
         var webhook = await _webhookManager.GetWebhookAsync(webhookId, cancellationToken);
         if (webhook is null || webhook.TenantId != tenantId)
         {
@@ -133,19 +130,10 @@ public sealed class WebhookController : ControllerBase
     [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<WebhookApiResponse>), StatusCodes.Status200OK)]
     public async Task<IActionResult> ListWebhooks(
-        [FromHeader(Name = "X-Tenant-Id")] Guid tenantId,
         [FromQuery] string? table = null,
         CancellationToken cancellationToken = default)
     {
-        if (tenantId == Guid.Empty)
-        {
-            return BadRequest(new ErrorResponse
-            {
-                Error = "InvalidTenant",
-                Message = "X-Tenant-Id header is required"
-            });
-        }
-
+        var tenantId = GetTenantId();
         var webhooks = await _webhookManager.ListWebhooksAsync(tenantId, table, cancellationToken);
         return Ok(webhooks.Select(w => MapToResponse(w, showSecret: false)));
     }
@@ -159,18 +147,9 @@ public sealed class WebhookController : ControllerBase
     public async Task<IActionResult> UpdateWebhook(
         Guid webhookId,
         [FromBody] UpdateWebhookApiRequest request,
-        [FromHeader(Name = "X-Tenant-Id")] Guid tenantId,
         CancellationToken cancellationToken)
     {
-        if (tenantId == Guid.Empty)
-        {
-            return BadRequest(new ErrorResponse
-            {
-                Error = "InvalidTenant",
-                Message = "X-Tenant-Id header is required"
-            });
-        }
-
+        var tenantId = GetTenantId();
         var existing = await _webhookManager.GetWebhookAsync(webhookId, cancellationToken);
         if (existing is null || existing.TenantId != tenantId)
         {
@@ -203,18 +182,9 @@ public sealed class WebhookController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteWebhook(
         Guid webhookId,
-        [FromHeader(Name = "X-Tenant-Id")] Guid tenantId,
         CancellationToken cancellationToken)
     {
-        if (tenantId == Guid.Empty)
-        {
-            return BadRequest(new ErrorResponse
-            {
-                Error = "InvalidTenant",
-                Message = "X-Tenant-Id header is required"
-            });
-        }
-
+        var tenantId = GetTenantId();
         var existing = await _webhookManager.GetWebhookAsync(webhookId, cancellationToken);
         if (existing is null || existing.TenantId != tenantId)
         {
@@ -240,18 +210,9 @@ public sealed class WebhookController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> RegenerateSecret(
         Guid webhookId,
-        [FromHeader(Name = "X-Tenant-Id")] Guid tenantId,
         CancellationToken cancellationToken)
     {
-        if (tenantId == Guid.Empty)
-        {
-            return BadRequest(new ErrorResponse
-            {
-                Error = "InvalidTenant",
-                Message = "X-Tenant-Id header is required"
-            });
-        }
-
+        var tenantId = GetTenantId();
         var existing = await _webhookManager.GetWebhookAsync(webhookId, cancellationToken);
         if (existing is null || existing.TenantId != tenantId)
         {
@@ -277,20 +238,11 @@ public sealed class WebhookController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetDeliveryHistory(
         Guid webhookId,
-        [FromHeader(Name = "X-Tenant-Id")] Guid tenantId,
         [FromQuery] int limit = 50,
         [FromQuery] int offset = 0,
         CancellationToken cancellationToken = default)
     {
-        if (tenantId == Guid.Empty)
-        {
-            return BadRequest(new ErrorResponse
-            {
-                Error = "InvalidTenant",
-                Message = "X-Tenant-Id header is required"
-            });
-        }
-
+        var tenantId = GetTenantId();
         var existing = await _webhookManager.GetWebhookAsync(webhookId, cancellationToken);
         if (existing is null || existing.TenantId != tenantId)
         {
@@ -378,18 +330,9 @@ public sealed class WebhookController : ControllerBase
     [HttpGet("dlq/stats")]
     [ProducesResponseType(typeof(DlqStatisticsApiResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetDlqStatistics(
-        [FromHeader(Name = "X-Tenant-Id")] Guid tenantId,
         CancellationToken cancellationToken = default)
     {
-        if (tenantId == Guid.Empty)
-        {
-            return BadRequest(new ErrorResponse
-            {
-                Error = "InvalidTenant",
-                Message = "X-Tenant-Id header is required"
-            });
-        }
-
+        var tenantId = GetTenantId();
         var stats = await _webhookManager.GetDlqStatisticsAsync(tenantId, cancellationToken);
         return Ok(new DlqStatisticsApiResponse
         {

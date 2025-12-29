@@ -4,6 +4,7 @@ using MorphDB.Core.Exceptions;
 using MorphDB.Service.Models.Api;
 using MorphDB.Service.OData;
 using MorphDB.Service.Realtime;
+using MorphDB.Service.Services;
 
 namespace MorphDB.Service.Controllers;
 
@@ -37,17 +38,30 @@ public sealed class SchemaController : ControllerBase
     private readonly ILogger<SchemaController> _logger;
     private readonly ChangeNotificationSetup _changeNotificationSetup;
     private readonly IEdmModelProvider _edmModelProvider;
+    private readonly ITenantContextAccessor _tenantContext;
 
     public SchemaController(
         ISchemaManager schemaManager,
         ILogger<SchemaController> logger,
         ChangeNotificationSetup changeNotificationSetup,
-        IEdmModelProvider edmModelProvider)
+        IEdmModelProvider edmModelProvider,
+        ITenantContextAccessor tenantContext)
     {
         _schemaManager = schemaManager;
         _logger = logger;
         _changeNotificationSetup = changeNotificationSetup;
         _edmModelProvider = edmModelProvider;
+        _tenantContext = tenantContext;
+    }
+
+    private Guid GetTenantId()
+    {
+        var tenantId = _tenantContext.TenantIdOrNull;
+        if (!tenantId.HasValue || tenantId.Value == Guid.Empty)
+        {
+            throw new UnauthorizedAccessException("Valid API key is required");
+        }
+        return tenantId.Value;
     }
 
     #region Tables
@@ -61,20 +75,11 @@ public sealed class SchemaController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> CreateTable(
         [FromBody] CreateTableApiRequest request,
-        [FromHeader(Name = "X-Tenant-Id")] Guid tenantId,
         CancellationToken cancellationToken)
     {
-        if (tenantId == Guid.Empty)
-        {
-            return BadRequest(new ErrorResponse
-            {
-                Error = "InvalidTenant",
-                Message = "X-Tenant-Id header is required"
-            });
-        }
-
         try
         {
+            var tenantId = GetTenantId();
             var createRequest = new CreateTableRequest
             {
                 TenantId = tenantId,
@@ -126,19 +131,10 @@ public sealed class SchemaController : ControllerBase
     /// </summary>
     [HttpGet("tables")]
     [ProducesResponseType(typeof(IReadOnlyList<TableApiResponse>), StatusCodes.Status200OK)]
-    public async Task<IActionResult> ListTables(
-        [FromHeader(Name = "X-Tenant-Id")] Guid tenantId,
-        CancellationToken cancellationToken)
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> ListTables(CancellationToken cancellationToken)
     {
-        if (tenantId == Guid.Empty)
-        {
-            return BadRequest(new ErrorResponse
-            {
-                Error = "InvalidTenant",
-                Message = "X-Tenant-Id header is required"
-            });
-        }
-
+        var tenantId = GetTenantId();
         var tables = await _schemaManager.ListTablesAsync(tenantId, cancellationToken);
         var response = tables.Select(TableApiResponse.FromMetadata).ToList();
 
@@ -153,18 +149,9 @@ public sealed class SchemaController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetTable(
         string name,
-        [FromHeader(Name = "X-Tenant-Id")] Guid tenantId,
         CancellationToken cancellationToken)
     {
-        if (tenantId == Guid.Empty)
-        {
-            return BadRequest(new ErrorResponse
-            {
-                Error = "InvalidTenant",
-                Message = "X-Tenant-Id header is required"
-            });
-        }
-
+        var tenantId = GetTenantId();
         var table = await _schemaManager.GetTableAsync(tenantId, name, cancellationToken);
 
         if (table is null)
@@ -189,20 +176,11 @@ public sealed class SchemaController : ControllerBase
     public async Task<IActionResult> UpdateTable(
         string name,
         [FromBody] UpdateTableApiRequest request,
-        [FromHeader(Name = "X-Tenant-Id")] Guid tenantId,
         CancellationToken cancellationToken)
     {
-        if (tenantId == Guid.Empty)
-        {
-            return BadRequest(new ErrorResponse
-            {
-                Error = "InvalidTenant",
-                Message = "X-Tenant-Id header is required"
-            });
-        }
-
         try
         {
+            var tenantId = GetTenantId();
             var table = await _schemaManager.GetTableAsync(tenantId, name, cancellationToken);
             if (table is null)
             {
@@ -253,20 +231,11 @@ public sealed class SchemaController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteTable(
         string name,
-        [FromHeader(Name = "X-Tenant-Id")] Guid tenantId,
         CancellationToken cancellationToken)
     {
-        if (tenantId == Guid.Empty)
-        {
-            return BadRequest(new ErrorResponse
-            {
-                Error = "InvalidTenant",
-                Message = "X-Tenant-Id header is required"
-            });
-        }
-
         try
         {
+            var tenantId = GetTenantId();
             var table = await _schemaManager.GetTableAsync(tenantId, name, cancellationToken);
             if (table is null)
             {
@@ -310,20 +279,11 @@ public sealed class SchemaController : ControllerBase
     public async Task<IActionResult> AddColumn(
         string tableName,
         [FromBody] AddColumnApiRequest request,
-        [FromHeader(Name = "X-Tenant-Id")] Guid tenantId,
         CancellationToken cancellationToken)
     {
-        if (tenantId == Guid.Empty)
-        {
-            return BadRequest(new ErrorResponse
-            {
-                Error = "InvalidTenant",
-                Message = "X-Tenant-Id header is required"
-            });
-        }
-
         try
         {
+            var tenantId = GetTenantId();
             var table = await _schemaManager.GetTableAsync(tenantId, tableName, cancellationToken);
             if (table is null)
             {
@@ -461,20 +421,11 @@ public sealed class SchemaController : ControllerBase
     public async Task<IActionResult> CreateIndex(
         string tableName,
         [FromBody] CreateIndexApiRequest request,
-        [FromHeader(Name = "X-Tenant-Id")] Guid tenantId,
         CancellationToken cancellationToken)
     {
-        if (tenantId == Guid.Empty)
-        {
-            return BadRequest(new ErrorResponse
-            {
-                Error = "InvalidTenant",
-                Message = "X-Tenant-Id header is required"
-            });
-        }
-
         try
         {
+            var tenantId = GetTenantId();
             var table = await _schemaManager.GetTableAsync(tenantId, tableName, cancellationToken);
             if (table is null)
             {
@@ -570,20 +521,11 @@ public sealed class SchemaController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> CreateRelation(
         [FromBody] CreateRelationApiRequest request,
-        [FromHeader(Name = "X-Tenant-Id")] Guid tenantId,
         CancellationToken cancellationToken)
     {
-        if (tenantId == Guid.Empty)
-        {
-            return BadRequest(new ErrorResponse
-            {
-                Error = "InvalidTenant",
-                Message = "X-Tenant-Id header is required"
-            });
-        }
-
         try
         {
+            var tenantId = GetTenantId();
             // Resolve table and column names to IDs
             var sourceTable = await _schemaManager.GetTableAsync(tenantId, request.SourceTable, cancellationToken);
             if (sourceTable is null)

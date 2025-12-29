@@ -1,7 +1,8 @@
 import { app, shell, BrowserWindow, ipcMain, Menu, safeStorage, dialog } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import { autoUpdater } from 'electron-updater'
+import electronUpdater from 'electron-updater'
+const { autoUpdater } = electronUpdater
 import Store from 'electron-store'
 import log from 'electron-log'
 
@@ -32,7 +33,7 @@ function createWindow(): void {
     frame: true,
     titleBarStyle: 'default',
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
+      preload: join(__dirname, '../preload/index.mjs'),
       sandbox: false,
       contextIsolation: true,
       nodeIntegration: false
@@ -320,16 +321,16 @@ ipcMain.handle('credentials:has', (_event, connectionId: string) => {
 })
 
 // Connection test handler
-ipcMain.handle('connection:test', async (_event, url: string, apiKey: string, tenantId?: string) => {
+ipcMain.handle('connection:test', async (_event, url: string, apiKey: string) => {
   try {
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
 
+    // Tenant ID is automatically resolved from API key on the server side
     const response = await fetch(`${url}/health`, {
       method: 'GET',
       headers: {
-        'X-API-Key': apiKey,
-        ...(tenantId && { 'X-Tenant-Id': tenantId })
+        'X-API-Key': apiKey
       },
       signal: controller.signal
     })

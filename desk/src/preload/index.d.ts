@@ -27,11 +27,7 @@ declare global {
       maximize: () => Promise<void>
       close: () => Promise<void>
       credentials: CredentialsAPI
-      testConnection: (
-        url: string,
-        apiKey: string,
-        tenantId?: string
-      ) => Promise<ConnectionTestResult>
+      testConnection: (url: string, apiKey: string) => Promise<ConnectionTestResult>
       onMenuNewConnection: (callback: () => void) => () => void
       onMenuSettings: (callback: () => void) => () => void
       onMenuAbout: (callback: () => void) => () => void

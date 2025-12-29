@@ -34,7 +34,6 @@ export const useConnectionStore = create<ConnectionState>()(
           name: data.name,
           url: data.url,
           apiKey: '', // Don't store API key in state
-          tenantId: data.tenantId,
           createdAt: new Date().toISOString(),
           status: 'disconnected'
         }
@@ -61,8 +60,7 @@ export const useConnectionStore = create<ConnectionState>()(
               ? {
                   ...conn,
                   name: data.name ?? conn.name,
-                  url: data.url ?? conn.url,
-                  tenantId: data.tenantId ?? conn.tenantId
+                  url: data.url ?? conn.url
                 }
               : conn
           ),
@@ -71,8 +69,7 @@ export const useConnectionStore = create<ConnectionState>()(
               ? {
                   ...state.activeConnection!,
                   name: data.name ?? state.activeConnection!.name,
-                  url: data.url ?? state.activeConnection!.url,
-                  tenantId: data.tenantId ?? state.activeConnection!.tenantId
+                  url: data.url ?? state.activeConnection!.url
                 }
               : state.activeConnection
         }))
@@ -133,7 +130,7 @@ export const useConnectionStore = create<ConnectionState>()(
 
         get().setConnectionStatus(id, 'connecting')
 
-        const result = await window.api.testConnection(connection.url, apiKey, connection.tenantId)
+        const result = await window.api.testConnection(connection.url, apiKey)
 
         if (result.success) {
           get().setConnectionStatus(id, 'connected')

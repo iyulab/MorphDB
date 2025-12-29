@@ -16,7 +16,6 @@ export interface ConnectionFormData {
   name: string
   url: string
   apiKey: string
-  tenantId?: string
 }
 
 export interface Project {

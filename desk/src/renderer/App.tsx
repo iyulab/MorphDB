@@ -12,6 +12,12 @@ function App(): ReactElement {
   const { connections } = useConnectionStore()
 
   useEffect(() => {
+    // Safety check for non-Electron environment (e.g., browser dev tools)
+    if (!window.api) {
+      console.warn('Running outside Electron context')
+      return
+    }
+
     // Get app version
     window.api.getVersion().then(setAppVersion)
 
@@ -22,7 +28,7 @@ function App(): ReactElement {
     })
 
     const unsubAbout = window.api.onMenuAbout(() => {
-      alert(`MorphDB Studio v${appVersion}\n\nDatabase Management Tool\nhttps://github.com/iyulab/MorphDB`)
+      alert(`MorphDB Desk v${appVersion}\n\nDatabase Management Tool\nhttps://github.com/iyulab/MorphDB`)
     })
 
     return () => {
