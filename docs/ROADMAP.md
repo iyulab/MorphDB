@@ -16,7 +16,7 @@
 | 0.6.0 | 13-16: Enterprise Hardening | ✅ Complete |
 | 0.7.0 | 17-18: Schema Architecture | ✅ Complete |
 | 0.7.5 | 18.5: Virtual Constraints | ✅ Complete |
-| 0.8.0 | 18.6-20: System Columns + Audit + Rate Limiting | 🔄 In Progress |
+| 0.8.0 | 18.6-20: System Columns + Audit + Rate Limiting | ✅ Complete |
 | 0.9.0 | 21-22: Organization + SSO | 📋 Planned |
 | 1.0.0 | 23-24: Enterprise Ready | 📋 Planned |
 
@@ -24,23 +24,25 @@
 
 ## Current Focus
 
-**Active Version**: v0.8.0 (Audit + Rate Limiting)
+**Active Version**: v0.9.0 (Organization + SSO)
 
-### Completed in Current Version
+### Completed in Previous Version (v0.8.0)
 
 | Phase | Task | Status |
 |-------|------|--------|
 | 18.6 | System Columns (Core/Standard/Optional) | ✅ Complete |
+| 19 | Audit Logging (API, middleware, integration tests) | ✅ Complete |
+| 20 | Rate Limiting (Quota API, rate limit headers) | ✅ Complete |
 
 ### Immediate Tasks
 
 | Priority | Task | Status | Assigned |
 |----------|------|--------|----------|
-| 🔴 Critical | Audit log infrastructure (Phase 19) | 📋 Planned | - |
-| 🔴 Critical | API rate limiting - token bucket (Phase 20) | 📋 Planned | - |
-| 🟡 High | Async audit writer service | 📋 Planned | - |
-| 🟡 High | Rate limit middleware per-tenant | 📋 Planned | - |
-| 🟢 Normal | Audit log query API | 📋 Planned | - |
+| 🔴 Critical | Organization entity and API (Phase 21) | 📋 Planned | - |
+| 🔴 Critical | RBAC implementation (Phase 21) | 📋 Planned | - |
+| 🟡 High | OIDC provider support (Phase 22) | 📋 Planned | - |
+| 🟡 High | SAML 2.0 for enterprise (Phase 22) | 📋 Planned | - |
+| 🟢 Normal | Team member invitation flow | 📋 Planned | - |
 
 ---
 
@@ -160,13 +162,13 @@ Write Request → Transformers → Validators → Executor → PostgreSQL
 
 ---
 
-### 🔄 In Progress: v0.8.0 (Audit + Rate Limiting + System Columns)
+### ✅ Complete: v0.8.0 (Audit + Rate Limiting + System Columns)
 
 | Phase | Description | Status | Tasks |
 |-------|-------------|--------|-------|
 | 18.6 | **System Columns** | ✅ Complete | Core/Standard/Optional layers |
-| 19 | **Audit Logging** | 📋 Planned | Change tracking, compliance |
-| 20 | **Rate Limiting** | 📋 Planned | API throttling, quotas |
+| 19 | **Audit Logging** | ✅ Complete | API integration tests, middleware |
+| 20 | **Rate Limiting** | ✅ Complete | Quota API tests, rate limit headers |
 
 #### Phase 18.6: System Columns Architecture ✅
 
@@ -209,16 +211,17 @@ Write Request → Transformers → Validators → Executor → PostgreSQL
 
 ---
 
-#### Phase 19: Audit Logging
+#### Phase 19: Audit Logging ✅
 
 **Goal**: Comprehensive audit trail for compliance and debugging
 
 | Task | Priority | Status | Notes |
 |------|----------|--------|-------|
-| Audit log schema design | 🔴 Critical | 📋 | Based on Enterprise Research |
-| Audit interceptor middleware | 🔴 Critical | 📋 | API Gateway integration |
-| Async audit writer service | 🟡 High | 📋 | Queue-based (Redis) |
-| Audit log query API | 🟡 High | 📋 | Time range, actor, event type |
+| Audit log schema design | 🔴 Critical | ✅ | `_audit_logs` in system schema |
+| Audit interceptor middleware | 🔴 Critical | ✅ | `AuditMiddleware`, async queue |
+| Async audit writer service | 🟡 High | ✅ | Channel-based batch writes |
+| Audit log query API | 🟡 High | ✅ | Time range, actor, event type filters |
+| Integration tests | 🟡 High | ✅ | `AuditApiTests.cs` - 17 tests |
 | Log retention policies | 🟢 Normal | 📋 | Tier-based (7d/30d/90d/1y) |
 
 **Audit Event Schema** (from Enterprise Research):
@@ -236,16 +239,17 @@ Write Request → Transformers → Validators → Executor → PostgreSQL
 }
 ```
 
-#### Phase 20: Rate Limiting
+#### Phase 20: Rate Limiting ✅
 
 **Goal**: Protect API from abuse and ensure fair usage
 
 | Task | Priority | Status | Notes |
 |------|----------|--------|-------|
-| Token bucket algorithm implementation | 🔴 Critical | 📋 | Redis-based |
-| Rate limit middleware | 🔴 Critical | 📋 | Per-tenant, per-endpoint |
-| X-RateLimit-* response headers | 🟡 High | 📋 | Standard headers |
-| Quota status API endpoint | 🟡 High | 📋 | GET /api/quota/status |
+| Token bucket algorithm implementation | 🔴 Critical | ✅ | `MemoryRateLimiter` |
+| Rate limit middleware | 🔴 Critical | ✅ | Per-tenant, per-endpoint |
+| X-RateLimit-* response headers | 🟡 High | ✅ | Standard headers |
+| Quota status API endpoint | 🟡 High | ✅ | `GET /api/projects/{id}/quota` |
+| Integration tests | 🟡 High | ✅ | `QuotaApiTests.cs` - 14 tests |
 | Dashboard integration | 🟢 Normal | 📋 | Usage visualization |
 
 **Rate Limit Tiers** (from Enterprise Research):
