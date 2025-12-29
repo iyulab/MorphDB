@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Encryption;
+using MorphDB.Core.Pipeline;
 using MorphDB.Core.Security;
 using MorphDB.Npgsql.Audit;
 using MorphDB.Npgsql.Backup;
@@ -10,6 +11,9 @@ using MorphDB.Npgsql.Caching;
 using MorphDB.Npgsql.Encryption;
 using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Organization;
+using MorphDB.Npgsql.Pipeline;
+using MorphDB.Npgsql.Pipeline.Transformers;
+using MorphDB.Npgsql.Pipeline.Validators;
 using MorphDB.Npgsql.Repositories;
 using MorphDB.Npgsql.Schema;
 using MorphDB.Npgsql.Security;
@@ -157,6 +161,36 @@ public static class ServiceCollectionExtensions
 
         // Register backup repository (Phase 23: Backup & PITR)
         services.AddSingleton<IBackupRepository, BackupRepository>();
+
+        // Register Write Pipeline components (Virtual Constraints)
+        services.AddWritePipeline();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers Write Pipeline components for Virtual Constraint enforcement.
+    /// </summary>
+    public static IServiceCollection AddWritePipeline(this IServiceCollection services)
+    {
+        // Register Transformers (data modification before write)
+        services.AddSingleton<ITransformer, DefaultValueApplier>();
+        services.AddSingleton<ITransformer, TimestampApplier>();
+        services.AddSingleton<ITransformer, VersionApplier>();
+        services.AddSingleton<ITransformer, AuditFieldApplier>();
+        services.AddSingleton<ITransformer, SoftDeleteApplier>();
+
+        // Register Validators (virtual constraint enforcement)
+        services.AddSingleton<IValidator, RequiredValidator>();
+        services.AddSingleton<IValidator, UniqueValidator>();
+        services.AddSingleton<IValidator, ForeignKeyValidator>();
+        services.AddSingleton<IValidator, CheckValidator>();
+
+        // Register Write Executor (executes actual DB operations)
+        services.AddSingleton<IWriteExecutor, PostgresWriteExecutor>();
+
+        // Register Write Pipeline (orchestrates transformers and validators)
+        services.AddSingleton<IWritePipeline, WritePipeline>();
 
         return services;
     }

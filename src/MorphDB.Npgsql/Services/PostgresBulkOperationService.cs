@@ -6,29 +6,34 @@ using System.Threading.Channels;
 using Dapper;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Models;
+using MorphDB.Core.Pipeline;
 using Npgsql;
 
 namespace MorphDB.Npgsql.Services;
 
 /// <summary>
 /// PostgreSQL implementation of bulk import/export operations.
+/// Uses WritePipeline with BulkImport options for optimized validation.
 /// </summary>
 public sealed class PostgresBulkOperationService : IBulkOperationService
 {
     private readonly NpgsqlDataSource _dataSource;
     private readonly ISchemaManager _schemaManager;
     private readonly IMorphDataService _dataService;
+    private readonly IWritePipeline? _writePipeline;
     private readonly BulkOperationOptions _options;
 
     public PostgresBulkOperationService(
         NpgsqlDataSource dataSource,
         ISchemaManager schemaManager,
         IMorphDataService dataService,
-        BulkOperationOptions options)
+        BulkOperationOptions options,
+        IWritePipeline? writePipeline = null)
     {
         _dataSource = dataSource;
         _schemaManager = schemaManager;
         _dataService = dataService;
+        _writePipeline = writePipeline;
         _options = options;
     }
 
@@ -165,40 +170,21 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
                 _ => throw new NotSupportedException($"Format {job.Format} not supported")
             };
 
+            // Get table metadata for pipeline usage
+            var table = await _schemaManager.GetTableAsync(job.TenantId, job.TableName, cancellationToken);
+
             await foreach (var row in rows.WithCancellation(cancellationToken))
             {
                 rowNumber++;
-                ImportRowResult result;
+                var result = await ProcessImportRowAsync(job, table, row, rowNumber);
 
-                try
+                if (result.Success)
                 {
-                    var insertResult = await _dataService.InsertAsync(
-                        job.TenantId,
-                        job.TableName,
-                        row,
-                        cancellationToken);
-
-                    var recordId = insertResult.TryGetValue("id", out var idValue) && idValue is Guid guid
-                        ? guid
-                        : (Guid?)null;
-
                     successCount++;
-                    result = new ImportRowResult
-                    {
-                        RowNumber = rowNumber,
-                        Success = true,
-                        RecordId = recordId
-                    };
                 }
-                catch (Exception ex)
+                else
                 {
                     errorCount++;
-                    result = new ImportRowResult
-                    {
-                        RowNumber = rowNumber,
-                        Success = false,
-                        Error = ex.Message
-                    };
                 }
 
                 // Update progress periodically
@@ -590,6 +576,71 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
     #endregion
 
     #region Private Helpers - Parsing
+
+    private async Task<ImportRowResult> ProcessImportRowAsync(
+        BulkImportJob job,
+        TableMetadata? table,
+        IDictionary<string, object?> row,
+        long rowNumber)
+    {
+        try
+        {
+            IDictionary<string, object?> insertResult;
+
+            // Use WritePipeline with BulkImport options if available
+            if (_writePipeline is not null && table is not null)
+            {
+                var writeResult = await _writePipeline.InsertAsync(
+                    job.TenantId,
+                    table,
+                    row,
+                    WriteOptions.BulkImport,
+                    CancellationToken.None);
+
+                if (!writeResult.Success)
+                {
+                    var errorMessages = string.Join("; ", writeResult.Errors.Select(e => e.Message));
+                    return new ImportRowResult
+                    {
+                        RowNumber = rowNumber,
+                        Success = false,
+                        Error = errorMessages
+                    };
+                }
+
+                insertResult = writeResult.Data ?? new Dictionary<string, object?>();
+            }
+            else
+            {
+                // Fallback to direct data service
+                insertResult = await _dataService.InsertAsync(
+                    job.TenantId,
+                    job.TableName,
+                    row,
+                    CancellationToken.None);
+            }
+
+            var recordId = insertResult.TryGetValue("id", out var idValue) && idValue is Guid guid
+                ? guid
+                : (Guid?)null;
+
+            return new ImportRowResult
+            {
+                RowNumber = rowNumber,
+                Success = true,
+                RecordId = recordId
+            };
+        }
+        catch (Exception ex)
+        {
+            return new ImportRowResult
+            {
+                RowNumber = rowNumber,
+                Success = false,
+                Error = ex.Message
+            };
+        }
+    }
 
     private static async IAsyncEnumerable<IDictionary<string, object?>> ParseCsvAsync(
         Stream stream,

@@ -23,6 +23,55 @@ public sealed class ColumnMetadata
     public int OrdinalPosition { get; init; }
     public JsonDocument? Descriptor { get; init; }
     public bool IsActive { get; init; } = true;
+
+    // Virtual Constraint Properties
+
+    /// <summary>
+    /// Virtual NOT NULL - enforced at application layer, not in database.
+    /// When true, the write pipeline will reject null values for this column.
+    /// </summary>
+    public bool IsRequired { get; init; }
+
+    /// <summary>
+    /// Specifies how the default value should be applied.
+    /// </summary>
+    public DefaultValueType DefaultType { get; init; } = DefaultValueType.None;
+
+    /// <summary>
+    /// When true, unique constraint is enforced at application layer.
+    /// Physical index may still exist for performance.
+    /// </summary>
+    public bool EnforceUniqueOnWrite { get; init; } = true;
+
+    /// <summary>
+    /// Condition for unique check (e.g., exclude soft-deleted rows).
+    /// Example: "_deleted_at IS NULL"
+    /// </summary>
+    public string? UniqueCondition { get; init; }
+}
+
+/// <summary>
+/// Specifies how a default value is applied.
+/// </summary>
+public enum DefaultValueType
+{
+    /// <summary>No default value.</summary>
+    None,
+
+    /// <summary>Static value stored in DefaultValue property.</summary>
+    Static,
+
+    /// <summary>Database function (e.g., gen_random_uuid(), CURRENT_TIMESTAMP).</summary>
+    DbFunction,
+
+    /// <summary>Computed from other fields in the same row.</summary>
+    Computed,
+
+    /// <summary>Context-based value (e.g., current user ID, tenant ID).</summary>
+    ContextBased,
+
+    /// <summary>Auto-incrementing sequence.</summary>
+    AutoIncrement
 }
 
 /// <summary>
