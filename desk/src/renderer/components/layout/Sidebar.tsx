@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, type ReactElement } from 'react'
+import { NavLink } from 'react-router-dom'
 import {
   Database,
   Plus,
@@ -9,7 +10,9 @@ import {
   Trash2,
   RefreshCw,
   Unplug,
-  Loader2
+  Loader2,
+  FolderKanban,
+  TableProperties
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { useConnectionStore } from '@/stores/connectionStore'
@@ -226,17 +229,47 @@ export function Sidebar({ onNewConnection, onEditConnection }: SidebarProps): Re
         </div>
       </div>
 
-      {/* Footer */}
-      <div className="border-t border-sidebar-border p-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="w-full justify-start gap-2"
-          onClick={() => {}}
+      {/* Navigation */}
+      <div className="border-t border-sidebar-border p-2 space-y-1">
+        <NavLink
+          to="/explorer"
+          className={({ isActive }) =>
+            cn(
+              'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
+              'hover:bg-sidebar-hover',
+              isActive && 'bg-sidebar-active text-primary'
+            )
+          }
+        >
+          <TableProperties className="h-4 w-4" />
+          Explorer
+        </NavLink>
+        <NavLink
+          to="/projects"
+          className={({ isActive }) =>
+            cn(
+              'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
+              'hover:bg-sidebar-hover',
+              isActive && 'bg-sidebar-active text-primary'
+            )
+          }
+        >
+          <FolderKanban className="h-4 w-4" />
+          Projects
+        </NavLink>
+        <NavLink
+          to="/settings"
+          className={({ isActive }) =>
+            cn(
+              'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
+              'hover:bg-sidebar-hover',
+              isActive && 'bg-sidebar-active text-primary'
+            )
+          }
         >
           <Settings className="h-4 w-4" />
           Settings
-        </Button>
+        </NavLink>
       </div>
 
       {/* Context Menu */}
