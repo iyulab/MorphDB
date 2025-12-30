@@ -535,6 +535,29 @@ MorphDB의 모든 기능을 관리할 수 있는 Electron 기반 데스크탑 �
 | SSO | Claim mappings and domain restrictions | ✅ |
 | SSO | Config test, activate, deactivate | ✅ |
 
+### Phase 5 Progress Details (v1.0.x)
+
+| Component | Features | Status |
+|-----------|----------|--------|
+| Theme System | Dark/Light mode toggle | ✅ |
+| Theme System | System preference detection | ✅ |
+| Theme System | CSS variables with OKLCH colors | ✅ |
+| Theme System | Persistent theme storage | ✅ |
+| Command Palette | Cmd/Ctrl+K activation | ✅ |
+| Command Palette | Navigation, theme, connection switching | ✅ |
+| Keyboard Shortcuts | Global shortcuts (navigation, actions) | ✅ |
+| Keyboard Shortcuts | Shortcuts help dialog (? key) | ✅ |
+| Unit Testing | Vitest setup with testing-library | ✅ |
+| Unit Testing | 22 passing tests (stores, hooks) | ✅ |
+| E2E Testing | Playwright setup with config | ✅ |
+| E2E Testing | App loading and navigation tests | ✅ |
+| Error Handling | Toast notification system | ✅ |
+| Error Handling | API error handling utility | ✅ |
+| Documentation | Keyboard shortcuts reference | ✅ |
+| Responsive Layout | Sidebar collapse, mobile support | 📋 Planned |
+| Accessibility | WCAG 2.1 AA compliance | 📋 Planned |
+| Storybook | Component documentation | 📋 Planned |
+
 ---
 
 ## Contributing
