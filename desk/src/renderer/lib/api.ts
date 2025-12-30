@@ -18,13 +18,40 @@ export interface PagedResponse<T> {
 export interface TableApiResponse {
   id: string
   name: string
-  displayName: string
+  displayName?: string
   description?: string
-  columnCount: number
-  schemaVersion: number
+  version: number
   createdAt: string
   updatedAt: string
   columns: ColumnApiResponse[]
+  indexes: IndexApiResponse[]
+  relations: RelationApiResponse[]
+  systemColumns?: SystemColumnOptionsResponse
+}
+
+export interface IndexApiResponse {
+  id: string
+  name: string
+  columns: string[]
+  type: 'btree' | 'hash' | 'gin' | 'gist'
+  unique: boolean
+}
+
+export interface RelationApiResponse {
+  id: string
+  name: string
+  sourceTableId: string
+  sourceColumnId: string
+  targetTableId: string
+  targetColumnId: string
+  type: 'one-to-one' | 'one-to-many' | 'many-to-one' | 'many-to-many'
+  onDelete: 'no-action' | 'cascade' | 'set-null' | 'restrict'
+}
+
+export interface SystemColumnOptionsResponse {
+  enableId: boolean
+  enableCreatedAt: boolean
+  enableUpdatedAt: boolean
 }
 
 export interface ColumnApiResponse {
@@ -71,6 +98,24 @@ export interface UpdateColumnRequest {
 
 export interface RenameTableRequest {
   newName: string
+}
+
+export interface CreateIndexRequest {
+  name: string
+  columns: string[]
+  type?: 'btree' | 'hash' | 'gin' | 'gist'
+  unique?: boolean
+  where?: string
+}
+
+export interface CreateRelationRequest {
+  name: string
+  sourceTable: string
+  sourceColumn: string
+  targetTable: string
+  targetColumn: string
+  type?: 'one-to-one' | 'one-to-many' | 'many-to-one' | 'many-to-many'
+  onDelete?: 'no-action' | 'cascade' | 'set-null' | 'restrict'
 }
 
 export interface ConnectionConfig {
@@ -221,6 +266,58 @@ export class MorphDBClient {
     })
   }
 
+  // Indexes
+  async createIndex(
+    tableName: string,
+    data: CreateIndexRequest,
+    tenantId?: string
+  ): Promise<IndexApiResponse> {
+    const headers: Record<string, string> = {}
+    if (tenantId) {
+      headers['X-Tenant-Id'] = tenantId
+    }
+    return this.request<IndexApiResponse>(`/api/schema/tables/${tableName}/indexes`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(data)
+    })
+  }
+
+  async deleteIndex(indexId: string, tenantId?: string): Promise<void> {
+    const headers: Record<string, string> = {}
+    if (tenantId) {
+      headers['X-Tenant-Id'] = tenantId
+    }
+    await this.request<void>(`/api/schema/indexes/${indexId}`, {
+      method: 'DELETE',
+      headers
+    })
+  }
+
+  // Relations
+  async createRelation(data: CreateRelationRequest, tenantId?: string): Promise<RelationApiResponse> {
+    const headers: Record<string, string> = {}
+    if (tenantId) {
+      headers['X-Tenant-Id'] = tenantId
+    }
+    return this.request<RelationApiResponse>('/api/schema/relations', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(data)
+    })
+  }
+
+  async deleteRelation(relationId: string, tenantId?: string): Promise<void> {
+    const headers: Record<string, string> = {}
+    if (tenantId) {
+      headers['X-Tenant-Id'] = tenantId
+    }
+    await this.request<void>(`/api/schema/relations/${relationId}`, {
+      method: 'DELETE',
+      headers
+    })
+  }
+
   // Data (OData operations)
   async queryData(
     tableName: string,
@@ -286,7 +383,7 @@ export function mapTableResponse(response: TableApiResponse): TableInfo {
     name: response.name,
     displayName: response.displayName || response.name,
     description: response.description,
-    columnCount: response.columnCount,
+    columnCount: response.columns.length,
     createdAt: response.createdAt,
     updatedAt: response.updatedAt
   }

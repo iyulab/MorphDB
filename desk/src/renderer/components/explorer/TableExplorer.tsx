@@ -13,11 +13,19 @@ import {
   Pencil,
   Trash2,
   Plus,
-  Eye
+  Eye,
+  ListTree,
+  Link2
 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/Button'
-import { MorphDBClient, type TableApiResponse, type ColumnApiResponse } from '@/lib/api'
+import {
+  MorphDBClient,
+  type TableApiResponse,
+  type ColumnApiResponse,
+  type IndexApiResponse,
+  type RelationApiResponse
+} from '@/lib/api'
 import { useConnectionStore } from '@/stores/connectionStore'
 import { useExplorerStore } from '@/stores/explorerStore'
 import { cn } from '@/lib/utils'
@@ -25,6 +33,8 @@ import { CreateTableDialog } from '@/components/dialogs/CreateTableDialog'
 import { ColumnDialog, type ColumnFormData } from '@/components/dialogs/ColumnDialog'
 import { DeleteConfirmationDialog } from '@/components/dialogs/DeleteConfirmationDialog'
 import { RenameDialog } from '@/components/dialogs/RenameDialog'
+import { IndexDialog, type IndexFormData } from '@/components/dialogs/IndexDialog'
+import { RelationDialog, type RelationFormData } from '@/components/dialogs/RelationDialog'
 
 interface ContextMenuState {
   open: boolean
@@ -53,6 +63,10 @@ interface DialogState {
   deleteTable: { open: boolean; tableName: string }
   deleteColumn: { open: boolean; tableName: string; columnName: string }
   renameTable: { open: boolean; tableName: string }
+  createIndex: { open: boolean; table: TableApiResponse | null }
+  deleteIndex: { open: boolean; indexId: string; indexName: string }
+  createRelation: { open: boolean; table: TableApiResponse | null }
+  deleteRelation: { open: boolean; relationId: string; relationName: string }
 }
 
 const initialDialogState: DialogState = {
@@ -61,7 +75,11 @@ const initialDialogState: DialogState = {
   editColumn: { open: false, tableName: '', column: null },
   deleteTable: { open: false, tableName: '' },
   deleteColumn: { open: false, tableName: '', columnName: '' },
-  renameTable: { open: false, tableName: '' }
+  renameTable: { open: false, tableName: '' },
+  createIndex: { open: false, table: null },
+  deleteIndex: { open: false, indexId: '', indexName: '' },
+  createRelation: { open: false, table: null },
+  deleteRelation: { open: false, relationId: '', relationName: '' }
 }
 
 export function TableExplorer(): ReactElement {
@@ -229,6 +247,67 @@ export function TableExplorer(): ReactElement {
     }
   })
 
+  // Create index mutation
+  const createIndexMutation = useMutation({
+    mutationFn: async ({ tableName, data }: { tableName: string; data: IndexFormData }) => {
+      const client = await createClient()
+      if (!client) throw new Error('No active connection')
+      return client.createIndex(tableName, {
+        name: data.name,
+        columns: data.columns,
+        type: data.type,
+        unique: data.unique
+      }, activeConnection?.tenantId)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tables', activeConnection?.id] })
+    }
+  })
+
+  // Delete index mutation
+  const deleteIndexMutation = useMutation({
+    mutationFn: async (indexId: string) => {
+      const client = await createClient()
+      if (!client) throw new Error('No active connection')
+      return client.deleteIndex(indexId, activeConnection?.tenantId)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tables', activeConnection?.id] })
+    }
+  })
+
+  // Create relation mutation
+  const createRelationMutation = useMutation({
+    mutationFn: async ({ sourceTable, data }: { sourceTable: string; data: RelationFormData }) => {
+      const client = await createClient()
+      if (!client) throw new Error('No active connection')
+      return client.createRelation({
+        name: data.name,
+        sourceTable,
+        sourceColumn: data.sourceColumn,
+        targetTable: data.targetTable,
+        targetColumn: data.targetColumn,
+        type: data.type,
+        onDelete: data.onDelete
+      }, activeConnection?.tenantId)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tables', activeConnection?.id] })
+    }
+  })
+
+  // Delete relation mutation
+  const deleteRelationMutation = useMutation({
+    mutationFn: async (relationId: string) => {
+      const client = await createClient()
+      if (!client) throw new Error('No active connection')
+      return client.deleteRelation(relationId, activeConnection?.tenantId)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tables', activeConnection?.id] })
+    }
+  })
+
   // Close context menu on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent): void => {
@@ -307,6 +386,22 @@ export function TableExplorer(): ReactElement {
     closeContextMenu()
   }
 
+  const handleCreateIndex = (): void => {
+    if (contextMenu.type === 'table' && contextMenu.target) {
+      const table = contextMenu.target as TableApiResponse
+      setDialogs((prev) => ({ ...prev, createIndex: { open: true, table } }))
+    }
+    closeContextMenu()
+  }
+
+  const handleCreateRelation = (): void => {
+    if (contextMenu.type === 'table' && contextMenu.target) {
+      const table = contextMenu.target as TableApiResponse
+      setDialogs((prev) => ({ ...prev, createRelation: { open: true, table } }))
+    }
+    closeContextMenu()
+  }
+
   const handleEditColumn = (): void => {
     if (contextMenu.type === 'column' && contextMenu.target) {
       const column = contextMenu.target as ColumnApiResponse
@@ -373,6 +468,30 @@ export function TableExplorer(): ReactElement {
       oldName: dialogs.renameTable.tableName,
       newName
     })
+  }
+
+  const handleCreateIndexSubmit = async (data: IndexFormData): Promise<void> => {
+    if (!dialogs.createIndex.table) return
+    await createIndexMutation.mutateAsync({
+      tableName: dialogs.createIndex.table.name,
+      data
+    })
+  }
+
+  const handleDeleteIndexConfirm = async (): Promise<void> => {
+    await deleteIndexMutation.mutateAsync(dialogs.deleteIndex.indexId)
+  }
+
+  const handleCreateRelationSubmit = async (data: RelationFormData): Promise<void> => {
+    if (!dialogs.createRelation.table) return
+    await createRelationMutation.mutateAsync({
+      sourceTable: dialogs.createRelation.table.name,
+      data
+    })
+  }
+
+  const handleDeleteRelationConfirm = async (): Promise<void> => {
+    await deleteRelationMutation.mutateAsync(dialogs.deleteRelation.relationId)
   }
 
   if (!activeConnection) {
@@ -479,7 +598,7 @@ export function TableExplorer(): ReactElement {
                     <Table2 className="h-4 w-4 flex-shrink-0 text-primary" />
                     <span className="truncate flex-1">{table.displayName || table.name}</span>
                     <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100">
-                      {table.columnCount}
+                      {table.columns?.length || 0}
                     </span>
                     <Button
                       variant="ghost"
@@ -494,30 +613,117 @@ export function TableExplorer(): ReactElement {
                     </Button>
                   </div>
 
-                  {/* Columns (Expanded) */}
-                  {isExpanded && table.columns && (
+                  {/* Expanded Content */}
+                  {isExpanded && (
                     <div className="ml-5 border-l border-border pl-2 mt-0.5">
-                      {table.columns.map((column) => (
-                        <div
-                          key={column.id}
-                          className={cn(
-                            'group flex items-center gap-2 rounded-md px-1.5 py-0.5 text-xs cursor-pointer',
-                            'hover:bg-accent/50 transition-colors'
-                          )}
-                          onContextMenu={(e) => handleColumnContextMenu(e, column)}
-                        >
-                          {getColumnIcon(column.dataType, column.isPrimaryKey)}
-                          <span className="truncate flex-1">
-                            {column.displayName || column.name}
-                          </span>
-                          <span className="text-muted-foreground/70 text-[10px]">
-                            {column.dataType}
-                          </span>
-                          {column.isNullable && (
-                            <span className="text-muted-foreground/50 text-[10px]">?</span>
-                          )}
+                      {/* Columns Section */}
+                      {table.columns && table.columns.length > 0 && (
+                        <div className="mb-1">
+                          <div className="text-[10px] uppercase text-muted-foreground/70 px-1.5 py-0.5 font-medium">
+                            Columns
+                          </div>
+                          {table.columns.map((column) => (
+                            <div
+                              key={column.id}
+                              className={cn(
+                                'group flex items-center gap-2 rounded-md px-1.5 py-0.5 text-xs cursor-pointer',
+                                'hover:bg-accent/50 transition-colors'
+                              )}
+                              onContextMenu={(e) => handleColumnContextMenu(e, column)}
+                            >
+                              {getColumnIcon(column.dataType, column.isPrimaryKey)}
+                              <span className="truncate flex-1">
+                                {column.displayName || column.name}
+                              </span>
+                              <span className="text-muted-foreground/70 text-[10px]">
+                                {column.dataType}
+                              </span>
+                              {column.isNullable && (
+                                <span className="text-muted-foreground/50 text-[10px]">?</span>
+                              )}
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      )}
+
+                      {/* Indexes Section */}
+                      {table.indexes && table.indexes.length > 0 && (
+                        <div className="mb-1">
+                          <div className="text-[10px] uppercase text-muted-foreground/70 px-1.5 py-0.5 font-medium">
+                            Indexes
+                          </div>
+                          {table.indexes.map((index) => (
+                            <div
+                              key={index.id}
+                              className={cn(
+                                'group flex items-center gap-2 rounded-md px-1.5 py-0.5 text-xs cursor-pointer',
+                                'hover:bg-accent/50 transition-colors'
+                              )}
+                            >
+                              <ListTree className="h-3.5 w-3.5 text-orange-500" />
+                              <span className="truncate flex-1">{index.name}</span>
+                              <span className="text-muted-foreground/70 text-[10px]">
+                                {index.type}
+                              </span>
+                              {index.unique && (
+                                <span className="text-yellow-500 text-[10px]">U</span>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-4 w-4 opacity-0 group-hover:opacity-100"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setDialogs((prev) => ({
+                                    ...prev,
+                                    deleteIndex: { open: true, indexId: index.id, indexName: index.name }
+                                  }))
+                                }}
+                              >
+                                <Trash2 className="h-3 w-3 text-destructive" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Relations Section */}
+                      {table.relations && table.relations.length > 0 && (
+                        <div className="mb-1">
+                          <div className="text-[10px] uppercase text-muted-foreground/70 px-1.5 py-0.5 font-medium">
+                            Relations
+                          </div>
+                          {table.relations.map((relation) => (
+                            <div
+                              key={relation.id}
+                              className={cn(
+                                'group flex items-center gap-2 rounded-md px-1.5 py-0.5 text-xs cursor-pointer',
+                                'hover:bg-accent/50 transition-colors'
+                              )}
+                            >
+                              <Link2 className="h-3.5 w-3.5 text-blue-500" />
+                              <span className="truncate flex-1">{relation.name}</span>
+                              <span className="text-muted-foreground/70 text-[10px]">
+                                {relation.type}
+                              </span>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-4 w-4 opacity-0 group-hover:opacity-100"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setDialogs((prev) => ({
+                                    ...prev,
+                                    deleteRelation: { open: true, relationId: relation.id, relationName: relation.name }
+                                  }))
+                                }}
+                              >
+                                <Trash2 className="h-3 w-3 text-destructive" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -561,6 +767,21 @@ export function TableExplorer(): ReactElement {
                 <Plus className="h-4 w-4" />
                 Add Column
               </button>
+              <button
+                onClick={handleCreateIndex}
+                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
+              >
+                <ListTree className="h-4 w-4" />
+                Add Index
+              </button>
+              <button
+                onClick={handleCreateRelation}
+                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
+              >
+                <Link2 className="h-4 w-4" />
+                Add Relation
+              </button>
+              <div className="my-1 h-px bg-border" />
               <button
                 onClick={handleRenameTable}
                 className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
@@ -657,6 +878,50 @@ export function TableExplorer(): ReactElement {
         title="Rename Table"
         currentName={dialogs.renameTable.tableName}
         onSubmit={handleRenameTableSubmit}
+      />
+
+      <IndexDialog
+        open={dialogs.createIndex.open}
+        onOpenChange={(open) =>
+          setDialogs((prev) => ({ ...prev, createIndex: { ...prev.createIndex, open } }))
+        }
+        tableName={dialogs.createIndex.table?.name || ''}
+        columns={dialogs.createIndex.table?.columns || []}
+        onSubmit={handleCreateIndexSubmit}
+      />
+
+      <DeleteConfirmationDialog
+        open={dialogs.deleteIndex.open}
+        onOpenChange={(open) =>
+          setDialogs((prev) => ({ ...prev, deleteIndex: { ...prev.deleteIndex, open } }))
+        }
+        title="Delete Index"
+        description={`This will permanently delete the index "${dialogs.deleteIndex.indexName}".`}
+        itemName={dialogs.deleteIndex.indexName}
+        requireTypedConfirmation={false}
+        onConfirm={handleDeleteIndexConfirm}
+      />
+
+      <RelationDialog
+        open={dialogs.createRelation.open}
+        onOpenChange={(open) =>
+          setDialogs((prev) => ({ ...prev, createRelation: { ...prev.createRelation, open } }))
+        }
+        sourceTable={dialogs.createRelation.table || { id: '', name: '', version: 0, createdAt: '', updatedAt: '', columns: [], indexes: [], relations: [] }}
+        tables={tables || []}
+        onSubmit={handleCreateRelationSubmit}
+      />
+
+      <DeleteConfirmationDialog
+        open={dialogs.deleteRelation.open}
+        onOpenChange={(open) =>
+          setDialogs((prev) => ({ ...prev, deleteRelation: { ...prev.deleteRelation, open } }))
+        }
+        title="Delete Relation"
+        description={`This will permanently delete the relation "${dialogs.deleteRelation.relationName}".`}
+        itemName={dialogs.deleteRelation.relationName}
+        requireTypedConfirmation={false}
+        onConfirm={handleDeleteRelationConfirm}
       />
     </div>
   )
