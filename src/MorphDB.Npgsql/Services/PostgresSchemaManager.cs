@@ -155,7 +155,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
             var columnId = Guid.NewGuid();
 
             // Check if this is a virtual column (lookup, rollup, formula)
-            var isVirtualColumn = colReq.LookupConfig != null || colReq.RollupConfig != null;
+            var isVirtualColumn = colReq.LookupConfig != null || colReq.RollupConfig != null || colReq.FormulaConfig != null;
 
             // Virtual columns don't have a physical column in the database
             var physicalColName = isVirtualColumn
@@ -182,7 +182,8 @@ public sealed class PostgresSchemaManager : ISchemaManager
                 OrdinalPosition = ordinal++,
                 IsActive = true,
                 LookupConfig = colReq.LookupConfig,
-                RollupConfig = colReq.RollupConfig
+                RollupConfig = colReq.RollupConfig,
+                FormulaConfig = colReq.FormulaConfig
             };
 
             columns.Add(column);
@@ -452,7 +453,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         var ordinalPosition = await _repository.GetNextOrdinalPositionAsync(request.TableId, cancellationToken);
 
         // Check if this is a virtual column (lookup, rollup, formula)
-        var isVirtualColumn = request.LookupConfig != null || request.RollupConfig != null;
+        var isVirtualColumn = request.LookupConfig != null || request.RollupConfig != null || request.FormulaConfig != null;
 
         // Virtual columns don't have a physical column in the database
         var physicalColName = isVirtualColumn
@@ -478,7 +479,8 @@ public sealed class PostgresSchemaManager : ISchemaManager
             OrdinalPosition = ordinalPosition,
             IsActive = true,
             LookupConfig = request.LookupConfig,
-            RollupConfig = request.RollupConfig
+            RollupConfig = request.RollupConfig,
+            FormulaConfig = request.FormulaConfig
         };
 
         // Only execute DDL for physical columns

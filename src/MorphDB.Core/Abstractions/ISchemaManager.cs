@@ -183,6 +183,12 @@ public sealed record CreateColumnRequest
     /// When set, the column becomes a virtual rollup column.
     /// </summary>
     public RollupColumnConfig? RollupConfig { get; init; }
+
+    /// <summary>
+    /// Configuration for formula fields that compute values from expressions.
+    /// When set, the column becomes a virtual formula column.
+    /// </summary>
+    public FormulaColumnConfig? FormulaConfig { get; init; }
 }
 
 public sealed record AddColumnRequest
@@ -207,6 +213,12 @@ public sealed record AddColumnRequest
     /// When set, the column becomes a virtual rollup column.
     /// </summary>
     public RollupColumnConfig? RollupConfig { get; init; }
+
+    /// <summary>
+    /// Configuration for formula fields that compute values from expressions.
+    /// When set, the column becomes a virtual formula column.
+    /// </summary>
+    public FormulaColumnConfig? FormulaConfig { get; init; }
 }
 
 public sealed record UpdateColumnRequest

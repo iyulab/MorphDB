@@ -184,6 +184,12 @@ public sealed record CreateColumnApiRequest
     /// When set, creates a virtual rollup column instead of a physical column.
     /// </summary>
     public RollupConfigApiRequest? Rollup { get; init; }
+
+    /// <summary>
+    /// Configuration for formula fields that compute values from expressions.
+    /// When set, creates a virtual formula column instead of a physical column.
+    /// </summary>
+    public FormulaConfigApiRequest? Formula { get; init; }
 }
 
 /// <summary>
@@ -218,6 +224,12 @@ public sealed record AddColumnApiRequest
     /// When set, creates a virtual rollup column instead of a physical column.
     /// </summary>
     public RollupConfigApiRequest? Rollup { get; init; }
+
+    /// <summary>
+    /// Configuration for formula fields that compute values from expressions.
+    /// When set, creates a virtual formula column instead of a physical column.
+    /// </summary>
+    public FormulaConfigApiRequest? Formula { get; init; }
 }
 
 /// <summary>
@@ -395,6 +407,39 @@ public sealed record RollupFilterApiRequest
 }
 
 /// <summary>
+/// Configuration for formula fields in API requests.
+/// </summary>
+public sealed record FormulaConfigApiRequest
+{
+    /// <summary>
+    /// The formula expression in MorphDB formula syntax.
+    /// Supports column references like {field_name}, operators (+, -, *, /),
+    /// and functions (IF, CONCAT, UPPER, LOWER, NOW, etc.).
+    /// </summary>
+    public required string Formula { get; init; }
+
+    /// <summary>
+    /// Optional explicit return type. If not specified, type is inferred from the formula.
+    /// </summary>
+    public string? ReturnType { get; init; }
+
+    /// <summary>
+    /// Format string for output (e.g., currency, percentage).
+    /// </summary>
+    public string? OutputFormat { get; init; }
+
+    /// <summary>
+    /// Converts to core FormulaColumnConfig model.
+    /// </summary>
+    public FormulaColumnConfig ToModel() => new()
+    {
+        Formula = Formula,
+        ReturnType = ReturnType != null ? ApiModelExtensions.ParseDataType(ReturnType) : MorphDataType.Text,
+        OutputFormat = OutputFormat
+    };
+}
+
+/// <summary>
 /// Request to update a column.
 /// </summary>
 public sealed record UpdateColumnApiRequest
@@ -493,6 +538,11 @@ public sealed record ColumnApiResponse
     /// </summary>
     public RollupConfigApiResponse? Rollup { get; init; }
 
+    /// <summary>
+    /// Formula configuration if this is a formula column.
+    /// </summary>
+    public FormulaConfigApiResponse? Formula { get; init; }
+
     public static ColumnApiResponse FromMetadata(ColumnMetadata column) => new()
     {
         Id = column.ColumnId,
@@ -510,6 +560,9 @@ public sealed record ColumnApiResponse
             : null,
         Rollup = column.RollupConfig != null
             ? RollupConfigApiResponse.FromModel(column.RollupConfig)
+            : null,
+        Formula = column.FormulaConfig != null
+            ? FormulaConfigApiResponse.FromModel(column.FormulaConfig)
             : null
     };
 }
@@ -683,6 +736,46 @@ public sealed record RollupFilterApiResponse
             _ => "eq"
         };
     }
+}
+
+/// <summary>
+/// Formula configuration in API responses.
+/// </summary>
+public sealed record FormulaConfigApiResponse
+{
+    /// <summary>
+    /// The formula expression.
+    /// </summary>
+    public required string Formula { get; init; }
+
+    /// <summary>
+    /// The return type of the formula.
+    /// </summary>
+    public required string ReturnType { get; init; }
+
+    /// <summary>
+    /// Fields referenced by the formula.
+    /// </summary>
+    public IReadOnlyList<string> Dependencies { get; init; } = [];
+
+    /// <summary>
+    /// Whether the formula contains volatile functions (NOW(), TODAY(), etc.).
+    /// </summary>
+    public bool IsVolatile { get; init; }
+
+    /// <summary>
+    /// Format string for output (e.g., currency, percentage).
+    /// </summary>
+    public string? OutputFormat { get; init; }
+
+    public static FormulaConfigApiResponse FromModel(FormulaColumnConfig config) => new()
+    {
+        Formula = config.Formula,
+        ReturnType = config.ReturnType.ToString().ToLowerInvariant(),
+        Dependencies = config.Dependencies,
+        IsVolatile = config.IsVolatile,
+        OutputFormat = config.OutputFormat
+    };
 }
 
 /// <summary>

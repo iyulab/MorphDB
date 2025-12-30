@@ -23,6 +23,7 @@ public sealed class MorphQueryBuilder : IMorphQueryBuilder
     private readonly ISecurityContextAccessor _securityContextAccessor;
     private readonly ILookupResolver? _lookupResolver;
     private readonly IRollupResolver? _rollupResolver;
+    private readonly IFormulaResolver? _formulaResolver;
     private readonly Guid _tenantId;
 
     /// <summary>
@@ -35,7 +36,8 @@ public sealed class MorphQueryBuilder : IMorphQueryBuilder
         ISecurityContextAccessor securityContextAccessor,
         Guid tenantId,
         ILookupResolver? lookupResolver = null,
-        IRollupResolver? rollupResolver = null)
+        IRollupResolver? rollupResolver = null,
+        IFormulaResolver? formulaResolver = null)
     {
         _dataSource = dataSource ?? throw new ArgumentNullException(nameof(dataSource));
         _metadataRepository = metadataRepository ?? throw new ArgumentNullException(nameof(metadataRepository));
@@ -43,6 +45,7 @@ public sealed class MorphQueryBuilder : IMorphQueryBuilder
         _securityContextAccessor = securityContextAccessor ?? throw new ArgumentNullException(nameof(securityContextAccessor));
         _lookupResolver = lookupResolver;
         _rollupResolver = rollupResolver;
+        _formulaResolver = formulaResolver;
         _tenantId = tenantId;
     }
 
@@ -56,6 +59,7 @@ public sealed class MorphQueryBuilder : IMorphQueryBuilder
             _securityContextAccessor,
             _lookupResolver,
             _rollupResolver,
+            _formulaResolver,
             _tenantId,
             tableName,
             null);
@@ -71,6 +75,7 @@ public sealed class MorphQueryBuilder : IMorphQueryBuilder
             _securityContextAccessor,
             _lookupResolver,
             _rollupResolver,
+            _formulaResolver,
             _tenantId,
             tableName,
             tableAlias);
@@ -83,6 +88,7 @@ public sealed class MorphQueryBuilder : IMorphQueryBuilder
 /// Automatically applies Row-Level Security (RLS) policies during query execution.
 /// Supports automatic lookup column expansion via JOINs.
 /// Supports automatic rollup column expansion via correlated subqueries.
+/// Supports automatic formula column expansion via SQL expressions.
 /// </summary>
 internal sealed class MorphQuery : IMorphQuery
 {
@@ -92,6 +98,7 @@ internal sealed class MorphQuery : IMorphQuery
     private readonly ISecurityContextAccessor _securityContextAccessor;
     private readonly ILookupResolver? _lookupResolver;
     private readonly IRollupResolver? _rollupResolver;
+    private readonly IFormulaResolver? _formulaResolver;
     private readonly Guid _tenantId;
     private readonly string _tableName;
     private readonly string? _tableAlias;
@@ -102,6 +109,7 @@ internal sealed class MorphQuery : IMorphQuery
     private readonly Dictionary<string, TableMetadata> _joinedTableMetadata = new();
     private LookupQueryExpansion? _lookupExpansion;
     private RollupQueryExpansion? _rollupExpansion;
+    private FormulaQueryExpansion? _formulaExpansion;
 
     // Store all query operations with logical names
     private bool _selectAllCalled;
@@ -138,6 +146,7 @@ internal sealed class MorphQuery : IMorphQuery
         ISecurityContextAccessor securityContextAccessor,
         ILookupResolver? lookupResolver,
         IRollupResolver? rollupResolver,
+        IFormulaResolver? formulaResolver,
         Guid tenantId,
         string tableName,
         string? tableAlias)
@@ -148,6 +157,7 @@ internal sealed class MorphQuery : IMorphQuery
         _securityContextAccessor = securityContextAccessor;
         _lookupResolver = lookupResolver;
         _rollupResolver = rollupResolver;
+        _formulaResolver = formulaResolver;
         _tenantId = tenantId;
         _tableName = tableName;
         _tableAlias = tableAlias;
@@ -716,12 +726,16 @@ internal sealed class MorphQuery : IMorphQuery
         // Build rollup expansion for rollup columns
         await BuildRollupExpansionAsync(table, cancellationToken);
 
+        // Build formula expansion for formula columns
+        await BuildFormulaExpansionAsync(table, cancellationToken);
+
         var query = await BuildPhysicalQueryAsync(cancellationToken);
 
-        // Determine if we're using base_table alias (when lookups or rollups are present)
+        // Determine if we're using base_table alias (when lookups, rollups, or formulas are present)
         var hasLookups = _lookupExpansion?.HasExpansion == true;
         var hasRollups = _rollupExpansion?.HasExpansion == true;
-        var useBaseTableAlias = hasLookups || hasRollups;
+        var hasFormulas = _formulaExpansion?.HasExpansion == true;
+        var useBaseTableAlias = hasLookups || hasRollups || hasFormulas;
 
         // Add SELECT clause
         if (_selectAllCalled || (_selectedColumns.Count == 0 && _aggregates.Count == 0))
@@ -748,6 +762,15 @@ internal sealed class MorphQuery : IMorphQuery
                         query.SelectRaw($"{subqueryExpr} AS \"{logicalName}\"");
                     }
                 }
+
+                // Add formula column expressions
+                if (hasFormulas)
+                {
+                    foreach (var (logicalName, formulaExpr) in _formulaExpansion!.Expressions)
+                    {
+                        query.SelectRaw($"{formulaExpr} AS \"{logicalName}\"");
+                    }
+                }
             }
             else
             {
@@ -768,6 +791,11 @@ internal sealed class MorphQuery : IMorphQuery
                 else if (_rollupExpansion?.SubqueryExpressions.TryGetValue(column, out var rollupExpr) == true)
                 {
                     query.SelectRaw($"{rollupExpr} AS \"{column}\"");
+                }
+                // Check if this is a formula column with expansion
+                else if (_formulaExpansion?.Expressions.TryGetValue(column, out var formulaExpr) == true)
+                {
+                    query.SelectRaw($"{formulaExpr} AS \"{column}\"");
                 }
                 else
                 {
@@ -878,6 +906,44 @@ internal sealed class MorphQuery : IMorphQuery
             _tenantId,
             table,
             rollupColumns,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Builds formula expansion for columns that are formula type.
+    /// </summary>
+    private async Task BuildFormulaExpansionAsync(TableMetadata table, CancellationToken cancellationToken)
+    {
+        if (_formulaResolver is null)
+            return;
+
+        // Find formula columns that need expansion
+        var formulaColumns = new List<FormulaColumnInfo>();
+
+        foreach (var column in table.Columns)
+        {
+            if (column.FormulaConfig is null)
+                continue;
+
+            // If SelectAll or this column is in the selected columns
+            if (_selectAllCalled || _selectedColumns.Count == 0 || _selectedColumns.Contains(column.LogicalName))
+            {
+                formulaColumns.Add(new FormulaColumnInfo
+                {
+                    ColumnName = column.LogicalName,
+                    Config = column.FormulaConfig,
+                    DataType = column.DataType
+                });
+            }
+        }
+
+        if (formulaColumns.Count == 0)
+            return;
+
+        _formulaExpansion = await _formulaResolver.BuildFormulaExpansionAsync(
+            _tenantId,
+            table,
+            formulaColumns,
             cancellationToken);
     }
 

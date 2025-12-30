@@ -93,7 +93,8 @@ public sealed class SchemaController : ControllerBase
                     IsIndexed = c.Indexed,
                     DefaultValue = c.Default,
                     LookupConfig = c.Lookup?.ToModel(),
-                    RollupConfig = c.Rollup?.ToModel()
+                    RollupConfig = c.Rollup?.ToModel(),
+                    FormulaConfig = c.Formula?.ToModel()
                 }).ToList(),
                 SystemColumns = request.SystemColumns?.ToOptions()
             };
@@ -308,7 +309,8 @@ public sealed class SchemaController : ControllerBase
                 DefaultValue = request.Default,
                 ExpectedVersion = table.SchemaVersion,
                 LookupConfig = request.Lookup?.ToModel(),
-                RollupConfig = request.Rollup?.ToModel()
+                RollupConfig = request.Rollup?.ToModel(),
+                FormulaConfig = request.Formula?.ToModel()
             };
 
             var column = await _schemaManager.AddColumnAsync(addRequest, cancellationToken);
