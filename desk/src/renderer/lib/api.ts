@@ -350,6 +350,84 @@ export interface ViewStaleResponse {
   lastRefreshedAt?: string
 }
 
+// Webhook types
+export interface WebhookApiResponse {
+  id: string
+  name: string
+  table: string
+  url: string
+  events: string[]
+  filter?: Record<string, unknown>
+  headers?: Record<string, string>
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreateWebhookApiRequest {
+  name: string
+  table: string
+  url: string
+  events?: string[]
+  filter?: Record<string, unknown>
+  headers?: Record<string, string>
+}
+
+export interface UpdateWebhookApiRequest {
+  url?: string
+  events?: string[]
+  filter?: Record<string, unknown>
+  headers?: Record<string, string>
+  isActive?: boolean
+}
+
+export interface WebhookDeliveryApiResponse {
+  id: string
+  event: string
+  status: string
+  attemptCount: number
+  httpStatusCode?: number
+  errorMessage?: string
+  createdAt: string
+  deliveredAt?: string
+}
+
+// DLQ types
+export interface DlqMessageApiResponse {
+  dlqId: string
+  deliveryId: string
+  webhookId: string
+  recordId?: string
+  event: string
+  reason: string
+  attemptCount: number
+  lastHttpStatusCode?: number
+  lastErrorMessage?: string
+  status: string
+  resolutionNotes?: string
+  dlqAt: string
+  resolvedAt?: string
+}
+
+export interface DlqStatisticsApiResponse {
+  totalMessages: number
+  pendingReviewCount: number
+  resolvedCount: number
+  archivedCount: number
+  byReason: Record<string, number>
+  byWebhook: Record<string, number>
+  oldestPendingAt?: string
+}
+
+export interface ResolveDlqApiRequest {
+  resolutionNotes: string
+  resolvedBy?: string
+}
+
+export interface ArchiveDlqApiResponse {
+  archivedCount: number
+}
+
 export interface TableApiResponse {
   id: string
   name: string
@@ -1011,6 +1089,91 @@ export class MorphDBClient {
 
     const query = params.toString() ? `?${params.toString()}` : ''
     return this.request<ViewQueryApiResponse>(`/api/views/${name}/data${query}`)
+  }
+
+  // Webhooks
+  async listWebhooks(): Promise<WebhookApiResponse[]> {
+    return this.request<WebhookApiResponse[]>('/api/webhooks')
+  }
+
+  async getWebhook(id: string): Promise<WebhookApiResponse> {
+    return this.request<WebhookApiResponse>(`/api/webhooks/${id}`)
+  }
+
+  async createWebhook(data: CreateWebhookApiRequest): Promise<WebhookApiResponse> {
+    return this.request<WebhookApiResponse>('/api/webhooks', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    })
+  }
+
+  async updateWebhook(id: string, data: UpdateWebhookApiRequest): Promise<WebhookApiResponse> {
+    return this.request<WebhookApiResponse>(`/api/webhooks/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data)
+    })
+  }
+
+  async deleteWebhook(id: string): Promise<void> {
+    await this.request<void>(`/api/webhooks/${id}`, {
+      method: 'DELETE'
+    })
+  }
+
+  async listWebhookDeliveries(
+    webhookId: string,
+    options?: { limit?: number; offset?: number }
+  ): Promise<WebhookDeliveryApiResponse[]> {
+    const params = new URLSearchParams()
+    if (options?.limit) params.append('limit', options.limit.toString())
+    if (options?.offset) params.append('offset', options.offset.toString())
+
+    const query = params.toString() ? `?${params.toString()}` : ''
+    return this.request<WebhookDeliveryApiResponse[]>(`/api/webhooks/${webhookId}/deliveries${query}`)
+  }
+
+  // Dead Letter Queue
+  async listDlqMessages(
+    options?: { webhookId?: string; status?: string; limit?: number; offset?: number }
+  ): Promise<DlqMessageApiResponse[]> {
+    const params = new URLSearchParams()
+    if (options?.webhookId) params.append('webhookId', options.webhookId)
+    if (options?.status) params.append('status', options.status)
+    if (options?.limit) params.append('limit', options.limit.toString())
+    if (options?.offset) params.append('offset', options.offset.toString())
+
+    const query = params.toString() ? `?${params.toString()}` : ''
+    return this.request<DlqMessageApiResponse[]>(`/api/webhooks/dlq${query}`)
+  }
+
+  async getDlqStatistics(): Promise<DlqStatisticsApiResponse> {
+    return this.request<DlqStatisticsApiResponse>('/api/webhooks/dlq/statistics')
+  }
+
+  async resolveDlqMessage(dlqId: string, data: ResolveDlqApiRequest): Promise<DlqMessageApiResponse> {
+    return this.request<DlqMessageApiResponse>(`/api/webhooks/dlq/${dlqId}/resolve`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    })
+  }
+
+  async replayDlqMessage(dlqId: string): Promise<void> {
+    await this.request<void>(`/api/webhooks/dlq/${dlqId}/replay`, {
+      method: 'POST'
+    })
+  }
+
+  async archiveDlqMessages(
+    options?: { webhookId?: string; olderThanDays?: number }
+  ): Promise<ArchiveDlqApiResponse> {
+    const params = new URLSearchParams()
+    if (options?.webhookId) params.append('webhookId', options.webhookId)
+    if (options?.olderThanDays) params.append('olderThanDays', options.olderThanDays.toString())
+
+    const query = params.toString() ? `?${params.toString()}` : ''
+    return this.request<ArchiveDlqApiResponse>(`/api/webhooks/dlq/archive${query}`, {
+      method: 'POST'
+    })
   }
 }
 
