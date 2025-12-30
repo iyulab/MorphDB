@@ -1,7 +1,11 @@
 import { type ReactElement } from 'react'
 import { Settings, Palette, Globe, Database, Shield } from 'lucide-react'
+import { ThemeToggle } from '@/components/ui/ThemeToggle'
+import { useThemeStore } from '@/stores/themeStore'
 
 export function SettingsPage(): ReactElement {
+  const { theme } = useThemeStore()
+
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Header */}
@@ -19,8 +23,19 @@ export function SettingsPage(): ReactElement {
               <Palette className="h-5 w-5 text-muted-foreground" />
               <h2 className="font-semibold">Appearance</h2>
             </div>
-            <div className="space-y-4 text-sm text-muted-foreground">
-              <p>Theme and display settings will be available in a future update.</p>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">Theme</p>
+                  <p className="text-sm text-muted-foreground">
+                    Select your preferred color theme
+                  </p>
+                </div>
+                <ThemeToggle showLabel />
+              </div>
+              <div className="text-xs text-muted-foreground pt-2 border-t border-border">
+                Current: {theme === 'system' ? 'System preference' : theme === 'dark' ? 'Dark' : 'Light'}
+              </div>
             </div>
           </section>
 

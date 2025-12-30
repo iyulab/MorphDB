@@ -1,53 +1,54 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./src/renderer/**/*.{js,ts,jsx,tsx,html}'],
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
-        background: 'oklch(0.145 0 0)',
-        foreground: 'oklch(0.985 0 0)',
+        background: 'var(--background)',
+        foreground: 'var(--foreground)',
         card: {
-          DEFAULT: 'oklch(0.175 0 0)',
-          foreground: 'oklch(0.985 0 0)'
+          DEFAULT: 'var(--card)',
+          foreground: 'var(--card-foreground)'
         },
         popover: {
-          DEFAULT: 'oklch(0.175 0 0)',
-          foreground: 'oklch(0.985 0 0)'
+          DEFAULT: 'var(--popover)',
+          foreground: 'var(--popover-foreground)'
         },
         primary: {
-          DEFAULT: 'oklch(0.65 0.18 250)',
-          foreground: 'oklch(0.985 0 0)'
+          DEFAULT: 'var(--primary)',
+          foreground: 'var(--primary-foreground)'
         },
         secondary: {
-          DEFAULT: 'oklch(0.27 0 0)',
-          foreground: 'oklch(0.985 0 0)'
+          DEFAULT: 'var(--secondary)',
+          foreground: 'var(--secondary-foreground)'
         },
         muted: {
-          DEFAULT: 'oklch(0.27 0 0)',
-          foreground: 'oklch(0.65 0 0)'
+          DEFAULT: 'var(--muted)',
+          foreground: 'var(--muted-foreground)'
         },
         accent: {
-          DEFAULT: 'oklch(0.27 0 0)',
-          foreground: 'oklch(0.985 0 0)'
+          DEFAULT: 'var(--accent)',
+          foreground: 'var(--accent-foreground)'
         },
         destructive: {
-          DEFAULT: 'oklch(0.55 0.2 25)',
-          foreground: 'oklch(0.985 0 0)'
+          DEFAULT: 'var(--destructive)',
+          foreground: 'var(--destructive-foreground)'
         },
-        border: 'oklch(0.3 0 0)',
-        input: 'oklch(0.3 0 0)',
-        ring: 'oklch(0.65 0.18 250)',
+        border: 'var(--border)',
+        input: 'var(--input)',
+        ring: 'var(--ring)',
         sidebar: {
-          DEFAULT: 'oklch(0.12 0 0)',
-          foreground: 'oklch(0.85 0 0)',
-          border: 'oklch(0.25 0 0)',
-          hover: 'oklch(0.2 0 0)',
-          active: 'oklch(0.25 0.05 250)'
+          DEFAULT: 'var(--sidebar)',
+          foreground: 'var(--sidebar-foreground)',
+          border: 'var(--sidebar-border)',
+          hover: 'var(--sidebar-hover)',
+          active: 'var(--sidebar-active)'
         },
-        success: 'oklch(0.65 0.18 145)',
-        warning: 'oklch(0.75 0.15 85)',
-        error: 'oklch(0.55 0.2 25)',
-        info: 'oklch(0.65 0.18 250)'
+        success: 'var(--success)',
+        warning: 'var(--warning)',
+        error: 'var(--error)',
+        info: 'var(--info)'
       },
       borderRadius: {
         sm: '0.25rem',

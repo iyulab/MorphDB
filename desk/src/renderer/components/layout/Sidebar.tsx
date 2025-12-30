@@ -23,6 +23,7 @@ import {
   KeyRound
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import { ThemeToggleButton } from '@/components/ui/ThemeToggle'
 import { useConnectionStore } from '@/stores/connectionStore'
 import type { Connection } from '@/types/connection'
 import { cn } from '@/lib/utils'
@@ -178,6 +179,7 @@ export function Sidebar({ onNewConnection, onEditConnection }: SidebarProps): Re
           <Database className="h-5 w-5 text-primary" />
           <span className="font-semibold text-sm">MorphDB</span>
         </div>
+        <ThemeToggleButton />
       </div>
 
       {/* Connections */}
