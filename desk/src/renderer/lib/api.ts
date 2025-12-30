@@ -75,6 +75,167 @@ export interface SchemaHealthIssue {
   columnName?: string
 }
 
+// Aggregation types
+export type AggregationFunction = 'count' | 'sum' | 'avg' | 'min' | 'max'
+
+export interface AggregationItem {
+  function: AggregationFunction
+  column?: string // Not required for COUNT(*)
+  alias: string
+}
+
+export interface FilterConditionItem {
+  column: string
+  operator: 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte' | 'contains' | 'startswith' | 'endswith'
+  value: unknown
+}
+
+export interface HavingCondition {
+  alias: string
+  operator: 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte'
+  value: number
+}
+
+export interface OrderByItem {
+  column: string
+  direction: 'asc' | 'desc'
+}
+
+export interface AggregationRequest {
+  aggregations: AggregationItem[]
+  groupBy?: string[]
+  filter?: FilterConditionItem[]
+  having?: HavingCondition[]
+  orderBy?: OrderByItem[]
+  limit?: number
+}
+
+export interface AggregationResponse {
+  data: Record<string, unknown>[]
+  metadata: {
+    executedAt: string
+    rowCount: number
+  }
+}
+
+// Batch operation types
+export interface BatchOperation {
+  method: 'INSERT' | 'UPDATE' | 'DELETE' | 'UPSERT'
+  table: string
+  id?: string
+  data?: Record<string, unknown>
+  keyColumns?: string[]
+}
+
+export interface BatchRequest {
+  operations: BatchOperation[]
+}
+
+export interface BatchOperationResult {
+  index: number
+  success: boolean
+  data?: Record<string, unknown>
+  affectedRows?: number
+  error?: string
+}
+
+export interface BatchResponse {
+  results: BatchOperationResult[]
+  successCount: number
+  failureCount: number
+}
+
+export interface DataRecordResponse {
+  id: string
+  data: Record<string, unknown>
+}
+
+// Bulk import/export types
+export type NullHandling = 'emptyAsNull' | 'preserveEmpty' | 'nullStringAsNull'
+export type DuplicateHandling = 'insert' | 'update' | 'upsert' | 'skip' | 'error'
+
+export interface CsvImportOptions {
+  delimiter?: string
+  hasHeader?: boolean
+  dateFormat?: string
+  trimWhitespace?: boolean
+  nullHandling?: NullHandling
+  duplicateHandling?: DuplicateHandling
+  keyColumns?: string[]
+}
+
+export interface JsonImportOptions {
+  dateFormat?: string
+  duplicateHandling?: DuplicateHandling
+  keyColumns?: string[]
+}
+
+export interface ImportJobResponse {
+  jobId: string
+  tableName: string
+  format: string
+  status: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled'
+  totalRows?: number
+  processedRows: number
+  successCount: number
+  errorCount: number
+  errorMessage?: string
+  createdAt: string
+  startedAt?: string
+  completedAt?: string
+}
+
+export interface CsvExportOptions {
+  delimiter?: string
+  includeHeader?: boolean
+  dateFormat?: string
+  columns?: string[]
+  filter?: string
+  orderBy?: string
+}
+
+export interface JsonExportOptions {
+  pretty?: boolean
+  dateFormat?: string
+  columns?: string[]
+  filter?: string
+  orderBy?: string
+}
+
+export interface XlsxExportOptions {
+  sheetName?: string
+  includeHeader?: boolean
+  columns?: string[]
+  filter?: string
+  orderBy?: string
+}
+
+export interface ExportJobResponse {
+  jobId: string
+  tableName: string
+  format: string
+  status: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled'
+  totalRows?: number
+  processedRows: number
+  fileSize?: number
+  errorMessage?: string
+  createdAt: string
+  startedAt?: string
+  completedAt?: string
+  expiresAt?: string
+}
+
+export interface JobProgressResponse {
+  jobId: string
+  status: string
+  totalRows?: number
+  processedRows: number
+  successCount: number
+  errorCount: number
+  percentComplete: number
+  estimatedTimeRemaining?: string
+}
+
 export interface TableApiResponse {
   id: string
   name: string
@@ -483,6 +644,193 @@ export class MorphDBClient {
     await this.request<void>(`/odata/${tableName}('${key}')`, {
       method: 'DELETE'
     })
+  }
+
+  // Aggregation
+  async aggregate(
+    tableName: string,
+    request: AggregationRequest
+  ): Promise<AggregationResponse> {
+    return this.request<AggregationResponse>(`/api/data/${tableName}/aggregate`, {
+      method: 'POST',
+      body: JSON.stringify(request)
+    })
+  }
+
+  // Batch Operations
+  async executeBatch(request: BatchRequest): Promise<BatchResponse> {
+    return this.request<BatchResponse>('/api/batch/data', {
+      method: 'POST',
+      body: JSON.stringify(request)
+    })
+  }
+
+  async bulkInsert(
+    tableName: string,
+    records: Record<string, unknown>[]
+  ): Promise<BatchResponse> {
+    return this.request<BatchResponse>(`/api/batch/data/${tableName}/insert`, {
+      method: 'POST',
+      body: JSON.stringify(records)
+    })
+  }
+
+  async bulkUpdate(
+    tableName: string,
+    data: Record<string, unknown>,
+    filter?: string
+  ): Promise<BatchResponse> {
+    return this.request<BatchResponse>(`/api/batch/data/${tableName}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ data, filter })
+    })
+  }
+
+  async bulkDelete(tableName: string, filter: string): Promise<BatchResponse> {
+    const params = new URLSearchParams({ filter })
+    return this.request<BatchResponse>(`/api/batch/data/${tableName}?${params}`, {
+      method: 'DELETE'
+    })
+  }
+
+  async upsert(
+    tableName: string,
+    data: Record<string, unknown>,
+    keyColumns: string[]
+  ): Promise<DataRecordResponse> {
+    return this.request<DataRecordResponse>(`/api/batch/data/${tableName}`, {
+      method: 'PUT',
+      body: JSON.stringify({ data, keyColumns })
+    })
+  }
+
+  // Bulk Import Operations
+  async importCsv(
+    tableName: string,
+    file: File,
+    options?: CsvImportOptions
+  ): Promise<ImportJobResponse> {
+    const params = new URLSearchParams()
+    if (options?.delimiter) params.append('delimiter', options.delimiter)
+    if (options?.hasHeader !== undefined) params.append('hasHeader', String(options.hasHeader))
+    if (options?.dateFormat) params.append('dateFormat', options.dateFormat)
+    if (options?.trimWhitespace !== undefined) params.append('trimWhitespace', String(options.trimWhitespace))
+    if (options?.nullHandling) params.append('nullHandling', options.nullHandling)
+    if (options?.duplicateHandling) params.append('duplicateHandling', options.duplicateHandling)
+    if (options?.keyColumns) params.append('keyColumns', options.keyColumns.join(','))
+
+    const query = params.toString() ? `?${params}` : ''
+    const url = `${this.baseUrl}/api/bulk/${tableName}/import/csv${query}`
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/csv',
+        'X-API-Key': this.apiKey,
+        ...(this.tenantId && { 'X-Tenant-Id': this.tenantId })
+      },
+      body: file
+    })
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: `Import failed: ${response.status}` }))
+      throw new Error(error.message)
+    }
+
+    return response.json()
+  }
+
+  async importJson(
+    tableName: string,
+    file: File,
+    options?: JsonImportOptions
+  ): Promise<ImportJobResponse> {
+    const params = new URLSearchParams()
+    if (options?.dateFormat) params.append('dateFormat', options.dateFormat)
+    if (options?.duplicateHandling) params.append('duplicateHandling', options.duplicateHandling)
+    if (options?.keyColumns) params.append('keyColumns', options.keyColumns.join(','))
+
+    const query = params.toString() ? `?${params}` : ''
+    const url = `${this.baseUrl}/api/bulk/${tableName}/import/json${query}`
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': this.apiKey,
+        ...(this.tenantId && { 'X-Tenant-Id': this.tenantId })
+      },
+      body: file
+    })
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: `Import failed: ${response.status}` }))
+      throw new Error(error.message)
+    }
+
+    return response.json()
+  }
+
+  async getImportJob(jobId: string): Promise<ImportJobResponse> {
+    return this.request<ImportJobResponse>(`/api/bulk/import/${jobId}`)
+  }
+
+  async listImportJobs(limit = 50, offset = 0): Promise<ImportJobResponse[]> {
+    return this.request<ImportJobResponse[]>(`/api/bulk/import?limit=${limit}&offset=${offset}`)
+  }
+
+  // Bulk Export Operations
+  async exportCsv(tableName: string, options?: CsvExportOptions): Promise<ExportJobResponse> {
+    return this.request<ExportJobResponse>(`/api/bulk/${tableName}/export/csv`, {
+      method: 'POST',
+      body: JSON.stringify(options || {})
+    })
+  }
+
+  async exportJson(tableName: string, options?: JsonExportOptions): Promise<ExportJobResponse> {
+    return this.request<ExportJobResponse>(`/api/bulk/${tableName}/export/json`, {
+      method: 'POST',
+      body: JSON.stringify(options || {})
+    })
+  }
+
+  async exportXlsx(tableName: string, options?: XlsxExportOptions): Promise<ExportJobResponse> {
+    return this.request<ExportJobResponse>(`/api/bulk/${tableName}/export/xlsx`, {
+      method: 'POST',
+      body: JSON.stringify(options || {})
+    })
+  }
+
+  async getExportJob(jobId: string): Promise<ExportJobResponse> {
+    return this.request<ExportJobResponse>(`/api/bulk/export/${jobId}`)
+  }
+
+  async listExportJobs(limit = 50, offset = 0): Promise<ExportJobResponse[]> {
+    return this.request<ExportJobResponse[]>(`/api/bulk/export?limit=${limit}&offset=${offset}`)
+  }
+
+  async downloadExport(jobId: string): Promise<Blob> {
+    const url = `${this.baseUrl}/api/bulk/export/${jobId}/download`
+    const response = await fetch(url, {
+      headers: {
+        'X-API-Key': this.apiKey,
+        ...(this.tenantId && { 'X-Tenant-Id': this.tenantId })
+      }
+    })
+
+    if (!response.ok) {
+      throw new Error(`Download failed: ${response.status}`)
+    }
+
+    return response.blob()
+  }
+
+  async getJobProgress(jobId: string): Promise<JobProgressResponse> {
+    return this.request<JobProgressResponse>(`/api/bulk/jobs/${jobId}/progress`)
+  }
+
+  async cancelJob(jobId: string): Promise<void> {
+    await this.request<void>(`/api/bulk/jobs/${jobId}/cancel`, { method: 'POST' })
   }
 
   // Health check

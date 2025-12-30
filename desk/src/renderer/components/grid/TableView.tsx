@@ -4,6 +4,7 @@ import { AlertCircle, Database } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { DataGrid } from './DataGrid'
 import { FilterBuilder } from './FilterBuilder'
+import { AggregationPanel } from './AggregationPanel'
 import { AddRecordDialog } from '@/components/dialogs/AddRecordDialog'
 import { MorphDBClient, type TableApiResponse } from '@/lib/api'
 import { useConnectionStore } from '@/stores/connectionStore'
@@ -221,6 +222,14 @@ export function TableView({ tableName }: TableViewProps): ReactElement {
         <FilterBuilder
           columns={tableSchema.columns}
           onApply={handleFilterChange}
+        />
+      )}
+
+      {/* Aggregation Panel */}
+      {tableSchema && (
+        <AggregationPanel
+          tableName={tableName}
+          columns={tableSchema.columns}
         />
       )}
 
