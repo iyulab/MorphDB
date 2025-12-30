@@ -442,9 +442,9 @@ MorphDB의 모든 기능을 관리할 수 있는 Electron 기반 데스크탑 �
 | SchemaController | 10 | ✅ 100% | Phase 1 ✅ |
 | DataController | 5 | ✅ 100% | Phase 1 ✅ |
 | ProjectController | 10 | ✅ 100% | Phase 1 ✅ |
-| AggregationController | 1 | ❌ 0% | Phase 2 |
-| BatchController | 5 | ❌ 0% | Phase 2 |
-| BulkController | 13 | ❌ 0% | Phase 2 |
+| AggregationController | 1 | ✅ 100% | Phase 2 ✅ |
+| BatchController | 5 | ✅ 100% | Phase 2 ✅ |
+| BulkController | 13 | ✅ 100% | Phase 2 ✅ |
 | ViewController | 8 | ❌ 0% | Phase 3 |
 | WebhookController | 12 | ❌ 0% | Phase 3 |
 | OrganizationController | 12 | ❌ 0% | Phase 3 |
@@ -459,12 +459,12 @@ MorphDB의 모든 기능을 관리할 수 있는 Electron 기반 데스크탑 �
 | Phase | Version | Focus | Key Features |
 |-------|---------|-------|--------------|
 | 1 | v0.2.x | Foundation | ✅ Routing, Schema 100%, Data 100%, Project CRUD |
-| 2 | v0.3.x | Data Operations | Aggregation, Batch ops, Import/Export |
+| 2 | v0.3.x | Data Operations | ✅ Aggregation, Batch ops, Import/Export |
 | 3 | v0.4.x | Enterprise | Org management, Views, Webhooks, Backup |
 | 4 | v0.5.x | Security | SSO config, API keys, RLS, Audit viewer |
 | 5 | v1.0.x | Polish | Performance, UX, Testing, Docs |
 
-**Current**: v0.2.x (Phase 1 Complete) - 25% API coverage
+**Current**: v0.3.x (Phase 2 Complete) - 44% API coverage (44/100 endpoints)
 **Target**: v1.0.x - 100% API coverage with full feature parity
 
 ### Phase 1 Completion Details (v0.2.x)
@@ -481,6 +481,22 @@ MorphDB의 모든 기능을 관리할 수 있는 Electron 기반 데스크탑 �
 | Projects | Full lifecycle: Create, Read, Update, Delete | ✅ |
 | Projects | Status management: Active, Suspended, Archived | ✅ |
 | Projects | Health validation and reporting | ✅ |
+
+### Phase 2 Completion Details (v0.3.x)
+
+| Component | Features | Status |
+|-----------|----------|--------|
+| Aggregation | Visual query builder (COUNT, SUM, AVG, MIN, MAX) | ✅ |
+| Aggregation | GROUP BY column picker, custom aliases | ✅ |
+| Aggregation | Results table with live execution | ✅ |
+| Batch Operations | Multi-operation executor (INSERT, UPDATE, DELETE) | ✅ |
+| Batch Operations | Color-coded operation types, per-op results | ✅ |
+| Bulk Update | Filter-based multi-record update | ✅ |
+| Bulk Delete | Safe delete with filter & confirmation | ✅ |
+| Import | CSV/JSON/NDJSON with format-specific options | ✅ |
+| Import | Auto-detect format, progress tracking | ✅ |
+| Export | CSV/JSON/XLSX with column selection | ✅ |
+| Export | Filter & row limit, format options | ✅ |
 
 ---
 
