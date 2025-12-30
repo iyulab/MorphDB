@@ -256,13 +256,15 @@ public sealed partial class OrganizationRepository : IOrganizationRepository
         };
     }
 
-    private sealed record OrganizationEntity(
-        Guid organization_id,
-        string name,
-        string slug,
-        string? description,
-        string? settings,
-        int status,
-        DateTimeOffset created_at,
-        DateTimeOffset updated_at);
+    private sealed class OrganizationEntity
+    {
+        public Guid organization_id { get; init; }
+        public string name { get; init; } = null!;
+        public string slug { get; init; } = null!;
+        public string? description { get; init; }
+        public string? settings { get; init; }
+        public int status { get; init; }
+        public DateTimeOffset created_at { get; init; }
+        public DateTimeOffset updated_at { get; init; }
+    }
 }

@@ -236,22 +236,24 @@ public sealed class SsoConfigurationRepository : ISsoConfigurationRepository
         };
     }
 
-    private sealed record SsoConfigEntity(
-        Guid sso_config_id,
-        Guid organization_id,
-        string name,
-        int provider_type,
-        string authority,
-        string client_id,
-        string? client_secret_encrypted,
-        string[]? scopes,
-        string[]? allowed_domains,
-        string? claim_mappings,
-        bool auto_provision_users,
-        int default_role,
-        int status,
-        string? last_error,
-        DateTimeOffset created_at,
-        DateTimeOffset updated_at,
-        DateTimeOffset? last_used_at);
+    private sealed class SsoConfigEntity
+    {
+        public Guid sso_config_id { get; init; }
+        public Guid organization_id { get; init; }
+        public string name { get; init; } = null!;
+        public int provider_type { get; init; }
+        public string authority { get; init; } = null!;
+        public string client_id { get; init; } = null!;
+        public string? client_secret_encrypted { get; init; }
+        public string[]? scopes { get; init; }
+        public string[]? allowed_domains { get; init; }
+        public string? claim_mappings { get; init; }
+        public bool auto_provision_users { get; init; }
+        public int default_role { get; init; }
+        public int status { get; init; }
+        public string? last_error { get; init; }
+        public DateTimeOffset created_at { get; init; }
+        public DateTimeOffset updated_at { get; init; }
+        public DateTimeOffset? last_used_at { get; init; }
+    }
 }

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MorphDB.Core.Abstractions;
+using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
 
 namespace MorphDB.Service.Controllers;
@@ -254,8 +255,15 @@ public sealed class SsoController : ControllerBase
             return Forbid();
         }
 
-        await _configService.ActivateConfigAsync(ssoConfigId, cancellationToken);
-        return NoContent();
+        try
+        {
+            await _configService.ActivateConfigAsync(ssoConfigId, cancellationToken);
+            return NoContent();
+        }
+        catch (MorphDbException ex) when (ex.ErrorCode == "SSO_CONFIG_INVALID")
+        {
+            return BadRequest(new { error = ex.ErrorCode, message = ex.Message });
+        }
     }
 
     /// <summary>

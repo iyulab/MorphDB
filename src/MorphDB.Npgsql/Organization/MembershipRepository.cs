@@ -554,41 +554,47 @@ public sealed class MembershipRepository : IMembershipRepository
 
     #endregion
 
-    #region Entity Records
+    #region Entity Classes
 
-    private sealed record OrgMemberEntity(
-        Guid member_id,
-        Guid organization_id,
-        string user_id,
-        string email,
-        string? display_name,
-        int role,
-        int status,
-        DateTimeOffset joined_at,
-        DateTimeOffset updated_at,
-        string? invited_by);
+    private sealed class OrgMemberEntity
+    {
+        public Guid member_id { get; init; }
+        public Guid organization_id { get; init; }
+        public string user_id { get; init; } = null!;
+        public string email { get; init; } = null!;
+        public string? display_name { get; init; }
+        public int role { get; init; }
+        public int status { get; init; }
+        public DateTimeOffset joined_at { get; init; }
+        public DateTimeOffset updated_at { get; init; }
+        public string? invited_by { get; init; }
+    }
 
-    private sealed record ProjMemberEntity(
-        Guid member_id,
-        Guid project_id,
-        string user_id,
-        string email,
-        string? display_name,
-        int role,
-        int status,
-        DateTimeOffset joined_at,
-        DateTimeOffset updated_at);
+    private sealed class ProjMemberEntity
+    {
+        public Guid member_id { get; init; }
+        public Guid project_id { get; init; }
+        public string user_id { get; init; } = null!;
+        public string email { get; init; } = null!;
+        public string? display_name { get; init; }
+        public int role { get; init; }
+        public int status { get; init; }
+        public DateTimeOffset joined_at { get; init; }
+        public DateTimeOffset updated_at { get; init; }
+    }
 
-    private sealed record InvitationEntity(
-        Guid invitation_id,
-        Guid organization_id,
-        string email,
-        int role,
-        string token,
-        int status,
-        DateTimeOffset created_at,
-        DateTimeOffset expires_at,
-        string invited_by);
+    private sealed class InvitationEntity
+    {
+        public Guid invitation_id { get; init; }
+        public Guid organization_id { get; init; }
+        public string email { get; init; } = null!;
+        public int role { get; init; }
+        public string token { get; init; } = null!;
+        public int status { get; init; }
+        public DateTimeOffset created_at { get; init; }
+        public DateTimeOffset expires_at { get; init; }
+        public string invited_by { get; init; } = null!;
+    }
 
     #endregion
 }
