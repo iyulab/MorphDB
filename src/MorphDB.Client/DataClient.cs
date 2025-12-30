@@ -135,6 +135,73 @@ public sealed class DataClient
             ?? throw new MorphDBException("Failed to deserialize record response");
     }
 
+    /// <summary>
+    /// Performs aggregation on a table with optional grouping.
+    /// </summary>
+    /// <param name="tableName">Name of the table.</param>
+    /// <param name="request">Aggregation request with functions, grouping, filters, and ordering.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Aggregation response with data and metadata.</returns>
+    public async Task<AggregationResponse> AggregateAsync(
+        string tableName,
+        AggregationRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var apiRequest = MapToApiRequest(request);
+        var response = await _httpClient.PostAsJsonAsync(
+            $"/api/data/{Uri.EscapeDataString(tableName)}/aggregate",
+            apiRequest,
+            cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<AggregationResponse>(cancellationToken: cancellationToken)
+            ?? new AggregationResponse { Data = [] };
+    }
+
+    private static object MapToApiRequest(AggregationRequest request)
+    {
+        return new
+        {
+            aggregations = request.Aggregations.Select(a => new
+            {
+                function = GetAggregateFunctionString(a.Function),
+                column = a.Column,
+                alias = a.Alias,
+                distinct = a.Distinct
+            }).ToList(),
+            groupBy = request.GroupBy,
+            filter = request.Filter?.Select(f => new
+            {
+                column = f.Column,
+                @operator = GetOperatorString(f.Operator),
+                value = f.Value
+            }).ToList(),
+            having = request.Having?.Select(h => new
+            {
+                alias = h.Alias,
+                @operator = GetOperatorString(h.Operator),
+                value = h.Value
+            }).ToList(),
+            orderBy = request.OrderBy?.Select(o => new
+            {
+                column = o.Column,
+                descending = o.Descending
+            }).ToList(),
+            limit = request.Limit,
+            offset = request.Offset
+        };
+    }
+
+    private static string GetAggregateFunctionString(AggregateFunction function) => function switch
+    {
+        AggregateFunction.Count => "count",
+        AggregateFunction.CountDistinct => "countDistinct",
+        AggregateFunction.Sum => "sum",
+        AggregateFunction.Avg => "avg",
+        AggregateFunction.Min => "min",
+        AggregateFunction.Max => "max",
+        _ => "count"
+    };
+
     private static string BuildQueryString(QueryRequest? request)
     {
         if (request == null)
