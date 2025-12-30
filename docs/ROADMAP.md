@@ -382,9 +382,24 @@ Write Request → Transformers → Validators → Executor → PostgreSQL
 
 | Document | Purpose |
 |----------|---------|
+| [Extended Roadmap (v0.9-v0.30)](./ROADMAP_v0.9-v0.30.md) | Data features: Views, Lookup, Rollup, Formula, Aggregation |
 | [Enterprise Features Research](./ENTERPRISE_FEATURES_RESEARCH.md) | Industry analysis, compliance requirements |
 | [Architecture](./ARCHITECTURE.md) | System design, layer responsibilities |
 | [API Documentation](./API.md) | Endpoint specifications |
+
+## Data Features Progress (Extended Roadmap)
+
+| Version | Feature | Status |
+|---------|---------|--------|
+| v0.10.x | Views & Computed Columns | ✅ Complete |
+| v0.11.x | Lookup Fields | ✅ Complete |
+| v0.12.x | Rollup Fields | ✅ Complete |
+| v0.13.x | Formula Fields | ✅ Complete |
+| v0.14.x | Aggregation API | ✅ Complete |
+| v0.15.x | Client SDK Aggregation | ✅ Complete |
+| v0.16.x | Materialized Views | 📋 Planned |
+
+See [Extended Roadmap](./ROADMAP_v0.9-v0.30.md) for full details.
 
 ---
 

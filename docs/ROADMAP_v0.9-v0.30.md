@@ -10,30 +10,31 @@
 
 ## Version Overview
 
-| Version | Theme | Key Features | Effort |
-|---------|-------|--------------|--------|
-| 0.9.x | Organization + SSO | Teams, RBAC, OIDC/SAML | High |
-| 0.10.x | Views | Virtual tables, computed columns | Medium |
-| 0.11.x | Lookup Fields | Cross-table field reference | Medium |
-| 0.12.x | Rollup Fields | Aggregation on relations | Medium |
-| 0.13.x | Formula Fields | Expression evaluation | High |
-| 0.14.x | Aggregation API | Count, sum, avg, min, max | Medium |
-| 0.15.x | Materialized Views | Cached query results | High |
-| 0.16.x | Advanced Relations | Many-to-many, self-referential | Medium |
-| 0.17.x | File Attachments | S3/Azure Blob integration | Medium |
-| 0.18.x | Full-Text Search | PostgreSQL tsvector | High |
-| 0.19.x | Workflow Automation | Triggers, actions | Very High |
-| 0.20.x | Plugin Architecture | Extension points | Very High |
-| 0.21.x | Advanced Permissions | Field-level, conditional | High |
-| 0.22.x | Data Connectors | External data sources | High |
-| 0.23.x | Admin Dashboard | Web UI | Very High |
-| 0.24.x | Enterprise Features | HA, Backup, PITR | Very High |
-| 0.25.x | Analytics & BI | Dashboards, charts | High |
-| 0.26.x | Multi-Region | Geo-replication | Very High |
-| 0.27.x | Edge Functions | Serverless compute | Very High |
-| 0.28.x | API Gateway | Rate limiting, caching | High |
-| 0.29.x | Compliance Pack | SOC2, GDPR, HIPAA | High |
-| 0.30.x | Pre-1.0 Hardening | Stability, performance | High |
+| Version | Theme | Key Features | Effort | Status |
+|---------|-------|--------------|--------|--------|
+| 0.9.x | Organization + SSO | Teams, RBAC, OIDC/SAML | High | 📋 Planned |
+| 0.10.x | Views | Virtual tables, computed columns | Medium | ✅ Complete |
+| 0.11.x | Lookup Fields | Cross-table field reference | Medium | ✅ Complete |
+| 0.12.x | Rollup Fields | Aggregation on relations | Medium | ✅ Complete |
+| 0.13.x | Formula Fields | Expression evaluation | High | ✅ Complete |
+| 0.14.x | Aggregation API | Count, sum, avg, min, max | Medium | ✅ Complete |
+| 0.15.x | Client SDK Aggregation | SDK aggregation support | Low | ✅ Complete |
+| 0.16.x | Materialized Views | Cached query results | High | 📋 Planned |
+| 0.17.x | Advanced Relations | Many-to-many, self-referential | Medium | 📋 Planned |
+| 0.18.x | File Attachments | S3/Azure Blob integration | Medium | 📋 Planned |
+| 0.19.x | Full-Text Search | PostgreSQL tsvector | High | 📋 Planned |
+| 0.20.x | Workflow Automation | Triggers, actions | Very High | 📋 Planned |
+| 0.21.x | Plugin Architecture | Extension points | Very High | 📋 Planned |
+| 0.22.x | Advanced Permissions | Field-level, conditional | High | 📋 Planned |
+| 0.23.x | Data Connectors | External data sources | High | 📋 Planned |
+| 0.24.x | Admin Dashboard | Web UI | Very High | 📋 Planned |
+| 0.25.x | Enterprise Features | HA, Backup, PITR | Very High | 📋 Planned |
+| 0.26.x | Analytics & BI | Dashboards, charts | High | 📋 Planned |
+| 0.27.x | Multi-Region | Geo-replication | Very High | 📋 Planned |
+| 0.28.x | Edge Functions | Serverless compute | Very High | 📋 Planned |
+| 0.29.x | API Gateway | Rate limiting, caching | High | 📋 Planned |
+| 0.30.x | Compliance Pack | SOC2, GDPR, HIPAA | High | 📋 Planned |
+| 0.31.x | Pre-1.0 Hardening | Stability, performance | High | 📋 Planned |
 
 ---
 
@@ -53,7 +54,7 @@
 
 ---
 
-### v0.10.x: Views & Computed Columns
+### v0.10.x: Views & Computed Columns ✅ Complete
 
 > **철학 정렬**: View는 논리적 추상화의 확장. 물리 테이블 없이 가상 테이블 제공.
 
@@ -130,7 +131,7 @@ POST /api/schema/tables/{table}/columns
 
 ---
 
-### v0.11.x: Lookup Fields
+### v0.11.x: Lookup Fields ✅ Complete
 
 > **철학 정렬**: 관계형 데이터의 편리한 참조. Airtable/Notion 스타일의 Lookup.
 
@@ -186,7 +187,7 @@ LEFT JOIN tbl_customers c ON o.col_customer_id = c.col_id
 
 ---
 
-### v0.12.x: Rollup Fields
+### v0.12.x: Rollup Fields ✅ Complete
 
 > **철학 정렬**: 관계 기반 집계. 1:N 관계의 N측 데이터 집계.
 
@@ -243,7 +244,7 @@ ColumnMetadata 확장
 
 ---
 
-### v0.13.x: Formula Fields
+### v0.13.x: Formula Fields ✅ Complete
 
 > **철학 정렬**: 표현식 기반 계산 필드. Airtable/Notion Formula 스타일.
 
@@ -297,7 +298,7 @@ FormulaDefinition
 
 ---
 
-### v0.14.x: Aggregation API
+### v0.14.x: Aggregation API ✅ Complete
 
 > **철학 정렬**: Firebase/Supabase 스타일의 서버사이드 집계.
 
@@ -357,7 +358,45 @@ query {
 
 ---
 
-### v0.15.x: Materialized Views
+### v0.15.x: Client SDK Aggregation ✅ Complete
+
+> **철학 정렬**: .NET Client SDK에서 서버사이드 집계 기능 지원.
+
+#### Implementation
+
+| Component | Status | Description |
+|-----------|--------|-------------|
+| AggregationModels.cs | ✅ | Client-side request/response models |
+| DataClient.AggregateAsync | ✅ | HTTP client method for aggregation |
+| AggregationApiTests.cs | ✅ | API integration tests (9/11 pass, 2 skipped) |
+
+#### Client Models
+
+```csharp
+// Request
+var request = new AggregationRequest
+{
+    Aggregations = [
+        AggregationColumn.Count("total"),
+        AggregationColumn.Sum("amount", "total_amount"),
+        AggregationColumn.Avg("rating", "avg_rating")
+    ],
+    GroupBy = ["category", "status"],
+    Having = [new HavingCondition("total_amount", FilterOperator.GreaterThan, 100)],
+    OrderBy = [new AggregationOrderBy("total_amount", descending: true)]
+};
+
+// Execute
+var result = await client.Data.AggregateAsync("orders", request);
+```
+
+#### Known Issues
+- Filter API serialization needs debugging (test skipped)
+- Having API serialization needs debugging (test skipped)
+
+---
+
+### v0.16.x: Materialized Views
 
 > **철학 정렬**: PostgreSQL Materialized View 활용한 쿼리 성능 최적화.
 
@@ -934,4 +973,15 @@ Version N → Version N+1:
 ---
 
 *Last Updated: 2025-12-30*
-*Author: Claude Code Analysis*
+*Author: Claude Code*
+
+## Recent Commits (v0.10.x ~ v0.15.x)
+
+| Version | Commit | Description |
+|---------|--------|-------------|
+| v0.10.x | dc3f5cc | Views & Computed Columns |
+| v0.11.x | e94785e | Lookup Fields |
+| v0.12.x | 2d31f63 | Rollup Fields |
+| v0.13.x | cd61e11 | Formula Fields |
+| v0.14.x | 408c245 | Aggregation API |
+| v0.15.x | 706c83b | Client SDK Aggregation |
