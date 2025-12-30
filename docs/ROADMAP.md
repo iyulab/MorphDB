@@ -17,32 +17,32 @@
 | 0.7.0 | 17-18: Schema Architecture | ✅ Complete |
 | 0.7.5 | 18.5: Virtual Constraints | ✅ Complete |
 | 0.8.0 | 18.6-20: System Columns + Audit + Rate Limiting | ✅ Complete |
-| 0.9.0 | 21-22: Organization + SSO | 📋 Planned |
+| 0.9.0 | 21-22: Organization + SSO | ✅ Complete |
 | 1.0.0 | 23-24: Enterprise Ready | 📋 Planned |
 
 ---
 
 ## Current Focus
 
-**Active Version**: v0.9.0 (Organization + SSO)
+**Active Version**: v1.0.0 (Enterprise Ready)
 
-### Completed in Previous Version (v0.8.0)
+### Completed in Previous Version (v0.9.0)
 
 | Phase | Task | Status |
 |-------|------|--------|
-| 18.6 | System Columns (Core/Standard/Optional) | ✅ Complete |
-| 19 | Audit Logging (API, middleware, integration tests) | ✅ Complete |
-| 20 | Rate Limiting (Quota API, rate limit headers) | ✅ Complete |
+| 21 | Organization entity, API, RBAC, Members, Invitations | ✅ Complete |
+| 22 | SSO Configuration CRUD, OIDC provider support | ✅ Complete |
+| 21-22 | Integration tests (35 tests: 16 Org + 19 SSO) | ✅ Complete |
 
 ### Immediate Tasks
 
 | Priority | Task | Status | Assigned |
 |----------|------|--------|----------|
-| 🔴 Critical | Organization entity and API (Phase 21) | 📋 Planned | - |
-| 🔴 Critical | RBAC implementation (Phase 21) | 📋 Planned | - |
-| 🟡 High | OIDC provider support (Phase 22) | 📋 Planned | - |
-| 🟡 High | SAML 2.0 for enterprise (Phase 22) | 📋 Planned | - |
-| 🟢 Normal | Team member invitation flow | 📋 Planned | - |
+| 🔴 Critical | Admin Dashboard - Phase 23 | 📋 Planned | - |
+| 🔴 Critical | Health status overview | 📋 Planned | - |
+| 🟡 High | Enterprise Features - Phase 24 | 📋 Planned | - |
+| 🟡 High | Backup and Recovery (PITR) | 📋 Planned | - |
+| 🟢 Normal | Compliance controls (SOC 2, HIPAA, GDPR) | 📋 Planned | - |
 
 ---
 
@@ -262,33 +262,58 @@ Write Request → Transformers → Validators → Executor → PostgreSQL
 
 ---
 
+### ✅ Complete: v0.9.0 (Organization + SSO)
+
+| Phase | Description | Status | Tasks |
+|-------|-------------|--------|-------|
+| 21 | **Organization** | ✅ Complete | Team management, roles, hierarchy |
+| 22 | **SSO Integration** | ✅ Complete | OIDC provider support |
+
+#### Phase 21: Organization Management ✅
+
+**Goal**: Multi-tenant organization hierarchy with RBAC
+
+| Task | Priority | Status | Notes |
+|------|----------|--------|-------|
+| Organization entity and API | 🔴 Critical | ✅ | CRUD, stats, slug-based lookup |
+| Project hierarchy (Org → Projects) | 🔴 Critical | ✅ | OrganizationId in Project |
+| RBAC roles | 🔴 Critical | ✅ | Owner/Admin/Member for Org, Admin/Developer/Viewer for Project |
+| Team member management | 🟡 High | ✅ | Add, update role, remove members |
+| Team member invitation flow | 🟢 Normal | ✅ | Create, revoke, list invitations |
+| Integration tests | 🟡 High | ✅ | 16 tests in OrganizationApiTests.cs |
+
+**Key Implementation Details**:
+- **Organization API**: `/api/organizations/*` with CRUD, members, invitations, stats
+- **Repositories**: OrganizationRepository, MembershipRepository (Dapper)
+- **RBAC**: PermissionService with cached permissions, role-based access control
+- **Controllers**: OrganizationController with [Authorize] attribute
+
+#### Phase 22: SSO Integration ✅
+
+**Goal**: Enterprise SSO with OIDC support
+
+| Task | Priority | Status | Notes |
+|------|----------|--------|-------|
+| SSO configuration CRUD | 🔴 Critical | ✅ | Create, read, update, delete configs |
+| OIDC provider support | 🔴 Critical | ✅ | Generic OIDC, EntraId, Google, Okta, Auth0, Keycloak |
+| Provider-specific presets | 🟡 High | ✅ | SsoProviderType enum with 6 providers |
+| Claim mappings | 🟡 High | ✅ | Configurable subject, email, name, groups claims |
+| Domain restrictions | 🟢 Normal | ✅ | AllowedDomains for email filtering |
+| SSO config activation/deactivation | 🟡 High | ✅ | With OIDC discovery validation |
+| SSO config testing | 🟡 High | ✅ | Validates OIDC discovery document |
+| Integration tests | 🟡 High | ✅ | 19 tests in SsoApiTests.cs |
+
+**Key Implementation Details**:
+- **SSO API**: `/api/sso/*` for config management, `/api/sso/login/{orgSlug}` for login flow
+- **Repositories**: SsoConfigurationRepository (Dapper, encrypted client secrets)
+- **Services**: SsoConfigurationService, SsoAuthenticationService with PKCE flow
+- **OIDC Discovery**: Validates authority before activation
+
+**Note**: SAML 2.0 support is deferred to a future version.
+
+---
+
 ### 📋 Planned Phases
-
-#### v0.9.0: Organization + SSO
-
-| Phase | Description | Tasks |
-|-------|-------------|-------|
-| 21 | **Organization** | Team management, roles, hierarchy |
-| 22 | **SSO Integration** | SAML 2.0, OIDC |
-
-<details>
-<summary>Task Breakdown</summary>
-
-**Phase 21: Organization Management**
-- [ ] Organization entity and API
-- [ ] Project hierarchy (Org → Projects → Environments)
-- [ ] RBAC: enterprise_admin, org_admin, project_admin, developer, viewer
-- [ ] Team member invitation flow
-- [ ] Activity tracking per member
-
-**Phase 22: SSO Integration**
-- [ ] OIDC provider support (Google, Microsoft, Auth0, Okta)
-- [ ] SAML 2.0 for enterprise (Okta, Azure AD, ADFS)
-- [ ] Just-in-time user provisioning
-- [ ] Attribute mapping configuration
-- [ ] Session management (timeout, concurrent limits)
-
-</details>
 
 #### v1.0.0: Enterprise Ready
 
