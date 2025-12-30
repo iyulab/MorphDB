@@ -157,6 +157,8 @@ export type DuplicateHandling = 'insert' | 'update' | 'upsert' | 'skip' | 'error
 export interface CsvImportOptions {
   delimiter?: string
   hasHeader?: boolean
+  skipRows?: number
+  encoding?: string
   dateFormat?: string
   trimWhitespace?: boolean
   nullHandling?: NullHandling
@@ -165,9 +167,18 @@ export interface CsvImportOptions {
 }
 
 export interface JsonImportOptions {
+  rootPath?: string
+  flattenNested?: boolean
   dateFormat?: string
   duplicateHandling?: DuplicateHandling
   keyColumns?: string[]
+}
+
+export interface ImportErrorItem {
+  row: number
+  column?: string
+  message: string
+  value?: unknown
 }
 
 export interface ImportJobResponse {
@@ -179,6 +190,7 @@ export interface ImportJobResponse {
   processedRows: number
   successCount: number
   errorCount: number
+  errors?: ImportErrorItem[]
   errorMessage?: string
   createdAt: string
   startedAt?: string
@@ -192,14 +204,17 @@ export interface CsvExportOptions {
   columns?: string[]
   filter?: string
   orderBy?: string
+  limit?: number
 }
 
 export interface JsonExportOptions {
   pretty?: boolean
+  arrayFormat?: boolean
   dateFormat?: string
   columns?: string[]
   filter?: string
   orderBy?: string
+  limit?: number
 }
 
 export interface XlsxExportOptions {
@@ -208,6 +223,7 @@ export interface XlsxExportOptions {
   columns?: string[]
   filter?: string
   orderBy?: string
+  limit?: number
 }
 
 export interface ExportJobResponse {
@@ -216,6 +232,7 @@ export interface ExportJobResponse {
   format: string
   status: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled'
   totalRows?: number
+  rowCount?: number
   processedRows: number
   fileSize?: number
   errorMessage?: string

@@ -1,6 +1,6 @@
 import { useState, useMemo, type ReactElement } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { AlertCircle, Database, MoreHorizontal, Layers, Pencil, Trash2 } from 'lucide-react'
+import { AlertCircle, Database, MoreHorizontal, Layers, Pencil, Trash2, Upload, Download } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { DataGrid } from './DataGrid'
 import { FilterBuilder } from './FilterBuilder'
@@ -9,6 +9,8 @@ import { AddRecordDialog } from '@/components/dialogs/AddRecordDialog'
 import { BulkOperationsDialog } from '@/components/dialogs/BulkOperationsDialog'
 import { BulkUpdateDialog } from '@/components/dialogs/BulkUpdateDialog'
 import { BulkDeleteDialog } from '@/components/dialogs/BulkDeleteDialog'
+import { ImportDialog } from '@/components/dialogs/ImportDialog'
+import { ExportDialog } from '@/components/dialogs/ExportDialog'
 import { MorphDBClient, type TableApiResponse } from '@/lib/api'
 import { useConnectionStore } from '@/stores/connectionStore'
 
@@ -31,6 +33,8 @@ export function TableView({ tableName }: TableViewProps): ReactElement {
   const [bulkUpdateOpen, setBulkUpdateOpen] = useState(false)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [batchMenuOpen, setBatchMenuOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
 
   // Helper to create API client
   const createClient = async (): Promise<MorphDBClient | null> => {
@@ -222,58 +226,80 @@ export function TableView({ tableName }: TableViewProps): ReactElement {
             </span>
           )}
         </div>
-        {/* Batch Operations Menu */}
-        <div className="relative">
+        {/* Import/Export Buttons */}
+        <div className="flex items-center gap-2">
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setBatchMenuOpen(!batchMenuOpen)}
+            onClick={() => setImportOpen(true)}
             className="gap-1"
           >
-            <Layers className="h-4 w-4" />
-            Batch
-            <MoreHorizontal className="h-4 w-4" />
+            <Upload className="h-4 w-4" />
+            Import
           </Button>
-          {batchMenuOpen && (
-            <>
-              <div
-                className="fixed inset-0"
-                onClick={() => setBatchMenuOpen(false)}
-              />
-              <div className="absolute right-0 top-full mt-1 z-50 min-w-[180px] rounded-md border bg-popover p-1 shadow-md">
-                <button
-                  onClick={() => {
-                    setBulkOpsOpen(true)
-                    setBatchMenuOpen(false)
-                  }}
-                  className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent text-left"
-                >
-                  <Layers className="h-4 w-4" />
-                  Batch Operations
-                </button>
-                <button
-                  onClick={() => {
-                    setBulkUpdateOpen(true)
-                    setBatchMenuOpen(false)
-                  }}
-                  className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent text-left"
-                >
-                  <Pencil className="h-4 w-4" />
-                  Bulk Update
-                </button>
-                <button
-                  onClick={() => {
-                    setBulkDeleteOpen(true)
-                    setBatchMenuOpen(false)
-                  }}
-                  className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent text-left text-destructive"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Bulk Delete
-                </button>
-              </div>
-            </>
-          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setExportOpen(true)}
+            className="gap-1"
+          >
+            <Download className="h-4 w-4" />
+            Export
+          </Button>
+
+          {/* Batch Operations Menu */}
+          <div className="relative">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setBatchMenuOpen(!batchMenuOpen)}
+              className="gap-1"
+            >
+              <Layers className="h-4 w-4" />
+              Batch
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+            {batchMenuOpen && (
+              <>
+                <div
+                  className="fixed inset-0"
+                  onClick={() => setBatchMenuOpen(false)}
+                />
+                <div className="absolute right-0 top-full mt-1 z-50 min-w-[180px] rounded-md border bg-popover p-1 shadow-md">
+                  <button
+                    onClick={() => {
+                      setBulkOpsOpen(true)
+                      setBatchMenuOpen(false)
+                    }}
+                    className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent text-left"
+                  >
+                    <Layers className="h-4 w-4" />
+                    Batch Operations
+                  </button>
+                  <button
+                    onClick={() => {
+                      setBulkUpdateOpen(true)
+                      setBatchMenuOpen(false)
+                    }}
+                    className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent text-left"
+                  >
+                    <Pencil className="h-4 w-4" />
+                    Bulk Update
+                  </button>
+                  <button
+                    onClick={() => {
+                      setBulkDeleteOpen(true)
+                      setBatchMenuOpen(false)
+                    }}
+                    className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent text-left text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Bulk Delete
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -343,6 +369,21 @@ export function TableView({ tableName }: TableViewProps): ReactElement {
             columns={tableSchema.columns}
           />
         </>
+      )}
+
+      {/* Import/Export Dialogs */}
+      <ImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        tableName={tableName}
+      />
+      {tableSchema && (
+        <ExportDialog
+          open={exportOpen}
+          onOpenChange={setExportOpen}
+          tableName={tableName}
+          columns={tableSchema.columns}
+        />
       )}
     </div>
   )
