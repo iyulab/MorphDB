@@ -1,9 +1,12 @@
-import { useState, useEffect, type ReactElement } from 'react'
+import { useState, useEffect, useCallback, type ReactElement } from 'react'
 import { Outlet } from 'react-router-dom'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { ConnectionDialog } from '@/components/dialogs/ConnectionDialog'
 import { CommandPalette, useCommandPalette } from '@/components/CommandPalette'
+import { KeyboardShortcutsHelp, useKeyboardShortcutsHelp } from '@/components/KeyboardShortcutsHelp'
+import { useGlobalShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useConnectionStore } from '@/stores/connectionStore'
+import { useThemeStore } from '@/stores/themeStore'
 import type { Connection } from '@/types/connection'
 
 export function RootLayout(): ReactElement {
@@ -11,7 +14,25 @@ export function RootLayout(): ReactElement {
   const [editConnection, setEditConnection] = useState<Connection | null>(null)
   const [appVersion, setAppVersion] = useState('')
   const { connections } = useConnectionStore()
+  const { toggleTheme } = useThemeStore()
   const { open: commandPaletteOpen, setOpen: setCommandPaletteOpen } = useCommandPalette()
+  const { open: shortcutsHelpOpen, setOpen: setShortcutsHelpOpen } = useKeyboardShortcutsHelp()
+
+  const handleNewConnectionShortcut = useCallback(() => {
+    setEditConnection(null)
+    setShowConnectionDialog(true)
+  }, [])
+
+  const handleReload = useCallback(() => {
+    window.location.reload()
+  }, [])
+
+  // Register global keyboard shortcuts
+  useGlobalShortcuts({
+    onNewConnection: handleNewConnectionShortcut,
+    onToggleTheme: toggleTheme,
+    onReload: handleReload
+  })
 
   useEffect(() => {
     // Safety check for non-Electron environment
@@ -83,6 +104,11 @@ export function RootLayout(): ReactElement {
       <CommandPalette
         open={commandPaletteOpen}
         onOpenChange={setCommandPaletteOpen}
+      />
+
+      <KeyboardShortcutsHelp
+        open={shortcutsHelpOpen}
+        onOpenChange={setShortcutsHelpOpen}
       />
     </div>
   )
