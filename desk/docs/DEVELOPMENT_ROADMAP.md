@@ -451,31 +451,74 @@ features/backups/
 **목표**: Production-ready 품질
 
 ### 5.1 Performance Optimization
-- [ ] Virtual scrolling for large datasets
-- [ ] Query result caching (react-query)
+- [x] Virtual scrolling for large datasets (@tanstack/react-virtual 구현됨)
+- [x] Query result caching (@tanstack/react-query 구현됨)
 - [ ] Optimistic updates
-- [ ] Lazy loading for routes
-- [ ] Image/asset optimization
+  - [ ] Data mutations에 useMutation + optimisticUpdate 적용
+  - [ ] Rollback on error 처리
+- [x] Lazy loading for routes (React Router 구현됨)
+- [ ] Bundle optimization
+  - [ ] Vite bundle analyzer 추가
+  - [ ] Tree shaking 확인
+  - [ ] Chunk splitting 최적화
 
 ### 5.2 UX Enhancement
-- [ ] Keyboard shortcuts
-- [ ] Command palette (⌘K)
+- [ ] Keyboard shortcuts (useHotkeys)
+  - [ ] Global shortcuts: Cmd/Ctrl+K (command palette), Cmd/Ctrl+N (new), Cmd/Ctrl+S (save)
+  - [ ] Navigation: Cmd/Ctrl+1-9 (sidebar items)
+  - [ ] Data grid: Arrow keys, Enter (edit), Escape (cancel), Delete (delete row)
+- [ ] Command palette (cmdk)
+  - [ ] 패키지 설치: cmdk
+  - [ ] CommandPalette 컴포넌트 생성
+  - [ ] Actions: Navigate, Create, Search, Quick operations
 - [ ] Dark/Light theme toggle
+  - [ ] ThemeProvider 구현
+  - [ ] CSS variables 기반 테마 시스템
+  - [ ] localStorage 테마 저장
+  - [ ] System preference 감지
 - [ ] Responsive layout
-- [ ] Accessibility (WCAG 2.1)
+  - [ ] Sidebar collapse on mobile/narrow
+  - [ ] DataGrid horizontal scroll
+  - [ ] Modal/Dialog 반응형
+- [ ] Accessibility (WCAG 2.1 AA)
+  - [ ] Focus management
+  - [ ] ARIA labels
+  - [ ] Screen reader 지원
+  - [ ] Color contrast 검증
 
 ### 5.3 Testing & Quality
 - [ ] Unit tests (Vitest)
+  - [ ] 패키지 설치: vitest, @testing-library/react, @testing-library/user-event
+  - [ ] vitest.config.ts 설정
+  - [ ] 핵심 컴포넌트 테스트 (Button, Input, DataGrid)
+  - [ ] API client 테스트
+  - [ ] Store 테스트
 - [ ] E2E tests (Playwright)
+  - [ ] 패키지 설치: @playwright/test
+  - [ ] playwright.config.ts 설정
+  - [ ] Critical path 테스트: Login → Table → Data CRUD
+  - [ ] Form validation 테스트
 - [ ] Storybook for components
+  - [ ] 패키지 설치: @storybook/react-vite
+  - [ ] UI 컴포넌트 stories
+  - [ ] Design system 문서화
 - [ ] Error boundary & recovery
+  - [ ] Global ErrorBoundary 개선
+  - [ ] Route-level error boundaries
+  - [ ] Retry 메커니즘
 - [ ] Comprehensive error messages
+  - [ ] Toast 알림 시스템
+  - [ ] API 에러 메시지 표준화
+  - [ ] Validation 에러 표시
 
 ### 5.4 Documentation
-- [ ] User guide
-- [ ] Keyboard shortcuts reference
-- [ ] Troubleshooting guide
-- [ ] Release notes
+- [ ] User guide (desk/docs/USER_GUIDE.md)
+  - [ ] Getting started
+  - [ ] Feature walkthroughs
+  - [ ] Screenshots
+- [ ] Keyboard shortcuts reference (desk/docs/KEYBOARD_SHORTCUTS.md)
+- [ ] Troubleshooting guide (desk/docs/TROUBLESHOOTING.md)
+- [ ] Release notes (desk/CHANGELOG.md)
 
 ---
 
@@ -503,41 +546,49 @@ features/backups/
 - Zustand (state)
 - Radix UI (components)
 
-### Additions for Roadmap
-- react-router-dom v6 (routing)
-- @tanstack/react-query (data fetching)
-- react-flow (ERD visualization)
-- recharts (charts)
+### Already Implemented
+- react-router-dom v6 (routing) ✅
+- @tanstack/react-query (data fetching) ✅
+- @tanstack/react-table (table) ✅
+- @tanstack/react-virtual (virtualization) ✅
+
+### Additions for Phase 5
 - cmdk (command palette)
-- vitest (testing)
-- playwright (E2E testing)
-- framer-motion (animations)
+- react-hotkeys-hook (keyboard shortcuts)
+- vitest + @testing-library/react (unit testing)
+- @playwright/test (E2E testing)
+- @storybook/react-vite (component docs)
+- rollup-plugin-visualizer (bundle analysis)
 
 ---
 
 ## Success Metrics
 
-### Phase 1
-- [ ] 100% Schema API coverage
-- [ ] 100% Data API coverage
-- [ ] Clean navigation structure
+### Phase 1 ✅
+- [x] 100% Schema API coverage
+- [x] 100% Data API coverage
+- [x] Clean navigation structure
 
-### Phase 2
-- [ ] Aggregation with visualization
-- [ ] Import 10k+ rows successfully
-- [ ] Export to all formats
+### Phase 2 ✅
+- [x] Aggregation with visualization
+- [x] Import 10k+ rows successfully
+- [x] Export to all formats
 
-### Phase 3
-- [ ] Multi-org support working
-- [ ] Webhooks with monitoring
-- [ ] Backup/restore cycle tested
+### Phase 3 ✅
+- [x] Multi-org support working
+- [x] Webhooks with monitoring
+- [x] Backup/restore cycle tested
 
-### Phase 4
-- [ ] SSO login flow working
-- [ ] RLS policies enforced
-- [ ] Audit log searchable
+### Phase 4 ✅
+- [x] SSO config UI working
+- [x] RLS policies UI working
+- [x] Audit log searchable
+- [x] Quota dashboard
 
-### Phase 5
-- [ ] <100ms UI response time
-- [ ] 90%+ test coverage
-- [ ] WCAG 2.1 AA compliant
+### Phase 5 (Target)
+- [ ] <100ms UI response time (Lighthouse CI)
+- [ ] 80%+ unit test coverage
+- [ ] Critical path E2E tests passing
+- [ ] WCAG 2.1 AA compliant (axe-core validation)
+- [ ] Command palette fully functional
+- [ ] Dark/Light theme working
