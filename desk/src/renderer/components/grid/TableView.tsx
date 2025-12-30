@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { AlertCircle, Database } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { DataGrid } from './DataGrid'
+import { FilterBuilder } from './FilterBuilder'
 import { AddRecordDialog } from '@/components/dialogs/AddRecordDialog'
 import { MorphDBClient, type TableApiResponse } from '@/lib/api'
 import { useConnectionStore } from '@/stores/connectionStore'
@@ -20,6 +21,7 @@ export function TableView({ tableName }: TableViewProps): ReactElement {
   const [currentPage, setCurrentPage] = useState(1)
   const [sortBy, setSortBy] = useState<string | null>(null)
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
+  const [filter, setFilter] = useState<string | null>(null)
   const [addRecordOpen, setAddRecordOpen] = useState(false)
 
   // Helper to create API client
@@ -56,7 +58,7 @@ export function TableView({ tableName }: TableViewProps): ReactElement {
     error: dataError,
     refetch: refetchData
   } = useQuery({
-    queryKey: ['table-data', activeConnection?.id, tableName, currentPage, sortBy, sortOrder],
+    queryKey: ['table-data', activeConnection?.id, tableName, currentPage, sortBy, sortOrder, filter],
     queryFn: async () => {
       const client = await createClient()
       if (!client) throw new Error('No active connection')
@@ -66,6 +68,7 @@ export function TableView({ tableName }: TableViewProps): ReactElement {
         $skip: number
         $count: boolean
         $orderby?: string
+        $filter?: string
       } = {
         $top: PAGE_SIZE,
         $skip: (currentPage - 1) * PAGE_SIZE,
@@ -74,6 +77,10 @@ export function TableView({ tableName }: TableViewProps): ReactElement {
 
       if (sortBy) {
         options.$orderby = `${sortBy} ${sortOrder}`
+      }
+
+      if (filter) {
+        options.$filter = filter
       }
 
       return client.queryData(tableName, options)
@@ -174,6 +181,11 @@ export function TableView({ tableName }: TableViewProps): ReactElement {
     setCurrentPage(page)
   }
 
+  const handleFilterChange = (newFilter: string | null): void => {
+    setFilter(newFilter)
+    setCurrentPage(1) // Reset to first page when filter changes
+  }
+
   // Error state
   if (schemaError || dataError) {
     return (
@@ -203,6 +215,14 @@ export function TableView({ tableName }: TableViewProps): ReactElement {
           )}
         </div>
       </div>
+
+      {/* Filter Builder */}
+      {tableSchema && (
+        <FilterBuilder
+          columns={tableSchema.columns}
+          onApply={handleFilterChange}
+        />
+      )}
 
       {/* Data Grid */}
       <div className="flex-1 overflow-hidden">
