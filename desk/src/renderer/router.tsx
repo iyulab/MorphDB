@@ -7,6 +7,7 @@ import { ViewsPage } from './routes/views'
 import { WebhooksPage } from './routes/webhooks'
 import { OrganizationsPage } from './routes/organizations'
 import { BackupsPage } from './routes/backups'
+import { AuditPage } from './routes/audit'
 import { ErrorBoundary } from './components/ErrorBoundary'
 
 export const router = createHashRouter([
@@ -46,6 +47,10 @@ export const router = createHashRouter([
       {
         path: 'backups',
         element: <BackupsPage />
+      },
+      {
+        path: 'audit',
+        element: <AuditPage />
       },
       {
         path: 'settings',

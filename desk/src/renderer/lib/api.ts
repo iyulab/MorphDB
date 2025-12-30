@@ -565,6 +565,79 @@ export interface RestoreResultApiResponse {
   durationMs: number
 }
 
+// Audit types
+export type AuditCategory = 'auth' | 'data' | 'schema' | 'admin' | 'security' | 'system'
+export type AuditSeverity = 'debug' | 'info' | 'warning' | 'error' | 'critical'
+
+export interface AuditLogQueryParams {
+  category?: number // 0=Auth, 1=Data, 2=Schema, 3=Admin, 4=Security, 5=System
+  minSeverity?: number // 0=Debug, 1=Info, 2=Warning, 3=Error, 4=Critical
+  actorId?: string
+  resourceType?: string
+  resourceId?: string
+  action?: string
+  from?: string
+  to?: string
+  searchText?: string
+  page?: number
+  pageSize?: number
+  orderBy?: string
+  descending?: boolean
+}
+
+export interface AuditLogEntryApiResponse {
+  id: string
+  projectId: string
+  category: AuditCategory
+  action: string
+  severity: AuditSeverity
+  actorId?: string
+  actorType?: string
+  resourceType?: string
+  resourceId?: string
+  httpMethod?: string
+  requestPath?: string
+  statusCode?: number
+  ipAddress?: string
+  userAgent?: string
+  durationMs?: number
+  metadata?: Record<string, unknown>
+  errorMessage?: string
+  timestamp: string
+}
+
+export interface AuditLogPageApiResponse {
+  items: AuditLogEntryApiResponse[]
+  totalCount: number
+  page: number
+  pageSize: number
+  totalPages: number
+  hasMore: boolean
+}
+
+export interface ActorStatsApiResponse {
+  actorId: string
+  actorType?: string
+  eventCount: number
+}
+
+export interface ActionStatsApiResponse {
+  action: string
+  eventCount: number
+  avgDurationMs?: number
+}
+
+export interface AuditStatsApiResponse {
+  totalEvents: number
+  byCategory: Record<string, number>
+  bySeverity: Record<string, number>
+  topActors: ActorStatsApiResponse[]
+  topActions: ActionStatsApiResponse[]
+  errorRate: number
+  from: string
+  to: string
+}
+
 export interface TableApiResponse {
   id: string
   name: string
@@ -1467,6 +1540,53 @@ export class MorphDBClient {
 
   getBackupDownloadUrl(projectId: string, backupId: string): string {
     return `${this.baseUrl}/api/projects/${projectId}/backups/${backupId}/download`
+  }
+
+  // Audit API
+  async queryAuditLogs(
+    projectId: string,
+    params?: AuditLogQueryParams
+  ): Promise<AuditLogPageApiResponse> {
+    const searchParams = new URLSearchParams()
+    if (params) {
+      if (params.category !== undefined) searchParams.set('category', params.category.toString())
+      if (params.minSeverity !== undefined)
+        searchParams.set('minSeverity', params.minSeverity.toString())
+      if (params.actorId) searchParams.set('actorId', params.actorId)
+      if (params.resourceType) searchParams.set('resourceType', params.resourceType)
+      if (params.resourceId) searchParams.set('resourceId', params.resourceId)
+      if (params.action) searchParams.set('action', params.action)
+      if (params.from) searchParams.set('from', params.from)
+      if (params.to) searchParams.set('to', params.to)
+      if (params.searchText) searchParams.set('searchText', params.searchText)
+      if (params.page !== undefined) searchParams.set('page', params.page.toString())
+      if (params.pageSize !== undefined) searchParams.set('pageSize', params.pageSize.toString())
+      if (params.orderBy) searchParams.set('orderBy', params.orderBy)
+      if (params.descending !== undefined)
+        searchParams.set('descending', params.descending.toString())
+    }
+    const queryString = searchParams.toString()
+    const url = `/api/projects/${projectId}/audit/logs${queryString ? `?${queryString}` : ''}`
+    return this.request<AuditLogPageApiResponse>(url)
+  }
+
+  async getAuditLog(projectId: string, logId: string): Promise<AuditLogEntryApiResponse> {
+    return this.request<AuditLogEntryApiResponse>(
+      `/api/projects/${projectId}/audit/logs/${logId}`
+    )
+  }
+
+  async getAuditStats(
+    projectId: string,
+    from?: string,
+    to?: string
+  ): Promise<AuditStatsApiResponse> {
+    const searchParams = new URLSearchParams()
+    if (from) searchParams.set('from', from)
+    if (to) searchParams.set('to', to)
+    const queryString = searchParams.toString()
+    const url = `/api/projects/${projectId}/audit/stats${queryString ? `?${queryString}` : ''}`
+    return this.request<AuditStatsApiResponse>(url)
   }
 }
 
