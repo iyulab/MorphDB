@@ -253,6 +253,103 @@ export interface JobProgressResponse {
   estimatedTimeRemaining?: string
 }
 
+// View types
+export interface ViewColumnApiResponse {
+  name: string
+  dataType: string
+  isComputed: boolean
+  expression?: string
+}
+
+export interface ViewJoinApiSpec {
+  table: string
+  alias?: string
+  joinType: 'Inner' | 'Left' | 'Right' | 'Full' | 'Cross'
+  condition: string
+}
+
+export interface ViewFilterApiSpec {
+  field: string
+  operator: string
+  value?: unknown
+  logicalOp: 'And' | 'Or'
+}
+
+export interface ViewOrderApiSpec {
+  column: string
+  descending: boolean
+  nullOrdering: 'First' | 'Last'
+}
+
+export interface ViewApiResponse {
+  id: string
+  name: string
+  baseTable: string
+  columns: ViewColumnApiResponse[]
+  joins?: ViewJoinApiSpec[]
+  filters?: ViewFilterApiSpec[]
+  groupBy?: string[]
+  orderBy?: ViewOrderApiSpec[]
+  limit?: number
+  distinct: boolean
+  isMaterialized: boolean
+  refreshPolicy?: string
+  refreshSchedule?: string
+  lastRefreshedAt?: string
+  isStale: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ViewColumnApiSpec {
+  source?: string
+  expression?: string
+  alias: string
+  dataType?: string
+  aggregation?: string
+}
+
+export interface CreateViewApiRequest {
+  name: string
+  baseTable: string
+  columns: ViewColumnApiSpec[]
+  joins?: ViewJoinApiSpec[]
+  filters?: ViewFilterApiSpec[]
+  groupBy?: string[]
+  orderBy?: ViewOrderApiSpec[]
+  limit?: number
+  distinct?: boolean
+  materialized?: boolean
+  refreshPolicy?: string
+  refreshSchedule?: string
+  description?: string
+}
+
+export interface UpdateViewApiRequest {
+  name?: string
+  columns?: ViewColumnApiSpec[]
+  joins?: ViewJoinApiSpec[]
+  filters?: ViewFilterApiSpec[]
+  groupBy?: string[]
+  orderBy?: ViewOrderApiSpec[]
+  limit?: number
+  distinct?: boolean
+  refreshPolicy?: string
+  refreshSchedule?: string
+  description?: string
+}
+
+export interface ViewQueryApiResponse {
+  data: Record<string, unknown>[]
+  totalCount: number
+  hasMore: boolean
+}
+
+export interface ViewStaleResponse {
+  isStale: boolean
+  lastRefreshedAt?: string
+}
+
 export interface TableApiResponse {
   id: string
   name: string
@@ -853,6 +950,67 @@ export class MorphDBClient {
   // Health check
   async healthCheck(): Promise<{ status: string }> {
     return this.request<{ status: string }>('/health')
+  }
+
+  // Views
+  async listViews(): Promise<ViewApiResponse[]> {
+    return this.request<ViewApiResponse[]>('/api/views')
+  }
+
+  async getView(name: string): Promise<ViewApiResponse> {
+    return this.request<ViewApiResponse>(`/api/views/${name}`)
+  }
+
+  async createView(data: CreateViewApiRequest): Promise<ViewApiResponse> {
+    return this.request<ViewApiResponse>('/api/views', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    })
+  }
+
+  async updateView(name: string, data: UpdateViewApiRequest): Promise<ViewApiResponse> {
+    return this.request<ViewApiResponse>(`/api/views/${name}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data)
+    })
+  }
+
+  async deleteView(name: string): Promise<void> {
+    await this.request<void>(`/api/views/${name}`, {
+      method: 'DELETE'
+    })
+  }
+
+  async refreshMaterializedView(name: string, concurrent = false): Promise<void> {
+    const params = concurrent ? '?concurrent=true' : ''
+    await this.request<void>(`/api/views/${name}/refresh${params}`, {
+      method: 'POST'
+    })
+  }
+
+  async checkViewStale(name: string): Promise<ViewStaleResponse> {
+    return this.request<ViewStaleResponse>(`/api/views/${name}/stale`)
+  }
+
+  async queryViewData(
+    name: string,
+    options?: {
+      select?: string
+      filter?: string
+      orderBy?: string
+      skip?: number
+      take?: number
+    }
+  ): Promise<ViewQueryApiResponse> {
+    const params = new URLSearchParams()
+    if (options?.select) params.append('select', options.select)
+    if (options?.filter) params.append('filter', options.filter)
+    if (options?.orderBy) params.append('orderBy', options.orderBy)
+    if (options?.skip) params.append('skip', options.skip.toString())
+    if (options?.take) params.append('take', options.take.toString())
+
+    const query = params.toString() ? `?${params.toString()}` : ''
+    return this.request<ViewQueryApiResponse>(`/api/views/${name}/data${query}`)
   }
 }
 

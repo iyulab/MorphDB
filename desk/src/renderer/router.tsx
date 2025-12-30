@@ -3,6 +3,7 @@ import { RootLayout } from './layouts/RootLayout'
 import { ExplorerPage } from './routes/explorer'
 import { SettingsPage } from './routes/settings'
 import { ProjectsPage } from './routes/projects'
+import { ViewsPage } from './routes/views'
 import { ErrorBoundary } from './components/ErrorBoundary'
 
 export const router = createHashRouter([
@@ -26,6 +27,10 @@ export const router = createHashRouter([
       {
         path: 'projects',
         element: <ProjectsPage />
+      },
+      {
+        path: 'views',
+        element: <ViewsPage />
       },
       {
         path: 'settings',
