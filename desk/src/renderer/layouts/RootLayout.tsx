@@ -4,6 +4,7 @@ import { Sidebar } from '@/components/layout/Sidebar'
 import { ConnectionDialog } from '@/components/dialogs/ConnectionDialog'
 import { CommandPalette, useCommandPalette } from '@/components/CommandPalette'
 import { KeyboardShortcutsHelp, useKeyboardShortcutsHelp } from '@/components/KeyboardShortcutsHelp'
+import { ToastContainer } from '@/components/ui/Toast'
 import { useGlobalShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useConnectionStore } from '@/stores/connectionStore'
 import { useThemeStore } from '@/stores/themeStore'
@@ -110,6 +111,8 @@ export function RootLayout(): ReactElement {
         open={shortcutsHelpOpen}
         onOpenChange={setShortcutsHelpOpen}
       />
+
+      <ToastContainer />
     </div>
   )
 }
