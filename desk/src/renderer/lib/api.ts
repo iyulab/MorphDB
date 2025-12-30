@@ -856,6 +856,22 @@ export interface SsoTestResultApiResponse {
   details?: Record<string, string>
 }
 
+// Raw table response from API
+interface RawTableApiResponse {
+  id: string
+  name: string
+  displayName?: string
+  description?: string
+  version: number
+  createdAt: string
+  updatedAt: string
+  columns: RawColumnApiResponse[]
+  indexes: IndexApiResponse[]
+  relations: RelationApiResponse[]
+  systemColumns?: SystemColumnOptionsResponse
+}
+
+// Internal table type (used throughout the app)
 export interface TableApiResponse {
   id: string
   name: string
@@ -868,6 +884,14 @@ export interface TableApiResponse {
   indexes: IndexApiResponse[]
   relations: RelationApiResponse[]
   systemColumns?: SystemColumnOptionsResponse
+}
+
+// Convert raw table response to internal type
+function toTableApiResponse(raw: RawTableApiResponse): TableApiResponse {
+  return {
+    ...raw,
+    columns: raw.columns.map(toColumnApiResponse)
+  }
 }
 
 export interface IndexApiResponse {
@@ -895,6 +919,41 @@ export interface SystemColumnOptionsResponse {
   enableUpdatedAt: boolean
 }
 
+// Raw API response (matches server response)
+interface RawColumnApiResponse {
+  id: string
+  name: string
+  type: string
+  nullable: boolean
+  unique: boolean
+  indexed: boolean
+  primaryKey: boolean
+  default?: string
+  position: number
+  isDerived: boolean
+  lookup?: LookupConfigResponse
+  rollup?: RollupConfigResponse
+  formula?: FormulaConfigResponse
+}
+
+export interface LookupConfigResponse {
+  relationId: string
+  sourceColumnName: string
+}
+
+export interface RollupConfigResponse {
+  relationId: string
+  sourceColumnName: string
+  aggregation: string
+  filterExpression?: string
+}
+
+export interface FormulaConfigResponse {
+  expression: string
+  outputType: string
+}
+
+// Internal column type (used throughout the app)
 export interface ColumnApiResponse {
   id: string
   name: string
@@ -905,7 +964,25 @@ export interface ColumnApiResponse {
   isIndexed: boolean
   isPrimaryKey: boolean
   defaultValue?: string
-  description?: string
+  position: number
+  isDerived: boolean
+}
+
+// Convert raw API response to internal type
+function toColumnApiResponse(raw: RawColumnApiResponse): ColumnApiResponse {
+  return {
+    id: raw.id,
+    name: raw.name,
+    displayName: raw.name,
+    dataType: raw.type,
+    isNullable: raw.nullable,
+    isUnique: raw.unique,
+    isIndexed: raw.indexed,
+    isPrimaryKey: raw.primaryKey,
+    defaultValue: raw.default,
+    position: raw.position,
+    isDerived: raw.isDerived
+  }
 }
 
 // Request DTOs
@@ -918,23 +995,37 @@ export interface CreateTableRequest {
 
 export interface CreateColumnRequest {
   name: string
-  displayName?: string
-  dataType: string
-  isNullable?: boolean
-  isUnique?: boolean
-  isIndexed?: boolean
-  isPrimaryKey?: boolean
-  defaultValue?: string
-  description?: string
+  type: string
+  nullable?: boolean
+  unique?: boolean
+  indexed?: boolean
+  default?: string
+  lookup?: LookupConfigRequest
+  rollup?: RollupConfigRequest
+  formula?: FormulaConfigRequest
+}
+
+export interface LookupConfigRequest {
+  relationId: string
+  sourceColumnName: string
+}
+
+export interface RollupConfigRequest {
+  relationId: string
+  sourceColumnName: string
+  aggregation: string
+  filterExpression?: string
+}
+
+export interface FormulaConfigRequest {
+  expression: string
+  outputType: string
 }
 
 export interface UpdateColumnRequest {
-  displayName?: string
-  isNullable?: boolean
-  isUnique?: boolean
-  isIndexed?: boolean
-  defaultValue?: string
-  description?: string
+  name?: string
+  default?: string
+  version: number
 }
 
 export interface RenameTableRequest {
@@ -1074,7 +1165,8 @@ export class MorphDBClient {
     if (tenantId) {
       headers['X-Tenant-Id'] = tenantId
     }
-    return this.request<TableApiResponse[]>('/api/schema/tables', { headers })
+    const raw = await this.request<RawTableApiResponse[]>('/api/schema/tables', { headers })
+    return raw.map(toTableApiResponse)
   }
 
   async getTable(name: string, tenantId?: string): Promise<TableApiResponse> {
@@ -1082,7 +1174,8 @@ export class MorphDBClient {
     if (tenantId) {
       headers['X-Tenant-Id'] = tenantId
     }
-    return this.request<TableApiResponse>(`/api/schema/tables/${name}`, { headers })
+    const raw = await this.request<RawTableApiResponse>(`/api/schema/tables/${name}`, { headers })
+    return toTableApiResponse(raw)
   }
 
   async createTable(data: CreateTableRequest, tenantId?: string): Promise<TableApiResponse> {
@@ -1090,11 +1183,12 @@ export class MorphDBClient {
     if (tenantId) {
       headers['X-Tenant-Id'] = tenantId
     }
-    return this.request<TableApiResponse>('/api/schema/tables', {
+    const raw = await this.request<RawTableApiResponse>('/api/schema/tables', {
       method: 'POST',
       headers,
       body: JSON.stringify(data)
     })
+    return toTableApiResponse(raw)
   }
 
   async renameTable(name: string, newName: string, tenantId?: string): Promise<TableApiResponse> {
@@ -1102,11 +1196,12 @@ export class MorphDBClient {
     if (tenantId) {
       headers['X-Tenant-Id'] = tenantId
     }
-    return this.request<TableApiResponse>(`/api/schema/tables/${name}/rename`, {
+    const raw = await this.request<RawTableApiResponse>(`/api/schema/tables/${name}/rename`, {
       method: 'POST',
       headers,
       body: JSON.stringify({ newName })
     })
+    return toTableApiResponse(raw)
   }
 
   async deleteTable(name: string, tenantId?: string): Promise<void> {
@@ -1126,11 +1221,12 @@ export class MorphDBClient {
     if (tenantId) {
       headers['X-Tenant-Id'] = tenantId
     }
-    return this.request<ColumnApiResponse>(`/api/schema/tables/${tableName}/columns`, {
+    const raw = await this.request<RawColumnApiResponse>(`/api/schema/tables/${tableName}/columns`, {
       method: 'POST',
       headers,
       body: JSON.stringify(data)
     })
+    return toColumnApiResponse(raw)
   }
 
   async updateColumn(
@@ -1143,11 +1239,12 @@ export class MorphDBClient {
     if (tenantId) {
       headers['X-Tenant-Id'] = tenantId
     }
-    return this.request<ColumnApiResponse>(`/api/schema/tables/${tableName}/columns/${columnName}`, {
+    const raw = await this.request<RawColumnApiResponse>(`/api/schema/tables/${tableName}/columns/${columnName}`, {
       method: 'PUT',
       headers,
       body: JSON.stringify(data)
     })
+    return toColumnApiResponse(raw)
   }
 
   async deleteColumn(tableName: string, columnName: string, tenantId?: string): Promise<void> {
@@ -1999,11 +2096,10 @@ export function mapTableResponse(response: TableApiResponse): TableInfo {
 export function mapColumnResponse(response: ColumnApiResponse): ColumnInfo {
   return {
     name: response.name,
-    displayName: response.displayName || response.name,
+    displayName: response.displayName,
     dataType: response.dataType,
     isNullable: response.isNullable,
     isPrimaryKey: response.isPrimaryKey,
-    defaultValue: response.defaultValue,
-    description: response.description
+    defaultValue: response.defaultValue
   }
 }

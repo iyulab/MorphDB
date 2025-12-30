@@ -162,11 +162,10 @@ export function TableExplorer(): ReactElement {
         name,
         columns: columns.map((col) => ({
           name: col.name,
-          dataType: col.type,
-          isNullable: col.nullable,
-          isUnique: col.unique,
-          isIndexed: col.indexed,
-          isPrimaryKey: col.isPrimaryKey
+          type: col.type,
+          nullable: col.nullable,
+          unique: col.unique,
+          indexed: col.indexed
         }))
       }, activeConnection?.tenantId)
     },
@@ -206,11 +205,11 @@ export function TableExplorer(): ReactElement {
       if (!client) throw new Error('No active connection')
       return client.addColumn(tableName, {
         name: data.name,
-        dataType: data.type,
-        isNullable: data.nullable,
-        isUnique: data.unique,
-        isIndexed: data.indexed,
-        defaultValue: data.defaultValue || undefined
+        type: data.type,
+        nullable: data.nullable,
+        unique: data.unique,
+        indexed: data.indexed,
+        default: data.defaultValue || undefined
       }, activeConnection?.tenantId)
     },
     onSuccess: () => {
@@ -218,16 +217,15 @@ export function TableExplorer(): ReactElement {
     }
   })
 
-  // Update column mutation
+  // Update column mutation (API only supports name and default changes)
   const updateColumnMutation = useMutation({
-    mutationFn: async ({ tableName, columnName, data }: { tableName: string; columnName: string; data: ColumnFormData }) => {
+    mutationFn: async ({ tableName, columnName, data, version = 1 }: { tableName: string; columnName: string; data: ColumnFormData; version?: number }) => {
       const client = await createClient()
       if (!client) throw new Error('No active connection')
       return client.updateColumn(tableName, columnName, {
-        isNullable: data.nullable,
-        isUnique: data.unique,
-        isIndexed: data.indexed,
-        defaultValue: data.defaultValue || undefined
+        name: data.name !== columnName ? data.name : undefined,
+        default: data.defaultValue || undefined,
+        version
       }, activeConnection?.tenantId)
     },
     onSuccess: () => {
