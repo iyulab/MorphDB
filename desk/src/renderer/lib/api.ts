@@ -675,6 +675,117 @@ export interface QuotaSummaryApiResponse {
   rateLimit: RateLimitStatusApiResponse
 }
 
+// ============================================================================
+// Security Types - API Keys
+// ============================================================================
+
+export type ApiKeyType = 'anon' | 'service'
+
+export interface ApiKeyApiResponse {
+  id: string
+  name: string
+  keyType: ApiKeyType
+  keyPrefix: string
+  description?: string
+  isActive: boolean
+  createdAt: string
+  expiresAt?: string
+  lastUsedAt?: string
+}
+
+export interface CreateApiKeyApiRequest {
+  name: string
+  keyType: ApiKeyType
+  description?: string
+  expiresAt?: string
+}
+
+export interface CreateApiKeyApiResponse {
+  key: ApiKeyApiResponse
+  rawKey: string
+}
+
+// ============================================================================
+// Security Types - RLS Policies
+// ============================================================================
+
+export type PolicyType = 'select' | 'insert' | 'update' | 'delete' | 'all'
+
+export interface SecurityPolicyApiResponse {
+  id: string
+  name: string
+  tableId: string
+  policyType: PolicyType
+  expression: string
+  description?: string
+  isActive: boolean
+  ordinalPosition: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreateSecurityPolicyApiRequest {
+  name: string
+  tableName: string
+  policyType: PolicyType
+  expression: string
+  description?: string
+}
+
+export interface UpdateSecurityPolicyApiRequest {
+  name?: string
+  expression?: string
+  isActive?: boolean
+  description?: string
+}
+
+// ============================================================================
+// Security Types - Encryption
+// ============================================================================
+
+export interface EncryptionInfoApiResponse {
+  enabled: boolean
+  currentKeyVersion: number
+  availableKeyVersions: number[]
+}
+
+export interface KeyRotationResultApiResponse {
+  success: boolean
+  tableName: string
+  previousKeyVersion: number
+  newKeyVersion: number
+  rowsProcessed: number
+  columnsRotated: number
+  durationMs: number
+  errorMessage?: string
+  startedAt: string
+  completedAt: string
+}
+
+export interface KeyRotationStatusApiResponse {
+  state: string
+  tableName: string
+  currentKeyVersion: number
+  targetKeyVersion?: number
+  progressPercent: number
+  rowsProcessed: number
+  totalRows: number
+  estimatedTimeRemainingMs?: number
+  startedAt?: string
+  lastRotatedAt?: string
+}
+
+export interface KeyValidationResultApiResponse {
+  isValid: boolean
+  tableName: string
+  expectedKeyVersion: number
+  totalEncryptedValues: number
+  currentVersionCount: number
+  oldVersionCount: number
+  unencryptedCount: number
+  versionBreakdown: Record<string, number>
+}
+
 export interface TableApiResponse {
   id: string
   name: string
@@ -1644,6 +1755,100 @@ export class MorphDBClient {
 
   async getRateLimitStatus(projectId: string): Promise<RateLimitStatusApiResponse> {
     return this.request<RateLimitStatusApiResponse>(`/api/projects/${projectId}/quota/rate-limit`)
+  }
+
+  // ============================================================================
+  // Security API - API Keys
+  // ============================================================================
+
+  async getApiKeys(): Promise<ApiKeyApiResponse[]> {
+    return this.request<ApiKeyApiResponse[]>('/api/security/keys')
+  }
+
+  async createApiKey(request: CreateApiKeyApiRequest): Promise<CreateApiKeyApiResponse> {
+    return this.request<CreateApiKeyApiResponse>('/api/security/keys', {
+      method: 'POST',
+      body: JSON.stringify(request)
+    })
+  }
+
+  async revokeApiKey(keyId: string): Promise<void> {
+    await this.request<void>(`/api/security/keys/${keyId}`, {
+      method: 'DELETE'
+    })
+  }
+
+  async rotateApiKey(keyId: string, revokeOld: boolean = true): Promise<CreateApiKeyApiResponse> {
+    return this.request<CreateApiKeyApiResponse>(
+      `/api/security/keys/${keyId}/rotate?revokeOld=${revokeOld}`,
+      { method: 'POST' }
+    )
+  }
+
+  // ============================================================================
+  // Security API - RLS Policies
+  // ============================================================================
+
+  async getSecurityPolicies(tableName: string): Promise<SecurityPolicyApiResponse[]> {
+    return this.request<SecurityPolicyApiResponse[]>(`/api/security/policies/${tableName}`)
+  }
+
+  async createSecurityPolicy(
+    request: CreateSecurityPolicyApiRequest
+  ): Promise<SecurityPolicyApiResponse> {
+    return this.request<SecurityPolicyApiResponse>('/api/security/policies', {
+      method: 'POST',
+      body: JSON.stringify(request)
+    })
+  }
+
+  async updateSecurityPolicy(
+    policyId: string,
+    request: UpdateSecurityPolicyApiRequest
+  ): Promise<SecurityPolicyApiResponse> {
+    return this.request<SecurityPolicyApiResponse>(`/api/security/policies/${policyId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(request)
+    })
+  }
+
+  async deleteSecurityPolicy(policyId: string): Promise<void> {
+    await this.request<void>(`/api/security/policies/${policyId}`, {
+      method: 'DELETE'
+    })
+  }
+
+  // ============================================================================
+  // Security API - Encryption
+  // ============================================================================
+
+  async getEncryptionInfo(): Promise<EncryptionInfoApiResponse> {
+    return this.request<EncryptionInfoApiResponse>('/api/security/encryption/info')
+  }
+
+  async rotateTableKey(tableName: string): Promise<KeyRotationResultApiResponse> {
+    return this.request<KeyRotationResultApiResponse>(
+      `/api/security/encryption/rotate/${tableName}`,
+      { method: 'POST' }
+    )
+  }
+
+  async rotateTenantKeys(): Promise<KeyRotationResultApiResponse> {
+    return this.request<KeyRotationResultApiResponse>('/api/security/encryption/rotate', {
+      method: 'POST'
+    })
+  }
+
+  async getRotationStatus(tableName: string): Promise<KeyRotationStatusApiResponse> {
+    return this.request<KeyRotationStatusApiResponse>(
+      `/api/security/encryption/status/${tableName}`
+    )
+  }
+
+  async validateEncryption(tableName: string): Promise<KeyValidationResultApiResponse> {
+    return this.request<KeyValidationResultApiResponse>(
+      `/api/security/encryption/validate/${tableName}`
+    )
   }
 }
 
