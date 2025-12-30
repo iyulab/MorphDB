@@ -2,6 +2,7 @@ import { useState, useEffect, type ReactElement } from 'react'
 import { Outlet } from 'react-router-dom'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { ConnectionDialog } from '@/components/dialogs/ConnectionDialog'
+import { CommandPalette, useCommandPalette } from '@/components/CommandPalette'
 import { useConnectionStore } from '@/stores/connectionStore'
 import type { Connection } from '@/types/connection'
 
@@ -10,6 +11,7 @@ export function RootLayout(): ReactElement {
   const [editConnection, setEditConnection] = useState<Connection | null>(null)
   const [appVersion, setAppVersion] = useState('')
   const { connections } = useConnectionStore()
+  const { open: commandPaletteOpen, setOpen: setCommandPaletteOpen } = useCommandPalette()
 
   useEffect(() => {
     // Safety check for non-Electron environment
@@ -76,6 +78,11 @@ export function RootLayout(): ReactElement {
         open={showConnectionDialog}
         onOpenChange={handleDialogClose}
         editConnection={editConnection}
+      />
+
+      <CommandPalette
+        open={commandPaletteOpen}
+        onOpenChange={setCommandPaletteOpen}
       />
     </div>
   )
