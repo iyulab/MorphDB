@@ -1,42 +1,121 @@
 import type { TableInfo, ColumnInfo } from '@/types/connection'
 
+// Import raw types from centralized schema
+import type {
+  RawTableApiResponse,
+  RawColumnApiResponse,
+  RawProjectApiResponse,
+  RawProjectStatsApiResponse,
+  RawSchemaHealthApiResponse,
+  RawViewApiResponse,
+  RawWebhookApiResponse,
+  RawDeliveryApiResponse,
+  RawDlqMessageApiResponse,
+  RawDlqStatisticsApiResponse,
+  RawExportJobApiResponse,
+  RawImportJobApiResponse,
+  RawAggregationApiResponse,
+  RawBatchResponse,
+  RawPagedResponse,
+} from './api-types'
+
+// Import converters
+import {
+  toTableApiResponse,
+  toColumnApiResponse,
+  toProjectApiResponse,
+  toProjectStatsResponse,
+  toSchemaHealthResponse,
+  toViewApiResponse,
+  toWebhookApiResponse,
+  toDeliveryApiResponse,
+  toDlqMessageApiResponse,
+  toDlqStatisticsApiResponse,
+  toExportJobApiResponse,
+  toImportJobApiResponse,
+  toAggregationApiResponse,
+  toBatchResponse,
+  toPagedResponse,
+} from './api-converters'
+
+// Import internal types for use within this file
+import type {
+  TableApiResponse,
+  ColumnApiResponse,
+  IndexApiResponse,
+  RelationApiResponse,
+  SystemColumnOptionsResponse,
+  ProjectApiResponse,
+  ProjectSettingsResponse,
+  ProjectStatsResponse,
+  SchemaHealthResponse,
+  SchemaHealthIssue,
+  ViewApiResponse,
+  ViewColumnResponse,
+  ViewFilterSpec,
+  ViewJoinSpec,
+  ViewOrderSpec,
+  WebhookApiResponse,
+  DeliveryApiResponse,
+  DlqMessageApiResponse,
+  DlqStatisticsApiResponse,
+  ExportJobApiResponse,
+  ImportJobApiResponse,
+  AggregationApiResponse,
+  BatchResponse,
+  BatchOperationResult,
+  PagedResponse,
+} from './api-converters'
+
+// Re-export internal types for use throughout the app
+export type {
+  TableApiResponse,
+  ColumnApiResponse,
+  IndexApiResponse,
+  RelationApiResponse,
+  SystemColumnOptionsResponse,
+  ProjectApiResponse,
+  ProjectSettingsResponse,
+  ProjectStatsResponse,
+  SchemaHealthResponse,
+  SchemaHealthIssue,
+  ViewApiResponse,
+  ViewColumnResponse,
+  ViewFilterSpec,
+  ViewJoinSpec,
+  ViewOrderSpec,
+  WebhookApiResponse,
+  DeliveryApiResponse,
+  DlqMessageApiResponse,
+  DlqStatisticsApiResponse,
+  ExportJobApiResponse,
+  ImportJobApiResponse,
+  AggregationApiResponse,
+  BatchResponse,
+  BatchOperationResult,
+  PagedResponse,
+} from './api-converters'
+
 export interface ApiError {
   error: string
   message: string
   code?: string
 }
 
-export interface PagedResponse<T> {
-  data: T[]
-  pagination: {
-    page: number
-    pageSize: number
-    totalCount: number
-  }
-}
-
-// Project types
+// Project-related type aliases
 export type ProjectStatus = 'Active' | 'Suspended' | 'Archived'
-
-export interface ProjectApiResponse {
-  projectId: string
-  organizationId: string
-  name: string
-  slug: string
-  description?: string
-  environment: string
-  status: ProjectStatus
-  settings?: ProjectSettings
-  createdAt: string
-  updatedAt?: string
-}
-
-export interface ProjectSettings {
+export type ProjectSettings = {
   defaultLocale?: string
+  timezone?: string
+  maxTables?: number
+  maxStorageBytes?: number
   enableAuditLog?: boolean
-  retentionDays?: number
-  maxTableCount?: number
-  maxRowsPerTable?: number
+  rateLimits?: {
+    requestsPerMinute?: number
+    requestsPerHour?: number
+    maxConcurrentConnections?: number
+  }
+  metadata?: Record<string, string>
 }
 
 export interface CreateProjectRequest {
@@ -51,29 +130,8 @@ export interface UpdateProjectRequest {
   settings?: ProjectSettings
 }
 
-export interface ProjectStatsResponse {
-  projectId: string
-  tableCount: number
-  totalRows: number
-  schemaSizeBytes: number
-  dataSizeBytes: number
-  lastActivityAt?: string
-}
-
-export interface SchemaHealthResponse {
-  projectId: string
-  isHealthy: boolean
-  issues: SchemaHealthIssue[]
-  checkedAt: string
-}
-
-export interface SchemaHealthIssue {
-  severity: 'Warning' | 'Error' | 'Critical'
-  category: string
-  message: string
-  tableName?: string
-  columnName?: string
-}
+// Note: ProjectStatsResponse, SchemaHealthResponse, SchemaHealthIssue
+// are now imported from api-converters
 
 // Aggregation types
 export type AggregationFunction = 'count' | 'sum' | 'avg' | 'min' | 'max'
@@ -131,19 +189,7 @@ export interface BatchRequest {
   operations: BatchOperation[]
 }
 
-export interface BatchOperationResult {
-  index: number
-  success: boolean
-  data?: Record<string, unknown>
-  affectedRows?: number
-  error?: string
-}
-
-export interface BatchResponse {
-  results: BatchOperationResult[]
-  successCount: number
-  failureCount: number
-}
+// Note: BatchOperationResult and BatchResponse are now imported from api-converters
 
 export interface DataRecordResponse {
   id: string
@@ -253,53 +299,14 @@ export interface JobProgressResponse {
   estimatedTimeRemaining?: string
 }
 
-// View types
-export interface ViewColumnApiResponse {
-  name: string
-  dataType: string
-  isComputed: boolean
-  expression?: string
-}
+// Note: ViewApiResponse, ViewColumnResponse, ViewFilterSpec, ViewJoinSpec, ViewOrderSpec
+// are now imported from api-converters
 
-export interface ViewJoinApiSpec {
-  table: string
-  alias?: string
-  joinType: 'Inner' | 'Left' | 'Right' | 'Full' | 'Cross'
-  condition: string
-}
-
-export interface ViewFilterApiSpec {
-  field: string
-  operator: string
-  value?: unknown
-  logicalOp: 'And' | 'Or'
-}
-
-export interface ViewOrderApiSpec {
-  column: string
-  descending: boolean
-  nullOrdering: 'First' | 'Last'
-}
-
-export interface ViewApiResponse {
-  id: string
-  name: string
-  baseTable: string
-  columns: ViewColumnApiResponse[]
-  joins?: ViewJoinApiSpec[]
-  filters?: ViewFilterApiSpec[]
-  groupBy?: string[]
-  orderBy?: ViewOrderApiSpec[]
-  limit?: number
-  distinct: boolean
-  isMaterialized: boolean
-  refreshPolicy?: string
-  refreshSchedule?: string
-  lastRefreshedAt?: string
-  isStale: boolean
-  createdAt: string
-  updatedAt: string
-}
+// Legacy aliases for backward compatibility
+export type ViewColumnApiResponse = import('./api-converters').ViewColumnResponse
+export type ViewJoinApiSpec = import('./api-converters').ViewJoinSpec
+export type ViewFilterApiSpec = import('./api-converters').ViewFilterSpec
+export type ViewOrderApiSpec = import('./api-converters').ViewOrderSpec
 
 export interface ViewColumnApiSpec {
   source?: string
@@ -350,20 +357,13 @@ export interface ViewStaleResponse {
   lastRefreshedAt?: string
 }
 
-// Webhook types
-export interface WebhookApiResponse {
-  id: string
-  name: string
-  table: string
-  url: string
-  events: string[]
-  filter?: Record<string, unknown>
-  headers?: Record<string, string>
-  isActive: boolean
-  createdAt: string
-  updatedAt: string
-}
+// Note: WebhookApiResponse, DeliveryApiResponse, DlqMessageApiResponse, DlqStatisticsApiResponse
+// are now imported from api-converters
 
+// Legacy alias for backward compatibility
+export type WebhookDeliveryApiResponse = import('./api-converters').DeliveryApiResponse
+
+// Webhook request types (not in api-converters)
 export interface CreateWebhookApiRequest {
   name: string
   table: string
@@ -379,44 +379,6 @@ export interface UpdateWebhookApiRequest {
   filter?: Record<string, unknown>
   headers?: Record<string, string>
   isActive?: boolean
-}
-
-export interface WebhookDeliveryApiResponse {
-  id: string
-  event: string
-  status: string
-  attemptCount: number
-  httpStatusCode?: number
-  errorMessage?: string
-  createdAt: string
-  deliveredAt?: string
-}
-
-// DLQ types
-export interface DlqMessageApiResponse {
-  dlqId: string
-  deliveryId: string
-  webhookId: string
-  recordId?: string
-  event: string
-  reason: string
-  attemptCount: number
-  lastHttpStatusCode?: number
-  lastErrorMessage?: string
-  status: string
-  resolutionNotes?: string
-  dlqAt: string
-  resolvedAt?: string
-}
-
-export interface DlqStatisticsApiResponse {
-  totalMessages: number
-  pendingReviewCount: number
-  resolvedCount: number
-  archivedCount: number
-  byReason: Record<string, number>
-  byWebhook: Record<string, number>
-  oldestPendingAt?: string
 }
 
 export interface ResolveDlqApiRequest {
@@ -856,134 +818,14 @@ export interface SsoTestResultApiResponse {
   details?: Record<string, string>
 }
 
-// Raw table response from API
-interface RawTableApiResponse {
-  id: string
-  name: string
-  displayName?: string
-  description?: string
-  version: number
-  createdAt: string
-  updatedAt: string
-  columns: RawColumnApiResponse[]
-  indexes: IndexApiResponse[]
-  relations: RelationApiResponse[]
-  systemColumns?: SystemColumnOptionsResponse
-}
+// Import derived field config types from api-types for backward compatibility
+import type {
+  RawLookupConfigApiResponse as LookupConfigResponse,
+  RawRollupConfigApiResponse as RollupConfigResponse,
+  RawFormulaConfigApiResponse as FormulaConfigResponse,
+} from './api-types'
 
-// Internal table type (used throughout the app)
-export interface TableApiResponse {
-  id: string
-  name: string
-  displayName?: string
-  description?: string
-  version: number
-  createdAt: string
-  updatedAt: string
-  columns: ColumnApiResponse[]
-  indexes: IndexApiResponse[]
-  relations: RelationApiResponse[]
-  systemColumns?: SystemColumnOptionsResponse
-}
-
-// Convert raw table response to internal type
-function toTableApiResponse(raw: RawTableApiResponse): TableApiResponse {
-  return {
-    ...raw,
-    columns: raw.columns.map(toColumnApiResponse)
-  }
-}
-
-export interface IndexApiResponse {
-  id: string
-  name: string
-  columns: string[]
-  type: 'btree' | 'hash' | 'gin' | 'gist'
-  unique: boolean
-}
-
-export interface RelationApiResponse {
-  id: string
-  name: string
-  sourceTableId: string
-  sourceColumnId: string
-  targetTableId: string
-  targetColumnId: string
-  type: 'one-to-one' | 'one-to-many' | 'many-to-one' | 'many-to-many'
-  onDelete: 'no-action' | 'cascade' | 'set-null' | 'restrict'
-}
-
-export interface SystemColumnOptionsResponse {
-  enableId: boolean
-  enableCreatedAt: boolean
-  enableUpdatedAt: boolean
-}
-
-// Raw API response (matches server response)
-interface RawColumnApiResponse {
-  id: string
-  name: string
-  type: string
-  nullable: boolean
-  unique: boolean
-  indexed: boolean
-  primaryKey: boolean
-  default?: string
-  position: number
-  isDerived: boolean
-  lookup?: LookupConfigResponse
-  rollup?: RollupConfigResponse
-  formula?: FormulaConfigResponse
-}
-
-export interface LookupConfigResponse {
-  relationId: string
-  sourceColumnName: string
-}
-
-export interface RollupConfigResponse {
-  relationId: string
-  sourceColumnName: string
-  aggregation: string
-  filterExpression?: string
-}
-
-export interface FormulaConfigResponse {
-  expression: string
-  outputType: string
-}
-
-// Internal column type (used throughout the app)
-export interface ColumnApiResponse {
-  id: string
-  name: string
-  displayName: string
-  dataType: string
-  isNullable: boolean
-  isUnique: boolean
-  isIndexed: boolean
-  isPrimaryKey: boolean
-  defaultValue?: string
-  position: number
-  isDerived: boolean
-}
-
-// Convert raw API response to internal type
-function toColumnApiResponse(raw: RawColumnApiResponse): ColumnApiResponse {
-  return {
-    id: raw.id,
-    name: raw.name,
-    displayName: raw.name,
-    dataType: raw.type,
-    isNullable: raw.nullable,
-    isUnique: raw.unique,
-    isIndexed: raw.indexed,
-    isPrimaryKey: raw.primaryKey,
-    defaultValue: raw.default,
-    position: raw.position,
-    isDerived: raw.isDerived
-  }
-}
+export type { LookupConfigResponse, RollupConfigResponse, FormulaConfigResponse }
 
 // Request DTOs
 export interface CreateTableRequest {

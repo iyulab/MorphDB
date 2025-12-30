@@ -163,19 +163,19 @@ export function ProjectsPage(): ReactElement {
   const handleUpdateProject = async (data: CreateProjectRequest | UpdateProjectRequest): Promise<void> => {
     if (!dialogs.editProject.project) return
     await updateProjectMutation.mutateAsync({
-      id: dialogs.editProject.project.projectId,
+      id: dialogs.editProject.project.id,
       data: data as UpdateProjectRequest
     })
   }
 
   const handleDeleteProject = async (): Promise<void> => {
     if (!dialogs.deleteProject.project) return
-    await deleteProjectMutation.mutateAsync(dialogs.deleteProject.project.projectId)
+    await deleteProjectMutation.mutateAsync(dialogs.deleteProject.project.id)
   }
 
   const handleViewHealth = async (project: ProjectApiResponse): Promise<void> => {
     try {
-      const report = await getHealthMutation.mutateAsync(project.projectId)
+      const report = await getHealthMutation.mutateAsync(project.id)
       setDialogs(prev => ({
         ...prev,
         healthReport: { open: true, report, projectName: project.name }
@@ -337,15 +337,15 @@ export function ProjectsPage(): ReactElement {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredProjects.map(project => (
               <ProjectCard
-                key={project.projectId}
+                key={project.id}
                 project={project}
                 onEdit={() => setDialogs(prev => ({
                   ...prev,
                   editProject: { open: true, project }
                 }))}
-                onSuspend={() => suspendProjectMutation.mutate(project.projectId)}
-                onReactivate={() => reactivateProjectMutation.mutate(project.projectId)}
-                onArchive={() => archiveProjectMutation.mutate(project.projectId)}
+                onSuspend={() => suspendProjectMutation.mutate(project.id)}
+                onReactivate={() => reactivateProjectMutation.mutate(project.id)}
+                onArchive={() => archiveProjectMutation.mutate(project.id)}
                 onDelete={() => setDialogs(prev => ({
                   ...prev,
                   deleteProject: { open: true, project }
@@ -443,13 +443,12 @@ export function ProjectsPage(): ReactElement {
                       )}>
                         {issue.severity}
                       </span>
-                      <span>{issue.category}</span>
+                      <span>{issue.code}</span>
                     </div>
                     <p className="mt-1 text-sm">{issue.message}</p>
-                    {(issue.tableName || issue.columnName) && (
+                    {issue.affectedObject && (
                       <p className="mt-1 text-xs text-muted-foreground">
-                        {issue.tableName && `Table: ${issue.tableName}`}
-                        {issue.columnName && ` / Column: ${issue.columnName}`}
+                        Affected: {issue.affectedObject}
                       </p>
                     )}
                   </div>

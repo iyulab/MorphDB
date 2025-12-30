@@ -151,8 +151,8 @@ export function ProjectCard({
       {/* Status & Info */}
       <div className="flex items-center gap-4 text-sm">
         <div className="flex items-center gap-1.5">
-          {getStatusIcon(project.status)}
-          <span className={cn('text-xs', getStatusColor(project.status))}>
+          {getStatusIcon(project.status as ProjectStatus)}
+          <span className={cn('text-xs', getStatusColor(project.status as ProjectStatus))}>
             {project.status}
           </span>
         </div>
@@ -161,10 +161,10 @@ export function ProjectCard({
         </span>
       </div>
 
-      {/* Environment & Org */}
+      {/* Schema & Org */}
       <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
         <span className="px-2 py-0.5 rounded bg-muted">
-          {project.environment || 'default'}
+          {project.dataSchema}
         </span>
         {project.organizationId && (
           <span className="truncate" title={project.organizationId}>
@@ -183,8 +183,8 @@ export function ProjectCard({
                 Audit On
               </span>
             )}
-            {project.settings.maxTableCount && (
-              <span>Max {project.settings.maxTableCount} tables</span>
+            {project.settings.maxTables && (
+              <span>Max {project.settings.maxTables} tables</span>
             )}
           </div>
         </div>

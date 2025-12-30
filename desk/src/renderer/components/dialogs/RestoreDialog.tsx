@@ -113,9 +113,9 @@ export function RestoreDialog({
               className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
             >
               {projects.map((project) => (
-                <option key={project.projectId} value={project.projectId}>
+                <option key={project.id} value={project.id}>
                   {project.name}
-                  {project.projectId === currentProjectId ? ' (current)' : ''}
+                  {project.id === currentProjectId ? ' (current)' : ''}
                 </option>
               ))}
             </select>

@@ -216,7 +216,7 @@ export function BackupsPage(): ReactElement {
           >
             <option value="">Select a project...</option>
             {projects.map((project) => (
-              <option key={project.projectId} value={project.projectId}>
+              <option key={project.id} value={project.id}>
                 {project.name}
               </option>
             ))}

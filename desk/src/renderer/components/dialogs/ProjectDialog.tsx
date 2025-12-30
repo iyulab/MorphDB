@@ -23,9 +23,9 @@ export function ProjectDialog({
     slug: '',
     organizationId: '',
     enableAuditLog: false,
-    retentionDays: 30,
-    maxTableCount: 100,
-    maxRowsPerTable: 1000000
+    maxTables: 100,
+    timezone: '',
+    defaultLocale: ''
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -36,11 +36,11 @@ export function ProjectDialog({
         setFormData({
           name: project.name,
           slug: project.slug,
-          organizationId: project.organizationId,
+          organizationId: project.organizationId ?? '',
           enableAuditLog: project.settings?.enableAuditLog ?? false,
-          retentionDays: project.settings?.retentionDays ?? 30,
-          maxTableCount: project.settings?.maxTableCount ?? 100,
-          maxRowsPerTable: project.settings?.maxRowsPerTable ?? 1000000
+          maxTables: project.settings?.maxTables ?? 100,
+          timezone: project.settings?.timezone ?? '',
+          defaultLocale: project.settings?.defaultLocale ?? ''
         })
       } else {
         setFormData({
@@ -48,9 +48,9 @@ export function ProjectDialog({
           slug: '',
           organizationId: '',
           enableAuditLog: false,
-          retentionDays: 30,
-          maxTableCount: 100,
-          maxRowsPerTable: 1000000
+          maxTables: 100,
+          timezone: '',
+          defaultLocale: ''
         })
       }
       setError(null)
@@ -91,9 +91,9 @@ export function ProjectDialog({
     try {
       const settings: ProjectSettings = {
         enableAuditLog: formData.enableAuditLog,
-        retentionDays: formData.retentionDays,
-        maxTableCount: formData.maxTableCount,
-        maxRowsPerTable: formData.maxRowsPerTable
+        maxTables: formData.maxTables,
+        timezone: formData.timezone || undefined,
+        defaultLocale: formData.defaultLocale || undefined
       }
 
       if (isEditing) {
@@ -196,27 +196,26 @@ export function ProjectDialog({
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs text-muted-foreground mb-1">
-                  Retention Days
+                  Max Tables
                 </label>
                 <input
                   type="number"
-                  value={formData.retentionDays}
-                  onChange={(e) => setFormData(prev => ({ ...prev, retentionDays: parseInt(e.target.value) || 30 }))}
+                  value={formData.maxTables}
+                  onChange={(e) => setFormData(prev => ({ ...prev, maxTables: parseInt(e.target.value) || 100 }))}
                   min={1}
-                  max={365}
+                  max={1000}
                   className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
               <div>
                 <label className="block text-xs text-muted-foreground mb-1">
-                  Max Tables
+                  Timezone
                 </label>
                 <input
-                  type="number"
-                  value={formData.maxTableCount}
-                  onChange={(e) => setFormData(prev => ({ ...prev, maxTableCount: parseInt(e.target.value) || 100 }))}
-                  min={1}
-                  max={1000}
+                  type="text"
+                  value={formData.timezone}
+                  onChange={(e) => setFormData(prev => ({ ...prev, timezone: e.target.value }))}
+                  placeholder="UTC"
                   className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
@@ -224,13 +223,13 @@ export function ProjectDialog({
 
             <div>
               <label className="block text-xs text-muted-foreground mb-1">
-                Max Rows Per Table
+                Default Locale
               </label>
               <input
-                type="number"
-                value={formData.maxRowsPerTable}
-                onChange={(e) => setFormData(prev => ({ ...prev, maxRowsPerTable: parseInt(e.target.value) || 1000000 }))}
-                min={1000}
+                type="text"
+                value={formData.defaultLocale}
+                onChange={(e) => setFormData(prev => ({ ...prev, defaultLocale: e.target.value }))}
+                placeholder="en-US"
                 className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>

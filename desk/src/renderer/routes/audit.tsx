@@ -257,7 +257,7 @@ export function AuditPage(): ReactElement {
             >
               <option value="">Select a project</option>
               {projects.map((project: ProjectApiResponse) => (
-                <option key={project.projectId} value={project.projectId}>
+                <option key={project.id} value={project.id}>
                   {project.name}
                 </option>
               ))}
