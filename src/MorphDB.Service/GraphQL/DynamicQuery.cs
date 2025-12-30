@@ -4,6 +4,11 @@ using MorphDB.Core.Abstractions;
 using MorphDB.Core.Models;
 using MorphDB.Service.Models.Api;
 using MorphDB.Service.Services;
+using AggregationRequest = MorphDB.Core.Abstractions.AggregationRequest;
+using AggregationColumn = MorphDB.Core.Abstractions.AggregationColumn;
+using FilterCondition = MorphDB.Core.Abstractions.FilterCondition;
+using HavingCondition = MorphDB.Core.Abstractions.HavingCondition;
+using AggregationOrderBy = MorphDB.Core.Abstractions.AggregationOrderBy;
 
 namespace MorphDB.Service.GraphQL;
 
@@ -192,6 +197,92 @@ public sealed class DynamicQuery
             Data = node.Data,
             CreatedAt = node.CreatedAt,
             UpdatedAt = node.UpdatedAt
+        };
+    }
+
+    /// <summary>
+    /// Performs aggregation on a table with optional grouping.
+    /// Follows Hasura-like _aggregate pattern.
+    /// </summary>
+    /// <remarks>
+    /// Example:
+    /// ```graphql
+    /// query {
+    ///   aggregate(
+    ///     table: "orders"
+    ///     aggregations: [
+    ///       { function: COUNT, alias: "total_orders" }
+    ///       { function: SUM, column: "amount", alias: "total_amount" }
+    ///     ]
+    ///     groupBy: ["status"]
+    ///   ) {
+    ///     data
+    ///     totalGroups
+    ///     metadata { rowsScanned executionTimeMs }
+    ///   }
+    /// }
+    /// ```
+    /// </remarks>
+    [GraphQLDescription("Performs aggregation on a table with optional grouping")]
+    public async Task<AggregateResult> Aggregate(
+        string table,
+        IReadOnlyList<AggregationInput> aggregations,
+        IReadOnlyList<string>? groupBy,
+        IReadOnlyList<FilterInput>? filter,
+        IReadOnlyList<HavingInput>? having,
+        IReadOnlyList<OrderByInput>? orderBy,
+        int? limit,
+        int? offset,
+        [Service] IAggregationService aggregationService,
+        [Service] ITenantContextAccessor tenantAccessor,
+        CancellationToken cancellationToken)
+    {
+        var tenantId = tenantAccessor.TenantId;
+
+        var request = new AggregationRequest
+        {
+            Aggregations = aggregations.Select(a => new AggregationColumn
+            {
+                Function = a.Function,
+                Column = a.Column,
+                Alias = a.Alias,
+                Distinct = a.Distinct ?? false
+            }).ToList(),
+            GroupBy = groupBy ?? [],
+            Filter = filter?.Select(f => new FilterCondition
+            {
+                Column = f.Column,
+                Operator = ParseOperator(f.Operator),
+                Value = f.Value
+            }).ToList(),
+            Having = having?.Select(h => new HavingCondition
+            {
+                Alias = h.Alias,
+                Operator = ParseOperator(h.Operator),
+                Value = h.Value ?? 0
+            }).ToList(),
+            OrderBy = orderBy?.Select(o => new AggregationOrderBy
+            {
+                Column = o.Column,
+                Descending = o.Direction?.Equals("desc", StringComparison.OrdinalIgnoreCase) ?? false
+            }).ToList(),
+            Limit = limit,
+            Offset = offset
+        };
+
+        var result = await aggregationService.AggregateAsync(tenantId, table, request, cancellationToken);
+
+        return new AggregateResult
+        {
+            Data = result.Data,
+            TotalGroups = result.TotalGroups,
+            Metadata = result.Metadata != null
+                ? new AggregateMetadata
+                {
+                    RowsScanned = result.Metadata.RowsScanned,
+                    ExecutionTimeMs = result.Metadata.ExecutionTimeMs
+                }
+                : null
         };
     }
 
@@ -391,6 +482,134 @@ public sealed class PageInfo
     public string? StartCursor { get; init; }
     public string? EndCursor { get; init; }
     public int TotalCount { get; init; }
+}
+
+#endregion
+
+#region Aggregation GraphQL Types
+
+/// <summary>
+/// Input type for aggregation function specification.
+/// </summary>
+public sealed class AggregationInput
+{
+    /// <summary>
+    /// Aggregation function to apply.
+    /// </summary>
+    public required AggregateFunction Function { get; init; }
+
+    /// <summary>
+    /// Column to aggregate (null for COUNT(*)).
+    /// </summary>
+    public string? Column { get; init; }
+
+    /// <summary>
+    /// Alias for the result.
+    /// </summary>
+    public required string Alias { get; init; }
+
+    /// <summary>
+    /// Whether to use DISTINCT.
+    /// </summary>
+    public bool? Distinct { get; init; }
+}
+
+/// <summary>
+/// Input type for filter conditions.
+/// </summary>
+public sealed class FilterInput
+{
+    /// <summary>
+    /// Column to filter on.
+    /// </summary>
+    public required string Column { get; init; }
+
+    /// <summary>
+    /// Filter operator (eq, neq, gt, gte, lt, lte, like, etc.).
+    /// </summary>
+    public required string Operator { get; init; }
+
+    /// <summary>
+    /// Value to compare against.
+    /// </summary>
+    [GraphQLType(typeof(AnyType))]
+    public object? Value { get; init; }
+}
+
+/// <summary>
+/// Input type for HAVING conditions.
+/// </summary>
+public sealed class HavingInput
+{
+    /// <summary>
+    /// Aggregation alias to filter on.
+    /// </summary>
+    public required string Alias { get; init; }
+
+    /// <summary>
+    /// Comparison operator (eq, neq, gt, gte, lt, lte).
+    /// </summary>
+    public required string Operator { get; init; }
+
+    /// <summary>
+    /// Value to compare against.
+    /// </summary>
+    [GraphQLType(typeof(AnyType))]
+    public object? Value { get; init; }
+}
+
+/// <summary>
+/// Input type for ORDER BY specification.
+/// </summary>
+public sealed class OrderByInput
+{
+    /// <summary>
+    /// Column or alias to order by.
+    /// </summary>
+    public required string Column { get; init; }
+
+    /// <summary>
+    /// Sort direction (asc or desc).
+    /// </summary>
+    public string? Direction { get; init; }
+}
+
+/// <summary>
+/// Result of an aggregation query.
+/// </summary>
+public sealed class AggregateResult
+{
+    /// <summary>
+    /// Aggregated data rows.
+    /// </summary>
+    [GraphQLType(typeof(ListType<AnyType>))]
+    public IReadOnlyList<IDictionary<string, object?>> Data { get; init; } = [];
+
+    /// <summary>
+    /// Total number of groups (before limit/offset).
+    /// </summary>
+    public long? TotalGroups { get; init; }
+
+    /// <summary>
+    /// Execution metadata.
+    /// </summary>
+    public AggregateMetadata? Metadata { get; init; }
+}
+
+/// <summary>
+/// Metadata about the aggregation execution.
+/// </summary>
+public sealed class AggregateMetadata
+{
+    /// <summary>
+    /// Number of rows scanned.
+    /// </summary>
+    public long RowsScanned { get; init; }
+
+    /// <summary>
+    /// Execution time in milliseconds.
+    /// </summary>
+    public double ExecutionTimeMs { get; init; }
 }
 
 #endregion

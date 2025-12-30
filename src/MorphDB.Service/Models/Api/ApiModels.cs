@@ -1418,6 +1418,255 @@ public sealed record ProjectQueryParameters
 
 #endregion
 
+#region Aggregation API Models
+
+/// <summary>
+/// Request to perform aggregation on a table.
+/// </summary>
+public sealed record AggregationApiRequest
+{
+    /// <summary>
+    /// Aggregation columns to compute (COUNT, SUM, AVG, MIN, MAX).
+    /// </summary>
+    public required IReadOnlyList<AggregationColumnApiRequest> Aggregations { get; init; }
+
+    /// <summary>
+    /// Columns to group by (logical names).
+    /// </summary>
+    public IReadOnlyList<string> GroupBy { get; init; } = [];
+
+    /// <summary>
+    /// Filter conditions (applied before grouping).
+    /// </summary>
+    public IReadOnlyList<FilterConditionApiRequest>? Filter { get; init; }
+
+    /// <summary>
+    /// Having conditions (applied after grouping).
+    /// </summary>
+    public IReadOnlyList<HavingConditionApiRequest>? Having { get; init; }
+
+    /// <summary>
+    /// Order by specifications.
+    /// </summary>
+    public IReadOnlyList<AggregationOrderByApiRequest>? OrderBy { get; init; }
+
+    /// <summary>
+    /// Maximum number of groups to return.
+    /// </summary>
+    public int? Limit { get; init; }
+
+    /// <summary>
+    /// Number of groups to skip.
+    /// </summary>
+    public int? Offset { get; init; }
+
+    /// <summary>
+    /// Converts to core AggregationRequest model.
+    /// </summary>
+    public AggregationRequest ToModel() => new()
+    {
+        Aggregations = Aggregations.Select(a => a.ToModel()).ToList(),
+        GroupBy = GroupBy,
+        Filter = Filter?.Select(f => f.ToModel()).ToList(),
+        Having = Having?.Select(h => h.ToModel()).ToList(),
+        OrderBy = OrderBy?.Select(o => o.ToModel()).ToList(),
+        Limit = Limit,
+        Offset = Offset
+    };
+}
+
+/// <summary>
+/// Aggregation column specification.
+/// </summary>
+public sealed record AggregationColumnApiRequest
+{
+    /// <summary>
+    /// Aggregation function: count, sum, avg, min, max.
+    /// </summary>
+    public required string Function { get; init; }
+
+    /// <summary>
+    /// Column to aggregate (null for COUNT(*)).
+    /// </summary>
+    public string? Column { get; init; }
+
+    /// <summary>
+    /// Alias for the result column.
+    /// </summary>
+    public required string Alias { get; init; }
+
+    /// <summary>
+    /// Whether to use DISTINCT.
+    /// </summary>
+    public bool Distinct { get; init; }
+
+    /// <summary>
+    /// Converts to core AggregationColumn model.
+    /// </summary>
+    public AggregationColumn ToModel() => new()
+    {
+        Function = ParseAggregateFunction(Function),
+        Column = Column,
+        Alias = Alias,
+        Distinct = Distinct
+    };
+
+    private static AggregateFunction ParseAggregateFunction(string function)
+    {
+        return function.ToLowerInvariant() switch
+        {
+            "count" => AggregateFunction.Count,
+            "countdistinct" or "count_distinct" or "count-distinct" => AggregateFunction.CountDistinct,
+            "sum" => AggregateFunction.Sum,
+            "avg" or "average" => AggregateFunction.Avg,
+            "min" => AggregateFunction.Min,
+            "max" => AggregateFunction.Max,
+            _ => throw new ArgumentException($"Unknown aggregate function: {function}")
+        };
+    }
+}
+
+/// <summary>
+/// Filter condition for aggregation WHERE clause.
+/// </summary>
+public sealed record FilterConditionApiRequest
+{
+    /// <summary>
+    /// Column to filter on (logical name).
+    /// </summary>
+    public required string Column { get; init; }
+
+    /// <summary>
+    /// Filter operator: eq, neq, gt, gte, lt, lte, like, ilike, contains, starts-with, ends-with, in, not-in, is-null, is-not-null, between.
+    /// </summary>
+    public required string Operator { get; init; }
+
+    /// <summary>
+    /// Value to compare against.
+    /// </summary>
+    public object? Value { get; init; }
+
+    /// <summary>
+    /// Converts to core FilterCondition model.
+    /// </summary>
+    public FilterCondition ToModel() => new()
+    {
+        Column = Column,
+        Operator = ApiModelExtensions.ParseFilterOperator(Operator),
+        Value = Value
+    };
+}
+
+/// <summary>
+/// Having condition for aggregation results.
+/// </summary>
+public sealed record HavingConditionApiRequest
+{
+    /// <summary>
+    /// Aggregation alias to filter on.
+    /// </summary>
+    public required string Alias { get; init; }
+
+    /// <summary>
+    /// Comparison operator: eq, neq, gt, gte, lt, lte.
+    /// </summary>
+    public required string Operator { get; init; }
+
+    /// <summary>
+    /// Value to compare against.
+    /// </summary>
+    public required object Value { get; init; }
+
+    /// <summary>
+    /// Converts to core HavingCondition model.
+    /// </summary>
+    public HavingCondition ToModel() => new()
+    {
+        Alias = Alias,
+        Operator = ApiModelExtensions.ParseFilterOperator(Operator),
+        Value = Value
+    };
+}
+
+/// <summary>
+/// Order by specification for aggregation results.
+/// </summary>
+public sealed record AggregationOrderByApiRequest
+{
+    /// <summary>
+    /// Column name or aggregation alias.
+    /// </summary>
+    public required string Column { get; init; }
+
+    /// <summary>
+    /// Sort direction: asc or desc.
+    /// </summary>
+    public string Direction { get; init; } = "asc";
+
+    /// <summary>
+    /// Converts to core AggregationOrderBy model.
+    /// </summary>
+    public AggregationOrderBy ToModel() => new()
+    {
+        Column = Column,
+        Descending = Direction.Equals("desc", StringComparison.OrdinalIgnoreCase)
+    };
+}
+
+/// <summary>
+/// Aggregation result response.
+/// </summary>
+public sealed record AggregationApiResponse
+{
+    /// <summary>
+    /// Aggregated data rows.
+    /// </summary>
+    public required IReadOnlyList<IDictionary<string, object?>> Data { get; init; }
+
+    /// <summary>
+    /// Total number of groups (before limit/offset).
+    /// </summary>
+    public long? TotalGroups { get; init; }
+
+    /// <summary>
+    /// Execution metadata.
+    /// </summary>
+    public AggregationMetadataApiResponse? Metadata { get; init; }
+
+    public static AggregationApiResponse FromResult(AggregationResult result) => new()
+    {
+        Data = result.Data,
+        TotalGroups = result.TotalGroups,
+        Metadata = result.Metadata != null
+            ? AggregationMetadataApiResponse.FromModel(result.Metadata)
+            : null
+    };
+}
+
+/// <summary>
+/// Aggregation execution metadata.
+/// </summary>
+public sealed record AggregationMetadataApiResponse
+{
+    /// <summary>
+    /// Number of rows scanned.
+    /// </summary>
+    public long RowsScanned { get; init; }
+
+    /// <summary>
+    /// Execution time in milliseconds.
+    /// </summary>
+    public double ExecutionTimeMs { get; init; }
+
+    public static AggregationMetadataApiResponse FromModel(AggregationMetadata metadata) => new()
+    {
+        RowsScanned = metadata.RowsScanned,
+        ExecutionTimeMs = metadata.ExecutionTimeMs
+    };
+}
+
+#endregion
+
 #region Helper Extensions
 
 public static class ApiModelExtensions

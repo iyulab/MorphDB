@@ -138,6 +138,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ILookupResolver, PostgresLookupResolver>();
         services.AddSingleton<IRollupResolver, PostgresRollupResolver>();
         services.AddSingleton<IFormulaResolver, PostgresFormulaResolver>();
+        services.AddSingleton<IAggregationService, PostgresAggregationService>();
         services.AddSingleton<IWebhookManager, PostgresWebhookManager>();
         services.AddSingleton(options.BulkOperationOptions);
         services.AddSingleton<IBulkOperationService, PostgresBulkOperationService>();
