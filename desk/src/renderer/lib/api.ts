@@ -1,4 +1,4 @@
-import type { Project, TableInfo, ColumnInfo } from '@/types/connection'
+import type { TableInfo, ColumnInfo } from '@/types/connection'
 
 export interface ApiError {
   error: string
@@ -13,6 +13,66 @@ export interface PagedResponse<T> {
     pageSize: number
     totalCount: number
   }
+}
+
+// Project types
+export type ProjectStatus = 'Active' | 'Suspended' | 'Archived'
+
+export interface ProjectApiResponse {
+  projectId: string
+  organizationId: string
+  name: string
+  slug: string
+  description?: string
+  environment: string
+  status: ProjectStatus
+  settings?: ProjectSettings
+  createdAt: string
+  updatedAt?: string
+}
+
+export interface ProjectSettings {
+  defaultLocale?: string
+  enableAuditLog?: boolean
+  retentionDays?: number
+  maxTableCount?: number
+  maxRowsPerTable?: number
+}
+
+export interface CreateProjectRequest {
+  name: string
+  slug?: string
+  organizationId?: string
+  settings?: ProjectSettings
+}
+
+export interface UpdateProjectRequest {
+  name?: string
+  settings?: ProjectSettings
+}
+
+export interface ProjectStatsResponse {
+  projectId: string
+  tableCount: number
+  totalRows: number
+  schemaSizeBytes: number
+  dataSizeBytes: number
+  lastActivityAt?: string
+}
+
+export interface SchemaHealthResponse {
+  projectId: string
+  isHealthy: boolean
+  issues: SchemaHealthIssue[]
+  checkedAt: string
+}
+
+export interface SchemaHealthIssue {
+  severity: 'Warning' | 'Error' | 'Critical'
+  category: string
+  message: string
+  tableName?: string
+  columnName?: string
 }
 
 export interface TableApiResponse {
@@ -164,13 +224,67 @@ export class MorphDBClient {
   }
 
   // Projects
-  async listProjects(): Promise<Project[]> {
-    const response = await this.request<PagedResponse<Project>>('/api/projects')
+  async listProjects(organizationId?: string, status?: ProjectStatus): Promise<ProjectApiResponse[]> {
+    const params = new URLSearchParams()
+    if (organizationId) params.append('organizationId', organizationId)
+    if (status) params.append('status', status)
+    const query = params.toString() ? `?${params.toString()}` : ''
+    const response = await this.request<PagedResponse<ProjectApiResponse>>(`/api/projects${query}`)
     return response.data
   }
 
-  async getProject(id: string): Promise<Project> {
-    return this.request<Project>(`/api/projects/${id}`)
+  async getProject(id: string): Promise<ProjectApiResponse> {
+    return this.request<ProjectApiResponse>(`/api/projects/${id}`)
+  }
+
+  async getProjectBySlug(slug: string): Promise<ProjectApiResponse> {
+    return this.request<ProjectApiResponse>(`/api/projects/slug/${slug}`)
+  }
+
+  async createProject(data: CreateProjectRequest): Promise<ProjectApiResponse> {
+    return this.request<ProjectApiResponse>('/api/projects', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    })
+  }
+
+  async updateProject(id: string, data: UpdateProjectRequest): Promise<ProjectApiResponse> {
+    return this.request<ProjectApiResponse>(`/api/projects/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data)
+    })
+  }
+
+  async deleteProject(id: string): Promise<void> {
+    await this.request<void>(`/api/projects/${id}`, {
+      method: 'DELETE'
+    })
+  }
+
+  async suspendProject(id: string): Promise<void> {
+    await this.request<void>(`/api/projects/${id}/suspend`, {
+      method: 'POST'
+    })
+  }
+
+  async reactivateProject(id: string): Promise<void> {
+    await this.request<void>(`/api/projects/${id}/reactivate`, {
+      method: 'POST'
+    })
+  }
+
+  async archiveProject(id: string): Promise<void> {
+    await this.request<void>(`/api/projects/${id}/archive`, {
+      method: 'POST'
+    })
+  }
+
+  async getProjectStats(id: string): Promise<ProjectStatsResponse> {
+    return this.request<ProjectStatsResponse>(`/api/projects/${id}/stats`)
+  }
+
+  async validateProjectHealth(id: string): Promise<SchemaHealthResponse> {
+    return this.request<SchemaHealthResponse>(`/api/projects/${id}/health`)
   }
 
   // Tables

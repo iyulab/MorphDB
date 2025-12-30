@@ -428,6 +428,47 @@ See [Extended Roadmap](./ROADMAP_v0.9-v0.30.md) for full details.
 
 ---
 
+## MorphDB Desk (Desktop UI)
+
+> **Location**: `desk/`
+> **Documentation**: [`desk/docs/GAP_ANALYSIS.md`](../desk/docs/GAP_ANALYSIS.md), [`desk/docs/DEVELOPMENT_ROADMAP.md`](../desk/docs/DEVELOPMENT_ROADMAP.md)
+
+MorphDB의 모든 기능을 관리할 수 있는 Electron 기반 데스크탑 애플리케이션입니다.
+
+### API Coverage Status
+
+| Controller | Endpoints | desk/ Status | Target Phase |
+|------------|-----------|--------------|--------------|
+| SchemaController | 10 | 🟡 70% | Phase 1 |
+| DataController | 5 | 🟡 80% | Phase 1 |
+| ProjectController | 10 | 🟡 30% | Phase 1 |
+| AggregationController | 1 | ❌ 0% | Phase 2 |
+| BatchController | 5 | ❌ 0% | Phase 2 |
+| BulkController | 13 | ❌ 0% | Phase 2 |
+| ViewController | 8 | ❌ 0% | Phase 3 |
+| WebhookController | 12 | ❌ 0% | Phase 3 |
+| OrganizationController | 12 | ❌ 0% | Phase 3 |
+| BackupController | 6 | ❌ 0% | Phase 3 |
+| SecurityController | 11 | ❌ 0% | Phase 4 |
+| SsoController | 12 | ❌ 0% | Phase 4 |
+| AuditController | 3 | ❌ 0% | Phase 4 |
+| QuotaController | 4 | ❌ 0% | Phase 4 |
+
+### Development Phases
+
+| Phase | Version | Focus | Key Features |
+|-------|---------|-------|--------------|
+| 1 | v0.2.x | Foundation | Routing, Schema 100%, Data 100%, Project CRUD |
+| 2 | v0.3.x | Data Operations | Aggregation, Batch ops, Import/Export |
+| 3 | v0.4.x | Enterprise | Org management, Views, Webhooks, Backup |
+| 4 | v0.5.x | Security | SSO config, API keys, RLS, Audit viewer |
+| 5 | v1.0.x | Polish | Performance, UX, Testing, Docs |
+
+**Current**: v0.1.x (Early Development) - 15% API coverage
+**Target**: v1.0.x - 100% API coverage with full feature parity
+
+---
+
 ## Contributing
 
 1. Check this ROADMAP for planned work
