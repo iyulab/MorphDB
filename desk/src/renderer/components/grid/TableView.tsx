@@ -1,11 +1,14 @@
 import { useState, useMemo, type ReactElement } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { AlertCircle, Database } from 'lucide-react'
+import { AlertCircle, Database, MoreHorizontal, Layers, Pencil, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { DataGrid } from './DataGrid'
 import { FilterBuilder } from './FilterBuilder'
 import { AggregationPanel } from './AggregationPanel'
 import { AddRecordDialog } from '@/components/dialogs/AddRecordDialog'
+import { BulkOperationsDialog } from '@/components/dialogs/BulkOperationsDialog'
+import { BulkUpdateDialog } from '@/components/dialogs/BulkUpdateDialog'
+import { BulkDeleteDialog } from '@/components/dialogs/BulkDeleteDialog'
 import { MorphDBClient, type TableApiResponse } from '@/lib/api'
 import { useConnectionStore } from '@/stores/connectionStore'
 
@@ -24,6 +27,10 @@ export function TableView({ tableName }: TableViewProps): ReactElement {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
   const [filter, setFilter] = useState<string | null>(null)
   const [addRecordOpen, setAddRecordOpen] = useState(false)
+  const [bulkOpsOpen, setBulkOpsOpen] = useState(false)
+  const [bulkUpdateOpen, setBulkUpdateOpen] = useState(false)
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [batchMenuOpen, setBatchMenuOpen] = useState(false)
 
   // Helper to create API client
   const createClient = async (): Promise<MorphDBClient | null> => {
@@ -215,6 +222,59 @@ export function TableView({ tableName }: TableViewProps): ReactElement {
             </span>
           )}
         </div>
+        {/* Batch Operations Menu */}
+        <div className="relative">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setBatchMenuOpen(!batchMenuOpen)}
+            className="gap-1"
+          >
+            <Layers className="h-4 w-4" />
+            Batch
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+          {batchMenuOpen && (
+            <>
+              <div
+                className="fixed inset-0"
+                onClick={() => setBatchMenuOpen(false)}
+              />
+              <div className="absolute right-0 top-full mt-1 z-50 min-w-[180px] rounded-md border bg-popover p-1 shadow-md">
+                <button
+                  onClick={() => {
+                    setBulkOpsOpen(true)
+                    setBatchMenuOpen(false)
+                  }}
+                  className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent text-left"
+                >
+                  <Layers className="h-4 w-4" />
+                  Batch Operations
+                </button>
+                <button
+                  onClick={() => {
+                    setBulkUpdateOpen(true)
+                    setBatchMenuOpen(false)
+                  }}
+                  className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent text-left"
+                >
+                  <Pencil className="h-4 w-4" />
+                  Bulk Update
+                </button>
+                <button
+                  onClick={() => {
+                    setBulkDeleteOpen(true)
+                    setBatchMenuOpen(false)
+                  }}
+                  className="w-full flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent text-left text-destructive"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Bulk Delete
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Filter Builder */}
@@ -259,6 +319,30 @@ export function TableView({ tableName }: TableViewProps): ReactElement {
           columns={tableSchema.columns}
           onSubmit={handleAddRecord}
         />
+      )}
+
+      {/* Batch Operations Dialogs */}
+      {tableSchema && (
+        <>
+          <BulkOperationsDialog
+            open={bulkOpsOpen}
+            onOpenChange={setBulkOpsOpen}
+            tableName={tableName}
+            columns={tableSchema.columns}
+          />
+          <BulkUpdateDialog
+            open={bulkUpdateOpen}
+            onOpenChange={setBulkUpdateOpen}
+            tableName={tableName}
+            columns={tableSchema.columns}
+          />
+          <BulkDeleteDialog
+            open={bulkDeleteOpen}
+            onOpenChange={setBulkDeleteOpen}
+            tableName={tableName}
+            columns={tableSchema.columns}
+          />
+        </>
       )}
     </div>
   )
