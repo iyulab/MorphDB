@@ -15,7 +15,8 @@ import {
   TableProperties,
   Eye,
   Webhook,
-  Building2
+  Building2,
+  HardDrive
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { useConnectionStore } from '@/stores/connectionStore'
@@ -298,6 +299,19 @@ export function Sidebar({ onNewConnection, onEditConnection }: SidebarProps): Re
         >
           <Building2 className="h-4 w-4" />
           Organizations
+        </NavLink>
+        <NavLink
+          to="/backups"
+          className={({ isActive }) =>
+            cn(
+              'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
+              'hover:bg-sidebar-hover',
+              isActive && 'bg-sidebar-active text-primary'
+            )
+          }
+        >
+          <HardDrive className="h-4 w-4" />
+          Backups
         </NavLink>
         <NavLink
           to="/settings"

@@ -513,6 +513,58 @@ export interface CreateInvitationApiRequest {
   role?: OrganizationRole
 }
 
+// Backup types
+export type BackupType = 'Full' | 'SchemaOnly' | 'DataOnly'
+export type BackupStatus = 'Pending' | 'InProgress' | 'Completed' | 'Failed' | 'Cancelled' | 'Expired'
+export type BackupStorageType = 'Local' | 'S3' | 'Gcs' | 'AzureBlob'
+export type BackupCompression = 'None' | 'Gzip' | 'Zstd'
+
+export interface BackupMetadataApiResponse {
+  postgresVersion?: string
+  tableCount: number
+  estimatedRowCount: number
+  schemas?: string[]
+  tables?: string[]
+  durationMs: number
+}
+
+export interface BackupApiResponse {
+  backupId: string
+  projectId: string
+  name: string
+  description?: string
+  type: BackupType
+  status: BackupStatus
+  sizeBytes: number
+  storageType: BackupStorageType
+  compression: BackupCompression
+  checksum?: string
+  errorMessage?: string
+  initiatedBy?: string
+  startedAt: string
+  completedAt?: string
+  expiresAt?: string
+  metadata?: BackupMetadataApiResponse
+}
+
+export interface CreateBackupApiRequest {
+  name: string
+  description?: string
+  type?: BackupType
+  expiresInDays?: number
+}
+
+export interface RestoreBackupApiRequest {
+  targetProjectId?: string
+  dropExisting?: boolean
+}
+
+export interface RestoreResultApiResponse {
+  success: boolean
+  tablesRestored: number
+  durationMs: number
+}
+
 export interface TableApiResponse {
   id: string
   name: string
@@ -1372,6 +1424,49 @@ export class MorphDBClient {
         method: 'DELETE'
       }
     )
+  }
+
+  // Backup operations
+  async listBackups(projectId: string): Promise<BackupApiResponse[]> {
+    return this.request<BackupApiResponse[]>(`/api/projects/${projectId}/backups`)
+  }
+
+  async getBackup(projectId: string, backupId: string): Promise<BackupApiResponse> {
+    return this.request<BackupApiResponse>(`/api/projects/${projectId}/backups/${backupId}`)
+  }
+
+  async createBackup(
+    projectId: string,
+    data: CreateBackupApiRequest
+  ): Promise<BackupApiResponse> {
+    return this.request<BackupApiResponse>(`/api/projects/${projectId}/backups`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    })
+  }
+
+  async restoreBackup(
+    projectId: string,
+    backupId: string,
+    data?: RestoreBackupApiRequest
+  ): Promise<RestoreResultApiResponse> {
+    return this.request<RestoreResultApiResponse>(
+      `/api/projects/${projectId}/backups/${backupId}/restore`,
+      {
+        method: 'POST',
+        body: data ? JSON.stringify(data) : undefined
+      }
+    )
+  }
+
+  async deleteBackup(projectId: string, backupId: string): Promise<void> {
+    await this.request<void>(`/api/projects/${projectId}/backups/${backupId}`, {
+      method: 'DELETE'
+    })
+  }
+
+  getBackupDownloadUrl(projectId: string, backupId: string): string {
+    return `${this.baseUrl}/api/projects/${projectId}/backups/${backupId}/download`
   }
 }
 
