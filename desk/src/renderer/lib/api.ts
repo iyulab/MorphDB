@@ -428,6 +428,91 @@ export interface ArchiveDlqApiResponse {
   archivedCount: number
 }
 
+// Organization types
+export type OrganizationRole = 'Owner' | 'Admin' | 'Member' | 'Viewer'
+export type OrganizationStatus = 'Active' | 'Suspended' | 'Deleted'
+export type MembershipStatus = 'Active' | 'Inactive' | 'Suspended'
+export type InvitationStatus = 'Pending' | 'Accepted' | 'Expired' | 'Revoked'
+
+export interface OrganizationSettings {
+  maxProjects?: number
+  maxMembersPerProject?: number
+  enableAuditLog?: boolean
+  defaultProjectEnvironment?: string
+}
+
+export interface OrganizationApiResponse {
+  organizationId: string
+  name: string
+  slug: string
+  description?: string
+  settings?: OrganizationSettings
+  status: OrganizationStatus
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreateOrganizationApiRequest {
+  name: string
+  slug?: string
+  description?: string
+  settings?: OrganizationSettings
+}
+
+export interface UpdateOrganizationApiRequest {
+  name?: string
+  description?: string
+  settings?: OrganizationSettings
+}
+
+export interface OrganizationStats {
+  organizationId: string
+  memberCount: number
+  projectCount: number
+  totalTables: number
+  totalRows: number
+  storageUsageBytes: number
+}
+
+export interface OrganizationMemberApiResponse {
+  memberId: string
+  organizationId: string
+  userId: string
+  email: string
+  displayName?: string
+  role: OrganizationRole
+  status: MembershipStatus
+  joinedAt: string
+}
+
+export interface AddMemberApiRequest {
+  userId: string
+  email: string
+  displayName?: string
+  role?: OrganizationRole
+}
+
+export interface UpdateMemberApiRequest {
+  role?: OrganizationRole
+  displayName?: string
+}
+
+export interface InvitationApiResponse {
+  invitationId: string
+  organizationId: string
+  email: string
+  role: OrganizationRole
+  status: InvitationStatus
+  createdAt: string
+  expiresAt: string
+  invitedBy: string
+}
+
+export interface CreateInvitationApiRequest {
+  email: string
+  role?: OrganizationRole
+}
+
 export interface TableApiResponse {
   id: string
   name: string
@@ -1174,6 +1259,119 @@ export class MorphDBClient {
     return this.request<ArchiveDlqApiResponse>(`/api/webhooks/dlq/archive${query}`, {
       method: 'POST'
     })
+  }
+
+  // Organizations
+  async listOrganizations(): Promise<OrganizationApiResponse[]> {
+    return this.request<OrganizationApiResponse[]>('/api/organizations')
+  }
+
+  async getOrganization(id: string): Promise<OrganizationApiResponse> {
+    return this.request<OrganizationApiResponse>(`/api/organizations/${id}`)
+  }
+
+  async createOrganization(data: CreateOrganizationApiRequest): Promise<OrganizationApiResponse> {
+    return this.request<OrganizationApiResponse>('/api/organizations', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    })
+  }
+
+  async updateOrganization(
+    id: string,
+    data: UpdateOrganizationApiRequest
+  ): Promise<OrganizationApiResponse> {
+    return this.request<OrganizationApiResponse>(`/api/organizations/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data)
+    })
+  }
+
+  async deleteOrganization(id: string): Promise<void> {
+    await this.request<void>(`/api/organizations/${id}`, {
+      method: 'DELETE'
+    })
+  }
+
+  async getOrganizationStats(id: string): Promise<OrganizationStats> {
+    return this.request<OrganizationStats>(`/api/organizations/${id}/stats`)
+  }
+
+  // Organization Members
+  async listOrganizationMembers(
+    organizationId: string,
+    options?: { offset?: number; limit?: number }
+  ): Promise<OrganizationMemberApiResponse[]> {
+    const params = new URLSearchParams()
+    if (options?.offset) params.append('offset', options.offset.toString())
+    if (options?.limit) params.append('limit', options.limit.toString())
+
+    const query = params.toString() ? `?${params.toString()}` : ''
+    return this.request<OrganizationMemberApiResponse[]>(
+      `/api/organizations/${organizationId}/members${query}`
+    )
+  }
+
+  async addOrganizationMember(
+    organizationId: string,
+    data: AddMemberApiRequest
+  ): Promise<OrganizationMemberApiResponse> {
+    return this.request<OrganizationMemberApiResponse>(
+      `/api/organizations/${organizationId}/members`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data)
+      }
+    )
+  }
+
+  async updateOrganizationMember(
+    organizationId: string,
+    memberId: string,
+    data: UpdateMemberApiRequest
+  ): Promise<OrganizationMemberApiResponse> {
+    return this.request<OrganizationMemberApiResponse>(
+      `/api/organizations/${organizationId}/members/${memberId}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(data)
+      }
+    )
+  }
+
+  async removeOrganizationMember(organizationId: string, memberId: string): Promise<void> {
+    await this.request<void>(`/api/organizations/${organizationId}/members/${memberId}`, {
+      method: 'DELETE'
+    })
+  }
+
+  // Organization Invitations
+  async listInvitations(organizationId: string): Promise<InvitationApiResponse[]> {
+    return this.request<InvitationApiResponse[]>(
+      `/api/organizations/${organizationId}/invitations`
+    )
+  }
+
+  async createInvitation(
+    organizationId: string,
+    data: CreateInvitationApiRequest
+  ): Promise<InvitationApiResponse> {
+    return this.request<InvitationApiResponse>(
+      `/api/organizations/${organizationId}/invitations`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data)
+      }
+    )
+  }
+
+  async revokeInvitation(organizationId: string, invitationId: string): Promise<void> {
+    await this.request<void>(
+      `/api/organizations/${organizationId}/invitations/${invitationId}`,
+      {
+        method: 'DELETE'
+      }
+    )
   }
 }
 
