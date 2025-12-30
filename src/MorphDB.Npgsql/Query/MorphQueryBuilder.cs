@@ -22,6 +22,7 @@ public sealed class MorphQueryBuilder : IMorphQueryBuilder
     private readonly ISecurityPolicyService _securityPolicyService;
     private readonly ISecurityContextAccessor _securityContextAccessor;
     private readonly ILookupResolver? _lookupResolver;
+    private readonly IRollupResolver? _rollupResolver;
     private readonly Guid _tenantId;
 
     /// <summary>
@@ -33,13 +34,15 @@ public sealed class MorphQueryBuilder : IMorphQueryBuilder
         ISecurityPolicyService securityPolicyService,
         ISecurityContextAccessor securityContextAccessor,
         Guid tenantId,
-        ILookupResolver? lookupResolver = null)
+        ILookupResolver? lookupResolver = null,
+        IRollupResolver? rollupResolver = null)
     {
         _dataSource = dataSource ?? throw new ArgumentNullException(nameof(dataSource));
         _metadataRepository = metadataRepository ?? throw new ArgumentNullException(nameof(metadataRepository));
         _securityPolicyService = securityPolicyService ?? throw new ArgumentNullException(nameof(securityPolicyService));
         _securityContextAccessor = securityContextAccessor ?? throw new ArgumentNullException(nameof(securityContextAccessor));
         _lookupResolver = lookupResolver;
+        _rollupResolver = rollupResolver;
         _tenantId = tenantId;
     }
 
@@ -52,6 +55,7 @@ public sealed class MorphQueryBuilder : IMorphQueryBuilder
             _securityPolicyService,
             _securityContextAccessor,
             _lookupResolver,
+            _rollupResolver,
             _tenantId,
             tableName,
             null);
@@ -66,6 +70,7 @@ public sealed class MorphQueryBuilder : IMorphQueryBuilder
             _securityPolicyService,
             _securityContextAccessor,
             _lookupResolver,
+            _rollupResolver,
             _tenantId,
             tableName,
             tableAlias);
@@ -77,6 +82,7 @@ public sealed class MorphQueryBuilder : IMorphQueryBuilder
 /// Stores query operations with logical names, then builds SQL with physical names at execution.
 /// Automatically applies Row-Level Security (RLS) policies during query execution.
 /// Supports automatic lookup column expansion via JOINs.
+/// Supports automatic rollup column expansion via correlated subqueries.
 /// </summary>
 internal sealed class MorphQuery : IMorphQuery
 {
@@ -85,6 +91,7 @@ internal sealed class MorphQuery : IMorphQuery
     private readonly ISecurityPolicyService _securityPolicyService;
     private readonly ISecurityContextAccessor _securityContextAccessor;
     private readonly ILookupResolver? _lookupResolver;
+    private readonly IRollupResolver? _rollupResolver;
     private readonly Guid _tenantId;
     private readonly string _tableName;
     private readonly string? _tableAlias;
@@ -94,6 +101,7 @@ internal sealed class MorphQuery : IMorphQuery
     private string? _rlsExpression;
     private readonly Dictionary<string, TableMetadata> _joinedTableMetadata = new();
     private LookupQueryExpansion? _lookupExpansion;
+    private RollupQueryExpansion? _rollupExpansion;
 
     // Store all query operations with logical names
     private bool _selectAllCalled;
@@ -129,6 +137,7 @@ internal sealed class MorphQuery : IMorphQuery
         ISecurityPolicyService securityPolicyService,
         ISecurityContextAccessor securityContextAccessor,
         ILookupResolver? lookupResolver,
+        IRollupResolver? rollupResolver,
         Guid tenantId,
         string tableName,
         string? tableAlias)
@@ -138,6 +147,7 @@ internal sealed class MorphQuery : IMorphQuery
         _securityPolicyService = securityPolicyService;
         _securityContextAccessor = securityContextAccessor;
         _lookupResolver = lookupResolver;
+        _rollupResolver = rollupResolver;
         _tenantId = tenantId;
         _tableName = tableName;
         _tableAlias = tableAlias;
@@ -579,15 +589,15 @@ internal sealed class MorphQuery : IMorphQuery
 
     /// <summary>
     /// Builds a SqlKata query with physical names for actual execution.
-    /// Uses "base_table" as alias when lookup expansion is present.
+    /// Uses "base_table" as alias when lookup or rollup expansion is present.
     /// </summary>
     private async Task<SqlKataQuery> BuildPhysicalQueryAsync(CancellationToken cancellationToken)
     {
         var table = await GetTableMetadataAsync(cancellationToken);
         var query = new SqlKataQuery(table.PhysicalName);
 
-        // Use base_table alias when lookup expansion is present
-        var useBaseTableAlias = _lookupExpansion?.HasExpansion == true;
+        // Use base_table alias when lookup or rollup expansion is present
+        var useBaseTableAlias = _lookupExpansion?.HasExpansion == true || _rollupExpansion?.HasExpansion == true;
         if (useBaseTableAlias)
         {
             query.As("base_table");
@@ -703,23 +713,40 @@ internal sealed class MorphQuery : IMorphQuery
         // Build lookup expansion for lookup columns
         await BuildLookupExpansionAsync(table, cancellationToken);
 
+        // Build rollup expansion for rollup columns
+        await BuildRollupExpansionAsync(table, cancellationToken);
+
         var query = await BuildPhysicalQueryAsync(cancellationToken);
 
-        // Determine if we're using base_table alias (only when lookups are present)
+        // Determine if we're using base_table alias (when lookups or rollups are present)
         var hasLookups = _lookupExpansion?.HasExpansion == true;
+        var hasRollups = _rollupExpansion?.HasExpansion == true;
+        var useBaseTableAlias = hasLookups || hasRollups;
 
         // Add SELECT clause
         if (_selectAllCalled || (_selectedColumns.Count == 0 && _aggregates.Count == 0))
         {
-            if (hasLookups)
+            if (useBaseTableAlias)
             {
                 // Select all base table columns with alias
                 query.Select("base_table.*");
 
                 // Add lookup column expressions
-                foreach (var (logicalName, selectExpr) in _lookupExpansion!.SelectExpressions)
+                if (hasLookups)
                 {
-                    query.SelectRaw($"{selectExpr} AS \"{logicalName}\"");
+                    foreach (var (logicalName, selectExpr) in _lookupExpansion!.SelectExpressions)
+                    {
+                        query.SelectRaw($"{selectExpr} AS \"{logicalName}\"");
+                    }
+                }
+
+                // Add rollup column expressions (correlated subqueries)
+                if (hasRollups)
+                {
+                    foreach (var (logicalName, subqueryExpr) in _rollupExpansion!.SubqueryExpressions)
+                    {
+                        query.SelectRaw($"{subqueryExpr} AS \"{logicalName}\"");
+                    }
                 }
             }
             else
@@ -737,10 +764,15 @@ internal sealed class MorphQuery : IMorphQuery
                 {
                     query.SelectRaw($"{lookupExpr} AS \"{column}\"");
                 }
+                // Check if this is a rollup column with expansion
+                else if (_rollupExpansion?.SubqueryExpressions.TryGetValue(column, out var rollupExpr) == true)
+                {
+                    query.SelectRaw($"{rollupExpr} AS \"{column}\"");
+                }
                 else
                 {
                     var physicalColumn = GetPhysicalColumnName(column, table);
-                    if (hasLookups)
+                    if (useBaseTableAlias)
                     {
                         query.Select($"base_table.{physicalColumn}");
                     }
@@ -756,7 +788,7 @@ internal sealed class MorphQuery : IMorphQuery
         foreach (var (function, column, alias) in _aggregates)
         {
             var physicalColumn = GetPhysicalColumnName(column, table);
-            var columnRef = hasLookups ? $"base_table.{physicalColumn}" : physicalColumn;
+            var columnRef = useBaseTableAlias ? $"base_table.{physicalColumn}" : physicalColumn;
             var aggExpr = BuildAggregateExpression(function, columnRef);
             if (!string.IsNullOrEmpty(alias))
             {
@@ -807,6 +839,45 @@ internal sealed class MorphQuery : IMorphQuery
             _tenantId,
             table,
             lookupColumns,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Builds rollup expansion for columns that are rollup type.
+    /// Rollups generate correlated subqueries for aggregate values.
+    /// </summary>
+    private async Task BuildRollupExpansionAsync(TableMetadata table, CancellationToken cancellationToken)
+    {
+        if (_rollupResolver is null)
+            return;
+
+        // Find rollup columns that need expansion
+        var rollupColumns = new List<RollupColumnInfo>();
+
+        foreach (var column in table.Columns)
+        {
+            if (column.RollupConfig is null)
+                continue;
+
+            // If SelectAll or this column is in the selected columns
+            if (_selectAllCalled || _selectedColumns.Count == 0 || _selectedColumns.Contains(column.LogicalName))
+            {
+                rollupColumns.Add(new RollupColumnInfo
+                {
+                    ColumnName = column.LogicalName,
+                    Config = column.RollupConfig,
+                    DataType = column.DataType
+                });
+            }
+        }
+
+        if (rollupColumns.Count == 0)
+            return;
+
+        _rollupExpansion = await _rollupResolver.BuildRollupExpansionAsync(
+            _tenantId,
+            table,
+            rollupColumns,
             cancellationToken);
     }
 

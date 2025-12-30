@@ -178,6 +178,12 @@ public sealed record CreateColumnApiRequest
     /// When set, creates a virtual lookup column instead of a physical column.
     /// </summary>
     public LookupConfigApiRequest? Lookup { get; init; }
+
+    /// <summary>
+    /// Configuration for rollup fields that aggregate data from related tables.
+    /// When set, creates a virtual rollup column instead of a physical column.
+    /// </summary>
+    public RollupConfigApiRequest? Rollup { get; init; }
 }
 
 /// <summary>
@@ -206,6 +212,12 @@ public sealed record AddColumnApiRequest
     /// When set, creates a virtual lookup column instead of a physical column.
     /// </summary>
     public LookupConfigApiRequest? Lookup { get; init; }
+
+    /// <summary>
+    /// Configuration for rollup fields that aggregate data from related tables.
+    /// When set, creates a virtual rollup column instead of a physical column.
+    /// </summary>
+    public RollupConfigApiRequest? Rollup { get; init; }
 }
 
 /// <summary>
@@ -261,6 +273,125 @@ public sealed record LookupConfigApiRequest
             _ => LookupDeleteAction.SetNull
         };
     }
+}
+
+/// <summary>
+/// Configuration for rollup fields in API requests.
+/// </summary>
+public sealed record RollupConfigApiRequest
+{
+    /// <summary>
+    /// The relation that connects to the records to roll up.
+    /// </summary>
+    public required string Relation { get; init; }
+
+    /// <summary>
+    /// The table containing the records to roll up (child table).
+    /// </summary>
+    public required string TargetTable { get; init; }
+
+    /// <summary>
+    /// The foreign key column in the target table that references this table.
+    /// </summary>
+    public required string ForeignKeyColumn { get; init; }
+
+    /// <summary>
+    /// The column in the target table to aggregate.
+    /// Use "*" for COUNT operations.
+    /// </summary>
+    public string SourceColumn { get; init; } = "*";
+
+    /// <summary>
+    /// The aggregation function: count, count-values, count-empty, sum, average, min, max,
+    /// string-concat, array-values, percent-checked, percent-unchecked,
+    /// earliest-date, latest-date, date-range, all-true, any-true.
+    /// </summary>
+    public required string Aggregation { get; init; }
+
+    /// <summary>
+    /// Optional filter to apply before aggregation.
+    /// </summary>
+    public RollupFilterApiRequest? Filter { get; init; }
+
+    /// <summary>
+    /// Delimiter for string-concat aggregation. Default: ", ".
+    /// </summary>
+    public string? Delimiter { get; init; }
+
+    /// <summary>
+    /// Order by expression for string-concat and array-values aggregations.
+    /// </summary>
+    public string? OrderBy { get; init; }
+
+    /// <summary>
+    /// Converts to core RollupColumnConfig model.
+    /// </summary>
+    public RollupColumnConfig ToModel() => new()
+    {
+        Relation = Relation,
+        TargetTable = TargetTable,
+        ForeignKeyColumn = ForeignKeyColumn,
+        SourceColumn = SourceColumn,
+        Aggregation = ParseRollupAggregation(Aggregation),
+        Filter = Filter?.ToModel(),
+        Delimiter = Delimiter,
+        OrderBy = OrderBy
+    };
+
+    private static RollupAggregation ParseRollupAggregation(string aggregation)
+    {
+        return aggregation.ToLowerInvariant().Replace("-", "").Replace("_", "") switch
+        {
+            "count" => RollupAggregation.Count,
+            "countvalues" => RollupAggregation.CountValues,
+            "countempty" => RollupAggregation.CountEmpty,
+            "sum" => RollupAggregation.Sum,
+            "average" or "avg" => RollupAggregation.Average,
+            "min" => RollupAggregation.Min,
+            "max" => RollupAggregation.Max,
+            "stringconcat" or "concat" => RollupAggregation.StringConcat,
+            "arrayvalues" or "array" => RollupAggregation.ArrayValues,
+            "percentchecked" => RollupAggregation.PercentChecked,
+            "percentunchecked" => RollupAggregation.PercentUnchecked,
+            "earliestdate" or "earliest" => RollupAggregation.EarliestDate,
+            "latestdate" or "latest" => RollupAggregation.LatestDate,
+            "daterange" => RollupAggregation.DateRange,
+            "alltrue" or "all" => RollupAggregation.AllTrue,
+            "anytrue" or "any" => RollupAggregation.AnyTrue,
+            _ => RollupAggregation.Count
+        };
+    }
+}
+
+/// <summary>
+/// Filter configuration for rollup operations in API requests.
+/// </summary>
+public sealed record RollupFilterApiRequest
+{
+    /// <summary>
+    /// The field to filter on.
+    /// </summary>
+    public required string Field { get; init; }
+
+    /// <summary>
+    /// The comparison operator: eq, neq, gt, gte, lt, lte, contains, starts-with, ends-with, is-null, is-not-null, in, not-in.
+    /// </summary>
+    public required string Operator { get; init; }
+
+    /// <summary>
+    /// The value to compare against.
+    /// </summary>
+    public object? Value { get; init; }
+
+    /// <summary>
+    /// Converts to core RollupFilter model.
+    /// </summary>
+    public RollupFilter ToModel() => new()
+    {
+        Field = Field,
+        Operator = ApiModelExtensions.ParseFilterOperator(Operator),
+        Value = Value
+    };
 }
 
 /// <summary>
@@ -357,6 +488,11 @@ public sealed record ColumnApiResponse
     /// </summary>
     public LookupConfigApiResponse? Lookup { get; init; }
 
+    /// <summary>
+    /// Rollup configuration if this is a rollup column.
+    /// </summary>
+    public RollupConfigApiResponse? Rollup { get; init; }
+
     public static ColumnApiResponse FromMetadata(ColumnMetadata column) => new()
     {
         Id = column.ColumnId,
@@ -371,6 +507,9 @@ public sealed record ColumnApiResponse
         IsDerived = column.IsDerived,
         Lookup = column.LookupConfig != null
             ? LookupConfigApiResponse.FromModel(column.LookupConfig)
+            : null,
+        Rollup = column.RollupConfig != null
+            ? RollupConfigApiResponse.FromModel(column.RollupConfig)
             : null
     };
 }
@@ -413,6 +552,137 @@ public sealed record LookupConfigApiResponse
         OnDelete = config.OnDelete.ToString().ToLowerInvariant(),
         AllowMultiple = config.AllowMultiple
     };
+}
+
+/// <summary>
+/// Rollup configuration in API responses.
+/// </summary>
+public sealed record RollupConfigApiResponse
+{
+    /// <summary>
+    /// The relation that connects to the records to roll up.
+    /// </summary>
+    public required string Relation { get; init; }
+
+    /// <summary>
+    /// The target table containing the records to roll up.
+    /// </summary>
+    public required string TargetTable { get; init; }
+
+    /// <summary>
+    /// The foreign key column in the target table.
+    /// </summary>
+    public required string ForeignKeyColumn { get; init; }
+
+    /// <summary>
+    /// The column being aggregated.
+    /// </summary>
+    public required string SourceColumn { get; init; }
+
+    /// <summary>
+    /// The aggregation function being applied.
+    /// </summary>
+    public required string Aggregation { get; init; }
+
+    /// <summary>
+    /// Optional filter applied before aggregation.
+    /// </summary>
+    public RollupFilterApiResponse? Filter { get; init; }
+
+    /// <summary>
+    /// Delimiter for string concatenation.
+    /// </summary>
+    public string? Delimiter { get; init; }
+
+    /// <summary>
+    /// Order by expression for ordered aggregations.
+    /// </summary>
+    public string? OrderBy { get; init; }
+
+    public static RollupConfigApiResponse FromModel(RollupColumnConfig config) => new()
+    {
+        Relation = config.Relation,
+        TargetTable = config.TargetTable,
+        ForeignKeyColumn = config.ForeignKeyColumn,
+        SourceColumn = config.SourceColumn,
+        Aggregation = FormatAggregation(config.Aggregation),
+        Filter = config.Filter != null ? RollupFilterApiResponse.FromModel(config.Filter) : null,
+        Delimiter = config.Delimiter,
+        OrderBy = config.OrderBy
+    };
+
+    private static string FormatAggregation(RollupAggregation aggregation)
+    {
+        return aggregation switch
+        {
+            RollupAggregation.Count => "count",
+            RollupAggregation.CountValues => "count-values",
+            RollupAggregation.CountEmpty => "count-empty",
+            RollupAggregation.Sum => "sum",
+            RollupAggregation.Average => "average",
+            RollupAggregation.Min => "min",
+            RollupAggregation.Max => "max",
+            RollupAggregation.StringConcat => "string-concat",
+            RollupAggregation.ArrayValues => "array-values",
+            RollupAggregation.PercentChecked => "percent-checked",
+            RollupAggregation.PercentUnchecked => "percent-unchecked",
+            RollupAggregation.EarliestDate => "earliest-date",
+            RollupAggregation.LatestDate => "latest-date",
+            RollupAggregation.DateRange => "date-range",
+            RollupAggregation.AllTrue => "all-true",
+            RollupAggregation.AnyTrue => "any-true",
+            _ => "count"
+        };
+    }
+}
+
+/// <summary>
+/// Rollup filter configuration in API responses.
+/// </summary>
+public sealed record RollupFilterApiResponse
+{
+    /// <summary>
+    /// The field being filtered.
+    /// </summary>
+    public required string Field { get; init; }
+
+    /// <summary>
+    /// The comparison operator.
+    /// </summary>
+    public required string Operator { get; init; }
+
+    /// <summary>
+    /// The comparison value.
+    /// </summary>
+    public object? Value { get; init; }
+
+    public static RollupFilterApiResponse FromModel(RollupFilter filter) => new()
+    {
+        Field = filter.Field,
+        Operator = FormatOperator(filter.Operator),
+        Value = filter.Value
+    };
+
+    private static string FormatOperator(FilterOperator op)
+    {
+        return op switch
+        {
+            FilterOperator.Equals => "eq",
+            FilterOperator.NotEquals => "neq",
+            FilterOperator.GreaterThan => "gt",
+            FilterOperator.GreaterThanOrEquals => "gte",
+            FilterOperator.LessThan => "lt",
+            FilterOperator.LessThanOrEquals => "lte",
+            FilterOperator.Contains => "contains",
+            FilterOperator.StartsWith => "starts-with",
+            FilterOperator.EndsWith => "ends-with",
+            FilterOperator.IsNull => "is-null",
+            FilterOperator.IsNotNull => "is-not-null",
+            FilterOperator.In => "in",
+            FilterOperator.NotIn => "not-in",
+            _ => "eq"
+        };
+    }
 }
 
 /// <summary>

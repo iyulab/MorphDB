@@ -177,6 +177,12 @@ public sealed record CreateColumnRequest
     /// When set, the column becomes a virtual lookup column.
     /// </summary>
     public LookupColumnConfig? LookupConfig { get; init; }
+
+    /// <summary>
+    /// Configuration for rollup fields that aggregate data from related tables.
+    /// When set, the column becomes a virtual rollup column.
+    /// </summary>
+    public RollupColumnConfig? RollupConfig { get; init; }
 }
 
 public sealed record AddColumnRequest
@@ -195,6 +201,12 @@ public sealed record AddColumnRequest
     /// When set, the column becomes a virtual lookup column.
     /// </summary>
     public LookupColumnConfig? LookupConfig { get; init; }
+
+    /// <summary>
+    /// Configuration for rollup fields that aggregate data from related tables.
+    /// When set, the column becomes a virtual rollup column.
+    /// </summary>
+    public RollupColumnConfig? RollupConfig { get; init; }
 }
 
 public sealed record UpdateColumnRequest
