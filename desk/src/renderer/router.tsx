@@ -10,6 +10,7 @@ import { BackupsPage } from './routes/backups'
 import { AuditPage } from './routes/audit'
 import { QuotaPage } from './routes/quota'
 import { SecurityPage } from './routes/security'
+import { SsoPage } from './routes/sso'
 import { ErrorBoundary } from './components/ErrorBoundary'
 
 export const router = createHashRouter([
@@ -61,6 +62,10 @@ export const router = createHashRouter([
       {
         path: 'security',
         element: <SecurityPage />
+      },
+      {
+        path: 'sso',
+        element: <SsoPage />
       },
       {
         path: 'settings',

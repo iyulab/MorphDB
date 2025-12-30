@@ -786,6 +786,76 @@ export interface KeyValidationResultApiResponse {
   versionBreakdown: Record<string, number>
 }
 
+// ============================================================================
+// SSO Types
+// ============================================================================
+
+export type SsoProviderType = 'oidc' | 'entraId' | 'google' | 'okta' | 'auth0' | 'keycloak' | 'saml'
+export type SsoConfigStatus = 'disabled' | 'active' | 'testing' | 'error'
+// Note: OrganizationRole is already defined above as 'Owner' | 'Admin' | 'Member' | 'Viewer'
+
+export interface SsoClaimMappingsApiResponse {
+  subjectClaim?: string
+  emailClaim?: string
+  nameClaim?: string
+  firstNameClaim?: string
+  lastNameClaim?: string
+  groupsClaim?: string
+  groupRoleMappings?: Record<string, OrganizationRole>
+}
+
+export interface SsoConfigApiResponse {
+  ssoConfigId: string
+  organizationId: string
+  name: string
+  providerType: SsoProviderType
+  authority: string
+  clientId: string
+  hasClientSecret: boolean
+  scopes: string[]
+  allowedDomains?: string[]
+  claimMappings?: SsoClaimMappingsApiResponse
+  autoProvisionUsers: boolean
+  defaultRole: OrganizationRole
+  status: SsoConfigStatus
+  lastError?: string
+  createdAt: string
+  updatedAt: string
+  lastUsedAt?: string
+}
+
+export interface CreateSsoConfigApiRequest {
+  name: string
+  providerType: SsoProviderType
+  authority: string
+  clientId: string
+  clientSecret?: string
+  scopes?: string[]
+  allowedDomains?: string[]
+  claimMappings?: SsoClaimMappingsApiResponse
+  autoProvisionUsers?: boolean
+  defaultRole?: OrganizationRole
+}
+
+export interface UpdateSsoConfigApiRequest {
+  name?: string
+  providerType?: SsoProviderType
+  authority?: string
+  clientId?: string
+  clientSecret?: string
+  scopes?: string[]
+  allowedDomains?: string[]
+  claimMappings?: SsoClaimMappingsApiResponse
+  autoProvisionUsers?: boolean
+  defaultRole?: OrganizationRole
+}
+
+export interface SsoTestResultApiResponse {
+  success: boolean
+  message: string
+  details?: Record<string, string>
+}
+
 export interface TableApiResponse {
   id: string
   name: string
@@ -1849,6 +1919,68 @@ export class MorphDBClient {
     return this.request<KeyValidationResultApiResponse>(
       `/api/security/encryption/validate/${tableName}`
     )
+  }
+
+  // ============================================================================
+  // SSO API
+  // ============================================================================
+
+  async listSsoConfigs(organizationId: string): Promise<SsoConfigApiResponse[]> {
+    return this.request<SsoConfigApiResponse[]>(
+      `/api/sso/organizations/${organizationId}/configs`
+    )
+  }
+
+  async getSsoConfig(ssoConfigId: string): Promise<SsoConfigApiResponse> {
+    return this.request<SsoConfigApiResponse>(`/api/sso/configs/${ssoConfigId}`)
+  }
+
+  async createSsoConfig(
+    organizationId: string,
+    request: CreateSsoConfigApiRequest
+  ): Promise<SsoConfigApiResponse> {
+    return this.request<SsoConfigApiResponse>(
+      `/api/sso/organizations/${organizationId}/configs`,
+      {
+        method: 'POST',
+        body: JSON.stringify(request)
+      }
+    )
+  }
+
+  async updateSsoConfig(
+    ssoConfigId: string,
+    request: UpdateSsoConfigApiRequest
+  ): Promise<SsoConfigApiResponse> {
+    return this.request<SsoConfigApiResponse>(`/api/sso/configs/${ssoConfigId}`, {
+      method: 'PUT',
+      body: JSON.stringify(request)
+    })
+  }
+
+  async deleteSsoConfig(ssoConfigId: string): Promise<void> {
+    await this.request<void>(`/api/sso/configs/${ssoConfigId}`, {
+      method: 'DELETE'
+    })
+  }
+
+  async testSsoConfig(ssoConfigId: string): Promise<SsoTestResultApiResponse> {
+    return this.request<SsoTestResultApiResponse>(
+      `/api/sso/configs/${ssoConfigId}/test`,
+      { method: 'POST' }
+    )
+  }
+
+  async activateSsoConfig(ssoConfigId: string): Promise<void> {
+    await this.request<void>(`/api/sso/configs/${ssoConfigId}/activate`, {
+      method: 'POST'
+    })
+  }
+
+  async deactivateSsoConfig(ssoConfigId: string): Promise<void> {
+    await this.request<void>(`/api/sso/configs/${ssoConfigId}/deactivate`, {
+      method: 'POST'
+    })
   }
 }
 

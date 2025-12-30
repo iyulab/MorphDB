@@ -19,7 +19,8 @@ import {
   HardDrive,
   FileText,
   Gauge,
-  Shield
+  Shield,
+  KeyRound
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { useConnectionStore } from '@/stores/connectionStore'
@@ -354,6 +355,19 @@ export function Sidebar({ onNewConnection, onEditConnection }: SidebarProps): Re
         >
           <Shield className="h-4 w-4" />
           Security
+        </NavLink>
+        <NavLink
+          to="/sso"
+          className={({ isActive }) =>
+            cn(
+              'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
+              'hover:bg-sidebar-hover',
+              isActive && 'bg-sidebar-active text-primary'
+            )
+          }
+        >
+          <KeyRound className="h-4 w-4" />
+          SSO
         </NavLink>
         <NavLink
           to="/settings"
