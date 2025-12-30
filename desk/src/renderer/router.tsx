@@ -8,6 +8,7 @@ import { WebhooksPage } from './routes/webhooks'
 import { OrganizationsPage } from './routes/organizations'
 import { BackupsPage } from './routes/backups'
 import { AuditPage } from './routes/audit'
+import { QuotaPage } from './routes/quota'
 import { ErrorBoundary } from './components/ErrorBoundary'
 
 export const router = createHashRouter([
@@ -51,6 +52,10 @@ export const router = createHashRouter([
       {
         path: 'audit',
         element: <AuditPage />
+      },
+      {
+        path: 'quota',
+        element: <QuotaPage />
       },
       {
         path: 'settings',

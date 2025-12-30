@@ -638,6 +638,43 @@ export interface AuditStatsApiResponse {
   to: string
 }
 
+// Quota types
+export interface QuotaUsageApiResponse {
+  projectId: string
+  period: string
+  apiRequests: number
+  dataReads: number
+  dataWrites: number
+  storageBytes: number
+  bandwidthBytes: number
+  lastUpdated: string
+}
+
+export interface QuotaLimitsApiResponse {
+  projectId: string
+  maxApiRequests: number
+  maxDataReads: number
+  maxDataWrites: number
+  maxStorageBytes: number
+  maxBandwidthBytes: number
+  tier: string
+}
+
+export interface RateLimitStatusApiResponse {
+  key: string
+  available: number
+  limit: number
+  windowSeconds: number
+  resetAt: string
+  requestCount: number
+}
+
+export interface QuotaSummaryApiResponse {
+  usage: QuotaUsageApiResponse
+  limits: QuotaLimitsApiResponse
+  rateLimit: RateLimitStatusApiResponse
+}
+
 export interface TableApiResponse {
   id: string
   name: string
@@ -1587,6 +1624,26 @@ export class MorphDBClient {
     const queryString = searchParams.toString()
     const url = `/api/projects/${projectId}/audit/stats${queryString ? `?${queryString}` : ''}`
     return this.request<AuditStatsApiResponse>(url)
+  }
+
+  // Quota API
+  async getQuotaSummary(projectId: string): Promise<QuotaSummaryApiResponse> {
+    return this.request<QuotaSummaryApiResponse>(`/api/projects/${projectId}/quota`)
+  }
+
+  async getQuotaUsage(projectId: string, period?: string): Promise<QuotaUsageApiResponse> {
+    const url = period
+      ? `/api/projects/${projectId}/quota/usage?period=${period}`
+      : `/api/projects/${projectId}/quota/usage`
+    return this.request<QuotaUsageApiResponse>(url)
+  }
+
+  async getQuotaLimits(projectId: string): Promise<QuotaLimitsApiResponse> {
+    return this.request<QuotaLimitsApiResponse>(`/api/projects/${projectId}/quota/limits`)
+  }
+
+  async getRateLimitStatus(projectId: string): Promise<RateLimitStatusApiResponse> {
+    return this.request<RateLimitStatusApiResponse>(`/api/projects/${projectId}/quota/rate-limit`)
   }
 }
 
