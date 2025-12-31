@@ -30,3 +30,11 @@ Thumbs.db
 
 # Test coverage
 coverage/
+
+# Playwright test artifacts
+playwright-report/
+test-results/
+playwright/.cache/
+
+# TypeScript build info
+*.tsbuildinfo

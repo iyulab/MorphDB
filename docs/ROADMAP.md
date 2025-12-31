@@ -554,6 +554,9 @@ MorphDB의 모든 기능을 관리할 수 있는 Electron 기반 데스크탑 �
 | Error Handling | Toast notification system | ✅ |
 | Error Handling | API error handling utility | ✅ |
 | Documentation | Keyboard shortcuts reference | ✅ |
+| API Types | Centralized type definitions (api-types.ts) | ✅ |
+| API Types | Type converters (api-converters.ts) | ✅ |
+| API Types | Field name alignment with server | ✅ |
 | Responsive Layout | Sidebar collapse, mobile support | 📋 Planned |
 | Accessibility | WCAG 2.1 AA compliance | 📋 Planned |
 | Storybook | Component documentation | 📋 Planned |
