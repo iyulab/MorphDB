@@ -2,6 +2,7 @@ using Dapper;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using MorphDB.Core.Abstractions;
+using MorphDB.Core.Audit;
 using MorphDB.Core.Encryption;
 using MorphDB.Core.Pipeline;
 using MorphDB.Core.Security;
@@ -156,6 +157,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IProjectService, ProjectService>();
 
         // Register audit services (Phase 19: Audit Logging)
+        // PII masking is configured via options pattern
+        services.Configure<PiiMaskingOptions>(opt => { });
+        services.AddSingleton<IPiiMaskingService, PiiMaskingService>();
         services.AddSingleton<IAuditService, PostgresAuditService>();
 
         // Register organization repositories (Phase 21: Organization & RBAC)

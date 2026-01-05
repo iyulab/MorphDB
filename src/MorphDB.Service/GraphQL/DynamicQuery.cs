@@ -33,7 +33,6 @@ public sealed class DynamicQuery
         return tables.Select(t => new TableGraphType
         {
             Name = t.LogicalName,
-            PhysicalName = t.PhysicalName,
             Version = t.SchemaVersion,
             Columns = t.Columns.Select(c => new ColumnGraphType
             {
@@ -67,7 +66,6 @@ public sealed class DynamicQuery
         return new TableGraphType
         {
             Name = table.LogicalName,
-            PhysicalName = table.PhysicalName,
             Version = table.SchemaVersion,
             Columns = table.Columns.Select(c => new ColumnGraphType
             {
@@ -391,11 +389,12 @@ public sealed class DynamicQuery
 
 /// <summary>
 /// GraphQL representation of a table.
+/// Note: PhysicalName is intentionally NOT exposed per MorphDB philosophy
+/// ("물리적 이름 외부 노출 금지" - Don't expose physical names externally).
 /// </summary>
 public sealed class TableGraphType
 {
     public required string Name { get; init; }
-    public required string PhysicalName { get; init; }
     public int Version { get; init; }
     public IReadOnlyList<ColumnGraphType> Columns { get; init; } = [];
     public IReadOnlyList<IndexGraphType> Indexes { get; init; } = [];

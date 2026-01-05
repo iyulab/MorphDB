@@ -793,7 +793,7 @@ public sealed record IndexApiResponse
     {
         Id = index.IndexId,
         Name = index.LogicalName,
-        Columns = index.Columns.Select(c => c.PhysicalName).ToList(),
+        Columns = index.Columns.Select(c => c.LogicalName).ToList(),
         Type = index.IndexType.ToString().ToLowerInvariant(),
         Unique = index.IsUnique
     };

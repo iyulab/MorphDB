@@ -191,6 +191,103 @@ Webhook payload:
 
 ---
 
+## Write Options
+
+Control virtual constraint validation and automatic field management during write operations.
+
+### Usage
+
+Pass `options` in the request body for data operations:
+
+```http
+POST /api/data/{table}
+Content-Type: application/json
+
+{
+  "data": { "name": "John", "email": "john@example.com" },
+  "options": {
+    "validateRequired": true,
+    "validateForeignKeys": true,
+    "validateUnique": true,
+    "validateCheck": true,
+    "applyDefaults": true,
+    "applyTimestamps": true,
+    "applyVersion": true,
+    "expectedVersion": 1
+  }
+}
+```
+
+### Validation Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `validateRequired` | `true` | Validate required fields (virtual NOT NULL) |
+| `validateForeignKeys` | `true` | Validate foreign key references exist |
+| `validateUnique` | `true` | Validate unique constraints |
+| `validateCheck` | `true` | Validate CHECK constraints (supports AND/OR expressions) |
+
+### Auto-Apply Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `applyDefaults` | `true` | Apply default values for missing fields |
+| `applyTimestamps` | `true` | Auto-manage `_created_at` and `_updated_at` |
+| `applyVersion` | `true` | Auto-manage `_version` for optimistic locking |
+| `applyAuditFields` | `true` | Auto-manage `_created_by` and `_updated_by` |
+| `applyOwnership` | `true` | Auto-manage `_owner_id` for ownership tables |
+| `applySortOrder` | `true` | Auto-manage `_sort_order` for hierarchy tables |
+
+### Advanced Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `deferValidation` | `false` | Defer validation until after bulk insert |
+| `expectedVersion` | `null` | Expected version for optimistic locking |
+
+### Preset Configurations
+
+**Default** (all enabled):
+```json
+{ "validateRequired": true, "validateForeignKeys": true, "validateUnique": true, "validateCheck": true, "applyDefaults": true, "applyTimestamps": true, "applyVersion": true }
+```
+
+**Bulk Import** (deferred validation):
+```json
+{ "validateRequired": true, "validateForeignKeys": false, "validateUnique": false, "validateCheck": false, "applyDefaults": true, "applyTimestamps": true, "applyVersion": false, "deferValidation": true }
+```
+
+**No Validation** (use with caution):
+```json
+{ "validateRequired": false, "validateForeignKeys": false, "validateUnique": false, "validateCheck": false, "applyDefaults": false, "applyTimestamps": false, "applyVersion": false }
+```
+
+### Dry Run (Validate Only)
+
+Validate data without writing:
+
+```http
+POST /api/data/{table}/validate
+Content-Type: application/json
+
+{
+  "data": { "name": "John", "email": "invalid-email" },
+  "options": { "validateRequired": true }
+}
+```
+
+Response:
+```json
+{
+  "success": false,
+  "errors": [
+    { "field": "email", "code": "INVALID_FORMAT", "message": "Invalid email format" }
+  ]
+}
+```
+
+---
+
 ## Bulk Operations
 
 ```http

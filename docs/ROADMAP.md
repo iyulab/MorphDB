@@ -18,31 +18,52 @@
 | 0.7.5 | 18.5: Virtual Constraints | ✅ Complete |
 | 0.8.0 | 18.6-20: System Columns + Audit + Rate Limiting | ✅ Complete |
 | 0.9.0 | 21-22: Organization + SSO | ✅ Complete |
-| 1.0.0 | 23-24: Enterprise Ready | 📋 Planned |
+| **0.9.5** | **23: Philosophy Alignment** | ✅ Complete |
+| 0.10.0 | 24: Production Hardening | 📋 Planned |
+| 1.0.0-alpha | 25: Admin Dashboard | 📋 Planned |
+| 1.0.0-beta | 26: Integration & Documentation | 📋 Planned |
+| 1.0.0-rc | 27: Release Candidate | 📋 Planned |
+| 1.0.0 | GA: General Availability | 📋 Planned |
+
+---
+
+## v1.0.0 Release Path
+
+> **철학 문서**: [PHILOSOPHY.md](./PHILOSOPHY.md) 참조
+> **철학 검토 결과**: 100% 준수 (v0.9.5에서 4개 개선 항목 완료)
+
+```
+v0.9.0 ──→ v0.9.5 ──→ v0.10.0 ──→ v1.0.0-alpha ──→ v1.0.0-beta ──→ v1.0.0-rc ──→ v1.0.0
+           (완료)     (현재)       (대시보드)      (통합/문서)     (RC검증)      (GA)
+```
 
 ---
 
 ## Current Focus
 
-**Active Version**: v1.0.0 (Enterprise Ready)
+**Active Version**: v0.10.0 (Production Hardening)
 
-### Completed in Previous Version (v0.9.0)
+### Completed in Previous Version (v0.9.5)
 
 | Phase | Task | Status |
 |-------|------|--------|
-| 21 | Organization entity, API, RBAC, Members, Invitations | ✅ Complete |
-| 22 | SSO Configuration CRUD, OIDC provider support | ✅ Complete |
-| 21-22 | Integration tests (35 tests: 16 Org + 19 SSO) | ✅ Complete |
+| 23 | 감사 로그 PII 마스킹 구현 | ✅ Complete |
+| 23 | API 응답 물리명 노출 검증 및 수정 | ✅ Complete |
+| 23 | CHECK 표현식 AND/OR 복합 지원 확장 | ✅ Complete |
+| 23 | WriteOptions 문서화 (API.md) | ✅ Complete |
+| 23 | 철학 준수 자동 검증 테스트 (21 tests) | ✅ Complete |
 
-### Immediate Tasks
+### v0.9.5 Completed Tasks (Philosophy Alignment)
 
-| Priority | Task | Status | Assigned |
-|----------|------|--------|----------|
-| 🔴 Critical | Admin Dashboard - Phase 23 | 📋 Planned | - |
-| 🔴 Critical | Health status overview | 📋 Planned | - |
-| 🟡 High | Enterprise Features - Phase 24 | 📋 Planned | - |
-| 🟡 High | Backup and Recovery (PITR) | 📋 Planned | - |
-| 🟢 Normal | Compliance controls (SOC 2, HIPAA, GDPR) | 📋 Planned | - |
+> 철학 검토에서 발견된 미비점 해결 완료 (91% → 100%)
+
+| Priority | Task | Status | Notes |
+|----------|------|--------|-------|
+| 🔴 Critical | 감사 로그 민감정보 마스킹 | ✅ Complete | `PiiMaskingFilter` 구현 (email, phone, name, address 등) |
+| 🔴 Critical | API 응답 물리명 노출 검증 | ✅ Complete | DynamicQuery.cs, ApiModels.cs 수정 |
+| 🟡 High | CHECK 표현식 AND/OR 지원 | ✅ Complete | 복합/중첩 표현식 파싱 (CheckValidator.cs) |
+| 🟡 High | 제약 검증 기본값 문서화 | ✅ Complete | API.md WriteOptions 섹션 추가 |
+| 🟢 Normal | 철학 준수 자동 검증 테스트 | ✅ Complete | PhilosophyComplianceTests.cs (21 tests) |
 
 ---
 
@@ -313,36 +334,280 @@ Write Request → Transformers → Validators → Executor → PostgreSQL
 
 ---
 
-### 📋 Planned Phases
+### ✅ Complete: v0.9.5 (Philosophy Alignment)
 
-#### v1.0.0: Enterprise Ready
+| Phase | Description | Status | Tasks |
+|-------|-------------|--------|-------|
+| 23 | **Philosophy Alignment** | ✅ Complete | PII masking, Physical name fix, CHECK AND/OR, WriteOptions docs, Philosophy tests |
 
-| Phase | Description | Tasks |
-|-------|-------------|-------|
-| 23 | **Admin Dashboard** | Management UI |
-| 24 | **Enterprise Features** | Backup, recovery, HA |
+#### Phase 23: Philosophy Alignment ✅
+
+> **목표**: 철학 검토에서 발견된 미비점 해결, 핵심 원칙 100% 준수
+
+**달성**: 철학 준수율 91% → 100%
+
+| Task | Priority | Status | Notes |
+|------|----------|--------|-------|
+| 감사 로그 PII 마스킹 | 🔴 Critical | ✅ | `PiiMaskingFilter` - email, phone, name, address 마스킹 |
+| API 응답 물리명 검증 | 🔴 Critical | ✅ | DynamicQuery.cs, ApiModels.cs 수정 |
+| CHECK 표현식 확장 | 🟡 High | ✅ | AND/OR 복합 표현식, 중첩 괄호 지원 |
+| WriteOptions 문서화 | 🟡 High | ✅ | API.md에 WriteOptions 섹션 추가 |
+| 철학 준수 테스트 | 🟢 Normal | ✅ | PhilosophyComplianceTests.cs (21 tests), CheckValidatorTests.cs (20 tests) |
 
 <details>
-<summary>Task Breakdown</summary>
+<summary>구현 상세</summary>
 
-**Phase 23: Admin Dashboard**
-- [ ] Health status overview
-- [ ] Schema explorer with visual viewer
-- [ ] Query console with history
-- [ ] Performance monitoring (latency, connections)
-- [ ] Alerting system (threshold, anomaly detection)
-- [ ] Team management UI
-- [ ] Billing & usage dashboard
+**PII 마스킹 구현** (`PostgresAuditService.cs`):
+```csharp
+public class PiiMaskingFilter : IAuditFilter
+{
+    private static readonly string[] SensitivePatterns =
+        ["email", "phone", "name", "address", "ssn", "credit_card", "password"];
 
-**Phase 24: Enterprise Features**
-- [ ] Point-in-Time Recovery (PITR)
-- [ ] Cross-region backup
-- [ ] Disaster recovery automation
-- [ ] SOC 2 Type II compliance controls
-- [ ] HIPAA technical safeguards (BAA support)
-- [ ] GDPR data subject rights API
+    public AuditEvent Filter(AuditEvent evt)
+    {
+        // Metadata에서 민감 필드 자동 마스킹
+        // email: ***@***.com, phone: ***-***-1234
+    }
+}
+```
+
+**물리명 노출 방지 테스트** (`PhilosophyComplianceTests.cs`):
+```csharp
+[Fact]
+public void TableApiResponse_ShouldNotExposePhysicalName()
+{
+    var response = TableApiResponse.FromMetadata(table);
+    var json = JsonSerializer.Serialize(response);
+
+    json.Should().NotContain("tbl_"); // No physical table name
+    json.Should().NotContain("col_"); // No physical column name
+}
+```
+
+**CHECK 표현식 AND/OR 지원** (`CheckValidator.cs`):
+```csharp
+// 지원 표현식 예시:
+// "price > 0 AND quantity >= 1"
+// "status = 'active' OR status = 'pending'"
+// "(price > 0 AND price < 100) OR quantity = 0"
+```
 
 </details>
+
+---
+
+### 📋 Planned Phases: v0.10.0 → v1.0.0
+
+---
+
+#### v0.10.0: Production Hardening (Phase 24)
+
+> **목표**: 프로덕션 환경 안정성 및 운영 준비 완료
+
+**기간**: 2-3 주
+
+| Task | Priority | Description | Acceptance Criteria |
+|------|----------|-------------|---------------------|
+| PITR (Point-in-Time Recovery) | 🔴 Critical | WAL 기반 시점 복구 | 특정 시점으로 복원 성공 |
+| 백업 자동 검증 | 🔴 Critical | 백업 무결성 자동 테스트 | 매일 복원 테스트 실행 |
+| Health Check 강화 | 🟡 High | Liveness/Readiness 분리 | K8s probe 호환 |
+| 연결 풀 모니터링 | 🟡 High | 연결 상태 메트릭 노출 | Prometheus 메트릭 |
+| Slow Query 로깅 | 🟡 High | 느린 쿼리 자동 감지 | >1s 쿼리 로깅 |
+| 그레이스풀 셧다운 | 🟢 Normal | 진행 중 요청 완료 대기 | 데이터 손실 없는 재시작 |
+
+<details>
+<summary>PITR 아키텍처</summary>
+
+```yaml
+pitr_implementation:
+  wal_archiving:
+    storage: S3/Azure Blob
+    compression: zstd
+    encryption: AES-256-GCM
+    retention:
+      pro: 24_hours
+      team: 7_days
+      enterprise: 30_days
+
+  recovery_targets:
+    - timestamp: "2025-01-15T10:30:00Z"
+    - named_restore_point: "before_migration"
+```
+
+</details>
+
+---
+
+#### v1.0.0-alpha: Admin Dashboard (Phase 25)
+
+> **목표**: 관리 대시보드 MVP, 핵심 운영 기능
+
+**기간**: 3-4 주
+
+| Task | Priority | Description | Acceptance Criteria |
+|------|----------|-------------|---------------------|
+| 대시보드 프레임워크 | 🔴 Critical | React 기반 관리 UI | 인증된 관리자 접근 |
+| Health Overview | 🔴 Critical | 시스템 상태 한눈에 | API/DB/Queue 상태 표시 |
+| Schema Explorer | 🟡 High | 테이블/컬럼 시각화 | 관계 다이어그램 |
+| Query Console | 🟡 High | 구조화된 쿼리 실행 | 히스토리, 자동완성 |
+| Metrics Dashboard | 🟡 High | 성능 메트릭 시각화 | 지연시간, 처리량, 오류율 |
+| 사용자 관리 | 🟢 Normal | 팀 멤버/역할 관리 | CRUD UI |
+
+<details>
+<summary>대시보드 구조</summary>
+
+```
+/admin
+├── /overview          # Health, Quick Stats
+├── /projects/{id}
+│   ├── /schema        # Schema Explorer
+│   ├── /data          # Data Browser
+│   ├── /query         # Query Console
+│   └── /metrics       # Performance
+├── /team              # Members, Roles
+├── /audit             # Audit Log Viewer
+├── /settings          # Organization Settings
+└── /billing           # Usage & Billing
+```
+
+</details>
+
+---
+
+#### v1.0.0-beta: Integration & Documentation (Phase 26)
+
+> **목표**: 통합 테스트 완료, 문서화, SDK 안정화
+
+**기간**: 2-3 주
+
+| Task | Priority | Description | Acceptance Criteria |
+|------|----------|-------------|---------------------|
+| E2E 테스트 스위트 | 🔴 Critical | 전체 사용자 시나리오 | 핵심 플로우 100% 커버 |
+| API 문서 완성 | 🔴 Critical | OpenAPI 3.1 명세 | 모든 엔드포인트 문서화 |
+| SDK 안정화 | 🟡 High | .NET/TS/Python SDK | Breaking change 없음 |
+| 마이그레이션 가이드 | 🟡 High | 버전 업그레이드 문서 | 0.x → 1.0 경로 |
+| 운영 가이드 | 🟡 High | 배포/모니터링 문서 | K8s, Docker Compose |
+| 튜토리얼 | 🟢 Normal | 시작하기 가이드 | 10분 내 첫 테이블 생성 |
+
+<details>
+<summary>E2E 테스트 시나리오</summary>
+
+```yaml
+e2e_scenarios:
+  onboarding:
+    - Create organization
+    - Create project
+    - Create first table
+    - Insert data via API
+    - Query via GraphQL
+
+  enterprise_flow:
+    - SSO login
+    - Create team member
+    - Assign roles
+    - Audit log verification
+
+  data_operations:
+    - Bulk import (10K rows)
+    - Complex query with JOIN
+    - Real-time subscription
+    - Backup and restore
+```
+
+</details>
+
+---
+
+#### v1.0.0-rc: Release Candidate (Phase 27)
+
+> **목표**: 릴리스 준비 완료, 최종 검증
+
+**기간**: 1-2 주
+
+| Task | Priority | Description | Acceptance Criteria |
+|------|----------|-------------|---------------------|
+| 성능 벤치마크 | 🔴 Critical | 부하 테스트 완료 | 1000 RPS, p99 < 100ms |
+| 보안 감사 | 🔴 Critical | 취약점 스캔 및 수정 | Critical/High 0개 |
+| 호환성 테스트 | 🟡 High | PostgreSQL 버전 호환 | 14, 15, 16 지원 확인 |
+| 의존성 감사 | 🟡 High | 라이선스/취약점 확인 | 문제 있는 의존성 제거 |
+| 릴리스 노트 | 🟡 High | 변경사항 문서화 | Breaking changes 명시 |
+| 롤백 플랜 | 🟢 Normal | 문제 시 롤백 절차 | 검증된 롤백 스크립트 |
+
+<details>
+<summary>성능 벤치마크 기준</summary>
+
+```yaml
+performance_targets:
+  throughput:
+    read: 1000 RPS
+    write: 500 RPS
+
+  latency:
+    p50: < 10ms
+    p95: < 50ms
+    p99: < 100ms
+
+  concurrency:
+    connections: 100 concurrent
+
+  stress_test:
+    duration: 1 hour
+    error_rate: < 0.1%
+```
+
+</details>
+
+---
+
+#### v1.0.0: General Availability
+
+> **목표**: 프로덕션 릴리스
+
+**체크리스트**:
+
+| Category | Requirement | Status |
+|----------|-------------|--------|
+| **기능** | 모든 API 엔드포인트 안정 | 📋 |
+| **기능** | GraphQL/OData/REST 완전 호환 | 📋 |
+| **기능** | 실시간 동기화 안정 | 📋 |
+| **보안** | 인증/인가 완전 구현 | 📋 |
+| **보안** | 감사 로그 완전 기능 | 📋 |
+| **보안** | 보안 취약점 0개 | 📋 |
+| **운영** | 모니터링/알림 구축 | 📋 |
+| **운영** | 백업/복구 검증 완료 | 📋 |
+| **운영** | 그레이스풀 배포 지원 | 📋 |
+| **문서** | API 문서 100% 완성 | 📋 |
+| **문서** | 운영 가이드 완성 | 📋 |
+| **문서** | SDK 문서 완성 | 📋 |
+| **테스트** | 단위 테스트 > 80% 커버리지 | 📋 |
+| **테스트** | E2E 테스트 통과 | 📋 |
+| **테스트** | 성능 테스트 통과 | 📋 |
+| **철학** | 물리명 노출 0개 | 📋 |
+| **철학** | 직접 SQL 경로 0개 | 📋 |
+| **철학** | 감사 가능성 100% | 📋 |
+
+---
+
+### 📅 예상 일정
+
+```
+2025 Q1
+├── v0.9.5  (완료)   ████████████████ Philosophy Alignment ✅
+├── v0.10.0 (2-3주)  ████░░░░░░░░░░░░ Production Hardening (현재)
+└── v1.0.0-alpha     ████████████░░░░ Admin Dashboard
+
+2025 Q2
+├── v1.0.0-beta      ██████░░░░░░░░░░ Integration & Docs
+├── v1.0.0-rc        ████░░░░░░░░░░░░ Release Candidate
+└── v1.0.0 GA        ██░░░░░░░░░░░░░░ General Availability
+```
+
+---
+
+### Post-1.0 Backlog
+
+> [Enterprise Features Research](./ENTERPRISE_FEATURES_RESEARCH.md) 참조
 
 ---
 

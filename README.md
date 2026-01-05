@@ -14,6 +14,28 @@ MorphDB provides runtime schema flexibility while preserving PostgreSQL's power.
 - **Real-time** - Live data sync via SignalR
 - **Type Safety** - Native PostgreSQL types with logical name mapping
 
+## Philosophy: Virtual DOM for Databases
+
+MorphDB applies the **Virtual DOM pattern** to databases. Just as React abstracts DOM manipulation, MorphDB abstracts database access:
+
+```
+React:   [Developer] → [Virtual DOM] → [Real DOM]
+MorphDB: [Developer] → [Logical Schema] → [Physical DB]
+```
+
+**Core Principles**:
+
+| Principle | Effect |
+|-----------|--------|
+| **Logical-Physical Separation** | Rename tables/columns without data migration |
+| **Virtual Constraints** | FK, UNIQUE, CHECK at app layer; only PK/Index physical |
+| **Blocked Access = Security** | No direct SQL = No SQL injection, full audit trail |
+| **Encapsulated Complexity** | Simple API, complex internals hidden |
+
+**Trade-offs**: We sacrifice direct SQL access and some advanced DB features in exchange for security, flexibility, and simplicity.
+
+→ See [Philosophy](docs/PHILOSOPHY.md) for detailed design rationale.
+
 ## Quick Start
 
 ```bash
@@ -64,6 +86,7 @@ await dataService.InsertAsync(tenantId, "customers", new Dictionary<string, obje
 
 | Document | Description |
 |----------|-------------|
+| [Philosophy](docs/PHILOSOPHY.md) | Project vision, principles, and scope |
 | [Architecture](docs/ARCHITECTURE.md) | System design and layer structure |
 | [API Reference](docs/API.md) | REST, GraphQL, OData, WebSocket endpoints |
 | [Roadmap](docs/ROADMAP.md) | Development phases and progress |

@@ -233,7 +233,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
             {
                 PhysicalName = $"idx_{physicalTableName}_tenant",
                 TablePhysicalName = physicalTableName,
-                Columns = [new IndexColumnInfo { ColumnId = tenantColumn.ColumnId, PhysicalName = tenantColumn.PhysicalName }],
+                Columns = [new IndexColumnInfo { ColumnId = tenantColumn.ColumnId, LogicalName = tenantColumn.LogicalName, PhysicalName = tenantColumn.PhysicalName }],
                 IndexType = IndexType.BTree
             });
             await connection.ExecuteAsync(tenantIndexSql, transaction: transaction);
@@ -254,7 +254,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
                 {
                     PhysicalName = $"idx_{physicalTableName}_{col.PhysicalName}",
                     TablePhysicalName = physicalTableName,
-                    Columns = [new IndexColumnInfo { ColumnId = col.ColumnId, PhysicalName = col.PhysicalName }],
+                    Columns = [new IndexColumnInfo { ColumnId = col.ColumnId, LogicalName = col.LogicalName, PhysicalName = col.PhysicalName }],
                     IndexType = TypeMapper.GetRecommendedIndexType(col.DataType)
                 });
                 await connection.ExecuteAsync(indexSql, transaction: transaction);
@@ -511,7 +511,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
                     {
                         PhysicalName = $"idx_{table.PhysicalName}_{physicalColName}",
                         TablePhysicalName = table.PhysicalName,
-                        Columns = [new IndexColumnInfo { ColumnId = columnId, PhysicalName = physicalColName }],
+                        Columns = [new IndexColumnInfo { ColumnId = columnId, LogicalName = request.LogicalName, PhysicalName = physicalColName }],
                         IndexType = TypeMapper.GetRecommendedIndexType(request.DataType)
                     });
                     await connection.ExecuteAsync(indexSql, transaction: transaction);
@@ -661,6 +661,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
             indexColumns.Add(new IndexColumnInfo
             {
                 ColumnId = colId,
+                LogicalName = column.LogicalName,
                 PhysicalName = column.PhysicalName
             });
         }

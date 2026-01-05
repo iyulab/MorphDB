@@ -22,7 +22,17 @@ public sealed class IndexMetadata
 public sealed class IndexColumnInfo
 {
     public Guid ColumnId { get; init; }
+
+    /// <summary>
+    /// Logical column name (user-facing, for API responses).
+    /// </summary>
+    public required string LogicalName { get; init; }
+
+    /// <summary>
+    /// Physical column name (internal, for database operations).
+    /// </summary>
     public required string PhysicalName { get; init; }
+
     public SortDirection Direction { get; init; } = SortDirection.Ascending;
     public NullsPosition NullsPosition { get; init; } = NullsPosition.Last;
 }

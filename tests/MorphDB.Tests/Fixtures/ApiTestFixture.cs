@@ -13,6 +13,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MorphDB.Core.Abstractions;
+using MorphDB.Core.Audit;
 using MorphDB.Core.Models;
 using MorphDB.Core.Security;
 using MorphDB.Npgsql.Audit;
@@ -144,7 +145,9 @@ public sealed class ApiTestFixture : IAsyncLifetime
                     services.RemoveAll<IProjectService>();
                     services.AddSingleton<IProjectService, ProjectService>();
 
-                    // Audit service
+                    // Audit service with PII masking
+                    services.RemoveAll<IPiiMaskingService>();
+                    services.AddSingleton<IPiiMaskingService, PiiMaskingService>();
                     services.RemoveAll<IAuditService>();
                     services.AddSingleton<IAuditService, PostgresAuditService>();
 

@@ -315,6 +315,7 @@ public sealed class MetadataRepository : IMetadataRepository
         var columnsJson = JsonSerializer.Serialize(index.Columns.Select(c => new
         {
             column_id = c.ColumnId,
+            logical_name = c.LogicalName,
             physical_name = c.PhysicalName,
             direction = c.Direction.ToString().ToLowerInvariant(),
             nulls_position = c.NullsPosition.ToString().ToLowerInvariant()
@@ -567,12 +568,22 @@ public sealed class MetadataRepository : IMetadataRepository
     {
         var columnsDoc = JsonDocument.Parse(row.columns);
         var columns = columnsDoc.RootElement.EnumerateArray()
-            .Select(elem => new IndexColumnInfo
+            .Select(elem =>
             {
-                ColumnId = elem.GetProperty("column_id").GetGuid(),
-                PhysicalName = elem.GetProperty("physical_name").GetString()!,
-                Direction = Enum.Parse<SortDirection>(elem.GetProperty("direction").GetString()!, ignoreCase: true),
-                NullsPosition = Enum.Parse<NullsPosition>(elem.GetProperty("nulls_position").GetString()!, ignoreCase: true)
+                var physicalName = elem.GetProperty("physical_name").GetString()!;
+                // Support backward compatibility: use physical_name if logical_name is not present
+                var logicalName = elem.TryGetProperty("logical_name", out var ln)
+                    ? ln.GetString() ?? physicalName
+                    : physicalName;
+
+                return new IndexColumnInfo
+                {
+                    ColumnId = elem.GetProperty("column_id").GetGuid(),
+                    LogicalName = logicalName,
+                    PhysicalName = physicalName,
+                    Direction = Enum.Parse<SortDirection>(elem.GetProperty("direction").GetString()!, ignoreCase: true),
+                    NullsPosition = Enum.Parse<NullsPosition>(elem.GetProperty("nulls_position").GetString()!, ignoreCase: true)
+                };
             })
             .ToList();
 

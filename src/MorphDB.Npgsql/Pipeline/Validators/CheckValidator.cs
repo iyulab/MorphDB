@@ -7,6 +7,8 @@ namespace MorphDB.Npgsql.Pipeline.Validators;
 /// <summary>
 /// Validates CHECK constraints at application layer.
 /// Supports simple expressions like "price > 0" or "end_date > start_date".
+/// Also supports compound expressions with AND/OR operators.
+/// Examples: "price > 0 AND quantity >= 1", "status = 'active' OR status = 'pending'"
 /// </summary>
 public sealed partial class CheckValidator : IValidator
 {
@@ -53,9 +55,10 @@ public sealed partial class CheckValidator : IValidator
     }
 
     /// <summary>
-    /// Evaluates a simple check expression.
+    /// Evaluates a check expression that may contain AND/OR compound expressions.
     /// Supports: field > value, field >= value, field < value, field <= value,
     ///           field1 > field2, field1 < field2, etc.
+    /// Also supports: expr1 AND expr2, expr1 OR expr2, and nested expressions.
     /// </summary>
     private static bool EvaluateCheckExpression(
         string expression,
@@ -67,6 +70,104 @@ public sealed partial class CheckValidator : IValidator
 
         expression = expression.Trim();
 
+        // Remove outer parentheses if present
+        while (expression.StartsWith('(') && expression.EndsWith(')') && IsBalancedParentheses(expression[1..^1]))
+        {
+            expression = expression[1..^1].Trim();
+        }
+
+        // Check for OR operator (lowest precedence, evaluated first to split)
+        var orSplit = SplitByLogicalOperator(expression, "OR");
+        if (orSplit.Count > 1)
+        {
+            // OR: true if any sub-expression is true
+            return orSplit.Any(subExpr => EvaluateCheckExpression(subExpr, columnName, value, data));
+        }
+
+        // Check for AND operator
+        var andSplit = SplitByLogicalOperator(expression, "AND");
+        if (andSplit.Count > 1)
+        {
+            // AND: true only if all sub-expressions are true
+            return andSplit.All(subExpr => EvaluateCheckExpression(subExpr, columnName, value, data));
+        }
+
+        // Evaluate as simple expression
+        return EvaluateSimpleExpression(expression, columnName, value, data);
+    }
+
+    /// <summary>
+    /// Splits an expression by a logical operator (AND/OR), respecting parentheses.
+    /// </summary>
+    private static List<string> SplitByLogicalOperator(string expression, string op)
+    {
+        var result = new List<string>();
+        var depth = 0;
+        var lastSplit = 0;
+        var opPattern = $" {op} ";
+        var i = 0;
+
+        while (i < expression.Length)
+        {
+            if (expression[i] == '(') depth++;
+            else if (expression[i] == ')') depth--;
+            else if (depth == 0)
+            {
+                // Check if we're at the operator
+                var remaining = expression[i..];
+                if (remaining.StartsWith(opPattern, StringComparison.OrdinalIgnoreCase))
+                {
+                    result.Add(expression[lastSplit..i].Trim());
+                    i += opPattern.Length;
+                    lastSplit = i;
+                    continue;
+                }
+            }
+            i++;
+        }
+
+        // Add the remaining part
+        var lastPart = expression[lastSplit..].Trim();
+        if (!string.IsNullOrEmpty(lastPart))
+        {
+            result.Add(lastPart);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Checks if the parentheses in an expression are balanced.
+    /// </summary>
+    private static bool IsBalancedParentheses(string expression)
+    {
+        var depth = 0;
+        foreach (var c in expression)
+        {
+            if (c == '(') depth++;
+            else if (c == ')') depth--;
+            if (depth < 0) return false;
+        }
+        return depth == 0;
+    }
+
+    /// <summary>
+    /// Evaluates a simple (non-compound) check expression.
+    /// </summary>
+    private static bool EvaluateSimpleExpression(
+        string expression,
+        string columnName,
+        object? value,
+        IDictionary<string, object?> data)
+    {
+        expression = expression.Trim();
+
+        // Remove parentheses if present
+        while (expression.StartsWith('(') && expression.EndsWith(')'))
+        {
+            expression = expression[1..^1].Trim();
+        }
+
         // Pattern: field operator value
         // Examples: "price > 0", "quantity >= 1", "age < 150"
         var simpleMatch = SimpleCheckPattern().Match(expression);
@@ -76,10 +177,11 @@ public sealed partial class CheckValidator : IValidator
             var op = simpleMatch.Groups["op"].Value.Trim();
             var compareValue = simpleMatch.Groups["value"].Value.Trim();
 
-            // If the field name matches the column, compare with the provided value
-            if (field.Equals(columnName, StringComparison.OrdinalIgnoreCase))
+            // Get the value for this field
+            var fieldValue = GetFieldValue(field, columnName, value, data);
+            if (fieldValue is not null)
             {
-                return CompareValues(value, op, ParseValue(compareValue));
+                return CompareValues(fieldValue, op, ParseValue(compareValue));
             }
         }
 
@@ -92,18 +194,8 @@ public sealed partial class CheckValidator : IValidator
             var op = crossFieldMatch.Groups["op"].Value.Trim();
             var field2 = crossFieldMatch.Groups["field2"].Value.Trim();
 
-            object? value1 = null, value2 = null;
-
-            if (field1.Equals(columnName, StringComparison.OrdinalIgnoreCase))
-            {
-                value1 = value;
-                data.TryGetValue(field2, out value2);
-            }
-            else if (field2.Equals(columnName, StringComparison.OrdinalIgnoreCase))
-            {
-                value2 = value;
-                data.TryGetValue(field1, out value1);
-            }
+            var value1 = GetFieldValue(field1, columnName, value, data);
+            var value2 = GetFieldValue(field2, columnName, value, data);
 
             if (value1 is not null && value2 is not null)
             {
@@ -113,6 +205,19 @@ public sealed partial class CheckValidator : IValidator
 
         // Unknown expression format, assume valid
         return true;
+    }
+
+    /// <summary>
+    /// Gets the value for a field, either from the current column or from the data dictionary.
+    /// </summary>
+    private static object? GetFieldValue(string field, string columnName, object? currentValue, IDictionary<string, object?> data)
+    {
+        if (field.Equals(columnName, StringComparison.OrdinalIgnoreCase))
+        {
+            return currentValue;
+        }
+
+        return data.TryGetValue(field, out var fieldValue) ? fieldValue : null;
     }
 
     private static bool CompareValues(object? left, string op, object? right)

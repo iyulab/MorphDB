@@ -4,6 +4,7 @@ using System.Threading.Channels;
 using Dapper;
 using Microsoft.Extensions.Logging;
 using MorphDB.Core.Abstractions;
+using MorphDB.Core.Audit;
 using Npgsql;
 
 namespace MorphDB.Npgsql.Audit;
@@ -11,11 +12,13 @@ namespace MorphDB.Npgsql.Audit;
 /// <summary>
 /// PostgreSQL implementation of audit logging service.
 /// Uses async queue for non-blocking writes.
+/// Implements PII masking to protect sensitive data in audit trails.
 /// </summary>
 public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposable
 {
     private readonly NpgsqlDataSource _dataSource;
     private readonly ISchemaNameResolver _schemaNameResolver;
+    private readonly IPiiMaskingService _piiMaskingService;
     private readonly ILogger<PostgresAuditService> _logger;
     private readonly Channel<AuditEvent> _eventQueue;
     private readonly Task _processorTask;
@@ -27,10 +30,12 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
     public PostgresAuditService(
         NpgsqlDataSource dataSource,
         ISchemaNameResolver schemaNameResolver,
+        IPiiMaskingService piiMaskingService,
         ILogger<PostgresAuditService> logger)
     {
         _dataSource = dataSource;
         _schemaNameResolver = schemaNameResolver;
+        _piiMaskingService = piiMaskingService;
         _logger = logger;
 
         _eventQueue = Channel.CreateBounded<AuditEvent>(new BoundedChannelOptions(MaxQueueSize)
@@ -395,6 +400,9 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
 
                 foreach (var evt in events)
                 {
+                    // Apply PII masking to metadata before storage
+                    var maskedMetadata = _piiMaskingService.MaskMetadata(evt.Metadata);
+
                     await connection.ExecuteAsync(sql, new
                     {
                         category = (int)evt.Category,
@@ -410,7 +418,7 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
                         ipAddress = evt.IpAddress,
                         userAgent = evt.UserAgent,
                         durationMs = evt.DurationMs,
-                        metadata = evt.Metadata is not null ? JsonSerializer.Serialize(evt.Metadata) : null,
+                        metadata = maskedMetadata is not null ? JsonSerializer.Serialize(maskedMetadata) : null,
                         errorMessage = evt.ErrorMessage,
                         timestamp = evt.Timestamp
                     });

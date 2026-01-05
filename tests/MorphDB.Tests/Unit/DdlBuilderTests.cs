@@ -159,6 +159,7 @@ public class DdlBuilderTests
                 new IndexColumnInfo
                 {
                     ColumnId = Guid.NewGuid(),
+                    LogicalName = "email",
                     PhysicalName = "email",
                     Direction = SortDirection.Ascending,
                     NullsPosition = NullsPosition.Last
@@ -192,6 +193,7 @@ public class DdlBuilderTests
                 new IndexColumnInfo
                 {
                     ColumnId = Guid.NewGuid(),
+                    LogicalName = "id",
                     PhysicalName = "id",
                     Direction = SortDirection.Ascending,
                     NullsPosition = NullsPosition.Last
@@ -222,6 +224,7 @@ public class DdlBuilderTests
                 new IndexColumnInfo
                 {
                     ColumnId = Guid.NewGuid(),
+                    LogicalName = "order_date",
                     PhysicalName = "order_date",
                     Direction = SortDirection.Descending,
                     NullsPosition = NullsPosition.First
@@ -251,6 +254,7 @@ public class DdlBuilderTests
                 new IndexColumnInfo
                 {
                     ColumnId = Guid.NewGuid(),
+                    LogicalName = "email",
                     PhysicalName = "email",
                     Direction = SortDirection.Ascending,
                     NullsPosition = NullsPosition.Last

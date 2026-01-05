@@ -285,6 +285,7 @@ public class MetadataRepositoryTests
                 new IndexColumnInfo
                 {
                     ColumnId = column.ColumnId,
+                    LogicalName = column.LogicalName,
                     PhysicalName = column.PhysicalName,
                     Direction = SortDirection.Ascending,
                     NullsPosition = NullsPosition.Last
@@ -341,6 +342,7 @@ public class MetadataRepositoryTests
                 new IndexColumnInfo
                 {
                     ColumnId = column.ColumnId,
+                    LogicalName = column.LogicalName,
                     PhysicalName = column.PhysicalName,
                     Direction = SortDirection.Ascending,
                     NullsPosition = NullsPosition.Last
