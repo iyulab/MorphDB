@@ -32,8 +32,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e": "playwright test --ignore-snapshots e2e/integration",
+    "test:e2e:ui": "playwright test --ui --ignore-snapshots e2e/integration",
+    "test:integration": "playwright test e2e/integration",
+    "test:all": "vitest run && playwright test"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.1",

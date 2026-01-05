@@ -1,0 +1,52 @@
+version: '3.8'
+
+# Docker Compose for SDK and Desk integration testing
+# Usage:
+#   docker compose -f docker-compose.test.yml up -d
+#   cd sdk/python && pytest tests/integration/
+#   cd sdk/typescript && npm run test:integration
+#   docker compose -f docker-compose.test.yml down
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: src/MorphDB.Service/Dockerfile
+    container_name: morphdb-test-api
+    ports:
+      - "5000:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__MorphDB: Host=postgres;Port=5432;Database=morphdb_test;Username=morph;Password=morph
+      Jwt__SecretKey: MorphDB-Test-Secret-Key-Must-Be-At-Least-32-Characters-Long
+      Jwt__Issuer: MorphDB-Test
+      Jwt__Audience: MorphDB-Test
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: morphdb-test-postgres
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: morph
+      POSTGRES_PASSWORD: morph
+      POSTGRES_DB: morphdb_test
+    volumes:
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U morph -d morphdb_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres_test_data:
