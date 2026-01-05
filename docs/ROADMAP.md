@@ -23,7 +23,7 @@
 | 0.10.0 | src/ | Production Hardening | ✅ Complete |
 | **0.11.0** | **src/** | **Admin Dashboard** | ✅ Complete |
 | **0.12.0** | **src/** | **Data Features Enhancement** | ✅ Complete |
-| **0.13.0** | **sdk/** | **SDK Testing & Stabilization** | 📋 Planned |
+| **0.13.0** | **sdk/** | **SDK Testing & Stabilization** | ✅ Complete |
 | **0.14.0** | **desk/** | **Desktop Phase 5 Completion** | 📋 Planned |
 | **0.15.0** | **ALL** | **Cross-Component Integration** | 📋 Planned |
 | **0.16.0** | **ALL** | **Documentation & E2E Tests** | 📋 Planned |
@@ -112,7 +112,17 @@ v0.9.5 ──→ v0.10.0 ──→ v0.11.0 ──→ v0.12.0 (Data Features Enha
 
 ## Current Focus
 
-**Active Version**: v0.13.0 (SDK Testing & Stabilization)
+**Active Version**: v0.14.0 (Desktop Phase 5 Completion)
+
+### Completed in v0.13.0 (SDK Testing & Stabilization)
+
+| Phase | Task | Status |
+|-------|------|--------|
+| SDK | Python SDK 테스트 인프라 (pytest, conftest.py) | ✅ Complete |
+| SDK | Python SDK 단위 테스트 (schema, data, bulk, webhook, client) | ✅ Complete |
+| SDK | TypeScript SDK 테스트 인프라 (vitest 설정) | ✅ Complete |
+| SDK | TypeScript SDK 단위 테스트 (http, client, schema, data, bulk, webhook) | ✅ Complete |
+| SDK | SDK 버전 동기화 (0.1.0 → 0.13.0) | ✅ Complete |
 
 ### Completed in v0.12.0 (Data Features Enhancement)
 
@@ -754,22 +764,27 @@ row_state_system:
 
 ---
 
-#### 📋 v0.13.0: SDK Testing & Stabilization
+#### ✅ v0.13.0: SDK Testing & Stabilization - Complete
 
 > **목표**: Python/TypeScript SDK 기능 검증 및 테스트 완료
 > **컴포넌트**: `sdk/`
-> **기간**: 1-2 주
-> **난이도**: ★★☆☆☆ (초급-중급)
+> **상태**: ✅ 완료
 
-| Task | Priority | Description | Acceptance Criteria |
-|------|----------|-------------|---------------------|
-| Python SDK 단위 테스트 | 🔴 Critical | pytest 기반 테스트 스위트 | >80% 커버리지 |
-| TypeScript SDK 단위 테스트 | 🔴 Critical | vitest/jest 기반 테스트 | >80% 커버리지 |
-| Python SDK 통합 테스트 | 🟡 High | 실제 서버 연동 테스트 | 핵심 플로우 검증 |
-| TypeScript SDK 통합 테스트 | 🟡 High | 실제 서버 연동 테스트 | 핵심 플로우 검증 |
-| SDK API 버전 호환성 | 🟡 High | v0.12.0 서버와 호환 확인 | Breaking change 0개 |
-| SDK README 업데이트 | 🟢 Normal | 최신 API 반영 | 모든 기능 문서화 |
-| SDK 패키지 버전 동기화 | 🟢 Normal | package.json/pyproject.toml 버전 | 0.13.0으로 통일 |
+| Task | Priority | Description | Status |
+|------|----------|-------------|--------|
+| Python SDK 단위 테스트 | 🔴 Critical | pytest 기반 테스트 스위트 | ✅ Complete |
+| TypeScript SDK 단위 테스트 | 🔴 Critical | vitest 기반 테스트 | ✅ Complete |
+| Python SDK 통합 테스트 | 🟡 High | 실제 서버 연동 테스트 | 📋 v0.15.0 통합 단계로 이동 |
+| TypeScript SDK 통합 테스트 | 🟡 High | 실제 서버 연동 테스트 | 📋 v0.15.0 통합 단계로 이동 |
+| SDK API 버전 호환성 | 🟡 High | v0.12.0 서버와 호환 확인 | ✅ Complete |
+| SDK README 업데이트 | 🟢 Normal | 최신 API 반영 | ✅ Complete |
+| SDK 패키지 버전 동기화 | 🟢 Normal | package.json/pyproject.toml 버전 | ✅ Complete (0.13.0) |
+
+**구현 상세**:
+- **Python SDK**: `sdk/python/tests/` - conftest.py, test_client.py, test_schema_client.py, test_data_client.py, test_webhook_client.py, test_bulk_client.py
+- **TypeScript SDK**: `sdk/typescript/tests/` - test-utils.ts, client.test.ts, schema.test.ts, data.test.ts, webhook.test.ts, bulk.test.ts, http.test.ts
+- **테스트 프레임워크**: Python (pytest + pytest-asyncio), TypeScript (vitest)
+- **통합 테스트**: v0.15.0 Cross-Component Integration 단계에서 실제 서버 연동 테스트 수행 예정
 
 **테스트 범위**:
 ```yaml
@@ -1027,10 +1042,14 @@ performance_targets:
 │   │                                  - Hierarchy Query API ✅
 │   │                                  - Transaction & Row-State ✅
 │   └────────────────────────────────────────────────────────────────────
-├── v0.13.0          ██░░░░░░░░░░░░░░ SDK Testing & Stabilization (sdk/) ← 현재
-├── v0.14.0          ██░░░░░░░░░░░░░░ Desktop Phase 5 Completion (desk/)
-├── v0.15.0          ██░░░░░░░░░░░░░░ Cross-Component Integration (ALL)
-└── v0.16.0          ██░░░░░░░░░░░░░░ Documentation & E2E Tests (ALL)
+├── v0.13.0 (완료)   ████████████████ SDK Testing & Stabilization (sdk/) ✅
+│   │                                  - Python SDK 테스트 스위트 ✅
+│   │                                  - TypeScript SDK 테스트 스위트 ✅
+│   │                                  - SDK 버전 동기화 (0.13.0) ✅
+│   └────────────────────────────────────────────────────────────────────
+├── v0.14.0          ██░░░░░░░░░░░░░░ Desktop Phase 5 Completion (desk/) ← 현재
+├── v0.15.0          ░░░░░░░░░░░░░░░░ Cross-Component Integration (ALL)
+└── v0.16.0          ░░░░░░░░░░░░░░░░ Documentation & E2E Tests (ALL)
 
 2025 Q2
 ├── v1.0.0-rc        ██░░░░░░░░░░░░░░ Release Candidate (ALL)
