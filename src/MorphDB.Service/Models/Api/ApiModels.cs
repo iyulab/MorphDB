@@ -93,6 +93,11 @@ public sealed record SystemColumnOptionsApiRequest
     public bool SourceTracking { get; init; }
 
     /// <summary>
+    /// Enable _row_state and _row_errors for draft mode and deferred validation. Default: false.
+    /// </summary>
+    public bool RowState { get; init; }
+
+    /// <summary>
     /// Converts API model to Core SystemColumnOptions.
     /// </summary>
     public SystemColumnOptions ToOptions() => new()
@@ -102,7 +107,8 @@ public sealed record SystemColumnOptionsApiRequest
         SoftDeleteEnabled = SoftDelete,
         OwnershipEnabled = Ownership,
         HierarchyEnabled = Hierarchy,
-        SourceTrackingEnabled = SourceTracking
+        SourceTrackingEnabled = SourceTracking,
+        RowStateEnabled = RowState
     };
 }
 
@@ -147,6 +153,11 @@ public sealed record SystemColumnOptionsApiResponse
     public bool SourceTracking { get; init; }
 
     /// <summary>
+    /// Whether _row_state and _row_errors for draft mode are enabled.
+    /// </summary>
+    public bool RowState { get; init; }
+
+    /// <summary>
     /// Creates response from TableMetadata.
     /// </summary>
     public static SystemColumnOptionsApiResponse FromMetadata(TableMetadata table) => new()
@@ -157,7 +168,8 @@ public sealed record SystemColumnOptionsApiResponse
         SoftDelete = table.SoftDeleteEnabled,
         Ownership = table.OwnershipEnabled,
         Hierarchy = table.HierarchyEnabled,
-        SourceTracking = table.SourceTrackingEnabled
+        SourceTracking = table.SourceTrackingEnabled,
+        RowState = table.RowStateEnabled
     };
 }
 
@@ -859,6 +871,13 @@ public sealed record DataQueryParameters
     /// Page size (default: 50, max: 1000).
     /// </summary>
     public int PageSize { get; init; } = 50;
+
+    /// <summary>
+    /// Filter by row state: "draft", "valid", "error", or "all".
+    /// Only applies to tables with RowStateEnabled.
+    /// Default: "valid" (excludes draft and error rows).
+    /// </summary>
+    public string? State { get; init; }
 }
 
 /// <summary>
@@ -915,6 +934,170 @@ public sealed record BatchOperationResult
     public IDictionary<string, object?>? Data { get; init; }
     public string? Error { get; init; }
     public int? AffectedRows { get; init; }
+}
+
+#endregion
+
+#region Transaction API Models
+
+/// <summary>
+/// Cross-entity transaction request with $ref support.
+/// </summary>
+public sealed record TransactionApiRequest
+{
+    /// <summary>
+    /// List of operations to execute atomically in order.
+    /// </summary>
+    public required IReadOnlyList<TransactionOperationApiRequest> Operations { get; init; }
+
+    /// <summary>
+    /// Optional timeout in milliseconds. Default: 30000 (30 seconds).
+    /// </summary>
+    public int? TimeoutMs { get; init; }
+
+    /// <summary>
+    /// When true, returns full record data for each operation.
+    /// </summary>
+    public bool ReturnFullRecords { get; init; }
+}
+
+/// <summary>
+/// Single operation within a transaction.
+/// </summary>
+public sealed record TransactionOperationApiRequest
+{
+    /// <summary>
+    /// Operation type: INSERT, UPDATE, DELETE, or UPSERT.
+    /// </summary>
+    public required string Method { get; init; }
+
+    /// <summary>
+    /// The table name to operate on.
+    /// </summary>
+    public required string Table { get; init; }
+
+    /// <summary>
+    /// The data for INSERT/UPDATE/UPSERT operations.
+    /// Values can contain $ref expressions like "$order._id".
+    /// </summary>
+    public IDictionary<string, object?>? Data { get; init; }
+
+    /// <summary>
+    /// Record ID for UPDATE/DELETE operations.
+    /// Can be a GUID or a $ref expression like "$order._id".
+    /// </summary>
+    public object? Id { get; init; }
+
+    /// <summary>
+    /// Reference name for this operation's result.
+    /// Other operations can reference using $[ref].[property].
+    /// </summary>
+    public string? Ref { get; init; }
+
+    /// <summary>
+    /// Key columns for UPSERT operations.
+    /// </summary>
+    public IReadOnlyList<string>? KeyColumns { get; init; }
+
+    /// <summary>
+    /// Write mode: "default" or "draft".
+    /// </summary>
+    public string? Mode { get; init; }
+}
+
+/// <summary>
+/// Transaction result response.
+/// </summary>
+public sealed record TransactionApiResponse
+{
+    /// <summary>
+    /// Whether the entire transaction succeeded.
+    /// </summary>
+    public bool Success { get; init; }
+
+    /// <summary>
+    /// Results for each operation in order.
+    /// </summary>
+    public required IReadOnlyList<TransactionOperationApiResult> Results { get; init; }
+
+    /// <summary>
+    /// Error message if the transaction failed.
+    /// </summary>
+    public string? Error { get; init; }
+
+    /// <summary>
+    /// Index of the operation that caused the failure.
+    /// </summary>
+    public int? FailedOperationIndex { get; init; }
+}
+
+/// <summary>
+/// Result of a single operation within a transaction.
+/// </summary>
+public sealed record TransactionOperationApiResult
+{
+    public int Index { get; init; }
+    public bool Success { get; init; }
+    public string? Ref { get; init; }
+    public Guid? Id { get; init; }
+    public IDictionary<string, object?>? Data { get; init; }
+    public int AffectedRows { get; init; }
+    public string? Error { get; init; }
+    public IReadOnlyList<ValidationErrorApi>? ValidationErrors { get; init; }
+}
+
+/// <summary>
+/// Validation error in API response.
+/// </summary>
+public sealed record ValidationErrorApi
+{
+    public required string Field { get; init; }
+    public required string Code { get; init; }
+    public required string Message { get; init; }
+}
+
+/// <summary>
+/// Request to finalize (validate) records.
+/// </summary>
+public sealed record FinalizeApiRequest
+{
+    /// <summary>
+    /// Record IDs to finalize. If empty, finalizes a single record via URL parameter.
+    /// </summary>
+    public IReadOnlyList<Guid>? RecordIds { get; init; }
+}
+
+/// <summary>
+/// Response for finalize operations.
+/// </summary>
+public sealed record FinalizeApiResponse
+{
+    public required IReadOnlyList<FinalizeResultApi> Results { get; init; }
+    public int ValidCount { get; init; }
+    public int ErrorCount { get; init; }
+}
+
+/// <summary>
+/// Result of a single finalize operation.
+/// </summary>
+public sealed record FinalizeResultApi
+{
+    public Guid RecordId { get; init; }
+    public bool Success { get; init; }
+    public string NewState { get; init; } = "valid";
+    public IReadOnlyList<RowValidationErrorApi>? Errors { get; init; }
+    public IDictionary<string, object?>? Data { get; init; }
+}
+
+/// <summary>
+/// Row validation error in API response.
+/// </summary>
+public sealed record RowValidationErrorApi
+{
+    public required string Column { get; init; }
+    public required string Error { get; init; }
+    public required string Message { get; init; }
+    public object? AttemptedValue { get; init; }
 }
 
 #endregion

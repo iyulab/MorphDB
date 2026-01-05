@@ -798,7 +798,24 @@ public sealed class PostgresSchemaManager : ISchemaManager
             cancellationToken);
 
         var relationId = Guid.NewGuid();
-        var constraintName = $"fk_{sourceTable.PhysicalName}_{sourceColumn.PhysicalName}";
+        Guid? junctionTableId = null;
+        string? junctionTableName = null;
+
+        // For ManyToMany relations, auto-generate junction table
+        if (request.RelationType == RelationType.ManyToMany)
+        {
+            junctionTableName = request.JunctionTableName
+                ?? $"{sourceTable.LogicalName}_{targetTable.LogicalName}";
+
+            var junctionTable = await CreateJunctionTableAsync(
+                request.TenantId,
+                junctionTableName,
+                sourceTable,
+                targetTable,
+                cancellationToken);
+
+            junctionTableId = junctionTable.TableId;
+        }
 
         var relation = new RelationMetadata
         {
@@ -809,23 +826,39 @@ public sealed class PostgresSchemaManager : ISchemaManager
             SourceColumnId = request.SourceColumnId,
             TargetTableId = request.TargetTableId,
             TargetColumnId = request.TargetColumnId,
+            SourceTableName = sourceTable.LogicalName,
+            SourceColumnName = sourceColumn.LogicalName,
+            TargetTableName = targetTable.LogicalName,
+            TargetColumnName = targetColumn.LogicalName,
             RelationType = request.RelationType,
             OnDelete = request.OnDelete,
+            MaxHierarchyDepth = request.MaxHierarchyDepth,
+            JunctionTableId = junctionTableId,
+            JunctionTableName = junctionTableName,
+            // Virtual FK by default - no physical constraint created
+            EnforceOnWrite = true,
+            VirtualCascade = true,
             IsActive = true
         };
 
-        // Execute DDL
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-        var addFkSql = DdlBuilder.BuildAddForeignKey(new ForeignKeyDefinition
+        // For non-ManyToMany, optionally create physical FK (configurable)
+        // Note: Virtual Constraint philosophy recommends NOT creating physical FKs
+        // Physical FKs are kept for backward compatibility but can be disabled
+        if (request.RelationType != RelationType.ManyToMany && _options.CreatePhysicalForeignKeys)
         {
-            ConstraintName = constraintName,
-            SourceTablePhysicalName = sourceTable.PhysicalName,
-            SourceColumnPhysicalName = sourceColumn.PhysicalName,
-            TargetTablePhysicalName = targetTable.PhysicalName,
-            TargetColumnPhysicalName = targetColumn.PhysicalName,
-            OnDelete = request.OnDelete
-        });
-        await connection.ExecuteAsync(addFkSql);
+            await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+            var constraintName = $"fk_{sourceTable.PhysicalName}_{sourceColumn.PhysicalName}";
+            var addFkSql = DdlBuilder.BuildAddForeignKey(new ForeignKeyDefinition
+            {
+                ConstraintName = constraintName,
+                SourceTablePhysicalName = sourceTable.PhysicalName,
+                SourceColumnPhysicalName = sourceColumn.PhysicalName,
+                TargetTablePhysicalName = targetTable.PhysicalName,
+                TargetColumnPhysicalName = targetColumn.PhysicalName,
+                OnDelete = request.OnDelete
+            });
+            await connection.ExecuteAsync(addFkSql);
+        }
 
         // Insert metadata and increment version
         var insertedRelation = await _repository.InsertRelationAsync(relation, cancellationToken);
@@ -843,11 +876,81 @@ public sealed class PostgresSchemaManager : ISchemaManager
             {
                 relation.LogicalName,
                 SourceTable = sourceTable.LogicalName,
-                TargetTable = targetTable.LogicalName
+                TargetTable = targetTable.LogicalName,
+                JunctionTable = junctionTableName,
+                IsSelfReferential = relation.IsSelfReferential
             }
         }, cancellationToken);
 
         return insertedRelation;
+    }
+
+    /// <summary>
+    /// Creates a junction table for ManyToMany relations.
+    /// The junction table contains source_id and target_id columns.
+    /// </summary>
+    private async Task<TableMetadata> CreateJunctionTableAsync(
+        Guid tenantId,
+        string junctionTableName,
+        TableMetadata sourceTable,
+        TableMetadata targetTable,
+        CancellationToken cancellationToken)
+    {
+        // Find the _id columns from source and target tables
+        var sourceIdColumn = sourceTable.Columns.FirstOrDefault(c => c.LogicalName == "_id")
+            ?? throw new InvalidOperationException($"Source table '{sourceTable.LogicalName}' must have _id column for M:N relation");
+        var targetIdColumn = targetTable.Columns.FirstOrDefault(c => c.LogicalName == "_id")
+            ?? throw new InvalidOperationException($"Target table '{targetTable.LogicalName}' must have _id column for M:N relation");
+
+        // Create junction table columns
+        var junctionColumns = new List<CreateColumnRequest>
+        {
+            new()
+            {
+                LogicalName = $"{sourceTable.LogicalName}_id",
+                DataType = sourceIdColumn.DataType,
+                IsNullable = false,
+                IsIndexed = true
+            },
+            new()
+            {
+                LogicalName = $"{targetTable.LogicalName}_id",
+                DataType = targetIdColumn.DataType,
+                IsNullable = false,
+                IsIndexed = true
+            }
+        };
+
+        // Create the junction table
+        var junctionTableRequest = new CreateTableRequest
+        {
+            TenantId = tenantId,
+            LogicalName = junctionTableName,
+            Columns = junctionColumns,
+            SystemColumns = new SystemColumnOptions
+            {
+                VersioningEnabled = true,
+                AuditFieldsEnabled = false,
+                SoftDeleteEnabled = false
+            }
+        };
+
+        var junctionTable = await CreateTableAsync(junctionTableRequest, cancellationToken);
+
+        // Create unique composite index on (source_id, target_id) to prevent duplicates
+        var junctionSourceCol = junctionTable.Columns.First(c => c.LogicalName == $"{sourceTable.LogicalName}_id");
+        var junctionTargetCol = junctionTable.Columns.First(c => c.LogicalName == $"{targetTable.LogicalName}_id");
+
+        await CreateIndexAsync(new CreateIndexRequest
+        {
+            TableId = junctionTable.TableId,
+            LogicalName = $"ux_{junctionTableName}_pair",
+            ColumnIds = [junctionSourceCol.ColumnId, junctionTargetCol.ColumnId],
+            IsUnique = true,
+            IndexType = IndexType.BTree
+        }, cancellationToken);
+
+        return junctionTable;
     }
 
     public async Task DeleteRelationAsync(
@@ -958,4 +1061,11 @@ public sealed class SchemaManagerOptions
     /// Timeout for acquiring advisory locks.
     /// </summary>
     public TimeSpan LockTimeout { get; init; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// When true, creates physical FK constraints in the database.
+    /// When false (recommended), uses Virtual FK enforcement at application layer.
+    /// Default: true for backward compatibility, but Virtual FK is recommended.
+    /// </summary>
+    public bool CreatePhysicalForeignKeys { get; init; } = true;
 }

@@ -153,6 +153,11 @@ public sealed record SystemColumnOptions
     /// Enable _source_id for external system tracking. Default: false.
     /// </summary>
     public bool SourceTrackingEnabled { get; init; }
+
+    /// <summary>
+    /// Enable _row_state and _row_errors for draft mode and deferred validation. Default: false.
+    /// </summary>
+    public bool RowStateEnabled { get; init; }
 }
 
 public sealed record UpdateTableRequest
@@ -249,6 +254,18 @@ public sealed record CreateRelationRequest
     public Guid TargetColumnId { get; init; }
     public RelationType RelationType { get; init; }
     public OnDeleteAction OnDelete { get; init; } = OnDeleteAction.NoAction;
+
+    /// <summary>
+    /// For ManyToMany relations, specify a custom junction table name.
+    /// If null, auto-generates as "{SourceTable}_{TargetTable}".
+    /// </summary>
+    public string? JunctionTableName { get; init; }
+
+    /// <summary>
+    /// Maximum depth for hierarchy traversal (self-referential relations only).
+    /// Default is 100.
+    /// </summary>
+    public int MaxHierarchyDepth { get; init; } = 100;
 }
 
 #endregion

@@ -228,6 +228,23 @@ public sealed record WriteOptions
     };
 
     /// <summary>
+    /// Options for draft mode inserts (skips all validation, sets _row_state = 'draft').
+    /// Used for spreadsheet-style paste operations and column-first input.
+    /// </summary>
+    public static WriteOptions DraftMode { get; } = new()
+    {
+        ValidateRequired = false,
+        ValidateForeignKeys = false,
+        ValidateUnique = false,
+        ValidateCheck = false,
+        ApplyDefaults = true,
+        ApplyTimestamps = true,
+        ApplyVersion = false,
+        ApplyAuditFields = true,
+        SaveAsDraft = true
+    };
+
+    /// <summary>
     /// When true, validates required fields (virtual NOT NULL).
     /// </summary>
     public bool ValidateRequired { get; init; } = true;
@@ -287,6 +304,13 @@ public sealed record WriteOptions
     /// Expected version for optimistic locking (null to skip check).
     /// </summary>
     public int? ExpectedVersion { get; init; }
+
+    /// <summary>
+    /// When true, saves the record with _row_state = 'draft' and skips validation.
+    /// Used for spreadsheet-style paste operations and column-first input.
+    /// Requires RowStateEnabled on the table.
+    /// </summary>
+    public bool SaveAsDraft { get; init; }
 }
 
 /// <summary>

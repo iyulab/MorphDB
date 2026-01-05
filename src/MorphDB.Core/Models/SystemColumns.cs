@@ -54,6 +54,14 @@ public static class SystemColumns
     /// <summary>External system's original ID for sync operations.</summary>
     public const string SourceId = "_source_id";
 
+    // Optional: Row-State (for draft/validation workflow)
+
+    /// <summary>Row state: draft, valid, or error.</summary>
+    public const string RowState = "_row_state";
+
+    /// <summary>JSONB array of validation errors when state is 'error'.</summary>
+    public const string RowErrors = "_row_errors";
+
     // Internal columns (not exposed to users)
 
     /// <summary>Tenant ID for multi-tenancy isolation (internal, not in API).</summary>
@@ -100,4 +108,43 @@ public static class SystemColumns
     /// </summary>
     public static IReadOnlyList<string> SourceTrackingColumns =>
         [SourceId];
+
+    /// <summary>
+    /// Returns row-state column names.
+    /// </summary>
+    public static IReadOnlyList<string> RowStateColumns =>
+        [RowState, RowErrors];
+}
+
+/// <summary>
+/// Possible values for the _row_state system column.
+/// </summary>
+public enum RowStateValue
+{
+    /// <summary>Saved but not validated. Used for spreadsheet-style paste operations.</summary>
+    Draft,
+
+    /// <summary>Validated successfully. All constraints passed.</summary>
+    Valid,
+
+    /// <summary>Validation failed. Errors stored in _row_errors column.</summary>
+    Error
+}
+
+/// <summary>
+/// Represents a single validation error stored in _row_errors column.
+/// </summary>
+public sealed record RowValidationError
+{
+    /// <summary>The column name that failed validation.</summary>
+    public required string Column { get; init; }
+
+    /// <summary>The error code (e.g., "required", "unique_violation", "check_failed").</summary>
+    public required string Error { get; init; }
+
+    /// <summary>Human-readable error message.</summary>
+    public required string Message { get; init; }
+
+    /// <summary>Optional: the value that caused the error.</summary>
+    public object? AttemptedValue { get; init; }
 }

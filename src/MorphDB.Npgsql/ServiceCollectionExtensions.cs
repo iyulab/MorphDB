@@ -142,6 +142,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IRollupResolver, PostgresRollupResolver>();
         services.AddSingleton<IFormulaResolver, PostgresFormulaResolver>();
         services.AddSingleton<IAggregationService, PostgresAggregationService>();
+        services.AddSingleton<IHierarchyQueryService, PostgresHierarchyQueryService>();
         services.AddSingleton<IWebhookManager, PostgresWebhookManager>();
         services.AddSingleton(options.BulkOperationOptions);
         services.AddSingleton<IBulkOperationService, PostgresBulkOperationService>();
@@ -189,6 +190,9 @@ public static class ServiceCollectionExtensions
         // Register Write Pipeline components (Virtual Constraints)
         services.AddWritePipeline();
 
+        // Register Transaction Service (Phase 28: Cross-Entity Transactions & Row-State)
+        services.AddSingleton<ITransactionService, PostgresTransactionService>();
+
         return services;
     }
 
@@ -206,6 +210,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ITransformer, OwnerApplier>();      // Ownership: _owner_id
         services.AddSingleton<ITransformer, SortOrderApplier>();  // Hierarchy: _sort_order
         services.AddSingleton<ITransformer, SoftDeleteApplier>();
+        services.AddSingleton<ITransformer, RowStateApplier>(); // Row state for draft mode
 
         // Register Validators (virtual constraint enforcement)
         services.AddSingleton<IValidator, RequiredValidator>();

@@ -50,6 +50,7 @@ public static class PipelineOrder
     public const int AuditFieldApplier = 400;
     public const int OwnerApplier = 450;       // _owner_id from SecurityContext
     public const int SortOrderApplier = 475;   // _sort_order auto-generation
+    public const int RowStateApplier = 490;    // _row_state for draft mode
     public const int ComputedFieldApplier = 500;
 
     // Validators (run after transformers)

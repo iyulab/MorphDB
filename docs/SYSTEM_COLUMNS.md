@@ -128,6 +128,36 @@ MorphDB는 일부 웹 프레임워크가 Virtual DOM을 활용하는 것처럼, 
 - 외부 시스템 연동 시 원본 식별
 - Upsert 및 동기화 충돌 해결에 활용
 
+#### Row-State (v0.12.0+)
+
+| 컬럼 | 타입 | 설명 |
+|------|------|------|
+| `_row_state` | Enum | 행 상태: `draft`, `valid`, `error` |
+| `_row_errors` | JSONB | 유효성 오류 상세 (error 상태용) |
+
+- **draft**: 저장됨, 유효성 검증 건너뜀 (NOT NULL/CHECK 미적용)
+- **valid**: 완전한 레코드, 모든 제약 검증 통과
+- **error**: 저장됨, 유효성 오류 있음
+
+**활용 시나리오**:
+```
+표 붙여넣기 → Draft Insert (검증 없음) → UI 편집 → Finalize
+                                                    ↓
+                                          valid (성공) / error (실패)
+```
+
+**_row_errors 형식**:
+```json
+[
+  { "column": "email", "error": "required", "message": "이메일은 필수입니다" },
+  { "column": "age", "error": "check_failed", "message": "age > 0 위반" }
+]
+```
+
+- 스프레드시트 스타일 붙여넣기 지원
+- 컬럼 순서 입력 (Column-first Input) 지원
+- 대량 데이터 임시 저장 후 일괄 검증
+
 ---
 
 ### Extension 컬럼 (v1.x 이후)
@@ -200,15 +230,17 @@ MorphDB는 일부 웹 프레임워크가 Virtual DOM을 활용하는 것처럼, 
 
 ## 구현 연관 파일
 
-### 현재 구현 (v0.7.5)
+### 현재 구현 (v0.12.0)
 
 | 컴포넌트 | 파일 | 역할 |
 |----------|------|------|
 | TableMetadata | `Core/Models/TableMetadata.cs` | 시스템 컬럼 플래그 |
+| SystemColumns | `Core/Models/SystemColumns.cs` | 시스템 컬럼 상수 및 RowStateValue enum |
 | TimestampApplier | `Pipeline/Transformers/TimestampApplier.cs` | `_created_at`, `_updated_at` |
 | VersionApplier | `Pipeline/Transformers/VersionApplier.cs` | `_version` |
 | AuditFieldApplier | `Pipeline/Transformers/AuditFieldApplier.cs` | `_created_by`, `_updated_by` |
 | SoftDeleteApplier | `Pipeline/Transformers/SoftDeleteApplier.cs` | `_deleted_at` |
+| RowStateApplier | `Pipeline/Transformers/RowStateApplier.cs` | `_row_state`, `_row_errors` |
 
 ### 추가 구현 필요 (Phase 18.6)
 

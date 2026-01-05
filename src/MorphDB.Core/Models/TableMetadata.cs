@@ -64,4 +64,10 @@ public sealed class TableMetadata
     /// Used for sync operations and external system integration.
     /// </summary>
     public bool SourceTrackingEnabled { get; init; }
+
+    /// <summary>
+    /// When true, _row_state and _row_errors columns are added for row-level validation workflow.
+    /// Enables draft mode inserts, deferred validation, and spreadsheet-style paste operations.
+    /// </summary>
+    public bool RowStateEnabled { get; init; }
 }

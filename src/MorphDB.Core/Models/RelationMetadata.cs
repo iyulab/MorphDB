@@ -71,6 +71,33 @@ public sealed class RelationMetadata
     /// This enables soft-delete aware cascades.
     /// </summary>
     public bool VirtualCascade { get; init; } = true;
+
+    // Self-Referential Properties (for hierarchical data)
+
+    /// <summary>
+    /// True if this relation is self-referential (SourceTableId == TargetTableId).
+    /// Used for hierarchical data structures like trees.
+    /// </summary>
+    public bool IsSelfReferential => SourceTableId == TargetTableId;
+
+    /// <summary>
+    /// Maximum depth for hierarchy traversal. Default is 100.
+    /// Used to prevent infinite loops in cyclic data.
+    /// </summary>
+    public int MaxHierarchyDepth { get; init; } = 100;
+
+    // Many-to-Many Properties
+
+    /// <summary>
+    /// For ManyToMany relations, the auto-generated junction table ID.
+    /// Null for OneToOne and OneToMany relations.
+    /// </summary>
+    public Guid? JunctionTableId { get; init; }
+
+    /// <summary>
+    /// For ManyToMany relations, the junction table's logical name.
+    /// </summary>
+    public string? JunctionTableName { get; init; }
 }
 
 public enum RelationType

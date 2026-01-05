@@ -83,6 +83,19 @@ public sealed class PostgresViewManager : IViewManager
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         await connection.ExecuteAsync(ddl);
 
+        // For materialized views, create a unique index to enable CONCURRENTLY refresh
+        if (request.IsMaterialized)
+        {
+            var indexColumns = GetUniqueIndexColumns(request.Definition);
+            if (indexColumns.Count > 0)
+            {
+                var indexName = $"ux_{physicalName}";
+                var indexDdl = DdlBuilder.BuildMaterializedViewUniqueIndex(
+                    indexName, physicalName, indexColumns);
+                await connection.ExecuteAsync(indexDdl);
+            }
+        }
+
         // Build view columns metadata from definition
         var columns = BuildViewColumns(viewId, request.Definition);
 
@@ -253,8 +266,10 @@ public sealed class PostgresViewManager : IViewManager
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         await connection.ExecuteAsync(refreshSql);
 
-        // Update refresh timestamp
-        await _viewRepository.UpdateLastRefreshAsync(viewId, DateTimeOffset.UtcNow, cancellationToken);
+        // Update refresh timestamp and clear stale status
+        var refreshTime = DateTimeOffset.UtcNow;
+        await _viewRepository.UpdateLastRefreshAsync(viewId, refreshTime, cancellationToken);
+        await _viewRepository.UpdateStaleStatusAsync(viewId, false, cancellationToken);
     }
 
     public async Task<bool> IsMaterializedViewStaleAsync(
@@ -272,12 +287,15 @@ public sealed class PostgresViewManager : IViewManager
             return false; // Regular views are always "fresh"
         }
 
-        // Check if any base tables have been modified since last refresh
+        // Check if any referenced tables have been modified since last refresh
         if (!view.LastRefreshedAt.HasValue)
         {
             return true; // Never refreshed
         }
 
+        var lastRefresh = view.LastRefreshedAt.Value;
+
+        // Check base table
         var baseTable = await _metadataRepository.GetTableByNameAsync(
             view.TenantId, view.Definition.BaseTable, cancellationToken: cancellationToken);
         if (baseTable == null)
@@ -285,9 +303,32 @@ public sealed class PostgresViewManager : IViewManager
             return true; // Base table not found, consider stale
         }
 
-        // Compare table update time with view refresh time
-        // This is a simplified check - a production system would track changes more granularly
-        return baseTable.UpdatedAt > view.LastRefreshedAt.Value;
+        if (baseTable.UpdatedAt > lastRefresh)
+        {
+            return true;
+        }
+
+        // Check all joined tables
+        foreach (var join in view.Definition.Joins)
+        {
+            var joinedTable = await _metadataRepository.GetTableByNameAsync(
+                view.TenantId, join.Table, cancellationToken: cancellationToken);
+
+            if (joinedTable == null)
+            {
+                // Joined table not found - could be an error or the table was deleted
+                return true;
+            }
+
+            if (joinedTable.UpdatedAt > lastRefresh)
+            {
+                // Mark as stale and update metadata
+                await _viewRepository.UpdateStaleStatusAsync(viewId, true, cancellationToken);
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public async Task<ViewQueryResult> QueryViewAsync(
@@ -475,5 +516,41 @@ public sealed class PostgresViewManager : IViewManager
         {
             throw new ArgumentException("View name cannot exceed 255 characters.", nameof(name));
         }
+    }
+
+    /// <summary>
+    /// Gets columns suitable for a unique index on a materialized view.
+    /// Prefers _id column if available, otherwise uses all non-computed columns.
+    /// This enables CONCURRENTLY refresh which requires a unique index on all columns.
+    /// </summary>
+    private static List<string> GetUniqueIndexColumns(ViewDefinition definition)
+    {
+        // Look for _id column first (most reliable unique identifier)
+        var idColumn = definition.Columns.FirstOrDefault(c =>
+            c.Alias.Equals("_id", StringComparison.OrdinalIgnoreCase) ||
+            c.Source?.EndsWith("._id", StringComparison.OrdinalIgnoreCase) == true);
+
+        if (idColumn != null)
+        {
+            return [idColumn.Alias];
+        }
+
+        // If no _id, look for any column that seems like a primary key
+        var pkColumn = definition.Columns.FirstOrDefault(c =>
+            c.Alias.EndsWith("_id", StringComparison.OrdinalIgnoreCase) &&
+            string.IsNullOrEmpty(c.Expression));
+
+        if (pkColumn != null)
+        {
+            return [pkColumn.Alias];
+        }
+
+        // Fall back to all non-computed, non-aggregated columns
+        var candidateColumns = definition.Columns
+            .Where(c => string.IsNullOrEmpty(c.Expression) && c.Aggregation == null)
+            .Select(c => c.Alias)
+            .ToList();
+
+        return candidateColumns;
     }
 }

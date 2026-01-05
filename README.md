@@ -3,16 +3,16 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![.NET](https://img.shields.io/badge/.NET-10.0-blue.svg)](https://dotnet.microsoft.com/)
 
-**Runtime-flexible relational database service for PostgreSQL**
+**Runtime-flexible relational database service**
 
-MorphDB provides runtime schema flexibility while preserving PostgreSQL's power. Build Notion-style databases, dynamic forms, or any application requiring runtime data structures.
+MorphDB provides runtime schema flexibility while preserving full RDBMS power—ACID transactions, complex queries, and referential integrity. Its design philosophy enables building dynamic data applications—spreadsheet-style databases, form builders, or any system requiring runtime data structures.
 
 ## Key Features
 
 - **Dynamic Schema** - Create/modify tables and columns at runtime
 - **Multi-Protocol** - REST, GraphQL, OData, WebSocket, Webhook
 - **Real-time** - Live data sync via SignalR
-- **Type Safety** - Native PostgreSQL types with logical name mapping
+- **Type Safety** - Native SQL types with logical name mapping
 
 ## Philosophy: Virtual DOM for Databases
 
@@ -41,7 +41,7 @@ MorphDB: [Developer] → [Logical Schema] → [Physical DB]
 ```bash
 # Prerequisites: .NET 10.0, Docker
 
-# Start PostgreSQL
+# Start database
 docker-compose up -d
 
 # Run
@@ -97,7 +97,7 @@ await dataService.InsertAsync(tenantId, "customers", new Dictionary<string, obje
 MorphDB/
 ├── src/
 │   ├── MorphDB.Core/       # Abstractions and interfaces
-│   ├── MorphDB.Npgsql/     # PostgreSQL implementation
+│   ├── MorphDB.Npgsql/     # Database provider implementation
 │   ├── MorphDB.Service/    # ASP.NET Core API service
 │   └── MorphDB.Client/     # .NET client SDK
 ├── sdk/
@@ -109,11 +109,11 @@ MorphDB/
 
 ## Use Cases
 
-- Notion/Airtable-style databases
-- Low-code/No-code platforms
-- Dynamic form builders
-- CRM/ERP with custom fields
-- Multi-tenant SaaS backends
+- **Spreadsheet-style databases** - Runtime schema + relational power
+- **Low-code/No-code platforms** - API-first data layer
+- **Dynamic form builders** - Schema-on-the-fly
+- **CRM/ERP with custom fields** - Tenant-isolated customization
+- **Multi-tenant SaaS backends** - Secure data isolation
 
 ## License
 

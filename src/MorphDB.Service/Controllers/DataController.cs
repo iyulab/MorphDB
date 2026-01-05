@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Models;
+using MorphDB.Core.Pipeline;
+using MorphDB.Npgsql.Repositories;
 using MorphDB.Service.Models.Api;
 
 namespace MorphDB.Service.Controllers;
@@ -13,10 +15,17 @@ namespace MorphDB.Service.Controllers;
 public sealed class DataController : ControllerBase
 {
     private readonly IMorphDataService _dataService;
+    private readonly IWritePipeline? _writePipeline;
+    private readonly IMetadataRepository? _metadataRepository;
 
-    public DataController(IMorphDataService dataService)
+    public DataController(
+        IMorphDataService dataService,
+        IWritePipeline? writePipeline = null,
+        IMetadataRepository? metadataRepository = null)
     {
         _dataService = dataService;
+        _writePipeline = writePipeline;
+        _metadataRepository = metadataRepository;
     }
 
     private Guid GetTenantId()
@@ -71,6 +80,9 @@ public sealed class DataController : ControllerBase
             {
                 morphQuery = ApplyFilters(morphQuery, query.Filter);
             }
+
+            // Apply row state filter if specified
+            morphQuery = ApplyRowStateFilter(morphQuery, query.State);
 
             // Apply ordering
             if (!string.IsNullOrEmpty(query.OrderBy))
@@ -174,12 +186,17 @@ public sealed class DataController : ControllerBase
     /// <summary>
     /// Insert a new record.
     /// </summary>
+    /// <param name="table">The table name.</param>
+    /// <param name="data">The record data.</param>
+    /// <param name="mode">Write mode: "default" or "draft". Draft mode skips validation and sets _row_state='draft'.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     [HttpPost("{table}")]
     [ProducesResponseType(typeof(DataRecordResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Insert(
         string table,
         [FromBody] IDictionary<string, object?> data,
+        [FromQuery] string? mode = null,
         CancellationToken cancellationToken = default)
     {
         try
@@ -192,7 +209,56 @@ public sealed class DataController : ControllerBase
                 data["_id"] = Guid.CreateVersion7();
             }
 
-            var result = await _dataService.InsertAsync(tenantId, table, data, cancellationToken);
+            IDictionary<string, object?> result;
+
+            // Use draft mode if requested and pipeline is available
+            if (mode?.Equals("draft", StringComparison.OrdinalIgnoreCase) == true
+                && _writePipeline is not null
+                && _metadataRepository is not null)
+            {
+                var tableMetadata = await _metadataRepository.GetTableByNameAsync(
+                    tenantId, table, includeColumns: true, cancellationToken);
+
+                if (tableMetadata is null)
+                {
+                    return NotFound(new ErrorResponse
+                    {
+                        Error = "NotFound",
+                        Message = $"Table '{table}' not found",
+                        Code = "TABLE_NOT_FOUND"
+                    });
+                }
+
+                if (!tableMetadata.RowStateEnabled)
+                {
+                    return BadRequest(new ErrorResponse
+                    {
+                        Error = "BadRequest",
+                        Message = $"Table '{table}' does not have row state enabled. Draft mode is not supported.",
+                        Code = "ROW_STATE_NOT_ENABLED"
+                    });
+                }
+
+                var writeResult = await _writePipeline.InsertAsync(
+                    tenantId, tableMetadata, data, WriteOptions.DraftMode, cancellationToken);
+
+                if (!writeResult.Success)
+                {
+                    return BadRequest(new ErrorResponse
+                    {
+                        Error = "ValidationError",
+                        Message = string.Join("; ", writeResult.Errors.Select(e => e.Message)),
+                        Code = "VALIDATION_FAILED"
+                    });
+                }
+
+                result = writeResult.Data ?? data;
+            }
+            else
+            {
+                result = await _dataService.InsertAsync(tenantId, table, data, cancellationToken);
+            }
+
             var id = result.TryGetValue("_id", out var idValue) && idValue is Guid guid ? guid : Guid.Empty;
 
             var response = new DataRecordResponse
@@ -362,6 +428,37 @@ public sealed class DataController : ControllerBase
         }
 
         return query;
+    }
+
+    private static IMorphQuery ApplyRowStateFilter(IMorphQuery query, string? state)
+    {
+        // If state is not specified, don't apply any filter (backward compatible).
+        // This allows queries on tables without RowStateEnabled to work normally.
+        if (string.IsNullOrWhiteSpace(state))
+        {
+            return query;
+        }
+
+        // Normalize state to lowercase
+        var normalizedState = state.Trim().ToLowerInvariant();
+
+        return normalizedState switch
+        {
+            // "all" returns all records regardless of _row_state
+            "all" => query,
+
+            // "draft" returns only draft records
+            "draft" => query.Where(SystemColumns.RowState, FilterOperator.Equals, RowStateValue.Draft.ToString().ToLowerInvariant()),
+
+            // "error" returns only error records
+            "error" => query.Where(SystemColumns.RowState, FilterOperator.Equals, RowStateValue.Error.ToString().ToLowerInvariant()),
+
+            // "valid" returns valid records only
+            "valid" => query.Where(SystemColumns.RowState, FilterOperator.Equals, RowStateValue.Valid.ToString().ToLowerInvariant()),
+
+            // Unknown state values are ignored (no filter applied)
+            _ => query
+        };
     }
 
     private static object ParseFilterValue(string value)

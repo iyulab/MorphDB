@@ -22,12 +22,28 @@
 | 0.9.5 | src/ | Philosophy Alignment | ✅ Complete |
 | 0.10.0 | src/ | Production Hardening | ✅ Complete |
 | **0.11.0** | **src/** | **Admin Dashboard** | ✅ Complete |
-| **0.12.0** | **sdk/** | **SDK Testing & Stabilization** | 📋 Planned |
-| **0.13.0** | **desk/** | **Desktop Phase 5 Completion** | 📋 Planned |
-| **0.14.0** | **ALL** | **Cross-Component Integration** | 📋 Planned |
-| **0.15.0** | **ALL** | **Documentation & E2E Tests** | 📋 Planned |
+| **0.12.0** | **src/** | **Data Features Enhancement** | ✅ Complete |
+| **0.13.0** | **sdk/** | **SDK Testing & Stabilization** | 📋 Planned |
+| **0.14.0** | **desk/** | **Desktop Phase 5 Completion** | 📋 Planned |
+| **0.15.0** | **ALL** | **Cross-Component Integration** | 📋 Planned |
+| **0.16.0** | **ALL** | **Documentation & E2E Tests** | 📋 Planned |
 | **1.0.0-rc** | **ALL** | **Release Candidate** | 📋 Planned |
 | **1.0.0** | **ALL** | **General Availability** | 📋 Planned |
+
+### Data Features (Extended Roadmap - 통합 완료)
+
+> 핵심 데이터 기능은 메인 코드베이스에 이미 통합되어 있습니다.
+
+| Extended Version | Feature | Main Integration | Status |
+|------------------|---------|------------------|--------|
+| v0.10.x | Views & Computed Columns | ✅ Included | ✅ Complete |
+| v0.11.x | Lookup Fields | ✅ Included | ✅ Complete |
+| v0.12.x | Rollup Fields | ✅ Included | ✅ Complete |
+| v0.13.x | Formula Fields | ✅ Included | ✅ Complete |
+| v0.14.x | Aggregation API | ✅ Included | ✅ Complete |
+| v0.15.x | Client SDK Aggregation | ✅ Included | ✅ Complete |
+| v0.16.x | Materialized Views | → v0.12.0 | ✅ Complete |
+| v0.17.x | Advanced Relations | → v0.12.0 | ✅ Complete |
 
 ---
 
@@ -38,32 +54,81 @@
 > **통합 범위**: Server (`src/`) + SDKs (`sdk/`) + Desktop App (`desk/`)
 
 ```
-src/ Server:
-v0.9.5 ──→ v0.10.0 ──→ v0.11.0 ──────────────────────────────────┐
-(완료)      (완료)      (완료)                                    │
-                                                                  │
-sdk/ Python + TypeScript:                                         │
-─────────────────────── v0.12.0 ─────────────────────────────────┼──┐
-                       (SDK 테스트/안정화)                          │  │
-                                                                  │  │
-desk/ Desktop App:                                                │  │
-Phase 1-4 완료 ───────────────── v0.13.0 ────────────────────────┼──┼──┐
-                               (Phase 5 완료)                     │  │  │
-                                                                  ▼  ▼  ▼
-                                                              v0.14.0 (통합)
-                                                                  │
-                                                              v0.15.0 (문서/E2E)
-                                                                  │
-                                                              v1.0.0-rc
-                                                                  │
-                                                              v1.0.0 GA
+                          src/ Server 핵심 기능 완성
+                                    │
+v0.9.5 ──→ v0.10.0 ──→ v0.11.0 ──→ v0.12.0 (Data Features Enhancement)
+(완료)      (완료)      (완료)     (Materialized Views, Advanced Relations)
+                                    │
+                                    ▼
+                     ┌──────────────┴──────────────┐
+                     │                             │
+              sdk/ Python + TS              desk/ Desktop App
+                     │                             │
+                 v0.13.0                       v0.14.0
+              (SDK 테스트/안정화)              (Phase 5 완료)
+                     │                             │
+                     └──────────────┬──────────────┘
+                                    │
+                                    ▼
+                            v0.15.0 (통합)
+                                    │
+                            v0.16.0 (문서/E2E)
+                                    │
+                            v1.0.0-rc
+                                    │
+                            v1.0.0 GA
+```
+
+### Runtime Data Layer 기능 현황
+
+```
+✅ 완료된 핵심 기능 (앱 빌더를 위한 런타임 데이터 조작):
+├── Linked Records ─────────────────────── FK + Virtual Constraints (관계 동적 정의)
+├── Lookup Fields ──────────────────────── Auto-JOIN Expansion (관계 데이터 자동 조회)
+├── Rollup Fields ──────────────────────── Subquery Aggregation (1:N 자동 집계)
+├── Count Fields ───────────────────────── Rollup with COUNT (관련 레코드 수)
+├── Formula Fields ─────────────────────── Expression Parser (계산 필드 런타임 정의)
+├── Computed Columns ───────────────────── PostgreSQL GENERATED (저장/가상 계산)
+├── Views ──────────────────────────────── Virtual Tables (데이터 뷰 동적 생성)
+├── Aggregation API ────────────────────── Server-side GroupBy (복잡 집계 지원)
+└── Conditional Rollup ─────────────────── Filtered Aggregation (조건부 집계)
+
+✅ v0.12.0 완료된 기능 (Phase 28: Transaction & Row-State):
+├── Cross-Entity Transaction ──────────── 다중 테이블 원자적 작업 ($ref 참조) ✅
+├── Row-State (_row_state) ────────────── draft/valid/error 상태 관리 ✅
+├── Draft Mode Bulk Insert ────────────── 유효성 검증 지연 (표 붙여넣기 지원) ✅
+└── Finalize API ──────────────────────── 상태 전환 + 일괄 검증 ✅
+
+✅ v0.12.0 완료된 기능 (Phase 26-27: Materialized Views + Advanced Relations):
+├── Materialized Views ─────────────────── Cached Query Results, CONCURRENTLY refresh ✅
+├── Staleness Detection ────────────────── 조인된 테이블 변경 추적 ✅
+├── Self-Referential Relations ─────────── IsSelfReferential, MaxHierarchyDepth ✅
+├── Many-to-Many Relations ─────────────── Auto Junction Table 생성 ✅
+├── Hierarchy Query API ────────────────── HierarchyController (ancestors/descendants/path/siblings) ✅
+└── Cycle Detection ────────────────────── WouldCreateCycleAsync, DetectCyclesAsync ✅
 ```
 
 ---
 
 ## Current Focus
 
-**Active Version**: v0.12.0 (SDK Testing & Stabilization)
+**Active Version**: v0.13.0 (SDK Testing & Stabilization)
+
+### Completed in v0.12.0 (Data Features Enhancement)
+
+| Phase | Task | Status |
+|-------|------|--------|
+| 26 | Materialized View DDL/Refresh (PostgresViewManager) | ✅ Complete |
+| 26 | CONCURRENTLY refresh with UNIQUE INDEX | ✅ Complete |
+| 26 | Staleness detection (joined table tracking) | ✅ Complete |
+| 27 | Self-Referential Relations (IsSelfReferential) | ✅ Complete |
+| 27 | Many-to-Many Junction Table Auto-Generation | ✅ Complete |
+| 27 | Hierarchy Query API (HierarchyController) | ✅ Complete |
+| 27 | Cycle Detection (CTE-based) | ✅ Complete |
+| 28 | Cross-Entity Transaction API | ✅ Complete |
+| 28 | $ref Reference System | ✅ Complete |
+| 28 | _row_state/_row_errors System Columns | ✅ Complete |
+| 28 | Draft Mode Bulk Insert + Finalize API | ✅ Complete |
 
 ### Completed in v0.11.0 (Admin Dashboard)
 
@@ -88,6 +153,68 @@ Phase 1-4 완료 ───────────────── v0.13.0 ─
 | 🟡 High | Schema Administration API | ✅ Complete | /api/admin/schema/* - overview, tenant tables, mappings |
 | 🟡 High | Activity & Audit API | ✅ Complete | /api/admin/activity/* - logs, stats, cross-tenant |
 | 🟢 Normal | Static Admin Dashboard | ✅ Complete | wwwroot/admin/index.html - 단일 파일 대시보드 |
+
+---
+
+## v0.12.0 Data Features Enhancement (src/)
+
+> 고급 데이터 모델링 기능 추가 - SDK/Desktop 이전에 서버 핵심 기능 완성
+
+### Phase 26: Materialized Views ✅
+
+| Priority | Task | Status | Notes |
+|----------|------|--------|-------|
+| 🔴 Critical | Materialized View 메타데이터 모델 | ✅ Complete | IViewManager, ViewMetadata with IsMaterialized |
+| 🔴 Critical | Materialized View DDL 구현 | ✅ Complete | CREATE/DROP MATERIALIZED VIEW in PostgresViewManager |
+| 🟡 High | Refresh Strategy (Manual/Scheduled) | ✅ Complete | RefreshMaterializedViewAsync with CONCURRENTLY option |
+| 🟡 High | Concurrent Refresh 지원 | ✅ Complete | UNIQUE INDEX 자동 생성, CONCURRENTLY 지원 |
+| 🟡 High | Staleness Detection | ✅ Complete | IsMaterializedViewStaleAsync - 조인된 테이블 변경 추적 |
+| 🟢 Normal | Materialized View API 엔드포인트 | ✅ Complete | ViewController: /api/schema/views/* |
+
+### Phase 27: Advanced Relations ✅
+
+| Priority | Task | Status | Notes |
+|----------|------|--------|-------|
+| 🔴 Critical | Self-Referential Relation 지원 | ✅ Complete | IsSelfReferential, MaxHierarchyDepth in RelationMetadata |
+| 🔴 Critical | Many-to-Many 자동 Junction Table | ✅ Complete | CreateRelationAsync auto-generates junction table |
+| 🟡 High | Hierarchy Query API | ✅ Complete | HierarchyController with ancestors/descendants/path/siblings/subtree |
+| 🟡 High | Cycle Detection | ✅ Complete | WouldCreateCycleAsync, DetectCyclesAsync using recursive CTE |
+| 🟢 Normal | Hierarchy Service DI | ✅ Complete | PostgresHierarchyQueryService registered in ServiceCollectionExtensions |
+
+### Phase 28: Transaction & Row-State ✅
+
+| Priority | Task | Status | Notes |
+|----------|------|--------|-------|
+| 🔴 Critical | Cross-Entity Transaction API | ✅ Complete | `POST /api/batch/transaction` - 다중 테이블 원자적 작업 |
+| 🔴 Critical | $ref 참조 시스템 | ✅ Complete | 이전 operation 결과 참조 (`$order._id`) |
+| 🔴 Critical | `_row_state` 시스템 컬럼 | ✅ Complete | draft/valid/error 상태 관리 |
+| 🟡 High | `_row_errors` 컬럼 | ✅ Complete | JSONB - 유효성 오류 상세 저장 |
+| 🟡 High | Draft 모드 Bulk Insert | ✅ Complete | `?mode=draft` - 유효성 검증 건너뜀 |
+| 🟡 High | Finalize API | ✅ Complete | `PATCH /{id}/finalize` - 유효성 검증 후 상태 전환 |
+| 🟢 Normal | Row-State 쿼리 필터 | ✅ Complete | `?state=valid` - 상태별 조회 |
+
+**Cross-Entity Transaction 예시**:
+```json
+{
+  "operations": [
+    { "method": "INSERT", "table": "orders", "data": {...}, "ref": "$order" },
+    { "method": "INSERT", "table": "order_items", "data": { "order_id": "$order._id", ... } }
+  ]
+}
+```
+
+**Row-State 활용 시나리오**:
+```
+표 붙여넣기 → Draft Insert (검증 없음) → UI 편집 → Finalize (검증 실행)
+                                                    ↓
+                                          valid (성공) / error (실패+오류상세)
+```
+
+### Difficulty: ★★★☆☆ (중급)
+
+> **Prerequisites**: v0.11.0 (Admin Dashboard) 완료
+> **Goals**: 앱 빌더를 위한 고급 데이터 모델링 기능 제공
+> **후속 작업**: v0.13.0 SDK → v0.14.0 Desktop → v0.15.0 통합
 
 ---
 
@@ -552,11 +679,87 @@ wwwroot/admin/
 
 ---
 
-#### 📋 v0.12.0: SDK Testing & Stabilization
+#### 📋 v0.12.0: Data Features Enhancement (Phase 26-28)
+
+> **목표**: Materialized Views, Advanced Relations, Transaction & Row-State 구현 - 서버 핵심 기능 완성
+> **컴포넌트**: `src/`
+> **기간**: 3 주
+> **난이도**: ★★★☆☆ (중급)
+
+| Task | Priority | Description | Acceptance Criteria |
+|------|----------|-------------|---------------------|
+| Materialized View DDL | 🔴 Critical | CREATE MATERIALIZED VIEW 지원 | 물리명 변환 동작 |
+| Materialized View API | 🔴 Critical | CRUD 및 Refresh API | /api/schema/materialized-views/* |
+| Refresh Scheduling | 🟡 High | Manual/Scheduled 새로고침 | Background job 통합 |
+| Concurrent Refresh | 🟡 High | 무중단 새로고침 지원 | UNIQUE INDEX 자동 생성 |
+| Staleness Detection | 🟡 High | 기반 테이블 변경 감지 | _morph_views.is_stale 컬럼 |
+| Self-Referential Relations | 🟡 High | 계층 구조 지원 | parent_id 패턴 |
+| Many-to-Many 자동화 | 🔴 Critical | Junction Table 자동 생성 | 연결 테이블 관리 |
+| Hierarchy Query API | 🟢 Normal | ancestors/descendants 조회 | CTE 기반 재귀 쿼리 |
+| Cross-Entity Transaction | 🔴 Critical | 다중 테이블 원자적 작업 | /api/batch/transaction |
+| $ref 참조 시스템 | 🔴 Critical | 이전 op 결과 참조 | `$order._id` 패턴 |
+| `_row_state` 시스템 컬럼 | 🔴 Critical | draft/valid/error 상태 | Optional 시스템 컬럼 |
+| Draft 모드 Bulk Insert | 🟡 High | 유효성 검증 건너뜀 | `?mode=draft` |
+| Finalize API | 🟡 High | 상태 전환 + 검증 | `PATCH /{id}/finalize` |
+| Data Features 통합 테스트 | 🟢 Normal | 전체 기능 검증 | E2E 테스트 통과 |
+
+**Materialized Views 아키텍처**:
+```yaml
+materialized_view_schema:
+  view_id: UUID
+  definition: ViewDefinition
+  refresh_policy:
+    type: "manual" | "scheduled" | "concurrent"
+    schedule: "0 * * * *"  # cron (scheduled)
+  last_refreshed: timestamp
+  is_stale: boolean
+```
+
+**Advanced Relations 패턴**:
+```yaml
+relation_patterns:
+  self_referential:
+    - parent_id: 동일 테이블 FK
+    - CTE로 ancestors/descendants 조회
+    - 순환 참조 방지 로직
+
+  many_to_many:
+    - Junction table 자동 생성: {table1}_{table2}_link
+    - 양방향 Lookup/Rollup 지원
+    - Cascade delete 옵션
+```
+
+**Transaction & Row-State 아키텍처**:
+```yaml
+cross_entity_transaction:
+  endpoint: POST /api/batch/transaction
+  features:
+    - 단일 DB 트랜잭션 래핑
+    - $ref 참조로 이전 결과 사용
+    - 전체 성공 or 전체 롤백
+
+row_state_system:
+  columns:
+    _row_state: "draft | valid | error"
+    _row_errors: "JSONB - 유효성 오류 상세"
+  workflow:
+    - Draft Insert (검증 스킵)
+    - UI 편집
+    - Finalize (검증 실행 → valid/error)
+  use_cases:
+    - 스프레드시트 붙여넣기
+    - 컬럼 순서 입력
+    - 대량 데이터 임시 저장
+```
+
+---
+
+#### 📋 v0.13.0: SDK Testing & Stabilization
 
 > **목표**: Python/TypeScript SDK 기능 검증 및 테스트 완료
 > **컴포넌트**: `sdk/`
 > **기간**: 1-2 주
+> **난이도**: ★★☆☆☆ (초급-중급)
 
 | Task | Priority | Description | Acceptance Criteria |
 |------|----------|-------------|---------------------|
@@ -564,9 +767,9 @@ wwwroot/admin/
 | TypeScript SDK 단위 테스트 | 🔴 Critical | vitest/jest 기반 테스트 | >80% 커버리지 |
 | Python SDK 통합 테스트 | 🟡 High | 실제 서버 연동 테스트 | 핵심 플로우 검증 |
 | TypeScript SDK 통합 테스트 | 🟡 High | 실제 서버 연동 테스트 | 핵심 플로우 검증 |
-| SDK API 버전 호환성 | 🟡 High | v0.11.0 서버와 호환 확인 | Breaking change 0개 |
+| SDK API 버전 호환성 | 🟡 High | v0.12.0 서버와 호환 확인 | Breaking change 0개 |
 | SDK README 업데이트 | 🟢 Normal | 최신 API 반영 | 모든 기능 문서화 |
-| SDK 패키지 버전 동기화 | 🟢 Normal | package.json/pyproject.toml 버전 | 0.12.0으로 통일 |
+| SDK 패키지 버전 동기화 | 🟢 Normal | package.json/pyproject.toml 버전 | 0.13.0으로 통일 |
 
 **테스트 범위**:
 ```yaml
@@ -595,11 +798,12 @@ sdk_test_coverage:
 
 ---
 
-#### 📋 v0.13.0: Desktop Phase 5 Completion
+#### 📋 v0.14.0: Desktop Phase 5 Completion
 
 > **목표**: desk/ 앱 Phase 5 완료 (Production-Ready 품질)
 > **컴포넌트**: `desk/`
 > **기간**: 2-3 주
+> **난이도**: ★★★☆☆ (중급)
 > **참조**: [`desk/docs/DEVELOPMENT_ROADMAP.md`](../desk/docs/DEVELOPMENT_ROADMAP.md)
 
 | Task | Priority | Description | Acceptance Criteria |
@@ -624,11 +828,12 @@ sdk_test_coverage:
 
 ---
 
-#### 📋 v0.14.0: Cross-Component Integration
+#### 📋 v0.15.0: Cross-Component Integration
 
 > **목표**: src/, sdk/, desk/ 간 통합 테스트 및 호환성 검증
 > **컴포넌트**: `ALL (src/ + sdk/ + desk/)`
 > **기간**: 1-2 주
+> **난이도**: ★★★☆☆ (중급)
 
 | Task | Priority | Description | Acceptance Criteria |
 |------|----------|-------------|---------------------|
@@ -665,17 +870,19 @@ integration_scenarios:
 
 ---
 
-#### 📋 v0.15.0: Documentation & E2E Tests
+#### 📋 v0.16.0: Documentation & E2E Tests
 
 > **목표**: 완전한 문서화 및 종단간 테스트 스위트
 > **컴포넌트**: `ALL`
 > **기간**: 2 주
+> **난이도**: ★★☆☆☆ (초급-중급)
 
 | Task | Priority | Description | Acceptance Criteria |
 |------|----------|-------------|---------------------|
 | API 문서 완성 (OpenAPI 3.1) | 🔴 Critical | 모든 엔드포인트 명세 | 100% 커버리지 |
 | SDK 문서 완성 | 🔴 Critical | Python/TypeScript 가이드 | 모든 기능 예제 |
 | desk 사용자 가이드 | 🟡 High | 기능별 상세 설명 | 스크린샷 포함 |
+| Data Features 문서 | 🟡 High | Lookup/Rollup/Formula 가이드 | 사용 예제 포함 |
 | 운영 가이드 | 🟡 High | K8s, Docker Compose 배포 | 프로덕션 설정 |
 | 마이그레이션 가이드 | 🟡 High | 0.x → 1.0 업그레이드 경로 | Breaking changes |
 | 튜토리얼 | 🟢 Normal | 시작하기 가이드 | 10분 내 첫 테이블 |
@@ -727,12 +934,16 @@ e2e_scenarios:
 > **목표**: 릴리스 준비 완료, 최종 검증
 > **컴포넌트**: `ALL`
 > **기간**: 1-2 주
+> **난이도**: ★★★★☆ (고급)
+> **전제 조건**: v0.12.0 (Data Features) + v0.13.0 (SDK) + v0.14.0 (Desktop) + v0.15.0 (통합) + v0.16.0 (문서) 완료
 
 | Task | Priority | Description | Acceptance Criteria |
 |------|----------|-------------|---------------------|
 | 성능 벤치마크 | 🔴 Critical | 부하 테스트 완료 | 1000 RPS, p99 < 100ms |
 | 보안 감사 | 🔴 Critical | 취약점 스캔 및 수정 | Critical/High 0개 |
-| 호환성 테스트 | 🟡 High | PostgreSQL 버전 호환 | 14, 15, 16 지원 확인 |
+| 호환성 테스트 | 🟡 High | PostgreSQL 버전 호환 | 14, 15, 16, 17 지원 확인 |
+| Data Features 검증 | 🔴 Critical | Lookup/Rollup/Formula 프로덕션 검증 | 모든 기능 안정 |
+| Materialized Views 검증 | 🟡 High | Refresh 안정성 확인 | Concurrent refresh 성공 |
 | 의존성 감사 | 🟡 High | 라이선스/취약점 확인 | 문제 있는 의존성 제거 |
 | SDK 패키지 게시 테스트 | 🟡 High | npm/PyPI 테스트 게시 | 설치 검증 |
 | desk 빌드 검증 | 🟡 High | Windows/macOS/Linux 빌드 | 모든 플랫폼 동작 |
@@ -806,16 +1017,46 @@ performance_targets:
 ├── v0.9.5  (완료)   ████████████████ Philosophy Alignment ✅
 ├── v0.10.0 (완료)   ████████████████ Production Hardening ✅ (src/)
 └── v0.11.0 (완료)   ████████████████ Admin Dashboard ✅ (src/)
+    │
+    └── [Data Features 통합 완료] Views, Lookup, Rollup, Formula, Aggregation ✅
 
 2025 Q1-Q2 (현재 ~ 진행 예정)
-├── v0.12.0          ████░░░░░░░░░░░░ SDK Testing & Stabilization (sdk/) ← 현재
-├── v0.13.0          ██░░░░░░░░░░░░░░ Desktop Phase 5 Completion (desk/)
-├── v0.14.0          ██░░░░░░░░░░░░░░ Cross-Component Integration (ALL)
-└── v0.15.0          ██░░░░░░░░░░░░░░ Documentation & E2E Tests (ALL)
+├── v0.12.0 (완료)   ████████████████ Data Features Enhancement (src/) ✅
+│   │                                  - Materialized Views ✅
+│   │                                  - Advanced Relations (Self-ref, M:N) ✅
+│   │                                  - Hierarchy Query API ✅
+│   │                                  - Transaction & Row-State ✅
+│   └────────────────────────────────────────────────────────────────────
+├── v0.13.0          ██░░░░░░░░░░░░░░ SDK Testing & Stabilization (sdk/) ← 현재
+├── v0.14.0          ██░░░░░░░░░░░░░░ Desktop Phase 5 Completion (desk/)
+├── v0.15.0          ██░░░░░░░░░░░░░░ Cross-Component Integration (ALL)
+└── v0.16.0          ██░░░░░░░░░░░░░░ Documentation & E2E Tests (ALL)
 
 2025 Q2
 ├── v1.0.0-rc        ██░░░░░░░░░░░░░░ Release Candidate (ALL)
 └── v1.0.0 GA        █░░░░░░░░░░░░░░░ General Availability (ALL)
+```
+
+### 다단계 난이도 프로그레션
+
+```
+Phase 1-2 (v0.1.0-v0.4.0 완료): 기초 + API
+└── 난이도: ★★☆☆☆ (Core functionality, GraphQL, OData, Real-time)
+
+Phase 3-4 (v0.5.0-v0.11.0 완료): 데이터 기능 + 보안 + 운영
+└── 난이도: ★★★☆☆ (Lookup, Rollup, Formula, Audit, RLS, Admin)
+
+Phase 5 (v0.12.0): 고급 데이터 기능 ★ 서버 핵심 완성
+└── 난이도: ★★★☆☆ (Materialized Views, Advanced Relations, Hierarchy API)
+
+Phase 6 (v0.13.0-v0.14.0): 클라이언트 컴포넌트
+└── 난이도: ★★☆☆☆ ~ ★★★☆☆ (SDK 테스트, Desktop 완성)
+
+Phase 7 (v0.15.0-v0.16.0): 통합 + 문서
+└── 난이도: ★★★☆☆ (컴포넌트 통합, 문서화, E2E 테스트)
+
+Phase 8 (v1.0.0-rc → GA): 품질 + 릴리스
+└── 난이도: ★★★★☆ (성능/보안 감사, 최종 검증)
 ```
 
 ---
@@ -892,19 +1133,215 @@ performance_targets:
 | [Architecture](./ARCHITECTURE.md) | System design, layer responsibilities |
 | [API Documentation](./API.md) | Endpoint specifications |
 
-## Data Features Progress (Extended Roadmap)
+---
 
-| Version | Feature | Status |
-|---------|---------|--------|
-| v0.10.x | Views & Computed Columns | ✅ Complete |
-| v0.11.x | Lookup Fields | ✅ Complete |
-| v0.12.x | Rollup Fields | ✅ Complete |
-| v0.13.x | Formula Fields | ✅ Complete |
-| v0.14.x | Aggregation API | ✅ Complete |
-| v0.15.x | Client SDK Aggregation | ✅ Complete |
-| v0.16.x | Materialized Views | 📋 Planned |
+## 🎯 Runtime Data Layer (런타임 데이터 레이어)
 
-See [Extended Roadmap](./ROADMAP_v0.9-v0.30.md) for full details.
+> **MorphDB 포지셔닝**: Runtime RDB - PostgreSQL의 ACID/성능 + 런타임 스키마 유연성
+>
+> **핵심 가치**: 앱 개발자가 데이터 모델을 런타임에 정의/수정하면서도 RDB의 강력함을 유지
+>
+> **목표**: 데이터 기반 응용 앱 빌드를 극도로 용이하게
+
+### Runtime RDB 핵심 기능
+
+| Feature | Status | Implementation | App Builder 가치 |
+|---------|--------|----------------|------------------|
+| **Linked Records** | ✅ Complete | RelationMetadata + Virtual FK | 테이블 간 관계 동적 정의 |
+| **Lookup Fields** | ✅ Complete | Auto-JOIN expansion | 관계 데이터 자동 조회 |
+| **Rollup Fields** | ✅ Complete | Subquery aggregation | 1:N 집계 자동 계산 |
+| **Count Fields** | ✅ Complete | Rollup with COUNT | 관련 레코드 수 자동 집계 |
+| **Formula Fields** | ✅ Complete | Expression parser + SQL | 계산 필드 런타임 정의 |
+| **Computed Columns** | ✅ Complete | PostgreSQL GENERATED | 저장/가상 계산 컬럼 |
+| **Virtual Tables (Views)** | ✅ Complete | Query-based views | 데이터 뷰 동적 생성 |
+| **Conditional Aggregation** | ✅ Complete | Filtered rollup | 조건부 집계 지원 |
+| **Hierarchical Data** | ✅ v0.12.0 | Self-referential FK + CTE | 트리/계층 구조 지원 |
+| **M:N Relations** | ✅ v0.12.0 | Auto junction table | 다대다 관계 자동화 |
+| **Materialized Views** | ✅ v0.12.0 | Cached query results | 복잡 쿼리 성능 최적화 |
+
+### Runtime RDB vs Traditional Approaches
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Why Runtime RDB?                                      │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  Traditional RDB        NoSQL/Document DB       MorphDB (Runtime RDB)   │
+│  ─────────────────     ─────────────────       ─────────────────────    │
+│  ✅ ACID               ❌ Weak consistency      ✅ Full ACID             │
+│  ✅ Complex queries    ❌ Limited queries       ✅ Full SQL power        │
+│  ✅ Referential int.   ❌ No FK enforcement     ✅ Virtual + Physical FK │
+│  ❌ Static schema      ✅ Flexible schema       ✅ Runtime schema        │
+│  ❌ Migration hell     ✅ Schema-less           ✅ Zero-migration        │
+│  ❌ DBA required       ✅ Dev-friendly          ✅ API-first             │
+│                                                                          │
+│  Result: MorphDB = RDB Power + Runtime Flexibility                      │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Data Features Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                     MorphDB Data Features Layer                          │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
+│  │   Lookup    │  │   Rollup    │  │   Formula   │  │    View     │    │
+│  │   Fields    │  │   Fields    │  │   Fields    │  │   Engine    │    │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘    │
+│         │                │                │                │            │
+│         └────────────────┼────────────────┼────────────────┘            │
+│                          ▼                ▼                              │
+│              ┌───────────────────────────────────────┐                  │
+│              │        Query Transformation Layer      │                  │
+│              │   (Logical → Physical Translation)     │                  │
+│              └───────────────────────────────────────┘                  │
+│                                    │                                     │
+│                                    ▼                                     │
+│              ┌───────────────────────────────────────┐                  │
+│              │     PostgreSQL Execution Engine        │                  │
+│              │   (ACID, Performance, Reliability)     │                  │
+│              └───────────────────────────────────────┘                  │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Completed Data Features (✅)
+
+#### 1. Lookup Fields (v0.11.x)
+```
+Lookup = FK 관계를 통한 자동 필드 참조
+
+orders.customer_id → customers._id (FK)
+orders.customer_name (lookup) ← customers.name (자동 조회)
+
+API:
+POST /api/schema/tables/{table}/columns
+{
+  "name": "customer_name",
+  "type": "lookup",
+  "lookupConfig": {
+    "relation": "customer_id",
+    "targetColumn": "name"
+  }
+}
+```
+
+#### 2. Rollup Fields (v0.12.x)
+```
+Rollup = 1:N 관계의 N측 데이터 집계
+
+customers._id ← orders.customer_id (1:N)
+customers.total_orders (rollup) = COUNT(orders)
+customers.total_spent (rollup) = SUM(orders.amount)
+
+지원 집계 함수:
+- COUNT: 레코드 수
+- SUM/AVG: 숫자 집계
+- MIN/MAX: 최소/최대값
+- ARRAY_AGG: 배열 수집
+- STRING_AGG: 문자열 연결
+
+Conditional Rollup:
+{ "filter": { "status": "completed" } }  // 조건부 집계
+```
+
+#### 3. Formula Fields (v0.13.x)
+```
+Formula = 표현식 기반 계산 필드
+
+지원 함수 카테고리:
+- Math: ABS, ROUND, POWER, SQRT, MOD
+- Text: CONCAT, LEFT, RIGHT, LEN, UPPER, LOWER, TRIM
+- Date: NOW, TODAY, DATEADD, DATEDIFF, FORMAT_DATE
+- Logic: IF, SWITCH, AND, OR, NOT, COALESCE
+- Array: ARRAY_JOIN, ARRAY_CONTAINS, ARRAY_LENGTH
+
+예시:
+{ "expression": "CONCAT(first_name, ' ', last_name)" }
+{ "expression": "total * 1.1" }
+{ "expression": "IF(status == 'active', 'Yes', 'No')" }
+```
+
+#### 4. Aggregation API (v0.14.x)
+```
+서버사이드 집계 쿼리 API
+
+POST /api/data/{table}/aggregate
+{
+  "aggregations": [
+    { "function": "COUNT", "alias": "total" },
+    { "function": "SUM", "column": "amount", "alias": "total_amount" }
+  ],
+  "groupBy": ["status", "category"],
+  "filter": { "created_at": { "$gte": "2024-01-01" } }
+}
+
+GraphQL 통합:
+query {
+  orders_aggregate(where: { status: { _eq: "completed" } }) {
+    aggregate { count, sum { amount } }
+  }
+}
+```
+
+### Planned Data Features (📋)
+
+#### v0.16.x: Materialized Views
+```
+캐시된 쿼리 결과로 성능 최적화
+
+새로고침 전략:
+- Manual: REFRESH MATERIALIZED VIEW
+- Scheduled: Cron-based (Hangfire)
+- Concurrent: REFRESH CONCURRENTLY (무중단)
+
+사용 사례:
+- 대시보드 집계
+- 복잡한 JOIN 캐싱
+- 통계 데이터 사전 계산
+```
+
+#### v0.17.x: Advanced Relations
+```
+복잡한 관계 모델링
+
+1. Self-Referential (계층 구조):
+   - categories.parent_id → categories._id
+   - GET /api/data/categories/{id}/ancestors
+   - GET /api/data/categories/tree
+
+2. Many-to-Many:
+   - students ↔ courses (junction: enrollments)
+   - 자동 junction 테이블 생성
+   - 추가 컬럼 지원 (enrolled_at, grade)
+
+3. Polymorphic Relations:
+   - entity_type + entity_id 패턴
+   - 다형성 참조 지원
+```
+
+### Data Features Progress Summary
+
+| Feature | Extended Version | Status | Priority |
+|---------|------------------|--------|----------|
+| Views & Computed Columns | v0.10.x | ✅ Complete | Core |
+| Lookup Fields | v0.11.x | ✅ Complete | Core |
+| Rollup Fields | v0.12.x | ✅ Complete | Core |
+| Formula Fields | v0.13.x | ✅ Complete | Core |
+| Aggregation API | v0.14.x | ✅ Complete | Core |
+| Client SDK Aggregation | v0.15.x | ✅ Complete | Integration |
+| Materialized Views | v0.16.x | ✅ Complete | Performance |
+| Advanced Relations | v0.17.x | ✅ Complete | Extended |
+| File Attachments | v0.18.x | 📋 Planned | Extended |
+| Full-Text Search | v0.19.x | 📋 Planned | Extended |
+| Workflow Automation | v0.20.x | 📋 Planned | Enterprise |
+
+> **Note**: Extended Roadmap 버전 (v0.10.x~v0.30.x)은 데이터 기능 개발 순서를 나타냅니다.
+> 메인 Roadmap 버전 (v0.11.0~v1.0.0)은 릴리스 마일스톤입니다.
+> 데이터 기능은 이미 메인 코드베이스에 통합되어 있습니다.
+
+See [Extended Roadmap](./ROADMAP_v0.9-v0.30.md) for full implementation details.
 
 ---
 
