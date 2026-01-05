@@ -20,7 +20,7 @@
 | 0.9.0 | 21-22: Organization + SSO | ✅ Complete |
 | 0.9.5 | 23: Philosophy Alignment | ✅ Complete |
 | **0.10.0** | **24: Production Hardening** | ✅ Complete |
-| 1.0.0-alpha | 25: Admin Dashboard | 📋 Planned |
+| **1.0.0-alpha** | **25: Admin Dashboard** | ✅ Complete |
 | 1.0.0-beta | 26: Integration & Documentation | 📋 Planned |
 | 1.0.0-rc | 27: Release Candidate | 📋 Planned |
 | 1.0.0 | GA: General Availability | 📋 Planned |
@@ -34,14 +34,40 @@
 
 ```
 v0.9.0 ──→ v0.9.5 ──→ v0.10.0 ──→ v1.0.0-alpha ──→ v1.0.0-beta ──→ v1.0.0-rc ──→ v1.0.0
-           (완료)      (완료)      (현재)         (통합/문서)     (RC검증)      (GA)
+           (완료)      (완료)      (완료)          (현재)          (RC검증)      (GA)
 ```
 
 ---
 
 ## Current Focus
 
-**Active Version**: v1.0.0-alpha (Admin Dashboard)
+**Active Version**: v1.0.0-beta (Integration & Documentation)
+
+### Completed in v1.0.0-alpha (Admin Dashboard)
+
+| Phase | Task | Status |
+|-------|------|--------|
+| 25 | Admin API Foundation (시스템 상태, 테넌트 조회) | ✅ Complete |
+| 25 | Admin Authorization (Admin 역할 기반 접근 제어) | ✅ Complete |
+| 25 | Metrics Dashboard API (쿼리/연결 통계 집계) | ✅ Complete |
+| 25 | Schema Administration API (스키마 개요/매핑 조회) | ✅ Complete |
+| 25 | Activity & Audit API (활동 로그/감사 조회) | ✅ Complete |
+| 25 | Static Admin Dashboard (정적 HTML + JS) | ✅ Complete |
+
+### v1.0.0-alpha Completed Tasks (Admin Dashboard)
+
+> Admin API 및 정적 대시보드 완료
+
+| Priority | Task | Status | Notes |
+|----------|------|--------|-------|
+| 🔴 Critical | Admin API Foundation | ✅ Complete | `AdminController` - /api/admin/system/*, /api/admin/tenants/* |
+| 🔴 Critical | Admin Authorization | ✅ Complete | Program.cs Admin policy - role/scope/system claims |
+| 🟡 High | Metrics Dashboard API | ✅ Complete | /api/admin/metrics/* - queries, connections, performance |
+| 🟡 High | Schema Administration API | ✅ Complete | /api/admin/schema/* - overview, tenant tables, mappings |
+| 🟡 High | Activity & Audit API | ✅ Complete | /api/admin/activity/* - logs, stats, cross-tenant |
+| 🟢 Normal | Static Admin Dashboard | ✅ Complete | wwwroot/admin/index.html - 단일 파일 대시보드 |
+
+---
 
 ### Completed in Previous Version (v0.10.0)
 
@@ -462,36 +488,66 @@ pitr_implementation:
 
 ---
 
-#### v1.0.0-alpha: Admin Dashboard (Phase 25)
+#### ✅ v1.0.0-alpha: Admin API Layer (Phase 25) - Complete
 
-> **목표**: 관리 대시보드 MVP, 핵심 운영 기능
+> **목표**: 관리 API 및 최소 대시보드, 핵심 운영 기능
+> **철학 정렬**: Query Console 제거 (철학 위반), React SPA → 정적 HTML (스코프 관리)
 
-**기간**: 3-4 주
+**상태**: ✅ 완료
 
-| Task | Priority | Description | Acceptance Criteria |
-|------|----------|-------------|---------------------|
-| 대시보드 프레임워크 | 🔴 Critical | React 기반 관리 UI | 인증된 관리자 접근 |
-| Health Overview | 🔴 Critical | 시스템 상태 한눈에 | API/DB/Queue 상태 표시 |
-| Schema Explorer | 🟡 High | 테이블/컬럼 시각화 | 관계 다이어그램 |
-| Query Console | 🟡 High | 구조화된 쿼리 실행 | 히스토리, 자동완성 |
-| Metrics Dashboard | 🟡 High | 성능 메트릭 시각화 | 지연시간, 처리량, 오류율 |
-| 사용자 관리 | 🟢 Normal | 팀 멤버/역할 관리 | CRUD UI |
+| Task | Priority | Description | Status |
+|------|----------|-------------|--------|
+| Admin API Foundation | 🔴 Critical | 시스템 상태, 테넌트 조회 API | ✅ Complete |
+| Admin Authorization | 🔴 Critical | Admin 역할 기반 접근 제어 | ✅ Complete |
+| Metrics Dashboard API | 🟡 High | 쿼리/연결 통계 집계 API | ✅ Complete |
+| Schema Administration API | 🟡 High | 스키마 개요/매핑 조회 API | ✅ Complete |
+| Activity & Audit API | 🟡 High | 활동 로그/감사 조회 API | ✅ Complete |
+| Static Admin Dashboard | 🟢 Normal | 정적 HTML + JS 대시보드 | ✅ Complete |
+
+**철학 정렬 결정**:
+- ❌ Query Console 제거: "디버깅용으로도 SQL 콘솔 제공하지 않음" 원칙 준수
+- ❌ React SPA 제거: 백엔드 서비스 집중, 스코프 크립 방지
+- ✅ API-Only 접근: 프로그래매틱 관리 우선
+- ✅ 정적 대시보드: 최소 UI, wwwroot 내장
 
 <details>
-<summary>대시보드 구조</summary>
+<summary>Admin API 엔드포인트</summary>
 
 ```
-/admin
-├── /overview          # Health, Quick Stats
-├── /projects/{id}
-│   ├── /schema        # Schema Explorer
-│   ├── /data          # Data Browser
-│   ├── /query         # Query Console
-│   └── /metrics       # Performance
-├── /team              # Members, Roles
-├── /audit             # Audit Log Viewer
-├── /settings          # Organization Settings
-└── /billing           # Usage & Billing
+/api/admin
+├── /system
+│   ├── GET /status         # 시스템 상태 종합
+│   └── GET /config         # 설정 조회 (민감정보 마스킹)
+├── /tenants
+│   ├── GET /               # 테넌트 목록
+│   └── GET /{id}/usage     # 테넌트별 사용량
+├── /metrics
+│   ├── GET /queries        # 쿼리 통계 집계
+│   ├── GET /connections    # 연결 풀 상태
+│   └── GET /performance    # P95/P99 레이턴시
+├── /schema
+│   ├── GET /overview       # 전체 스키마 개요
+│   ├── GET /tables/{tenant}  # 테넌트별 테이블
+│   ├── GET /mappings       # Logical-Physical 매핑
+│   └── GET /changelog      # DDL 변경 이력
+└── /activity
+    ├── GET /recent         # 최근 활동 로그
+    └── GET /search         # 활동 검색
+```
+
+</details>
+
+<details>
+<summary>정적 대시보드 구조</summary>
+
+```
+wwwroot/admin/
+├── index.html          # 메인 대시보드
+├── css/
+│   └── admin.css       # 스타일
+└── js/
+    ├── admin.js        # API 호출 및 렌더링
+    └── charts.js       # Chart.js 기반 시각화
 ```
 
 </details>
@@ -618,10 +674,10 @@ performance_targets:
 2025 Q1
 ├── v0.9.5  (완료)   ████████████████ Philosophy Alignment ✅
 ├── v0.10.0 (완료)   ████████████████ Production Hardening ✅
-└── v1.0.0-alpha     ████████████░░░░ Admin Dashboard (현재)
+└── v1.0.0-alpha     ████████████████ Admin Dashboard ✅
 
 2025 Q2
-├── v1.0.0-beta      ██████░░░░░░░░░░ Integration & Docs
+├── v1.0.0-beta      ████████░░░░░░░░ Integration & Docs (현재)
 ├── v1.0.0-rc        ████░░░░░░░░░░░░ Release Candidate
 └── v1.0.0 GA        ██░░░░░░░░░░░░░░ General Availability
 ```
