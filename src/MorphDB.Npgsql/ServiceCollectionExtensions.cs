@@ -6,9 +6,11 @@ using MorphDB.Core.Audit;
 using MorphDB.Core.Encryption;
 using MorphDB.Core.Pipeline;
 using MorphDB.Core.Security;
+using MorphDB.Core.Diagnostics;
 using MorphDB.Npgsql.Audit;
 using MorphDB.Npgsql.Backup;
 using MorphDB.Npgsql.Caching;
+using MorphDB.Npgsql.Diagnostics;
 using MorphDB.Npgsql.Encryption;
 using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Organization;
@@ -172,6 +174,18 @@ public static class ServiceCollectionExtensions
         // Register backup repository (Phase 23: Backup & PITR)
         services.AddSingleton<IBackupRepository, BackupRepository>();
 
+        // Register query diagnostics (Phase 24: Production Hardening)
+        services.Configure<QueryDiagnosticsOptions>(opt =>
+        {
+            opt.Enabled = options.QueryDiagnosticsOptions.Enabled;
+            opt.SlowQueryThresholdMs = options.QueryDiagnosticsOptions.SlowQueryThresholdMs;
+            opt.MaxSlowQueryEntries = options.QueryDiagnosticsOptions.MaxSlowQueryEntries;
+            opt.LogSlowQueries = options.QueryDiagnosticsOptions.LogSlowQueries;
+            opt.IncludeQueryPatterns = options.QueryDiagnosticsOptions.IncludeQueryPatterns;
+            opt.StatisticsRetentionPeriod = options.QueryDiagnosticsOptions.StatisticsRetentionPeriod;
+        });
+        services.AddSingleton<IQueryDiagnostics, QueryDiagnosticsService>();
+
         // Register Write Pipeline components (Virtual Constraints)
         services.AddWritePipeline();
 
@@ -249,6 +263,11 @@ public sealed class MorphDbNpgsqlOptions
     /// Options for bulk operations.
     /// </summary>
     public BulkOperationOptions BulkOperationOptions { get; set; } = new();
+
+    /// <summary>
+    /// Options for query diagnostics and slow query detection.
+    /// </summary>
+    public QueryDiagnosticsOptions QueryDiagnosticsOptions { get; set; } = new();
 }
 
 /// <summary>

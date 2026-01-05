@@ -54,6 +54,60 @@ public interface IBackupService
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Stream of the backup file, or null if not found.</returns>
     Task<Stream?> DownloadBackupAsync(Guid backupId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Verifies backup integrity by checking file existence and checksum.
+    /// </summary>
+    /// <param name="backupId">The backup ID.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Verification result with details.</returns>
+    Task<BackupVerificationResult> VerifyBackupAsync(Guid backupId, CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// Result of backup verification.
+/// </summary>
+public sealed record BackupVerificationResult
+{
+    /// <summary>
+    /// Whether the backup passed all verification checks.
+    /// </summary>
+    public required bool IsValid { get; init; }
+
+    /// <summary>
+    /// Whether the backup file exists.
+    /// </summary>
+    public bool FileExists { get; init; }
+
+    /// <summary>
+    /// Whether the checksum matches the stored value.
+    /// </summary>
+    public bool ChecksumValid { get; init; }
+
+    /// <summary>
+    /// Whether the backup file can be decompressed.
+    /// </summary>
+    public bool CanDecompress { get; init; }
+
+    /// <summary>
+    /// Current file size in bytes.
+    /// </summary>
+    public long? CurrentSizeBytes { get; init; }
+
+    /// <summary>
+    /// Stored file size in bytes (from backup record).
+    /// </summary>
+    public long? StoredSizeBytes { get; init; }
+
+    /// <summary>
+    /// Error message if verification failed.
+    /// </summary>
+    public string? ErrorMessage { get; init; }
+
+    /// <summary>
+    /// Time taken for verification in milliseconds.
+    /// </summary>
+    public long VerificationDurationMs { get; init; }
 }
 
 /// <summary>

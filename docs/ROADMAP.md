@@ -18,8 +18,8 @@
 | 0.7.5 | 18.5: Virtual Constraints | ✅ Complete |
 | 0.8.0 | 18.6-20: System Columns + Audit + Rate Limiting | ✅ Complete |
 | 0.9.0 | 21-22: Organization + SSO | ✅ Complete |
-| **0.9.5** | **23: Philosophy Alignment** | ✅ Complete |
-| 0.10.0 | 24: Production Hardening | 📋 Planned |
+| 0.9.5 | 23: Philosophy Alignment | ✅ Complete |
+| **0.10.0** | **24: Production Hardening** | ✅ Complete |
 | 1.0.0-alpha | 25: Admin Dashboard | 📋 Planned |
 | 1.0.0-beta | 26: Integration & Documentation | 📋 Planned |
 | 1.0.0-rc | 27: Release Candidate | 📋 Planned |
@@ -34,16 +34,40 @@
 
 ```
 v0.9.0 ──→ v0.9.5 ──→ v0.10.0 ──→ v1.0.0-alpha ──→ v1.0.0-beta ──→ v1.0.0-rc ──→ v1.0.0
-           (완료)     (현재)       (대시보드)      (통합/문서)     (RC검증)      (GA)
+           (완료)      (완료)      (현재)         (통합/문서)     (RC검증)      (GA)
 ```
 
 ---
 
 ## Current Focus
 
-**Active Version**: v0.10.0 (Production Hardening)
+**Active Version**: v1.0.0-alpha (Admin Dashboard)
 
-### Completed in Previous Version (v0.9.5)
+### Completed in Previous Version (v0.10.0)
+
+| Phase | Task | Status |
+|-------|------|--------|
+| 24 | Slow Query 로깅 (QueryDiagnostics) | ✅ Complete |
+| 24 | Connection Pool 메트릭 엔드포인트 | ✅ Complete |
+| 24 | Backup 자동 검증 (VerifyBackupAsync) | ✅ Complete |
+| 24 | Graceful Shutdown (Request Draining) | ✅ Complete |
+| 24 | Production Hardening 테스트 (35+ tests) | ✅ Complete |
+
+### v0.10.0 Completed Tasks (Production Hardening)
+
+> 프로덕션 환경 안정성 및 운영 준비 완료
+
+| Priority | Task | Status | Notes |
+|----------|------|--------|-------|
+| 🟡 High | Slow Query 로깅 | ✅ Complete | `QueryDiagnosticsService`, 임계값 기반 감지 (default 1s), P95/P99 통계 |
+| 🟡 High | Connection Pool 모니터링 | ✅ Complete | `DiagnosticsController`, 헬스체크 + /metrics (OpenTelemetry) |
+| 🔴 Critical | Backup 자동 검증 | ✅ Complete | `VerifyBackupAsync`, 체크섬/압축해제 검증 |
+| 🟢 Normal | Graceful Shutdown | ✅ Complete | `GracefulShutdownService`, request draining 지원 |
+| 🟢 Normal | Production Hardening 테스트 | ✅ Complete | GracefulShutdownServiceTests, QueryDiagnosticsServiceTests, QueryExecutionScopeTests |
+
+---
+
+### Completed in v0.9.5 (Philosophy Alignment)
 
 | Phase | Task | Status |
 |-------|------|--------|
@@ -397,24 +421,23 @@ public void TableApiResponse_ShouldNotExposePhysicalName()
 
 ---
 
-### 📋 Planned Phases: v0.10.0 → v1.0.0
+### 📋 Planned Phases: v1.0.0-alpha → v1.0.0
 
 ---
 
-#### v0.10.0: Production Hardening (Phase 24)
+#### ✅ v0.10.0: Production Hardening (Phase 24) - Complete
 
 > **목표**: 프로덕션 환경 안정성 및 운영 준비 완료
 
-**기간**: 2-3 주
+**상태**: ✅ 완료
 
-| Task | Priority | Description | Acceptance Criteria |
-|------|----------|-------------|---------------------|
-| PITR (Point-in-Time Recovery) | 🔴 Critical | WAL 기반 시점 복구 | 특정 시점으로 복원 성공 |
-| 백업 자동 검증 | 🔴 Critical | 백업 무결성 자동 테스트 | 매일 복원 테스트 실행 |
-| Health Check 강화 | 🟡 High | Liveness/Readiness 분리 | K8s probe 호환 |
-| 연결 풀 모니터링 | 🟡 High | 연결 상태 메트릭 노출 | Prometheus 메트릭 |
-| Slow Query 로깅 | 🟡 High | 느린 쿼리 자동 감지 | >1s 쿼리 로깅 |
-| 그레이스풀 셧다운 | 🟢 Normal | 진행 중 요청 완료 대기 | 데이터 손실 없는 재시작 |
+| Task | Priority | Status | Implementation |
+|------|----------|--------|----------------|
+| Slow Query 로깅 | 🟡 High | ✅ Complete | `QueryDiagnosticsService`, P95/P99 통계 |
+| 연결 풀 모니터링 | 🟡 High | ✅ Complete | `DiagnosticsController`, OpenTelemetry |
+| 백업 자동 검증 | 🔴 Critical | ✅ Complete | `VerifyBackupAsync`, 체크섬/압축 검증 |
+| 그레이스풀 셧다운 | 🟢 Normal | ✅ Complete | `GracefulShutdownService`, request draining |
+| Production Hardening 테스트 | 🟢 Normal | ✅ Complete | 35+ 단위 테스트 추가 |
 
 <details>
 <summary>PITR 아키텍처</summary>
@@ -594,8 +617,8 @@ performance_targets:
 ```
 2025 Q1
 ├── v0.9.5  (완료)   ████████████████ Philosophy Alignment ✅
-├── v0.10.0 (2-3주)  ████░░░░░░░░░░░░ Production Hardening (현재)
-└── v1.0.0-alpha     ████████████░░░░ Admin Dashboard
+├── v0.10.0 (완료)   ████████████████ Production Hardening ✅
+└── v1.0.0-alpha     ████████████░░░░ Admin Dashboard (현재)
 
 2025 Q2
 ├── v1.0.0-beta      ██████░░░░░░░░░░ Integration & Docs

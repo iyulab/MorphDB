@@ -221,6 +221,51 @@ public sealed class BackupController : ControllerBase
     }
 
     /// <summary>
+    /// Verifies backup integrity by checking file existence, checksum, and decompression.
+    /// </summary>
+    [HttpPost("{backupId:guid}/verify")]
+    [ProducesResponseType(typeof(BackupVerificationResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<BackupVerificationResponse>> VerifyBackup(
+        Guid projectId,
+        Guid backupId,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetUserId();
+        if (userId is null)
+        {
+            return Unauthorized();
+        }
+
+        if (!await _permissionService.HasProjectPermissionAsync(userId, projectId, Permissions.Project.ManageBackups, cancellationToken))
+        {
+            return Forbid();
+        }
+
+        var backup = await _backupService.GetBackupAsync(backupId, cancellationToken);
+        if (backup is null || backup.ProjectId != projectId)
+        {
+            return NotFound();
+        }
+
+        var result = await _backupService.VerifyBackupAsync(backupId, cancellationToken);
+
+        return Ok(new BackupVerificationResponse
+        {
+            BackupId = backupId,
+            IsValid = result.IsValid,
+            FileExists = result.FileExists,
+            ChecksumValid = result.ChecksumValid,
+            CanDecompress = result.CanDecompress,
+            CurrentSizeBytes = result.CurrentSizeBytes,
+            StoredSizeBytes = result.StoredSizeBytes,
+            ErrorMessage = result.ErrorMessage,
+            VerificationDurationMs = result.VerificationDurationMs,
+            VerifiedAt = DateTimeOffset.UtcNow
+        });
+    }
+
+    /// <summary>
     /// Deletes a backup.
     /// </summary>
     [HttpDelete("{backupId:guid}")]
@@ -355,6 +400,62 @@ public sealed class RestoreResultResponse
     public bool Success { get; init; }
     public int TablesRestored { get; init; }
     public long DurationMs { get; init; }
+}
+
+/// <summary>
+/// Response DTO for backup verification result.
+/// </summary>
+public sealed class BackupVerificationResponse
+{
+    /// <summary>
+    /// The backup ID that was verified.
+    /// </summary>
+    public Guid BackupId { get; init; }
+
+    /// <summary>
+    /// Whether the backup passed all verification checks.
+    /// </summary>
+    public bool IsValid { get; init; }
+
+    /// <summary>
+    /// Whether the backup file exists on storage.
+    /// </summary>
+    public bool FileExists { get; init; }
+
+    /// <summary>
+    /// Whether the checksum matches the stored value.
+    /// </summary>
+    public bool ChecksumValid { get; init; }
+
+    /// <summary>
+    /// Whether the backup file can be decompressed.
+    /// </summary>
+    public bool CanDecompress { get; init; }
+
+    /// <summary>
+    /// Current file size in bytes.
+    /// </summary>
+    public long? CurrentSizeBytes { get; init; }
+
+    /// <summary>
+    /// Stored file size in bytes (from backup record).
+    /// </summary>
+    public long? StoredSizeBytes { get; init; }
+
+    /// <summary>
+    /// Error message if verification failed.
+    /// </summary>
+    public string? ErrorMessage { get; init; }
+
+    /// <summary>
+    /// Time taken for verification in milliseconds.
+    /// </summary>
+    public long VerificationDurationMs { get; init; }
+
+    /// <summary>
+    /// Timestamp when verification was performed.
+    /// </summary>
+    public DateTimeOffset VerifiedAt { get; init; }
 }
 
 #endregion

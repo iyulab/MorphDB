@@ -443,6 +443,136 @@ public sealed partial class BackupService : IBackupService, IDisposable
         return File.OpenRead(backup.StoragePath);
     }
 
+    /// <inheritdoc/>
+    public async Task<BackupVerificationResult> VerifyBackupAsync(Guid backupId, CancellationToken cancellationToken = default)
+    {
+        var stopwatch = Stopwatch.StartNew();
+
+        var backup = await _repository.GetByIdAsync(backupId, cancellationToken);
+        if (backup is null)
+        {
+            stopwatch.Stop();
+            return new BackupVerificationResult
+            {
+                IsValid = false,
+                ErrorMessage = "Backup not found.",
+                VerificationDurationMs = stopwatch.ElapsedMilliseconds
+            };
+        }
+
+        if (backup.Status != BackupStatus.Completed)
+        {
+            stopwatch.Stop();
+            return new BackupVerificationResult
+            {
+                IsValid = false,
+                ErrorMessage = $"Backup is not in completed status. Current status: {backup.Status}",
+                StoredSizeBytes = backup.SizeBytes,
+                VerificationDurationMs = stopwatch.ElapsedMilliseconds
+            };
+        }
+
+        // Check file existence
+        var fileExists = !string.IsNullOrEmpty(backup.StoragePath) && File.Exists(backup.StoragePath);
+        if (!fileExists)
+        {
+            stopwatch.Stop();
+            LogBackupVerificationFailed(backupId, "File not found");
+            return new BackupVerificationResult
+            {
+                IsValid = false,
+                FileExists = false,
+                StoredSizeBytes = backup.SizeBytes,
+                ErrorMessage = "Backup file not found.",
+                VerificationDurationMs = stopwatch.ElapsedMilliseconds
+            };
+        }
+
+        var fileInfo = new FileInfo(backup.StoragePath!);
+        var currentSize = fileInfo.Length;
+
+        // Check checksum
+        var checksumValid = false;
+        if (!string.IsNullOrEmpty(backup.Checksum))
+        {
+            try
+            {
+                var currentChecksum = await CalculateChecksumAsync(backup.StoragePath!, cancellationToken);
+                checksumValid = string.Equals(backup.Checksum, currentChecksum, StringComparison.OrdinalIgnoreCase);
+            }
+            catch (Exception ex)
+            {
+                stopwatch.Stop();
+                LogBackupVerificationFailed(backupId, $"Checksum calculation failed: {ex.Message}");
+                return new BackupVerificationResult
+                {
+                    IsValid = false,
+                    FileExists = true,
+                    ChecksumValid = false,
+                    CurrentSizeBytes = currentSize,
+                    StoredSizeBytes = backup.SizeBytes,
+                    ErrorMessage = $"Checksum calculation failed: {ex.Message}",
+                    VerificationDurationMs = stopwatch.ElapsedMilliseconds
+                };
+            }
+        }
+        else
+        {
+            // No stored checksum, skip this check
+            checksumValid = true;
+        }
+
+        // Try to decompress
+        var canDecompress = false;
+        try
+        {
+            await using var fileStream = File.OpenRead(backup.StoragePath!);
+            await using var gzipStream = new System.IO.Compression.GZipStream(fileStream, System.IO.Compression.CompressionMode.Decompress);
+            var buffer = new byte[1024];
+            var bytesRead = await gzipStream.ReadAsync(buffer, cancellationToken);
+            canDecompress = bytesRead > 0;
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+            LogBackupVerificationFailed(backupId, $"Decompression test failed: {ex.Message}");
+            return new BackupVerificationResult
+            {
+                IsValid = false,
+                FileExists = true,
+                ChecksumValid = checksumValid,
+                CanDecompress = false,
+                CurrentSizeBytes = currentSize,
+                StoredSizeBytes = backup.SizeBytes,
+                ErrorMessage = $"Decompression test failed: {ex.Message}",
+                VerificationDurationMs = stopwatch.ElapsedMilliseconds
+            };
+        }
+
+        stopwatch.Stop();
+
+        var isValid = fileExists && checksumValid && canDecompress;
+        if (isValid)
+        {
+            LogBackupVerificationSuccess(backupId, stopwatch.ElapsedMilliseconds);
+        }
+        else
+        {
+            LogBackupVerificationFailed(backupId, "One or more checks failed");
+        }
+
+        return new BackupVerificationResult
+        {
+            IsValid = isValid,
+            FileExists = fileExists,
+            ChecksumValid = checksumValid,
+            CanDecompress = canDecompress,
+            CurrentSizeBytes = currentSize,
+            StoredSizeBytes = backup.SizeBytes,
+            VerificationDurationMs = stopwatch.ElapsedMilliseconds
+        };
+    }
+
     private static async Task<string> CalculateChecksumAsync(string filePath, CancellationToken cancellationToken)
     {
         await using var stream = File.OpenRead(filePath);
@@ -481,6 +611,12 @@ public sealed partial class BackupService : IBackupService, IDisposable
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to delete backup file: {BackupId} at {FilePath}")]
     private partial void LogBackupFileDeleteFailed(Guid backupId, string filePath, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Backup verification succeeded: {BackupId} (duration: {DurationMs}ms)")]
+    private partial void LogBackupVerificationSuccess(Guid backupId, long durationMs);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Backup verification failed: {BackupId} ({Reason})")]
+    private partial void LogBackupVerificationFailed(Guid backupId, string reason);
 
     #endregion
 

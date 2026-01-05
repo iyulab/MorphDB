@@ -8,6 +8,7 @@ using MorphDB.Npgsql;
 using MorphDB.Npgsql.Security;
 using MorphDB.Service.Extensions;
 using MorphDB.Service.GraphQL;
+using MorphDB.Service.Infrastructure;
 using MorphDB.Service.Middleware;
 using MorphDB.Service.OData;
 using MorphDB.Service.RateLimiting;
@@ -211,6 +212,11 @@ try
     builder.Services.Configure<BackupOptions>(builder.Configuration.GetSection("Backup"));
     builder.Services.AddSingleton<IBackupService, BackupService>();
 
+    // Add graceful shutdown with request draining (Phase 24: Production Hardening)
+    builder.Services.Configure<GracefulShutdownOptions>(builder.Configuration.GetSection("GracefulShutdown"));
+    builder.Services.AddSingleton<GracefulShutdownService>();
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<GracefulShutdownService>());
+
     // Health checks with dependencies
     var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
     builder.Services.AddHealthChecks()
@@ -252,6 +258,7 @@ try
 
     // Configure the HTTP request pipeline
     app.UseSerilogRequestLogging();
+    app.UseRequestTracking(); // Graceful shutdown request tracking (Phase 24)
 
     if (app.Environment.IsDevelopment())
     {

@@ -1,9 +1,11 @@
 using System.Dynamic;
 using Dapper;
 using Microsoft.Extensions.Options;
+using MorphDB.Core.Diagnostics;
 using MorphDB.Core.Encryption;
 using MorphDB.Core.Models;
 using MorphDB.Core.Pipeline;
+using MorphDB.Npgsql.Diagnostics;
 using MorphDB.Npgsql.Dml;
 using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Pipeline.Transformers;
@@ -18,17 +20,20 @@ namespace MorphDB.Npgsql.Pipeline;
 public sealed class PostgresWriteExecutor : IWriteExecutor
 {
     private readonly NpgsqlDataSource _dataSource;
+    private readonly IQueryDiagnostics _queryDiagnostics;
     private readonly IDataEncryptionService? _encryptionService;
     private readonly DataEncryptionOptions _encryptionOptions;
     private readonly string _primaryKeyLogicalName;
 
     public PostgresWriteExecutor(
         NpgsqlDataSource dataSource,
+        IQueryDiagnostics queryDiagnostics,
         IDataEncryptionService? encryptionService = null,
         IOptions<DataEncryptionOptions>? encryptionOptions = null,
         string primaryKeyLogicalName = "id")
     {
         _dataSource = dataSource ?? throw new ArgumentNullException(nameof(dataSource));
+        _queryDiagnostics = queryDiagnostics ?? throw new ArgumentNullException(nameof(queryDiagnostics));
         _encryptionService = encryptionService;
         _encryptionOptions = encryptionOptions?.Value ?? new DataEncryptionOptions();
         _primaryKeyLogicalName = primaryKeyLogicalName;
@@ -68,50 +73,81 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             });
         }
 
-        var whereClause = DmlBuilder.BuildIdWhereClause(idColumn.PhysicalName);
-        var sql = DmlBuilder.BuildDelete(table.PhysicalName, whereClause);
+        using var scope = new QueryExecutionScope(
+            _queryDiagnostics,
+            context.TenantId,
+            table.LogicalName,
+            QueryOperationType.Delete,
+            "WritePipeline");
 
-        await using var connection = await _dataSource.OpenConnectionAsync(context.CancellationToken);
-        var affectedRows = await connection.ExecuteAsync(
-            new CommandDefinition(sql, new { id = context.RecordId.Value }, cancellationToken: context.CancellationToken));
-
-        if (affectedRows == 0)
+        try
         {
-            return WriteResult.Failed(new ValidationError
-            {
-                Field = "id",
-                Code = ValidationErrorCodes.NotFound,
-                Message = $"Record with id '{context.RecordId}' not found"
-            });
-        }
+            var whereClause = DmlBuilder.BuildIdWhereClause(idColumn.PhysicalName);
+            var sql = DmlBuilder.BuildDelete(table.PhysicalName, whereClause);
 
-        return WriteResult.Ok(new Dictionary<string, object?> { ["deleted"] = true, ["id"] = context.RecordId });
+            await using var connection = await _dataSource.OpenConnectionAsync(context.CancellationToken);
+            var affectedRows = await connection.ExecuteAsync(
+                new CommandDefinition(sql, new { id = context.RecordId.Value }, cancellationToken: context.CancellationToken));
+
+            if (affectedRows == 0)
+            {
+                return WriteResult.Failed(new ValidationError
+                {
+                    Field = "id",
+                    Code = ValidationErrorCodes.NotFound,
+                    Message = $"Record with id '{context.RecordId}' not found"
+                });
+            }
+
+            scope.SetRowCount(affectedRows);
+            return WriteResult.Ok(new Dictionary<string, object?> { ["deleted"] = true, ["id"] = context.RecordId });
+        }
+        catch (Exception ex)
+        {
+            scope.SetError(ex.Message);
+            throw;
+        }
     }
 
     private async Task<WriteResult> ExecuteInsertAsync(IWriteContext context)
     {
         var table = context.Table;
+        using var scope = new QueryExecutionScope(
+            _queryDiagnostics,
+            context.TenantId,
+            table.LogicalName,
+            QueryOperationType.Insert,
+            "WritePipeline");
 
-        // Ensure tenant_id is set
-        var dataWithTenant = EnsureTenantId(context.Data, context.TenantId);
+        try
+        {
+            // Ensure tenant_id is set
+            var dataWithTenant = EnsureTenantId(context.Data, context.TenantId);
 
-        // Encrypt data before storing
-        var encryptedData = EncryptRowData(context.TenantId, table.LogicalName, dataWithTenant, table.Columns);
+            // Encrypt data before storing
+            var encryptedData = EncryptRowData(context.TenantId, table.LogicalName, dataWithTenant, table.Columns);
 
-        // Map logical names to physical and prepare parameters
-        var (columns, parameters, values) = PrepareInsertParameters(encryptedData, table.Columns);
+            // Map logical names to physical and prepare parameters
+            var (columns, parameters, values) = PrepareInsertParameters(encryptedData, table.Columns);
 
-        var sql = DmlBuilder.BuildInsert(table.PhysicalName, columns, parameters);
+            var sql = DmlBuilder.BuildInsert(table.PhysicalName, columns, parameters);
 
-        await using var connection = await _dataSource.OpenConnectionAsync(context.CancellationToken);
-        var result = await connection.QuerySingleAsync<dynamic>(
-            new CommandDefinition(sql, values, cancellationToken: context.CancellationToken));
+            await using var connection = await _dataSource.OpenConnectionAsync(context.CancellationToken);
+            var result = await connection.QuerySingleAsync<dynamic>(
+                new CommandDefinition(sql, values, cancellationToken: context.CancellationToken));
 
-        var mapped = MapToLogicalDictionary(result, table.Columns);
+            var mapped = MapToLogicalDictionary(result, table.Columns);
 
-        // Return decrypted data to the caller
-        var decrypted = DecryptRowData(context.TenantId, table.LogicalName, mapped, table.Columns);
-        return WriteResult.Ok(decrypted);
+            // Return decrypted data to the caller
+            var decrypted = DecryptRowData(context.TenantId, table.LogicalName, mapped, table.Columns);
+            scope.SetRowCount(1);
+            return WriteResult.Ok(decrypted);
+        }
+        catch (Exception ex)
+        {
+            scope.SetError(ex.Message);
+            throw;
+        }
     }
 
     private async Task<WriteResult> ExecuteUpdateAsync(IWriteContext context)
@@ -129,33 +165,49 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             });
         }
 
-        // Encrypt data before storing
-        var encryptedData = EncryptRowData(context.TenantId, table.LogicalName, context.Data, table.Columns);
+        using var scope = new QueryExecutionScope(
+            _queryDiagnostics,
+            context.TenantId,
+            table.LogicalName,
+            QueryOperationType.Update,
+            "WritePipeline");
 
-        // Handle version increment specially
-        var (setColumns, values) = PrepareUpdateParameters(encryptedData, table.Columns);
-        ((IDictionary<string, object?>)values)["id"] = context.RecordId.Value;
-
-        var whereClause = DmlBuilder.BuildIdWhereClause(idColumn.PhysicalName);
-        var sql = DmlBuilder.BuildUpdate(table.PhysicalName, setColumns, whereClause);
-
-        await using var connection = await _dataSource.OpenConnectionAsync(context.CancellationToken);
-        var result = await connection.QuerySingleOrDefaultAsync<dynamic>(
-            new CommandDefinition(sql, values, cancellationToken: context.CancellationToken));
-
-        if (result is null)
+        try
         {
-            return WriteResult.Failed(new ValidationError
-            {
-                Field = "id",
-                Code = ValidationErrorCodes.NotFound,
-                Message = $"Record with id '{context.RecordId}' not found"
-            });
-        }
+            // Encrypt data before storing
+            var encryptedData = EncryptRowData(context.TenantId, table.LogicalName, context.Data, table.Columns);
 
-        var mapped = MapToLogicalDictionary(result, table.Columns);
-        var decrypted = DecryptRowData(context.TenantId, table.LogicalName, mapped, table.Columns);
-        return WriteResult.Ok(decrypted);
+            // Handle version increment specially
+            var (setColumns, values) = PrepareUpdateParameters(encryptedData, table.Columns);
+            ((IDictionary<string, object?>)values)["id"] = context.RecordId.Value;
+
+            var whereClause = DmlBuilder.BuildIdWhereClause(idColumn.PhysicalName);
+            var sql = DmlBuilder.BuildUpdate(table.PhysicalName, setColumns, whereClause);
+
+            await using var connection = await _dataSource.OpenConnectionAsync(context.CancellationToken);
+            var result = await connection.QuerySingleOrDefaultAsync<dynamic>(
+                new CommandDefinition(sql, values, cancellationToken: context.CancellationToken));
+
+            if (result is null)
+            {
+                return WriteResult.Failed(new ValidationError
+                {
+                    Field = "id",
+                    Code = ValidationErrorCodes.NotFound,
+                    Message = $"Record with id '{context.RecordId}' not found"
+                });
+            }
+
+            var mapped = MapToLogicalDictionary(result, table.Columns);
+            var decrypted = DecryptRowData(context.TenantId, table.LogicalName, mapped, table.Columns);
+            scope.SetRowCount(1);
+            return WriteResult.Ok(decrypted);
+        }
+        catch (Exception ex)
+        {
+            scope.SetError(ex.Message);
+            throw;
+        }
     }
 
     private async Task<WriteResult> ExecuteUpsertAsync(IWriteContext context)
@@ -164,24 +216,40 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
         var table = context.Table;
         var pkColumn = GetPrimaryKeyColumn(table);
 
-        // Ensure tenant_id is set
-        var dataWithTenant = EnsureTenantId(context.Data, context.TenantId);
+        using var scope = new QueryExecutionScope(
+            _queryDiagnostics,
+            context.TenantId,
+            table.LogicalName,
+            QueryOperationType.Upsert,
+            "WritePipeline");
 
-        // Encrypt data before storing
-        var encryptedData = EncryptRowData(context.TenantId, table.LogicalName, dataWithTenant, table.Columns);
+        try
+        {
+            // Ensure tenant_id is set
+            var dataWithTenant = EnsureTenantId(context.Data, context.TenantId);
 
-        // Prepare insert parameters
-        var (columns, parameters, values) = PrepareInsertParameters(encryptedData, table.Columns);
+            // Encrypt data before storing
+            var encryptedData = EncryptRowData(context.TenantId, table.LogicalName, dataWithTenant, table.Columns);
 
-        var sql = DmlBuilder.BuildUpsert(table.PhysicalName, columns, parameters, [pkColumn.PhysicalName]);
+            // Prepare insert parameters
+            var (columns, parameters, values) = PrepareInsertParameters(encryptedData, table.Columns);
 
-        await using var connection = await _dataSource.OpenConnectionAsync(context.CancellationToken);
-        var result = await connection.QuerySingleAsync<dynamic>(
-            new CommandDefinition(sql, values, cancellationToken: context.CancellationToken));
+            var sql = DmlBuilder.BuildUpsert(table.PhysicalName, columns, parameters, [pkColumn.PhysicalName]);
 
-        var mapped = MapToLogicalDictionary(result, table.Columns);
-        var decrypted = DecryptRowData(context.TenantId, table.LogicalName, mapped, table.Columns);
-        return WriteResult.Ok(decrypted);
+            await using var connection = await _dataSource.OpenConnectionAsync(context.CancellationToken);
+            var result = await connection.QuerySingleAsync<dynamic>(
+                new CommandDefinition(sql, values, cancellationToken: context.CancellationToken));
+
+            var mapped = MapToLogicalDictionary(result, table.Columns);
+            var decrypted = DecryptRowData(context.TenantId, table.LogicalName, mapped, table.Columns);
+            scope.SetRowCount(1);
+            return WriteResult.Ok(decrypted);
+        }
+        catch (Exception ex)
+        {
+            scope.SetError(ex.Message);
+            throw;
+        }
     }
 
     private async Task<WriteResult> ExecuteSoftDeleteAsync(IWriteContext context)
@@ -199,29 +267,45 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             });
         }
 
-        // Build update for soft delete columns
-        var (setColumns, values) = PrepareUpdateParameters(context.Data, table.Columns);
-        ((IDictionary<string, object?>)values)["id"] = context.RecordId.Value;
+        using var scope = new QueryExecutionScope(
+            _queryDiagnostics,
+            context.TenantId,
+            table.LogicalName,
+            QueryOperationType.Delete,
+            "WritePipeline.SoftDelete");
 
-        var whereClause = DmlBuilder.BuildIdWhereClause(idColumn.PhysicalName);
-        var sql = DmlBuilder.BuildUpdate(table.PhysicalName, setColumns, whereClause);
-
-        await using var connection = await _dataSource.OpenConnectionAsync(context.CancellationToken);
-        var result = await connection.QuerySingleOrDefaultAsync<dynamic>(
-            new CommandDefinition(sql, values, cancellationToken: context.CancellationToken));
-
-        if (result is null)
+        try
         {
-            return WriteResult.Failed(new ValidationError
-            {
-                Field = "id",
-                Code = ValidationErrorCodes.NotFound,
-                Message = $"Record with id '{context.RecordId}' not found"
-            });
-        }
+            // Build update for soft delete columns
+            var (setColumns, values) = PrepareUpdateParameters(context.Data, table.Columns);
+            ((IDictionary<string, object?>)values)["id"] = context.RecordId.Value;
 
-        var mapped = MapToLogicalDictionary(result, table.Columns);
-        return WriteResult.Ok(mapped);
+            var whereClause = DmlBuilder.BuildIdWhereClause(idColumn.PhysicalName);
+            var sql = DmlBuilder.BuildUpdate(table.PhysicalName, setColumns, whereClause);
+
+            await using var connection = await _dataSource.OpenConnectionAsync(context.CancellationToken);
+            var result = await connection.QuerySingleOrDefaultAsync<dynamic>(
+                new CommandDefinition(sql, values, cancellationToken: context.CancellationToken));
+
+            if (result is null)
+            {
+                return WriteResult.Failed(new ValidationError
+                {
+                    Field = "id",
+                    Code = ValidationErrorCodes.NotFound,
+                    Message = $"Record with id '{context.RecordId}' not found"
+                });
+            }
+
+            var mapped = MapToLogicalDictionary(result, table.Columns);
+            scope.SetRowCount(1);
+            return WriteResult.Ok(mapped);
+        }
+        catch (Exception ex)
+        {
+            scope.SetError(ex.Message);
+            throw;
+        }
     }
 
     #region Private Helpers
