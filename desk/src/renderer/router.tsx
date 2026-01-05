@@ -11,13 +11,13 @@ import { AuditPage } from './routes/audit'
 import { QuotaPage } from './routes/quota'
 import { SecurityPage } from './routes/security'
 import { SsoPage } from './routes/sso'
-import { ErrorBoundary } from './components/ErrorBoundary'
+import { RouteErrorBoundary } from './components/ErrorBoundary'
 
 export const router = createHashRouter([
   {
     path: '/',
     element: <RootLayout />,
-    errorElement: <ErrorBoundary />,
+    errorElement: <RouteErrorBoundary />,
     children: [
       {
         index: true,
@@ -25,51 +25,63 @@ export const router = createHashRouter([
       },
       {
         path: 'explorer',
-        element: <ExplorerPage />
+        element: <ExplorerPage />,
+        errorElement: <RouteErrorBoundary />
       },
       {
         path: 'explorer/:tableName',
-        element: <ExplorerPage />
+        element: <ExplorerPage />,
+        errorElement: <RouteErrorBoundary />
       },
       {
         path: 'projects',
-        element: <ProjectsPage />
+        element: <ProjectsPage />,
+        errorElement: <RouteErrorBoundary />
       },
       {
         path: 'views',
-        element: <ViewsPage />
+        element: <ViewsPage />,
+        errorElement: <RouteErrorBoundary />
       },
       {
         path: 'webhooks',
-        element: <WebhooksPage />
+        element: <WebhooksPage />,
+        errorElement: <RouteErrorBoundary />
       },
       {
         path: 'organizations',
-        element: <OrganizationsPage />
+        element: <OrganizationsPage />,
+        errorElement: <RouteErrorBoundary />
       },
       {
         path: 'backups',
-        element: <BackupsPage />
+        element: <BackupsPage />,
+        errorElement: <RouteErrorBoundary />
       },
       {
         path: 'audit',
-        element: <AuditPage />
+        element: <AuditPage />,
+        errorElement: <RouteErrorBoundary />
       },
       {
         path: 'quota',
-        element: <QuotaPage />
+        element: <QuotaPage />,
+        errorElement: <RouteErrorBoundary />
       },
       {
         path: 'security',
-        element: <SecurityPage />
+        element: <SecurityPage />,
+        errorElement: <RouteErrorBoundary />
       },
       {
         path: 'sso',
-        element: <SsoPage />
+        element: <SsoPage />,
+        errorElement: <RouteErrorBoundary />
       },
       {
         path: 'settings',
-        element: <SettingsPage />
+        element: <SettingsPage />,
+        errorElement: <RouteErrorBoundary />
       }
     ]
   }

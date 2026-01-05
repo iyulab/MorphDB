@@ -8,6 +8,7 @@ import { ToastContainer } from '@/components/ui/Toast'
 import { useGlobalShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useConnectionStore } from '@/stores/connectionStore'
 import { useThemeStore } from '@/stores/themeStore'
+import { useLayoutStore } from '@/stores/layoutStore'
 import type { Connection } from '@/types/connection'
 
 export function RootLayout(): ReactElement {
@@ -16,6 +17,7 @@ export function RootLayout(): ReactElement {
   const [appVersion, setAppVersion] = useState('')
   const { connections } = useConnectionStore()
   const { toggleTheme } = useThemeStore()
+  const { toggleSidebar } = useLayoutStore()
   const { open: commandPaletteOpen, setOpen: setCommandPaletteOpen } = useCommandPalette()
   const { open: shortcutsHelpOpen, setOpen: setShortcutsHelpOpen } = useKeyboardShortcutsHelp()
 
@@ -32,7 +34,8 @@ export function RootLayout(): ReactElement {
   useGlobalShortcuts({
     onNewConnection: handleNewConnectionShortcut,
     onToggleTheme: toggleTheme,
-    onReload: handleReload
+    onReload: handleReload,
+    onToggleSidebar: toggleSidebar
   })
 
   useEffect(() => {

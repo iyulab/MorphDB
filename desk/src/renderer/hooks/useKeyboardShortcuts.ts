@@ -55,6 +55,7 @@ export function useGlobalShortcuts(callbacks: {
   onNewConnection?: () => void
   onToggleTheme?: () => void
   onReload?: () => void
+  onToggleSidebar?: () => void
 }): void {
   const navigate = useNavigate()
 
@@ -141,6 +142,15 @@ export function useGlobalShortcuts(callbacks: {
     })
   }
 
+  if (callbacks.onToggleSidebar) {
+    shortcuts.push({
+      key: 'b',
+      ctrl: true,
+      description: 'Toggle Sidebar',
+      action: callbacks.onToggleSidebar
+    })
+  }
+
   useKeyboardShortcuts(shortcuts)
 }
 
@@ -186,6 +196,7 @@ export function getShortcutsList(): Array<{ category: string; shortcuts: Array<{
       category: 'Actions',
       shortcuts: [
         { key: `${mod}+K`, description: 'Open Command Palette' },
+        { key: `${mod}+B`, description: 'Toggle Sidebar' },
         { key: `${mod}+${shift}+N`, description: 'New Connection' },
         { key: `${mod}+${shift}+T`, description: 'Toggle Theme' },
         { key: `${mod}+${shift}+R`, description: 'Reload Window' }

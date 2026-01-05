@@ -10,6 +10,7 @@
     "skipLibCheck": true,
     "strict": true,
     "target": "ESNext",
+    "types": ["vite/client"],
     "useDefineForClassFields": true,
     "noEmit": true,
     "baseUrl": ".",

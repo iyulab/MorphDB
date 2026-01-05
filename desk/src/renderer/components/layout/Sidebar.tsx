@@ -20,17 +20,58 @@ import {
   FileText,
   Gauge,
   Shield,
-  KeyRound
+  KeyRound,
+  PanelLeftClose,
+  PanelLeft
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { ThemeToggleButton } from '@/components/ui/ThemeToggle'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/Tooltip'
 import { useConnectionStore } from '@/stores/connectionStore'
+import { useLayoutStore } from '@/stores/layoutStore'
 import type { Connection } from '@/types/connection'
 import { cn } from '@/lib/utils'
 
 interface SidebarProps {
   onNewConnection: () => void
   onEditConnection: (connection: Connection) => void
+}
+
+interface NavItemProps {
+  to: string
+  icon: React.ReactNode
+  label: string
+  collapsed: boolean
+}
+
+function NavItem({ to, icon, label, collapsed }: NavItemProps): ReactElement {
+  const content = (
+    <NavLink
+      to={to}
+      className={({ isActive }) =>
+        cn(
+          'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
+          'hover:bg-sidebar-hover',
+          isActive && 'bg-sidebar-active text-primary',
+          collapsed && 'justify-center px-0'
+        )
+      }
+    >
+      {icon}
+      {!collapsed && label}
+    </NavLink>
+  )
+
+  if (collapsed) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{content}</TooltipTrigger>
+        <TooltipContent side="right">{label}</TooltipContent>
+      </Tooltip>
+    )
+  }
+
+  return content
 }
 
 interface ContextMenuState {
@@ -66,6 +107,8 @@ export function Sidebar({ onNewConnection, onEditConnection }: SidebarProps): Re
     connectToServer,
     disconnectFromServer
   } = useConnectionStore()
+
+  const { sidebarCollapsed, toggleSidebar } = useLayoutStore()
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
     open: false,
@@ -172,68 +215,128 @@ export function Sidebar({ onNewConnection, onEditConnection }: SidebarProps): Re
   }
 
   return (
-    <aside className="flex h-full w-56 flex-col border-r border-sidebar-border bg-sidebar">
-      {/* Header */}
-      <div className="flex h-12 items-center justify-between border-b border-sidebar-border px-3">
-        <div className="flex items-center gap-2">
-          <Database className="h-5 w-5 text-primary" />
-          <span className="font-semibold text-sm">MorphDB</span>
+    <TooltipProvider delayDuration={0}>
+      <aside
+        className={cn(
+          'flex h-full flex-col border-r border-sidebar-border bg-sidebar transition-all duration-200',
+          sidebarCollapsed ? 'w-14' : 'w-56'
+        )}
+      >
+        {/* Header */}
+        <div className="flex h-12 items-center justify-between border-b border-sidebar-border px-3">
+          <div className="flex items-center gap-2">
+            <Database className="h-5 w-5 text-primary flex-shrink-0" />
+            {!sidebarCollapsed && <span className="font-semibold text-sm">MorphDB</span>}
+          </div>
+          <div className="flex items-center gap-1">
+            {!sidebarCollapsed && <ThemeToggleButton />}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={toggleSidebar}
+              title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              {sidebarCollapsed ? (
+                <PanelLeft className="h-4 w-4" />
+              ) : (
+                <PanelLeftClose className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
         </div>
-        <ThemeToggleButton />
-      </div>
 
       {/* Connections */}
       <div className="flex-1 overflow-y-auto p-2">
-        <div className="mb-2 flex items-center justify-between px-2">
-          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            Connections
-          </span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            onClick={onNewConnection}
-            title="New Connection"
-          >
-            <Plus className="h-4 w-4" />
-          </Button>
-        </div>
+        {!sidebarCollapsed && (
+          <div className="mb-2 flex items-center justify-between px-2">
+            <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              Connections
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={onNewConnection}
+              title="New Connection"
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
 
-        <div className="space-y-1">
-          {connections.length === 0 ? (
-            <div className="px-2 py-4 text-center text-sm text-muted-foreground">
-              No connections yet.
-              <br />
-              Click + to add one.
-            </div>
-          ) : (
-            connections.map((conn) => (
-              <div
-                key={conn.id}
-                className={cn(
-                  'group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm',
-                  'hover:bg-sidebar-hover transition-colors',
-                  activeConnectionId === conn.id && 'bg-sidebar-active text-primary'
-                )}
-                onContextMenu={(e) => handleContextMenu(e, conn.id)}
-              >
-                <button
-                  onClick={() => setActiveConnection(conn.id)}
-                  className="flex flex-1 items-center gap-2 min-w-0"
-                >
-                  <ConnectionStatusIndicator status={conn.status} />
-                  <Server className="h-4 w-4 flex-shrink-0" />
-                  <span className="truncate">{conn.name}</span>
-                </button>
+        {sidebarCollapsed && (
+          <div className="mb-2 flex justify-center">
+            <Tooltip>
+              <TooltipTrigger asChild>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-                  onClick={(e) => handleMenuButtonClick(e, conn.id)}
+                  className="h-8 w-8"
+                  onClick={onNewConnection}
+                  title="New Connection"
                 >
-                  <MoreVertical className="h-3 w-3" />
+                  <Plus className="h-4 w-4" />
                 </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right">New Connection</TooltipContent>
+            </Tooltip>
+          </div>
+        )}
+
+        <div className="space-y-1">
+          {connections.length === 0 ? (
+            !sidebarCollapsed && (
+              <div className="px-2 py-4 text-center text-sm text-muted-foreground">
+                No connections yet.
+                <br />
+                Click + to add one.
               </div>
+            )
+          ) : (
+            connections.map((conn) => (
+              <Tooltip key={conn.id}>
+                <TooltipTrigger asChild>
+                  <div
+                    className={cn(
+                      'group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm',
+                      'hover:bg-sidebar-hover transition-colors',
+                      activeConnectionId === conn.id && 'bg-sidebar-active text-primary',
+                      sidebarCollapsed && 'justify-center px-0'
+                    )}
+                    onContextMenu={(e) => handleContextMenu(e, conn.id)}
+                  >
+                    <button
+                      onClick={() => setActiveConnection(conn.id)}
+                      className={cn(
+                        'flex flex-1 items-center gap-2 min-w-0',
+                        sidebarCollapsed && 'flex-none justify-center'
+                      )}
+                    >
+                      <ConnectionStatusIndicator status={conn.status} />
+                      {!sidebarCollapsed && (
+                        <>
+                          <Server className="h-4 w-4 flex-shrink-0" />
+                          <span className="truncate">{conn.name}</span>
+                        </>
+                      )}
+                    </button>
+                    {!sidebarCollapsed && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                        onClick={(e) => handleMenuButtonClick(e, conn.id)}
+                      >
+                        <MoreVertical className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
+                </TooltipTrigger>
+                {sidebarCollapsed && (
+                  <TooltipContent side="right">{conn.name}</TooltipContent>
+                )}
+              </Tooltip>
             ))
           )}
         </div>
@@ -241,149 +344,17 @@ export function Sidebar({ onNewConnection, onEditConnection }: SidebarProps): Re
 
       {/* Navigation */}
       <div className="border-t border-sidebar-border p-2 space-y-1">
-        <NavLink
-          to="/explorer"
-          className={({ isActive }) =>
-            cn(
-              'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
-              'hover:bg-sidebar-hover',
-              isActive && 'bg-sidebar-active text-primary'
-            )
-          }
-        >
-          <TableProperties className="h-4 w-4" />
-          Explorer
-        </NavLink>
-        <NavLink
-          to="/projects"
-          className={({ isActive }) =>
-            cn(
-              'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
-              'hover:bg-sidebar-hover',
-              isActive && 'bg-sidebar-active text-primary'
-            )
-          }
-        >
-          <FolderKanban className="h-4 w-4" />
-          Projects
-        </NavLink>
-        <NavLink
-          to="/views"
-          className={({ isActive }) =>
-            cn(
-              'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
-              'hover:bg-sidebar-hover',
-              isActive && 'bg-sidebar-active text-primary'
-            )
-          }
-        >
-          <Eye className="h-4 w-4" />
-          Views
-        </NavLink>
-        <NavLink
-          to="/webhooks"
-          className={({ isActive }) =>
-            cn(
-              'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
-              'hover:bg-sidebar-hover',
-              isActive && 'bg-sidebar-active text-primary'
-            )
-          }
-        >
-          <Webhook className="h-4 w-4" />
-          Webhooks
-        </NavLink>
-        <NavLink
-          to="/organizations"
-          className={({ isActive }) =>
-            cn(
-              'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
-              'hover:bg-sidebar-hover',
-              isActive && 'bg-sidebar-active text-primary'
-            )
-          }
-        >
-          <Building2 className="h-4 w-4" />
-          Organizations
-        </NavLink>
-        <NavLink
-          to="/backups"
-          className={({ isActive }) =>
-            cn(
-              'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
-              'hover:bg-sidebar-hover',
-              isActive && 'bg-sidebar-active text-primary'
-            )
-          }
-        >
-          <HardDrive className="h-4 w-4" />
-          Backups
-        </NavLink>
-        <NavLink
-          to="/audit"
-          className={({ isActive }) =>
-            cn(
-              'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
-              'hover:bg-sidebar-hover',
-              isActive && 'bg-sidebar-active text-primary'
-            )
-          }
-        >
-          <FileText className="h-4 w-4" />
-          Audit Logs
-        </NavLink>
-        <NavLink
-          to="/quota"
-          className={({ isActive }) =>
-            cn(
-              'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
-              'hover:bg-sidebar-hover',
-              isActive && 'bg-sidebar-active text-primary'
-            )
-          }
-        >
-          <Gauge className="h-4 w-4" />
-          Usage & Quota
-        </NavLink>
-        <NavLink
-          to="/security"
-          className={({ isActive }) =>
-            cn(
-              'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
-              'hover:bg-sidebar-hover',
-              isActive && 'bg-sidebar-active text-primary'
-            )
-          }
-        >
-          <Shield className="h-4 w-4" />
-          Security
-        </NavLink>
-        <NavLink
-          to="/sso"
-          className={({ isActive }) =>
-            cn(
-              'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
-              'hover:bg-sidebar-hover',
-              isActive && 'bg-sidebar-active text-primary'
-            )
-          }
-        >
-          <KeyRound className="h-4 w-4" />
-          SSO
-        </NavLink>
-        <NavLink
-          to="/settings"
-          className={({ isActive }) =>
-            cn(
-              'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors',
-              'hover:bg-sidebar-hover',
-              isActive && 'bg-sidebar-active text-primary'
-            )
-          }
-        >
-          <Settings className="h-4 w-4" />
-          Settings
-        </NavLink>
+        <NavItem to="/explorer" icon={<TableProperties className="h-4 w-4 flex-shrink-0" />} label="Explorer" collapsed={sidebarCollapsed} />
+        <NavItem to="/projects" icon={<FolderKanban className="h-4 w-4 flex-shrink-0" />} label="Projects" collapsed={sidebarCollapsed} />
+        <NavItem to="/views" icon={<Eye className="h-4 w-4 flex-shrink-0" />} label="Views" collapsed={sidebarCollapsed} />
+        <NavItem to="/webhooks" icon={<Webhook className="h-4 w-4 flex-shrink-0" />} label="Webhooks" collapsed={sidebarCollapsed} />
+        <NavItem to="/organizations" icon={<Building2 className="h-4 w-4 flex-shrink-0" />} label="Organizations" collapsed={sidebarCollapsed} />
+        <NavItem to="/backups" icon={<HardDrive className="h-4 w-4 flex-shrink-0" />} label="Backups" collapsed={sidebarCollapsed} />
+        <NavItem to="/audit" icon={<FileText className="h-4 w-4 flex-shrink-0" />} label="Audit Logs" collapsed={sidebarCollapsed} />
+        <NavItem to="/quota" icon={<Gauge className="h-4 w-4 flex-shrink-0" />} label="Usage & Quota" collapsed={sidebarCollapsed} />
+        <NavItem to="/security" icon={<Shield className="h-4 w-4 flex-shrink-0" />} label="Security" collapsed={sidebarCollapsed} />
+        <NavItem to="/sso" icon={<KeyRound className="h-4 w-4 flex-shrink-0" />} label="SSO" collapsed={sidebarCollapsed} />
+        <NavItem to="/settings" icon={<Settings className="h-4 w-4 flex-shrink-0" />} label="Settings" collapsed={sidebarCollapsed} />
       </div>
 
       {/* Context Menu */}
@@ -448,6 +419,7 @@ export function Sidebar({ onNewConnection, onEditConnection }: SidebarProps): Re
           )}
         </div>
       )}
-    </aside>
+      </aside>
+    </TooltipProvider>
   )
 }

@@ -7,6 +7,7 @@ This document lists all keyboard shortcuts available in MorphDB Desk.
 | Shortcut | Action | Description |
 |----------|--------|-------------|
 | `Cmd/Ctrl + K` | Open Command Palette | Quick access to all actions and navigation |
+| `Cmd/Ctrl + B` | Toggle Sidebar | Collapse or expand the sidebar |
 | `Cmd/Ctrl + Shift + N` | New Connection | Open new connection dialog |
 | `Cmd/Ctrl + Shift + T` | Toggle Theme | Switch between dark and light themes |
 | `Cmd/Ctrl + Shift + R` | Reload Window | Refresh the application |
@@ -55,4 +56,4 @@ The Command Palette (`Cmd/Ctrl + K`) provides quick access to:
 
 ---
 
-*Last updated: Phase 5 - Polish & Performance*
+*Last updated: v0.14.0 - Testing & UX Foundations*
