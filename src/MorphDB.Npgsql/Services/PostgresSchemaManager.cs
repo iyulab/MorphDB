@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Dapper;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Exceptions;
@@ -206,6 +207,9 @@ public sealed class PostgresSchemaManager : ISchemaManager
             }
         }
 
+        // Serialize system column options into descriptor for persistence
+        var descriptor = BuildSystemColumnsDescriptor(sysOpts);
+
         // Create table metadata with system column options
         var tableMetadata = new TableMetadata
         {
@@ -214,6 +218,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
             LogicalName = request.LogicalName,
             PhysicalName = physicalTableName,
             SchemaVersion = 1,
+            Descriptor = descriptor,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
             IsActive = true,
@@ -1045,6 +1050,25 @@ public sealed class PostgresSchemaManager : ISchemaManager
     }
 
     #endregion
+
+    private static JsonDocument BuildSystemColumnsDescriptor(SystemColumnOptions sysOpts)
+    {
+        var json = JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            systemColumns = new
+            {
+                timestamps = true,
+                versioning = sysOpts.VersioningEnabled,
+                auditFields = sysOpts.AuditFieldsEnabled,
+                softDelete = sysOpts.SoftDeleteEnabled,
+                ownership = sysOpts.OwnershipEnabled,
+                hierarchy = sysOpts.HierarchyEnabled,
+                sourceTracking = sysOpts.SourceTrackingEnabled,
+                rowState = sysOpts.RowStateEnabled
+            }
+        });
+        return JsonDocument.Parse(json);
+    }
 }
 
 /// <summary>

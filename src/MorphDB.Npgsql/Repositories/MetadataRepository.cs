@@ -524,21 +524,51 @@ public sealed class MetadataRepository : IMetadataRepository
         UpdatedAt = table.UpdatedAt,
         Columns = columns,
         Relations = table.Relations,
-        Indexes = table.Indexes
+        Indexes = table.Indexes,
+        TimestampsEnabled = table.TimestampsEnabled,
+        VersioningEnabled = table.VersioningEnabled,
+        AuditFieldsEnabled = table.AuditFieldsEnabled,
+        SoftDeleteEnabled = table.SoftDeleteEnabled,
+        OwnershipEnabled = table.OwnershipEnabled,
+        HierarchyEnabled = table.HierarchyEnabled,
+        SourceTrackingEnabled = table.SourceTrackingEnabled,
+        RowStateEnabled = table.RowStateEnabled
     };
 
-    private static TableMetadata MapToTableMetadata(TableRow row) => new()
+    private static TableMetadata MapToTableMetadata(TableRow row)
     {
-        TableId = row.table_id,
-        TenantId = row.tenant_id,
-        LogicalName = row.logical_name,
-        PhysicalName = row.physical_name,
-        SchemaVersion = row.schema_version,
-        Descriptor = row.descriptor is not null ? JsonDocument.Parse(row.descriptor) : null,
-        IsActive = row.is_active,
-        CreatedAt = row.created_at,
-        UpdatedAt = row.updated_at
-    };
+        var descriptor = row.descriptor is not null ? JsonDocument.Parse(row.descriptor) : null;
+
+        // Restore system column options from descriptor
+        var sc = descriptor?.RootElement.TryGetProperty("systemColumns", out var sysEl) == true ? sysEl : (JsonElement?)null;
+
+        return new TableMetadata
+        {
+            TableId = row.table_id,
+            TenantId = row.tenant_id,
+            LogicalName = row.logical_name,
+            PhysicalName = row.physical_name,
+            SchemaVersion = row.schema_version,
+            Descriptor = descriptor,
+            IsActive = row.is_active,
+            CreatedAt = row.created_at,
+            UpdatedAt = row.updated_at,
+            TimestampsEnabled = GetBool(sc, "timestamps", true),
+            VersioningEnabled = GetBool(sc, "versioning"),
+            AuditFieldsEnabled = GetBool(sc, "auditFields"),
+            SoftDeleteEnabled = GetBool(sc, "softDelete"),
+            OwnershipEnabled = GetBool(sc, "ownership"),
+            HierarchyEnabled = GetBool(sc, "hierarchy"),
+            SourceTrackingEnabled = GetBool(sc, "sourceTracking"),
+            RowStateEnabled = GetBool(sc, "rowState")
+        };
+
+        static bool GetBool(JsonElement? parent, string property, bool defaultValue = false)
+        {
+            if (parent is null) return defaultValue;
+            return parent.Value.TryGetProperty(property, out var prop) ? prop.GetBoolean() : defaultValue;
+        }
+    }
 
     private static ColumnMetadata MapToColumnMetadata(ColumnRow row) => new()
     {
