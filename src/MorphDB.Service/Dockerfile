@@ -29,18 +29,11 @@ RUN dotnet publish -c Release -o /app/publish /p:UseAppHost=false
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 
-# Create non-root user for security
-RUN addgroup --system --gid 1000 morphdb && \
-    adduser --system --uid 1000 --ingroup morphdb morphdb
-
 # Copy published application
 COPY --from=publish /app/publish .
 
-# Set ownership
-RUN chown -R morphdb:morphdb /app
-
-# Switch to non-root user
-USER morphdb
+# Switch to built-in non-root user
+USER $APP_UID
 
 # Expose port
 EXPOSE 8080
