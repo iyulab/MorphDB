@@ -1,8 +1,9 @@
 # Build stage
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
-# Copy Directory.Packages.props for Central Package Management
+# Copy build configuration files
+COPY Directory.Build.props ./
 COPY Directory.Packages.props ./
 
 # Copy project files for restore
@@ -25,7 +26,7 @@ FROM build AS publish
 RUN dotnet publish -c Release -o /app/publish /p:UseAppHost=false
 
 # Runtime stage
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 
 # Create non-root user for security
@@ -46,7 +47,7 @@ EXPOSE 8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
 # Set environment variables
 ENV ASPNETCORE_URLS=http://+:8080
