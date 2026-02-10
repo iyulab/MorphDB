@@ -1,6 +1,7 @@
 using Dapper;
 using MorphDB.Core.Models;
 using MorphDB.Core.Pipeline;
+using MorphDB.Npgsql.Infrastructure;
 using Npgsql;
 
 namespace MorphDB.Npgsql.Pipeline.Transformers;
@@ -55,7 +56,9 @@ public sealed class SortOrderApplier : ITransformer
         object? parentId,
         CancellationToken cancellationToken)
     {
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var conn = ConnectionScope.HasScope
+            ? new ScopedConnection(ConnectionScope.CurrentConnection!, ConnectionScope.CurrentTransaction, false)
+            : new ScopedConnection(await _dataSource.OpenConnectionAsync(cancellationToken), null, true);
 
         string sql;
         object? param;
@@ -73,7 +76,7 @@ public sealed class SortOrderApplier : ITransformer
             param = new { parentId };
         }
 
-        return await connection.ExecuteScalarAsync<int>(
-            new CommandDefinition(sql, param, cancellationToken: cancellationToken));
+        return await conn.Connection.ExecuteScalarAsync<int>(
+            new CommandDefinition(sql, param, transaction: conn.Transaction, cancellationToken: cancellationToken));
     }
 }

@@ -1,6 +1,7 @@
 using Dapper;
 using MorphDB.Core.Models;
 using MorphDB.Core.Pipeline;
+using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Repositories;
 using Npgsql;
 
@@ -39,7 +40,9 @@ public sealed class ForeignKeyValidator : IValidator
         if (relations.Count == 0)
             return;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(context.CancellationToken);
+        await using var conn = ConnectionScope.HasScope
+            ? new ScopedConnection(ConnectionScope.CurrentConnection!, ConnectionScope.CurrentTransaction, false)
+            : new ScopedConnection(await _dataSource.OpenConnectionAsync(context.CancellationToken), null, true);
 
         foreach (var relation in relations)
         {
@@ -74,7 +77,8 @@ public sealed class ForeignKeyValidator : IValidator
 
             // Check if referenced record exists
             var exists = await CheckReferenceExistsAsync(
-                connection,
+                conn.Connection,
+                conn.Transaction,
                 targetTable,
                 targetColumn,
                 value,
@@ -93,6 +97,7 @@ public sealed class ForeignKeyValidator : IValidator
 
     private static async Task<bool> CheckReferenceExistsAsync(
         NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
         TableMetadata targetTable,
         ColumnMetadata targetColumn,
         object value,
@@ -109,6 +114,6 @@ public sealed class ForeignKeyValidator : IValidator
         sql += ")";
 
         return await connection.ExecuteScalarAsync<bool>(
-            new CommandDefinition(sql, new { value }, cancellationToken: cancellationToken));
+            new CommandDefinition(sql, new { value }, transaction: transaction, cancellationToken: cancellationToken));
     }
 }

@@ -1,6 +1,7 @@
 using Dapper;
 using MorphDB.Core.Models;
 using MorphDB.Core.Pipeline;
+using MorphDB.Npgsql.Infrastructure;
 using Npgsql;
 
 namespace MorphDB.Npgsql.Pipeline.Validators;
@@ -35,7 +36,9 @@ public sealed class UniqueValidator : IValidator
         if (uniqueColumns.Count == 0)
             return;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(context.CancellationToken);
+        await using var conn = ConnectionScope.HasScope
+            ? new ScopedConnection(ConnectionScope.CurrentConnection!, ConnectionScope.CurrentTransaction, false)
+            : new ScopedConnection(await _dataSource.OpenConnectionAsync(context.CancellationToken), null, true);
 
         foreach (var column in uniqueColumns)
         {
@@ -56,8 +59,8 @@ public sealed class UniqueValidator : IValidator
                 parameters.Add("excludeId", context.RecordId.Value);
             }
 
-            var exists = await connection.ExecuteScalarAsync<bool>(
-                new CommandDefinition(sql, parameters, cancellationToken: context.CancellationToken));
+            var exists = await conn.Connection.ExecuteScalarAsync<bool>(
+                new CommandDefinition(sql, parameters, transaction: conn.Transaction, cancellationToken: context.CancellationToken));
 
             if (exists)
             {

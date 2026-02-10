@@ -80,7 +80,8 @@ public sealed partial class BulkJobProcessorService : BackgroundService
         BulkExportJob job,
         CancellationToken cancellationToken)
     {
-        LogExportJobStarted(_logger, job.JobId, job.TableName, job.Format.ToString());
+        var format = job.Format.ToString();
+        LogExportJobStarted(_logger, job.JobId, job.TableName, format);
 
         try
         {
@@ -109,7 +110,8 @@ public sealed partial class BulkJobProcessorService : BackgroundService
         BulkImportJob job,
         CancellationToken cancellationToken)
     {
-        LogImportJobStarted(_logger, job.JobId, job.TableName, job.Format.ToString());
+        var format = job.Format.ToString();
+        LogImportJobStarted(_logger, job.JobId, job.TableName, format);
 
         try
         {

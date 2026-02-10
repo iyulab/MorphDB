@@ -54,6 +54,7 @@ public sealed class PostgresTransactionService : ITransactionService
 
         try
         {
+            using var scope = ConnectionScope.Begin(connection, transaction);
             for (var i = 0; i < request.Operations.Count; i++)
             {
                 var operation = request.Operations[i];

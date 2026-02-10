@@ -76,7 +76,8 @@ public sealed partial class BackupService : IBackupService, IDisposable
         // Save initial backup record
         backup = await _repository.CreateAsync(backup, cancellationToken);
 
-        LogBackupStarted(backupId, project.Slug, request.Type.ToString());
+        var backupType = request.Type.ToString();
+        LogBackupStarted(backupId, project.Slug, backupType);
 
         // Execute backup asynchronously
         _ = ExecuteBackupAsync(backup, project, cancellationToken);
