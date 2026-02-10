@@ -2,6 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![.NET](https://img.shields.io/badge/.NET-10.0-blue.svg)](https://dotnet.microsoft.com/)
+[![Docker](https://img.shields.io/badge/ghcr.io-morphdb-blue?logo=docker)](https://ghcr.io/iyulab/morphdb)
 
 **Runtime-flexible relational database service**
 
@@ -38,19 +39,69 @@ MorphDB: [Developer] → [Logical Schema] → [Physical DB]
 
 ## Quick Start
 
+### Docker (Recommended)
+
+```bash
+docker pull ghcr.io/iyulab/morphdb:latest
+```
+
+Run with PostgreSQL using docker-compose:
+
+```yaml
+# docker-compose.yml
+services:
+  morphdb:
+    image: ghcr.io/iyulab/morphdb:latest
+    ports:
+      - "8080:8080"
+    environment:
+      ConnectionStrings__MorphDB: Host=postgres;Port=5432;Database=morphdb;Username=morph;Password=morph
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: morph
+      POSTGRES_PASSWORD: morph
+      POSTGRES_DB: morphdb
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U morph -d morphdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+```
+
+```bash
+docker compose up -d
+
+# Access
+# REST API: http://localhost:8080/api/
+# GraphQL:  http://localhost:8080/graphql
+# Health:   http://localhost:8080/health
+```
+
+Available tags: `latest`, `0.2`, `0.2.0`
+Platforms: `linux/amd64`, `linux/arm64`
+
+### From Source
+
 ```bash
 # Prerequisites: .NET 10.0, Docker
 
 # Start database
-docker-compose up -d
+docker compose up -d postgres
 
 # Run
 dotnet run --project src/MorphDB.Service
 
-# Access
-# REST API: http://localhost:5400/api/
-# GraphQL:  http://localhost:5400/graphql
-# Swagger:  http://localhost:5400/swagger
+# Access: http://localhost:5400
 ```
 
 ## How It Works
