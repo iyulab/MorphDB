@@ -52,7 +52,8 @@ public sealed class DefaultValueApplier : ITransformer
 
     private static object? ParseStaticDefault(string? defaultValue, MorphDataType dataType)
     {
-        if (string.IsNullOrEmpty(defaultValue)) return null;
+        if (string.IsNullOrEmpty(defaultValue))
+            return null;
 
         return dataType switch
         {
@@ -90,7 +91,8 @@ public sealed class DefaultValueApplier : ITransformer
     {
         // Simple computed expressions: "field1 + field2", "field1 * 0.1", etc.
         var expression = column.DefaultValue;
-        if (string.IsNullOrEmpty(expression)) return null;
+        if (string.IsNullOrEmpty(expression))
+            return null;
 
         // For now, just handle simple field references
         // More complex expressions would need a proper expression parser

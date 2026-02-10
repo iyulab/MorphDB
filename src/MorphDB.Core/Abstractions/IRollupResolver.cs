@@ -187,12 +187,12 @@ public sealed class RollupValidationResult
         TableMetadata targetTable,
         ColumnMetadata? sourceColumn,
         ColumnMetadata foreignKeyColumn) => new()
-    {
-        IsValid = true,
-        TargetTable = targetTable,
-        SourceColumn = sourceColumn,
-        ForeignKeyColumn = foreignKeyColumn
-    };
+        {
+            IsValid = true,
+            TargetTable = targetTable,
+            SourceColumn = sourceColumn,
+            ForeignKeyColumn = foreignKeyColumn
+        };
 
     public static RollupValidationResult Invalid(params string[] errors) => new()
     {

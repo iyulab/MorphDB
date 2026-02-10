@@ -32,7 +32,8 @@ public sealed class UniqueValidator : IValidator
             .Where(c => c.IsUnique && c.EnforceUniqueOnWrite && c.IsActive && !c.IsPrimaryKey)
             .ToList();
 
-        if (uniqueColumns.Count == 0) return;
+        if (uniqueColumns.Count == 0)
+            return;
 
         await using var connection = await _dataSource.OpenConnectionAsync(context.CancellationToken);
 

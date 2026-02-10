@@ -1,6 +1,6 @@
+using System.Text.RegularExpressions;
 using MorphDB.Core.Models;
 using MorphDB.Core.Pipeline;
-using System.Text.RegularExpressions;
 
 namespace MorphDB.Npgsql.Pipeline.Validators;
 
@@ -66,7 +66,8 @@ public sealed partial class CheckValidator : IValidator
         object? value,
         IDictionary<string, object?> data)
     {
-        if (value is null) return true; // NULL values bypass check constraints
+        if (value is null)
+            return true; // NULL values bypass check constraints
 
         expression = expression.Trim();
 
@@ -109,8 +110,10 @@ public sealed partial class CheckValidator : IValidator
 
         while (i < expression.Length)
         {
-            if (expression[i] == '(') depth++;
-            else if (expression[i] == ')') depth--;
+            if (expression[i] == '(')
+                depth++;
+            else if (expression[i] == ')')
+                depth--;
             else if (depth == 0)
             {
                 // Check if we're at the operator
@@ -144,9 +147,12 @@ public sealed partial class CheckValidator : IValidator
         var depth = 0;
         foreach (var c in expression)
         {
-            if (c == '(') depth++;
-            else if (c == ')') depth--;
-            if (depth < 0) return false;
+            if (c == '(')
+                depth++;
+            else if (c == ')')
+                depth--;
+            if (depth < 0)
+                return false;
         }
         return depth == 0;
     }
@@ -222,7 +228,8 @@ public sealed partial class CheckValidator : IValidator
 
     private static bool CompareValues(object? left, string op, object? right)
     {
-        if (left is null || right is null) return true;
+        if (left is null || right is null)
+            return true;
 
         // Try numeric comparison
         if (TryConvertToDouble(left, out var leftNum) && TryConvertToDouble(right, out var rightNum))
@@ -290,7 +297,8 @@ public sealed partial class CheckValidator : IValidator
     private static bool TryConvertToDouble(object? value, out double result)
     {
         result = 0;
-        if (value is null) return false;
+        if (value is null)
+            return false;
 
         return value switch
         {

@@ -319,7 +319,7 @@ public sealed class ViewMetadataRepository : IViewMetadataRepository
         };
     }
 
-    #pragma warning disable IDE1006 // Naming convention for Dapper mapping
+#pragma warning disable IDE1006 // Naming convention for Dapper mapping
     private sealed class ViewRow
     {
         public Guid view_id { get; set; }
@@ -348,5 +348,5 @@ public sealed class ViewMetadataRepository : IViewMetadataRepository
         public string? expression { get; set; }
         public int ordinal_position { get; set; }
     }
-    #pragma warning restore IDE1006
+#pragma warning restore IDE1006
 }

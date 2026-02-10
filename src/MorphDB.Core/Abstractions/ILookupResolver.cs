@@ -179,12 +179,12 @@ public sealed class LookupValidationResult
         TableMetadata targetTable,
         ColumnMetadata targetColumn,
         ColumnMetadata relationColumn) => new()
-    {
-        IsValid = true,
-        TargetTable = targetTable,
-        TargetColumn = targetColumn,
-        RelationColumn = relationColumn
-    };
+        {
+            IsValid = true,
+            TargetTable = targetTable,
+            TargetColumn = targetColumn,
+            RelationColumn = relationColumn
+        };
 
     public static LookupValidationResult Invalid(params string[] errors) => new()
     {

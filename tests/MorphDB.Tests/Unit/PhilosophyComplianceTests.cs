@@ -2,8 +2,8 @@ using System.Text.Json;
 using FluentAssertions;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Models;
-using MorphDB.Service.Models.Api;
 using MorphDB.Npgsql.Infrastructure;
+using MorphDB.Service.Models.Api;
 
 namespace MorphDB.Tests.Unit;
 
@@ -220,7 +220,8 @@ public class PhilosophyComplianceTests
     /// </summary>
     private static bool IsPhysicalName(string name)
     {
-        if (string.IsNullOrEmpty(name)) return false;
+        if (string.IsNullOrEmpty(name))
+            return false;
 
         // Physical name patterns with hash suffixes
         var prefixes = new[] { "tbl_", "col_", "idx_", "fk_", "pk_", "uq_", "chk_", "view_" };

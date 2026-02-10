@@ -112,12 +112,12 @@ public sealed record TransactionResult
         IReadOnlyList<TransactionOperationResult> results,
         string error,
         int failedIndex) => new()
-    {
-        Success = false,
-        Results = results,
-        Error = error,
-        FailedOperationIndex = failedIndex
-    };
+        {
+            Success = false,
+            Results = results,
+            Error = error,
+            FailedOperationIndex = failedIndex
+        };
 }
 
 /// <summary>

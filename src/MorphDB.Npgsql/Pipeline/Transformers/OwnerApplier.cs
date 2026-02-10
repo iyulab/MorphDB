@@ -24,7 +24,8 @@ public sealed class OwnerApplier : ITransformer
     public Task ExecuteAsync(IWriteContext context)
     {
         var userId = context.SecurityContext?.UserId;
-        if (userId is null) return Task.CompletedTask;
+        if (userId is null)
+            return Task.CompletedTask;
 
         // Set _owner_id on insert only (owner doesn't change on updates)
         // User can explicitly provide _owner_id to override

@@ -63,7 +63,10 @@ public sealed class TransactionController : ControllerBase
             var coreRequest = MapToTransactionRequest(request);
             var result = await _transactionService.ExecuteAsync(tenantId, coreRequest, cancellationToken);
 
-            return Ok(MapToTransactionResponse(result));
+            var response = MapToTransactionResponse(result);
+            if (!result.Success)
+                return BadRequest(response);
+            return Ok(response);
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
         {
@@ -83,7 +86,7 @@ public sealed class TransactionController : ControllerBase
     /// or 'error' (if validation fails with errors stored in _row_errors).
     /// </remarks>
     [HttpPatch("data/{table}/{id}/finalize")]
-    [ProducesResponseType(typeof(FinalizeResultApi), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(FinalizeApiResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> FinalizeRecord(
@@ -107,7 +110,13 @@ public sealed class TransactionController : ControllerBase
                 });
             }
 
-            return Ok(MapToFinalizeResultApi(result));
+            var apiResult = MapToFinalizeResultApi(result);
+            return Ok(new FinalizeApiResponse
+            {
+                Results = [apiResult],
+                ValidCount = result.Success ? 1 : 0,
+                ErrorCount = result.Success ? 0 : 1
+            });
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
         {

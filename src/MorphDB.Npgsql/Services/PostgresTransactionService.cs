@@ -451,7 +451,8 @@ public sealed class PostgresTransactionService : ITransactionService
 
     private static Guid? GetRecordId(IDictionary<string, object?>? data)
     {
-        if (data is null) return null;
+        if (data is null)
+            return null;
 
         if (data.TryGetValue("_id", out var id))
         {

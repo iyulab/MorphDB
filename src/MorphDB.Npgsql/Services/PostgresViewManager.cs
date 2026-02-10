@@ -472,9 +472,12 @@ public sealed class PostgresViewManager : IViewManager
 
     private static string FormatValue(object? value)
     {
-        if (value == null) return "NULL";
-        if (value is string s) return $"'{s.Replace("'", "''")}'";
-        if (value is bool b) return b ? "true" : "false";
+        if (value == null)
+            return "NULL";
+        if (value is string s)
+            return $"'{s.Replace("'", "''")}'";
+        if (value is bool b)
+            return b ? "true" : "false";
         return value.ToString() ?? "NULL";
     }
 

@@ -181,14 +181,14 @@ public sealed class FormulaParseResult
         IReadOnlyList<string> functionCalls,
         bool isVolatile,
         MorphDataType? inferredType = null) => new()
-    {
-        IsSuccess = true,
-        AstJson = astJson,
-        ColumnReferences = columnReferences,
-        FunctionCalls = functionCalls,
-        IsVolatile = isVolatile,
-        InferredType = inferredType
-    };
+        {
+            IsSuccess = true,
+            AstJson = astJson,
+            ColumnReferences = columnReferences,
+            FunctionCalls = functionCalls,
+            IsVolatile = isVolatile,
+            InferredType = inferredType
+        };
 
     public static FormulaParseResult Failure(params string[] errors) => new()
     {
@@ -226,11 +226,11 @@ public sealed class FormulaValidationResult
     public static FormulaValidationResult Valid(
         IReadOnlyDictionary<string, string> resolvedDependencies,
         MorphDataType? inferredType = null) => new()
-    {
-        IsValid = true,
-        ResolvedDependencies = resolvedDependencies,
-        InferredType = inferredType
-    };
+        {
+            IsValid = true,
+            ResolvedDependencies = resolvedDependencies,
+            InferredType = inferredType
+        };
 
     public static FormulaValidationResult Invalid(params string[] errors) => new()
     {

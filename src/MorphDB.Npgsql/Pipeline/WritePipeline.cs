@@ -64,7 +64,8 @@ public sealed class WritePipeline : IWritePipeline
         // For delete, we only run transformers (soft delete) and skip validators
         foreach (var transformer in _transformers)
         {
-            if (!context.ShouldContinue) break;
+            if (!context.ShouldContinue)
+                break;
             if (transformer.ShouldExecute(context))
             {
                 await transformer.ExecuteAsync(context);
@@ -92,7 +93,8 @@ public sealed class WritePipeline : IWritePipeline
         // Run transformers first (to apply defaults, etc.)
         foreach (var transformer in _transformers)
         {
-            if (!context.ShouldContinue) break;
+            if (!context.ShouldContinue)
+                break;
             if (transformer.ShouldExecute(context))
             {
                 await transformer.ExecuteAsync(context);
@@ -102,7 +104,8 @@ public sealed class WritePipeline : IWritePipeline
         // Then run validators
         foreach (var validator in _validators)
         {
-            if (!context.ShouldContinue) break;
+            if (!context.ShouldContinue)
+                break;
             if (validator.ShouldExecute(context))
             {
                 await validator.ExecuteAsync(context);
@@ -129,7 +132,8 @@ public sealed class WritePipeline : IWritePipeline
 
         foreach (var record in records)
         {
-            if (cancellationToken.IsCancellationRequested) break;
+            if (cancellationToken.IsCancellationRequested)
+                break;
             var result = await ValidateAsync(tenantId, table, record, WriteOperationType.Insert, options, cancellationToken);
             results.Add(result);
         }
@@ -142,7 +146,8 @@ public sealed class WritePipeline : IWritePipeline
         // Phase 1: Run transformers (apply defaults, timestamps, etc.)
         foreach (var transformer in _transformers)
         {
-            if (!context.ShouldContinue) break;
+            if (!context.ShouldContinue)
+                break;
             if (transformer.ShouldExecute(context))
             {
                 await transformer.ExecuteAsync(context);
@@ -157,7 +162,8 @@ public sealed class WritePipeline : IWritePipeline
         // Phase 2: Run validators
         foreach (var validator in _validators)
         {
-            if (!context.ShouldContinue) break;
+            if (!context.ShouldContinue)
+                break;
             if (validator.ShouldExecute(context))
             {
                 await validator.ExecuteAsync(context);

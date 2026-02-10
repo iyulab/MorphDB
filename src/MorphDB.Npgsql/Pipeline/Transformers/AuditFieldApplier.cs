@@ -24,7 +24,8 @@ public sealed class AuditFieldApplier : ITransformer
     public Task ExecuteAsync(IWriteContext context)
     {
         var userId = context.SecurityContext?.UserId;
-        if (userId is null) return Task.CompletedTask;
+        if (userId is null)
+            return Task.CompletedTask;
 
         // Set _created_by on insert only
         if (context.OperationType is WriteOperationType.Insert or WriteOperationType.Upsert)

@@ -36,7 +36,8 @@ public sealed class ForeignKeyValidator : IValidator
             .Where(r => r.IsActive && r.EnforceOnWrite && r.SourceTableId == context.Table.TableId)
             .ToList();
 
-        if (relations.Count == 0) return;
+        if (relations.Count == 0)
+            return;
 
         await using var connection = await _dataSource.OpenConnectionAsync(context.CancellationToken);
 
@@ -46,7 +47,8 @@ public sealed class ForeignKeyValidator : IValidator
             var sourceColumn = context.Table.Columns
                 .FirstOrDefault(c => c.ColumnId == relation.SourceColumnId);
 
-            if (sourceColumn is null) continue;
+            if (sourceColumn is null)
+                continue;
 
             // Skip if the FK field is not in the data or is null
             if (!context.Data.TryGetValue(sourceColumn.LogicalName, out var value) || value is null)
@@ -60,13 +62,15 @@ public sealed class ForeignKeyValidator : IValidator
                 includeColumns: true,
                 context.CancellationToken);
 
-            if (targetTable is null) continue;
+            if (targetTable is null)
+                continue;
 
             // Find target column
             var targetColumn = targetTable.Columns
                 .FirstOrDefault(c => c.ColumnId == relation.TargetColumnId);
 
-            if (targetColumn is null) continue;
+            if (targetColumn is null)
+                continue;
 
             // Check if referenced record exists
             var exists = await CheckReferenceExistsAsync(

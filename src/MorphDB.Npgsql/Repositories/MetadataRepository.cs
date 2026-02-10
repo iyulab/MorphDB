@@ -565,7 +565,8 @@ public sealed class MetadataRepository : IMetadataRepository
 
         static bool GetBool(JsonElement? parent, string property, bool defaultValue = false)
         {
-            if (parent is null) return defaultValue;
+            if (parent is null)
+                return defaultValue;
             return parent.Value.TryGetProperty(property, out var prop) ? prop.GetBoolean() : defaultValue;
         }
     }
