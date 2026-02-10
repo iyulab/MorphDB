@@ -146,7 +146,7 @@ public class OrganizationApiTests : IAsyncLifetime
 
         var orgs = await response.Content.ReadFromJsonAsync<List<OrganizationApiResponse>>();
         orgs.Should().NotBeNull();
-        orgs!.Count.Should().BeGreaterOrEqualTo(2);
+        orgs!.Count.Should().BeGreaterThanOrEqualTo(2);
     }
 
     [Fact]
@@ -231,7 +231,7 @@ public class OrganizationApiTests : IAsyncLifetime
         var stats = await response.Content.ReadFromJsonAsync<OrganizationStats>();
         stats.Should().NotBeNull();
         stats!.OrganizationId.Should().Be(createdOrg.OrganizationId);
-        stats.TotalMembers.Should().BeGreaterOrEqualTo(1); // Creator is a member
+        stats.TotalMembers.Should().BeGreaterThanOrEqualTo(1); // Creator is a member
     }
 
     #endregion
@@ -258,7 +258,7 @@ public class OrganizationApiTests : IAsyncLifetime
 
         var members = await response.Content.ReadFromJsonAsync<List<OrganizationMemberApiResponse>>();
         members.Should().NotBeNull();
-        members!.Count.Should().BeGreaterOrEqualTo(1); // Creator should be owner
+        members!.Count.Should().BeGreaterThanOrEqualTo(1); // Creator should be owner
     }
 
     [Fact]
@@ -439,7 +439,7 @@ public class OrganizationApiTests : IAsyncLifetime
 
         var invitations = await response.Content.ReadFromJsonAsync<List<InvitationApiResponse>>();
         invitations.Should().NotBeNull();
-        invitations!.Count.Should().BeGreaterOrEqualTo(1);
+        invitations!.Count.Should().BeGreaterThanOrEqualTo(1);
     }
 
     [Fact]

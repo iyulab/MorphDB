@@ -18,7 +18,7 @@ public class Sha256NameHasherTests
 
         // Assert
         result.Should().StartWith("tbl_");
-        result.Length.Should().BeLessOrEqualTo(63);
+        result.Length.Should().BeLessThanOrEqualTo(63);
         _hasher.IsValidPhysicalName(result).Should().BeTrue();
     }
 
@@ -34,7 +34,7 @@ public class Sha256NameHasherTests
 
         // Assert
         result.Should().StartWith("col_");
-        result.Length.Should().BeLessOrEqualTo(63);
+        result.Length.Should().BeLessThanOrEqualTo(63);
     }
 
     [Fact]
@@ -80,7 +80,7 @@ public class Sha256NameHasherTests
 
         // Assert
         result.Should().StartWith("idx_");
-        result.Length.Should().BeLessOrEqualTo(63);
+        result.Length.Should().BeLessThanOrEqualTo(63);
     }
 
     [Theory]

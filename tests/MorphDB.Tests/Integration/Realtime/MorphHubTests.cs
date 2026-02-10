@@ -154,7 +154,7 @@ public class MorphHubTests : IAsyncLifetime
         }
 
         // Assert
-        _receivedCreatedMessages.Should().HaveCountGreaterOrEqualTo(1);
+        _receivedCreatedMessages.Should().HaveCountGreaterThanOrEqualTo(1);
         _receivedCreatedMessages.First().Table.Should().Be(tableName);
         _receivedCreatedMessages.First().Operation.Should().Be("INSERT");
     }
@@ -191,7 +191,7 @@ public class MorphHubTests : IAsyncLifetime
         }
 
         // Assert
-        _receivedUpdatedMessages.Should().HaveCountGreaterOrEqualTo(1);
+        _receivedUpdatedMessages.Should().HaveCountGreaterThanOrEqualTo(1);
         _receivedUpdatedMessages.First().Table.Should().Be(tableName);
         _receivedUpdatedMessages.First().Operation.Should().Be("UPDATE");
     }
@@ -225,7 +225,7 @@ public class MorphHubTests : IAsyncLifetime
         }
 
         // Assert
-        _receivedDeletedMessages.Should().HaveCountGreaterOrEqualTo(1);
+        _receivedDeletedMessages.Should().HaveCountGreaterThanOrEqualTo(1);
         _receivedDeletedMessages.First().Table.Should().Be(tableName);
         _receivedDeletedMessages.First().RecordId.Should().Be(recordId);
     }

@@ -147,6 +147,17 @@ public sealed class PostgresSchemaManager : ISchemaManager
             columnDefinitions.Add(ColumnDefinition.FromMetadata(sourceIdColumn));
         }
 
+        if (sysOpts.RowStateEnabled)
+        {
+            var rowStateColumn = CreateSystemColumn(tableId, SystemColumns.RowState, MorphDataType.Text, ordinal++, isNullable: true);
+            columns.Add(rowStateColumn);
+            columnDefinitions.Add(ColumnDefinition.FromMetadata(rowStateColumn) with { DefaultExpression = "'valid'" });
+
+            var rowErrorsColumn = CreateSystemColumn(tableId, SystemColumns.RowErrors, MorphDataType.Json, ordinal++, isNullable: true);
+            columns.Add(rowErrorsColumn);
+            columnDefinitions.Add(ColumnDefinition.FromMetadata(rowErrorsColumn));
+        }
+
         // Add user-defined columns
         foreach (var colReq in request.Columns)
         {
@@ -215,7 +226,8 @@ public sealed class PostgresSchemaManager : ISchemaManager
             SoftDeleteEnabled = sysOpts.SoftDeleteEnabled,
             OwnershipEnabled = sysOpts.OwnershipEnabled,
             HierarchyEnabled = sysOpts.HierarchyEnabled,
-            SourceTrackingEnabled = sysOpts.SourceTrackingEnabled
+            SourceTrackingEnabled = sysOpts.SourceTrackingEnabled,
+            RowStateEnabled = sysOpts.RowStateEnabled
         };
 
         // Execute DDL and insert metadata in a transaction
@@ -308,7 +320,8 @@ public sealed class PostgresSchemaManager : ISchemaManager
             SoftDeleteEnabled = sysOpts.SoftDeleteEnabled,
             OwnershipEnabled = sysOpts.OwnershipEnabled,
             HierarchyEnabled = sysOpts.HierarchyEnabled,
-            SourceTrackingEnabled = sysOpts.SourceTrackingEnabled
+            SourceTrackingEnabled = sysOpts.SourceTrackingEnabled,
+            RowStateEnabled = sysOpts.RowStateEnabled
         };
     }
 

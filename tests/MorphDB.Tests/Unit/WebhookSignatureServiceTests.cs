@@ -214,8 +214,8 @@ public class WebhookSignatureServiceTests
         var after = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
         // Assert
-        timestamp.Should().BeGreaterOrEqualTo(before);
-        timestamp.Should().BeLessOrEqualTo(after);
+        timestamp.Should().BeGreaterThanOrEqualTo(before);
+        timestamp.Should().BeLessThanOrEqualTo(after);
     }
 
     [Theory]

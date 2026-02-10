@@ -79,11 +79,11 @@ public class QuotaApiTests : IAsyncLifetime
 
         // Verify usage structure
         result!.Usage.ProjectId.Should().Be(_projectId);
-        result.Usage.ApiRequests.Should().BeGreaterOrEqualTo(0);
-        result.Usage.DataReads.Should().BeGreaterOrEqualTo(0);
-        result.Usage.DataWrites.Should().BeGreaterOrEqualTo(0);
-        result.Usage.StorageBytes.Should().BeGreaterOrEqualTo(0);
-        result.Usage.BandwidthBytes.Should().BeGreaterOrEqualTo(0);
+        result.Usage.ApiRequests.Should().BeGreaterThanOrEqualTo(0);
+        result.Usage.DataReads.Should().BeGreaterThanOrEqualTo(0);
+        result.Usage.DataWrites.Should().BeGreaterThanOrEqualTo(0);
+        result.Usage.StorageBytes.Should().BeGreaterThanOrEqualTo(0);
+        result.Usage.BandwidthBytes.Should().BeGreaterThanOrEqualTo(0);
     }
 
     [Fact]
@@ -122,10 +122,10 @@ public class QuotaApiTests : IAsyncLifetime
 
         // Verify rate limit structure
         result!.RateLimit.Key.Should().NotBeNullOrEmpty();
-        result.RateLimit.Available.Should().BeGreaterOrEqualTo(0);
+        result.RateLimit.Available.Should().BeGreaterThanOrEqualTo(0);
         result.RateLimit.Limit.Should().BeGreaterThan(0);
         result.RateLimit.WindowSeconds.Should().BeGreaterThan(0);
-        result.RateLimit.RequestCount.Should().BeGreaterOrEqualTo(0);
+        result.RateLimit.RequestCount.Should().BeGreaterThanOrEqualTo(0);
     }
 
     #endregion
@@ -235,7 +235,7 @@ public class QuotaApiTests : IAsyncLifetime
         var result = await response.Content.ReadFromJsonAsync<RateLimitStatusApiResponse>();
         result.Should().NotBeNull();
         result!.Key.Should().Contain(_projectId.ToString());
-        result.Available.Should().BeGreaterOrEqualTo(0);
+        result.Available.Should().BeGreaterThanOrEqualTo(0);
         result.Limit.Should().BeGreaterThan(0);
         result.WindowSeconds.Should().BeGreaterThan(0);
     }
@@ -311,7 +311,7 @@ public class QuotaApiTests : IAsyncLifetime
         if (response.Headers.TryGetValues("X-RateLimit-Remaining", out var remainingValues))
         {
             int.TryParse(remainingValues.FirstOrDefault(), out var remaining).Should().BeTrue();
-            remaining.Should().BeGreaterOrEqualTo(0);
+            remaining.Should().BeGreaterThanOrEqualTo(0);
         }
 
         if (response.Headers.TryGetValues("X-RateLimit-Reset", out var resetValues))

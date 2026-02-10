@@ -50,7 +50,7 @@ public class SchemaApiTests
         var table = await response.Content.ReadFromJsonAsync<TableApiResponse>();
         table.Should().NotBeNull();
         table!.Name.Should().Be(request.Name);
-        table.Columns.Should().HaveCountGreaterOrEqualTo(3); // +1 for auto-added id column
+        table.Columns.Should().HaveCountGreaterThanOrEqualTo(3); // +1 for auto-added id column
     }
 
     [Fact]

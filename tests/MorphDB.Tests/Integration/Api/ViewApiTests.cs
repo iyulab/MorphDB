@@ -478,7 +478,7 @@ public class ViewApiTests
 
         var result = await response.Content.ReadFromJsonAsync<ViewQueryApiResponse>();
         result.Should().NotBeNull();
-        result!.TotalCount.Should().BeGreaterOrEqualTo(3);
+        result!.TotalCount.Should().BeGreaterThanOrEqualTo(3);
         result.Data.Should().NotBeEmpty();
     }
 
@@ -506,7 +506,7 @@ public class ViewApiTests
 
         var result = await response.Content.ReadFromJsonAsync<ViewQueryApiResponse>();
         result.Should().NotBeNull();
-        result!.Data.Count.Should().BeLessOrEqualTo(2);
+        result!.Data.Count.Should().BeLessThanOrEqualTo(2);
     }
 
     #endregion

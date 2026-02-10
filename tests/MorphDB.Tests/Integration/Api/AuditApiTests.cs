@@ -60,7 +60,7 @@ public class AuditApiTests : IAsyncLifetime
 
         var result = await response.Content.ReadFromJsonAsync<AuditLogPageApiResponse>();
         result.Should().NotBeNull();
-        result!.Page.Should().BeGreaterOrEqualTo(1);
+        result!.Page.Should().BeGreaterThanOrEqualTo(1);
         result.PageSize.Should().BeGreaterThan(0);
         result.Items.Should().NotBeNull();
     }
@@ -138,7 +138,7 @@ public class AuditApiTests : IAsyncLifetime
         result.Should().NotBeNull();
         result!.Page.Should().Be(1);
         result.PageSize.Should().Be(10);
-        result.Items.Should().HaveCountLessOrEqualTo(10);
+        result.Items.Should().HaveCountLessThanOrEqualTo(10);
     }
 
     [Fact]
@@ -233,7 +233,7 @@ public class AuditApiTests : IAsyncLifetime
 
         var result = await response.Content.ReadFromJsonAsync<AuditLogPageApiResponse>();
         result.Should().NotBeNull();
-        result!.PageSize.Should().BeLessOrEqualTo(100);
+        result!.PageSize.Should().BeLessThanOrEqualTo(100);
     }
 
     #endregion
@@ -280,12 +280,12 @@ public class AuditApiTests : IAsyncLifetime
 
         var result = await response.Content.ReadFromJsonAsync<AuditStatsApiResponse>();
         result.Should().NotBeNull();
-        result!.TotalEvents.Should().BeGreaterOrEqualTo(0);
+        result!.TotalEvents.Should().BeGreaterThanOrEqualTo(0);
         result.ByCategory.Should().NotBeNull();
         result.BySeverity.Should().NotBeNull();
         result.TopActors.Should().NotBeNull();
         result.TopActions.Should().NotBeNull();
-        result.ErrorRate.Should().BeGreaterOrEqualTo(0).And.BeLessOrEqualTo(100);
+        result.ErrorRate.Should().BeGreaterThanOrEqualTo(0).And.BeLessThanOrEqualTo(100);
     }
 
     [Fact]

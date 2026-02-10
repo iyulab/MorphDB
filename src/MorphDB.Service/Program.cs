@@ -1,7 +1,7 @@
 using System.Globalization;
 using HealthChecks.UI.Client;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
-using Microsoft.OpenApi.Models;
+using Microsoft.OpenApi;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Encryption;
 using MorphDB.Npgsql;
@@ -154,29 +154,11 @@ try
             Type = SecuritySchemeType.ApiKey
         });
 
-        options.AddSecurityRequirement(new OpenApiSecurityRequirement
+        options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
         {
-            {
-                new OpenApiSecurityScheme
-                {
-                    Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "ApiKey" }
-                },
-                Array.Empty<string>()
-            },
-            {
-                new OpenApiSecurityScheme
-                {
-                    Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
-                },
-                Array.Empty<string>()
-            },
-            {
-                new OpenApiSecurityScheme
-                {
-                    Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "TenantId" }
-                },
-                Array.Empty<string>()
-            }
+            [new OpenApiSecuritySchemeReference("ApiKey", document)] = [],
+            [new OpenApiSecuritySchemeReference("Bearer", document)] = [],
+            [new OpenApiSecuritySchemeReference("TenantId", document)] = []
         });
     });
 

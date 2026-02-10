@@ -137,7 +137,7 @@ public class SsoApiTests : IAsyncLifetime
 
         var configs = await response.Content.ReadFromJsonAsync<List<SsoConfigResponse>>();
         configs.Should().NotBeNull();
-        configs!.Count.Should().BeGreaterOrEqualTo(1);
+        configs!.Count.Should().BeGreaterThanOrEqualTo(1);
     }
 
     [Fact]
