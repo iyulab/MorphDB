@@ -23,13 +23,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Read version from Directory.Build.props
+      - name: Read version and prepare image name
         id: version
         run: |
           VERSION=$(grep -oP '<Version>\K[^<]+' Directory.Build.props)
+          IMAGE=$(echo "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}" | tr '[:upper:]' '[:lower:]')
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "major_minor=$(echo $VERSION | cut -d. -f1,2)" >> "$GITHUB_OUTPUT"
-          echo "Detected version: $VERSION"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "Detected version: $VERSION, image: $IMAGE"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -48,9 +50,9 @@ jobs:
           file: src/MorphDB.Service/Dockerfile
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.major_minor }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ steps.version.outputs.image }}:${{ steps.version.outputs.version }}
+            ${{ steps.version.outputs.image }}:${{ steps.version.outputs.major_minor }}
+            ${{ steps.version.outputs.image }}:latest
           labels: |
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
