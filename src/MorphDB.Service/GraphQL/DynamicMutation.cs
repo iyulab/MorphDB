@@ -3,6 +3,8 @@ using HotChocolate;
 using HotChocolate.Types;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Exceptions;
+using MorphDB.Core.Pipeline;
+using MorphDB.Npgsql.Repositories;
 using MorphDB.Service.Services;
 
 namespace MorphDB.Service.GraphQL;
@@ -20,7 +22,8 @@ public sealed class DynamicMutation
     public async Task<MutationResult<RecordNode>> CreateRecord(
         string table,
         [GraphQLType(typeof(AnyType))] IDictionary<string, object?> data,
-        [Service] IMorphDataService dataService,
+        [Service] IWritePipeline writePipeline,
+        [Service] IMetadataRepository metadataRepository,
         [Service] ITenantContextAccessor tenantAccessor,
         CancellationToken cancellationToken)
     {
@@ -28,15 +31,37 @@ public sealed class DynamicMutation
         {
             var tenantId = tenantAccessor.TenantId;
 
-            // Convert data from JsonElement if necessary
+            var tableMetadata = await metadataRepository.GetTableByNameAsync(
+                tenantId, table, includeColumns: true, cancellationToken);
+            if (tableMetadata is null)
+            {
+                return new MutationResult<RecordNode>
+                {
+                    Success = false,
+                    Error = $"Table '{table}' not found",
+                    ErrorCode = "NOT_FOUND"
+                };
+            }
+
             var normalizedData = NormalizeData(data);
 
-            var result = await dataService.InsertAsync(tenantId, table, normalizedData, cancellationToken);
+            var writeResult = await writePipeline.InsertAsync(
+                tenantId, tableMetadata, normalizedData, cancellationToken: cancellationToken);
+
+            if (!writeResult.Success)
+            {
+                return new MutationResult<RecordNode>
+                {
+                    Success = false,
+                    Error = string.Join("; ", writeResult.Errors.Select(e => e.Message)),
+                    ErrorCode = "VALIDATION_FAILED"
+                };
+            }
 
             return new MutationResult<RecordNode>
             {
                 Success = true,
-                Data = CreateRecordNode(result)
+                Data = CreateRecordNode(writeResult.Data ?? normalizedData)
             };
         }
         catch (ValidationException ex)
@@ -68,12 +93,26 @@ public sealed class DynamicMutation
         Guid id,
         [GraphQLType(typeof(AnyType))] IDictionary<string, object?> data,
         [Service] IMorphDataService dataService,
+        [Service] IWritePipeline writePipeline,
+        [Service] IMetadataRepository metadataRepository,
         [Service] ITenantContextAccessor tenantAccessor,
         CancellationToken cancellationToken)
     {
         try
         {
             var tenantId = tenantAccessor.TenantId;
+
+            var tableMetadata = await metadataRepository.GetTableByNameAsync(
+                tenantId, table, includeColumns: true, cancellationToken);
+            if (tableMetadata is null)
+            {
+                return new MutationResult<RecordNode>
+                {
+                    Success = false,
+                    Error = $"Table '{table}' not found",
+                    ErrorCode = "NOT_FOUND"
+                };
+            }
 
             // Verify record exists
             var existing = await dataService.GetByIdAsync(tenantId, table, id, cancellationToken);
@@ -88,12 +127,23 @@ public sealed class DynamicMutation
             }
 
             var normalizedData = NormalizeData(data);
-            var result = await dataService.UpdateAsync(tenantId, table, id, normalizedData, cancellationToken);
+            var writeResult = await writePipeline.UpdateAsync(
+                tenantId, tableMetadata, id, normalizedData, existing, cancellationToken: cancellationToken);
+
+            if (!writeResult.Success)
+            {
+                return new MutationResult<RecordNode>
+                {
+                    Success = false,
+                    Error = string.Join("; ", writeResult.Errors.Select(e => e.Message)),
+                    ErrorCode = "VALIDATION_FAILED"
+                };
+            }
 
             return new MutationResult<RecordNode>
             {
                 Success = true,
-                Data = CreateRecordNodeWithId(result, id)
+                Data = CreateRecordNodeWithId(writeResult.Data ?? normalizedData, id)
             };
         }
         catch (ValidationException ex)
@@ -123,7 +173,8 @@ public sealed class DynamicMutation
     public async Task<MutationResult<bool>> DeleteRecord(
         string table,
         Guid id,
-        [Service] IMorphDataService dataService,
+        [Service] IWritePipeline writePipeline,
+        [Service] IMetadataRepository metadataRepository,
         [Service] ITenantContextAccessor tenantAccessor,
         CancellationToken cancellationToken)
     {
@@ -131,9 +182,22 @@ public sealed class DynamicMutation
         {
             var tenantId = tenantAccessor.TenantId;
 
-            var deleted = await dataService.DeleteAsync(tenantId, table, id, cancellationToken);
+            var tableMetadata = await metadataRepository.GetTableByNameAsync(
+                tenantId, table, includeColumns: true, cancellationToken);
+            if (tableMetadata is null)
+            {
+                return new MutationResult<bool>
+                {
+                    Success = false,
+                    Error = $"Table '{table}' not found",
+                    ErrorCode = "NOT_FOUND"
+                };
+            }
 
-            if (!deleted)
+            var writeResult = await writePipeline.DeleteAsync(
+                tenantId, tableMetadata, id, cancellationToken: cancellationToken);
+
+            if (!writeResult.Success)
             {
                 return new MutationResult<bool>
                 {
@@ -163,6 +227,7 @@ public sealed class DynamicMutation
     /// <summary>
     /// Upserts a record (insert or update based on key columns).
     /// </summary>
+    // TODO: Migrate to IWritePipeline when Upsert support is added
     [GraphQLDescription("Upserts a record (insert or update based on key columns)")]
     public async Task<MutationResult<RecordNode>> UpsertRecord(
         string table,
@@ -208,6 +273,7 @@ public sealed class DynamicMutation
     /// <summary>
     /// Inserts multiple records in a batch.
     /// </summary>
+    // TODO: Migrate to IWritePipeline when Batch insert support is added
     [GraphQLDescription("Inserts multiple records in a batch")]
     public async Task<MutationResult<IReadOnlyList<RecordNode>>> CreateRecords(
         string table,

@@ -15,13 +15,13 @@ namespace MorphDB.Service.Controllers;
 public sealed class DataController : ControllerBase
 {
     private readonly IMorphDataService _dataService;
-    private readonly IWritePipeline? _writePipeline;
-    private readonly IMetadataRepository? _metadataRepository;
+    private readonly IWritePipeline _writePipeline;
+    private readonly IMetadataRepository _metadataRepository;
 
     public DataController(
         IMorphDataService dataService,
-        IWritePipeline? writePipeline = null,
-        IMetadataRepository? metadataRepository = null)
+        IWritePipeline writePipeline,
+        IMetadataRepository metadataRepository)
     {
         _dataService = dataService;
         _writePipeline = writePipeline;
@@ -203,32 +203,23 @@ public sealed class DataController : ControllerBase
         {
             var tenantId = GetTenantId();
 
-            // Generate ID if not provided - IdApplier will auto-generate with UUID v7
-            if (!data.ContainsKey("_id"))
+            var tableMetadata = await _metadataRepository.GetTableByNameAsync(
+                tenantId, table, includeColumns: true, cancellationToken);
+
+            if (tableMetadata is null)
             {
-                data["_id"] = Guid.CreateVersion7();
+                return NotFound(new ErrorResponse
+                {
+                    Error = "NotFound",
+                    Message = $"Table '{table}' not found",
+                    Code = "TABLE_NOT_FOUND"
+                });
             }
 
-            IDictionary<string, object?> result;
-
-            // Use draft mode if requested and pipeline is available
-            if (mode?.Equals("draft", StringComparison.OrdinalIgnoreCase) == true
-                && _writePipeline is not null
-                && _metadataRepository is not null)
+            // Determine write options based on mode
+            WriteOptions? options = null;
+            if (mode?.Equals("draft", StringComparison.OrdinalIgnoreCase) == true)
             {
-                var tableMetadata = await _metadataRepository.GetTableByNameAsync(
-                    tenantId, table, includeColumns: true, cancellationToken);
-
-                if (tableMetadata is null)
-                {
-                    return NotFound(new ErrorResponse
-                    {
-                        Error = "NotFound",
-                        Message = $"Table '{table}' not found",
-                        Code = "TABLE_NOT_FOUND"
-                    });
-                }
-
                 if (!tableMetadata.RowStateEnabled)
                 {
                     return BadRequest(new ErrorResponse
@@ -238,27 +229,23 @@ public sealed class DataController : ControllerBase
                         Code = "ROW_STATE_NOT_ENABLED"
                     });
                 }
-
-                var writeResult = await _writePipeline.InsertAsync(
-                    tenantId, tableMetadata, data, WriteOptions.DraftMode, cancellationToken);
-
-                if (!writeResult.Success)
-                {
-                    return BadRequest(new ErrorResponse
-                    {
-                        Error = "ValidationError",
-                        Message = string.Join("; ", writeResult.Errors.Select(e => e.Message)),
-                        Code = "VALIDATION_FAILED"
-                    });
-                }
-
-                result = writeResult.Data ?? data;
+                options = WriteOptions.DraftMode;
             }
-            else
+
+            var writeResult = await _writePipeline.InsertAsync(
+                tenantId, tableMetadata, data, options, cancellationToken);
+
+            if (!writeResult.Success)
             {
-                result = await _dataService.InsertAsync(tenantId, table, data, cancellationToken);
+                return BadRequest(new ErrorResponse
+                {
+                    Error = "ValidationError",
+                    Message = string.Join("; ", writeResult.Errors.Select(e => e.Message)),
+                    Code = "VALIDATION_FAILED"
+                });
             }
 
+            var result = writeResult.Data ?? data;
             var id = result.TryGetValue("_id", out var idValue) && idValue is Guid guid ? guid : Guid.Empty;
 
             var response = new DataRecordResponse
@@ -299,6 +286,19 @@ public sealed class DataController : ControllerBase
         {
             var tenantId = GetTenantId();
 
+            var tableMetadata = await _metadataRepository.GetTableByNameAsync(
+                tenantId, table, includeColumns: true, cancellationToken);
+
+            if (tableMetadata is null)
+            {
+                return NotFound(new ErrorResponse
+                {
+                    Error = "NotFound",
+                    Message = $"Table '{table}' not found",
+                    Code = "TABLE_NOT_FOUND"
+                });
+            }
+
             // Check if record exists first
             var existing = await _dataService.GetByIdAsync(tenantId, table, id, cancellationToken);
             if (existing == null)
@@ -311,12 +311,23 @@ public sealed class DataController : ControllerBase
                 });
             }
 
-            var result = await _dataService.UpdateAsync(tenantId, table, id, data, cancellationToken);
+            var writeResult = await _writePipeline.UpdateAsync(
+                tenantId, tableMetadata, id, data, existing, cancellationToken: cancellationToken);
+
+            if (!writeResult.Success)
+            {
+                return BadRequest(new ErrorResponse
+                {
+                    Error = "ValidationError",
+                    Message = string.Join("; ", writeResult.Errors.Select(e => e.Message)),
+                    Code = "VALIDATION_FAILED"
+                });
+            }
 
             return Ok(new DataRecordResponse
             {
                 Id = id,
-                Data = result
+                Data = writeResult.Data ?? data
             });
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
@@ -348,9 +359,23 @@ public sealed class DataController : ControllerBase
         {
             var tenantId = GetTenantId();
 
-            var deleted = await _dataService.DeleteAsync(tenantId, table, id, cancellationToken);
+            var tableMetadata = await _metadataRepository.GetTableByNameAsync(
+                tenantId, table, includeColumns: true, cancellationToken);
 
-            if (!deleted)
+            if (tableMetadata is null)
+            {
+                return NotFound(new ErrorResponse
+                {
+                    Error = "NotFound",
+                    Message = $"Table '{table}' not found",
+                    Code = "TABLE_NOT_FOUND"
+                });
+            }
+
+            var writeResult = await _writePipeline.DeleteAsync(
+                tenantId, tableMetadata, id, cancellationToken: cancellationToken);
+
+            if (!writeResult.Success)
             {
                 return NotFound(new ErrorResponse
                 {

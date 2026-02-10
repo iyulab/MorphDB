@@ -3,6 +3,8 @@ using System.Xml;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.OData.Edm.Csdl;
 using MorphDB.Core.Abstractions;
+using MorphDB.Core.Pipeline;
+using MorphDB.Npgsql.Repositories;
 using MorphDB.Service.Services;
 
 namespace MorphDB.Service.OData;
@@ -18,6 +20,8 @@ public sealed partial class MorphODataController : ControllerBase
     private readonly IEdmModelProvider _modelProvider;
     private readonly ODataQueryHandler _queryHandler;
     private readonly IMorphDataService _dataService;
+    private readonly IWritePipeline _writePipeline;
+    private readonly IMetadataRepository _metadataRepository;
     private readonly ITenantContextAccessor _tenantAccessor;
     private readonly ILogger<MorphODataController> _logger;
 
@@ -25,12 +29,16 @@ public sealed partial class MorphODataController : ControllerBase
         IEdmModelProvider modelProvider,
         ODataQueryHandler queryHandler,
         IMorphDataService dataService,
+        IWritePipeline writePipeline,
+        IMetadataRepository metadataRepository,
         ITenantContextAccessor tenantAccessor,
         ILogger<MorphODataController> logger)
     {
         _modelProvider = modelProvider;
         _queryHandler = queryHandler;
         _dataService = dataService;
+        _writePipeline = writePipeline;
+        _metadataRepository = metadataRepository;
         _tenantAccessor = tenantAccessor;
         _logger = logger;
     }
@@ -201,16 +209,24 @@ public sealed partial class MorphODataController : ControllerBase
             var modelResult = await _modelProvider.GetModelWithMappingAsync(tenantId, cancellationToken);
             var tableName = ResolveTableName(entitySet, modelResult.EntitySetToTableNameMap);
 
-            var data = JsonElementToDictionary(body);
-
-            // Generate _id if not provided
-            if (!data.ContainsKey("_id"))
+            var tableMetadata = await _metadataRepository.GetTableByNameAsync(
+                tenantId, tableName, includeColumns: true, cancellationToken);
+            if (tableMetadata is null)
             {
-                data["_id"] = Guid.CreateVersion7();
+                return NotFound(new { error = $"Table '{tableName}' not found." });
             }
 
-            var result = await _dataService.InsertAsync(tenantId, tableName, data, cancellationToken);
+            var data = JsonElementToDictionary(body);
 
+            var writeResult = await _writePipeline.InsertAsync(
+                tenantId, tableMetadata, data, cancellationToken: cancellationToken);
+
+            if (!writeResult.Success)
+            {
+                return BadRequest(new { error = string.Join("; ", writeResult.Errors.Select(e => e.Message)) });
+            }
+
+            var result = writeResult.Data ?? data;
             var response = new ODataSingleResponse
             {
                 Context = $"{Request.Scheme}://{Request.Host}/odata/$metadata#{entitySet}/$entity",
@@ -243,13 +259,28 @@ public sealed partial class MorphODataController : ControllerBase
             var modelResult = await _modelProvider.GetModelWithMappingAsync(tenantId, cancellationToken);
             var tableName = ResolveTableName(entitySet, modelResult.EntitySetToTableNameMap);
 
+            var tableMetadata = await _metadataRepository.GetTableByNameAsync(
+                tenantId, tableName, includeColumns: true, cancellationToken);
+            if (tableMetadata is null)
+            {
+                return NotFound(new { error = $"Table '{tableName}' not found." });
+            }
+
+            var existing = await _dataService.GetByIdAsync(tenantId, tableName, key, cancellationToken);
             var data = JsonElementToDictionary(body);
-            var result = await _dataService.UpdateAsync(tenantId, tableName, key, data, cancellationToken);
+
+            var writeResult = await _writePipeline.UpdateAsync(
+                tenantId, tableMetadata, key, data, existing, cancellationToken: cancellationToken);
+
+            if (!writeResult.Success)
+            {
+                return BadRequest(new { error = string.Join("; ", writeResult.Errors.Select(e => e.Message)) });
+            }
 
             var response = new ODataSingleResponse
             {
                 Context = $"{Request.Scheme}://{Request.Host}/odata/$metadata#{entitySet}/$entity",
-                Value = result
+                Value = writeResult.Data ?? data
             };
 
             return Ok(response);
@@ -276,8 +307,17 @@ public sealed partial class MorphODataController : ControllerBase
             var modelResult = await _modelProvider.GetModelWithMappingAsync(tenantId, cancellationToken);
             var tableName = ResolveTableName(entitySet, modelResult.EntitySetToTableNameMap);
 
-            var deleted = await _dataService.DeleteAsync(tenantId, tableName, key, cancellationToken);
-            if (!deleted)
+            var tableMetadata = await _metadataRepository.GetTableByNameAsync(
+                tenantId, tableName, includeColumns: true, cancellationToken);
+            if (tableMetadata is null)
+            {
+                return NotFound(new { error = $"Table '{tableName}' not found." });
+            }
+
+            var writeResult = await _writePipeline.DeleteAsync(
+                tenantId, tableMetadata, key, cancellationToken: cancellationToken);
+
+            if (!writeResult.Success)
             {
                 return NotFound(new { error = $"Entity with key '{key}' not found in '{entitySet}'." });
             }
@@ -329,23 +369,30 @@ public sealed partial class MorphODataController : ControllerBase
         {
             var tableName = ResolveTableName(request.EntitySet, entitySetToTableNameMap);
 
+            // Resolve table metadata for write operations
+            var tableMetadata = await _metadataRepository.GetTableByNameAsync(
+                tenantId, tableName, includeColumns: true, cancellationToken);
+
             switch (request.Method.ToUpperInvariant())
             {
                 case "POST":
+                    if (tableMetadata is null)
+                    {
+                        return new ODataBatchResponseItem { Id = request.Id, Status = 404, Error = $"Table '{tableName}' not found." };
+                    }
                     var insertData = request.Body != null
                         ? JsonElementToDictionary(request.Body.Value)
                         : new Dictionary<string, object?>();
-                    // Generate _id if not provided
-                    if (!insertData.ContainsKey("_id"))
+                    var insertWriteResult = await _writePipeline.InsertAsync(tenantId, tableMetadata, insertData, cancellationToken: cancellationToken);
+                    if (!insertWriteResult.Success)
                     {
-                        insertData["_id"] = Guid.CreateVersion7();
+                        return new ODataBatchResponseItem { Id = request.Id, Status = 400, Error = string.Join("; ", insertWriteResult.Errors.Select(e => e.Message)) };
                     }
-                    var insertResult = await _dataService.InsertAsync(tenantId, tableName, insertData, cancellationToken);
                     return new ODataBatchResponseItem
                     {
                         Id = request.Id,
                         Status = 201,
-                        Body = insertResult
+                        Body = insertWriteResult.Data
                     };
 
                 case "PATCH":
@@ -359,15 +406,24 @@ public sealed partial class MorphODataController : ControllerBase
                             Error = "Key is required for PATCH/PUT operations."
                         };
                     }
+                    if (tableMetadata is null)
+                    {
+                        return new ODataBatchResponseItem { Id = request.Id, Status = 404, Error = $"Table '{tableName}' not found." };
+                    }
+                    var existing = await _dataService.GetByIdAsync(tenantId, tableName, request.Key.Value, cancellationToken);
                     var updateData = request.Body != null
                         ? JsonElementToDictionary(request.Body.Value)
                         : new Dictionary<string, object?>();
-                    var updateResult = await _dataService.UpdateAsync(tenantId, tableName, request.Key.Value, updateData, cancellationToken);
+                    var updateWriteResult = await _writePipeline.UpdateAsync(tenantId, tableMetadata, request.Key.Value, updateData, existing, cancellationToken: cancellationToken);
+                    if (!updateWriteResult.Success)
+                    {
+                        return new ODataBatchResponseItem { Id = request.Id, Status = 400, Error = string.Join("; ", updateWriteResult.Errors.Select(e => e.Message)) };
+                    }
                     return new ODataBatchResponseItem
                     {
                         Id = request.Id,
                         Status = 200,
-                        Body = updateResult
+                        Body = updateWriteResult.Data
                     };
 
                 case "DELETE":
@@ -380,12 +436,16 @@ public sealed partial class MorphODataController : ControllerBase
                             Error = "Key is required for DELETE operations."
                         };
                     }
-                    var deleted = await _dataService.DeleteAsync(tenantId, tableName, request.Key.Value, cancellationToken);
+                    if (tableMetadata is null)
+                    {
+                        return new ODataBatchResponseItem { Id = request.Id, Status = 404, Error = $"Table '{tableName}' not found." };
+                    }
+                    var deleteWriteResult = await _writePipeline.DeleteAsync(tenantId, tableMetadata, request.Key.Value, cancellationToken: cancellationToken);
                     return new ODataBatchResponseItem
                     {
                         Id = request.Id,
-                        Status = deleted ? 204 : 404,
-                        Error = deleted ? null : "Entity not found."
+                        Status = deleteWriteResult.Success ? 204 : 404,
+                        Error = deleteWriteResult.Success ? null : "Entity not found."
                     };
 
                 case "GET":

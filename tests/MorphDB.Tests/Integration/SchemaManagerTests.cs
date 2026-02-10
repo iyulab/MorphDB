@@ -350,6 +350,60 @@ public class SchemaManagerTests
     }
 
     [Fact]
+    public async Task CreateTableAsync_WithUnderscorePrefix_ShouldSucceed()
+    {
+        // Arrange - Underscore-prefixed table names should be allowed (e.g. for embedding scenarios)
+        var tenantId = Guid.NewGuid();
+        var request = new CreateTableRequest
+        {
+            TenantId = tenantId,
+            LogicalName = "_archive_" + Guid.NewGuid().ToString("N")[..8],
+            Columns =
+            [
+                new CreateColumnRequest
+                {
+                    LogicalName = "data",
+                    DataType = MorphDataType.Text,
+                    IsNullable = true
+                }
+            ]
+        };
+
+        // Act
+        var result = await _schemaManager.CreateTableAsync(request);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.LogicalName.Should().StartWith("_archive_");
+        result.PhysicalName.Should().StartWith("tbl_");
+    }
+
+    [Fact]
+    public async Task CreateTableAsync_WithMorphPrefix_ShouldThrow()
+    {
+        // Arrange - _morph_ prefix is reserved for system tables
+        var tenantId = Guid.NewGuid();
+        var request = new CreateTableRequest
+        {
+            TenantId = tenantId,
+            LogicalName = "_morph_system_" + Guid.NewGuid().ToString("N")[..8],
+            Columns =
+            [
+                new CreateColumnRequest
+                {
+                    LogicalName = "data",
+                    DataType = MorphDataType.Text
+                }
+            ]
+        };
+
+        // Act & Assert
+        var act = () => _schemaManager.CreateTableAsync(request);
+        await act.Should().ThrowAsync<SchemaException>()
+            .Where(e => e.ErrorCode == "RESERVED_NAME");
+    }
+
+    [Fact]
     public async Task ListTablesAsync_ShouldReturnAllTablesForTenant()
     {
         // Arrange

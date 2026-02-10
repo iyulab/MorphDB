@@ -46,7 +46,7 @@ public sealed class PostgresViewManager : IViewManager
         CreateViewRequest request,
         CancellationToken cancellationToken = default)
     {
-        ValidateLogicalName(request.Name);
+        LogicalNameValidator.ValidateEntityName(request.Name, "View");
 
         // Check if view already exists
         var existing = await _viewRepository.GetViewByNameAsync(
@@ -498,24 +498,6 @@ public sealed class PostgresViewManager : IViewManager
         }
 
         return columns;
-    }
-
-    private static void ValidateLogicalName(string name)
-    {
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            throw new ArgumentException("View name cannot be empty.", nameof(name));
-        }
-
-        if (name.StartsWith('_'))
-        {
-            throw new ArgumentException("View name cannot start with underscore.", nameof(name));
-        }
-
-        if (name.Length > 255)
-        {
-            throw new ArgumentException("View name cannot exceed 255 characters.", nameof(name));
-        }
     }
 
     /// <summary>

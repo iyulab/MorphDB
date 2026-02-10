@@ -43,7 +43,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         CreateTableRequest request,
         CancellationToken cancellationToken = default)
     {
-        ValidateLogicalName(request.LogicalName);
+        LogicalNameValidator.ValidateEntityName(request.LogicalName, "Table");
 
         // Check if table already exists
         var existing = await _repository.GetTableByNameAsync(
@@ -150,7 +150,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         // Add user-defined columns
         foreach (var colReq in request.Columns)
         {
-            ValidateLogicalName(colReq.LogicalName);
+            LogicalNameValidator.ValidateColumnName(colReq.LogicalName);
 
             var columnId = Guid.NewGuid();
 
@@ -351,7 +351,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         // Validate new name if provided
         if (request.LogicalName is not null)
         {
-            ValidateLogicalName(request.LogicalName);
+            LogicalNameValidator.ValidateEntityName(request.LogicalName, "Table");
 
             // Check for duplicate name
             var existing = await _repository.GetTableByNameAsync(table.TenantId, request.LogicalName, cancellationToken: cancellationToken);
@@ -425,7 +425,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         AddColumnRequest request,
         CancellationToken cancellationToken = default)
     {
-        ValidateLogicalName(request.LogicalName);
+        LogicalNameValidator.ValidateColumnName(request.LogicalName);
 
         var table = await _repository.GetTableByIdAsync(request.TableId, includeColumns: true, cancellationToken)
             ?? throw new TableNotFoundException(request.TableId.ToString());
@@ -558,7 +558,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         // Validate new name if provided
         if (request.LogicalName is not null)
         {
-            ValidateLogicalName(request.LogicalName);
+            LogicalNameValidator.ValidateColumnName(request.LogicalName);
 
             // Check for duplicate name in same table
             var columns = await _repository.GetColumnsByTableIdAsync(column.TableId, cancellationToken);
@@ -646,7 +646,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         CreateIndexRequest request,
         CancellationToken cancellationToken = default)
     {
-        ValidateLogicalName(request.LogicalName);
+        LogicalNameValidator.ValidateEntityName(request.LogicalName, "Index");
 
         var table = await _repository.GetTableByIdAsync(request.TableId, includeColumns: true, cancellationToken)
             ?? throw new TableNotFoundException(request.TableId.ToString());
@@ -770,7 +770,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         CreateRelationRequest request,
         CancellationToken cancellationToken = default)
     {
-        ValidateLogicalName(request.LogicalName);
+        LogicalNameValidator.ValidateEntityName(request.LogicalName, "Relation");
 
         // Validate source table and column
         var sourceTable = await _repository.GetTableByIdAsync(request.SourceTableId, includeColumns: true, cancellationToken)
@@ -1029,24 +1029,6 @@ public sealed class PostgresSchemaManager : ISchemaManager
             OrdinalPosition = ordinalPosition,
             IsActive = true
         };
-    }
-
-    private static void ValidateLogicalName(string name)
-    {
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            throw new SchemaException("INVALID_NAME", "Logical name cannot be empty.");
-        }
-
-        if (name.Length > 255)
-        {
-            throw new SchemaException("INVALID_NAME", "Logical name cannot exceed 255 characters.");
-        }
-
-        if (name.StartsWith('_'))
-        {
-            throw new SchemaException("INVALID_NAME", "Logical name cannot start with underscore (reserved for system).");
-        }
     }
 
     #endregion

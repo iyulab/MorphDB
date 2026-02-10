@@ -114,6 +114,14 @@ v0.9.5 ──→ v0.10.0 ──→ v0.11.0 ──→ v0.12.0 (Data Features Enha
 
 **Active Version**: v0.16.0 (Documentation & E2E Tests)
 
+### Completed in v0.16.0 (In Progress)
+
+| Phase | Task | Status |
+|-------|------|--------|
+| ALL | Write Pipeline 통합 (모든 write 경로: REST, GraphQL, OData) | ✅ Complete |
+| ALL | 언더스코어 테이블명 허용 (`_custom_table` OK, `_morph_` 차단) | ✅ Complete |
+| ALL | LogicalNameValidator 분리 (Entity vs Column 검증 분리) | ✅ Complete |
+
 ### Completed in v0.15.0 (Cross-Component Integration)
 
 | Phase | Task | Status |
