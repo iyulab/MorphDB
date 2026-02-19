@@ -1,6 +1,17 @@
 namespace MorphDB.Core.Abstractions;
 
 /// <summary>
+/// Constants for query limits.
+/// </summary>
+public static class QueryLimits
+{
+    /// <summary>
+    /// Maximum allowed page size for any query. Values exceeding this are clamped.
+    /// </summary>
+    public const int MaxPageSize = 10000;
+}
+
+/// <summary>
 /// Fluent query builder for MorphDB queries using logical names.
 /// </summary>
 public interface IMorphQueryBuilder

@@ -173,6 +173,23 @@ public sealed class CachingSchemaManagerDecorator : ISchemaManager
         return column;
     }
 
+    public async Task<ColumnMetadata> RenameColumnAsync(
+        RenameColumnRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var column = await _inner.RenameColumnAsync(request, cancellationToken);
+
+        // Invalidate table cache (column name changed affects schema)
+        var table = await _inner.GetTableByIdAsync(column.TableId, cancellationToken);
+        if (table is not null)
+        {
+            await _cache.InvalidateTableAsync(table.TableId, cancellationToken);
+            await _cache.InvalidateTableAsync(table.TenantId, table.LogicalName, cancellationToken);
+        }
+
+        return column;
+    }
+
     public async Task DeleteColumnAsync(
         Guid columnId,
         CancellationToken cancellationToken = default)

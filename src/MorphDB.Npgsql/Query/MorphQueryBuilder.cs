@@ -304,7 +304,7 @@ internal sealed class MorphQuery : IMorphQuery
     /// <inheritdoc />
     public IMorphQuery Limit(int count)
     {
-        _limit = count;
+        _limit = Math.Min(count, QueryLimits.MaxPageSize);
         return this;
     }
 
@@ -320,7 +320,7 @@ internal sealed class MorphQuery : IMorphQuery
     {
         _whereConditions.Add(new WhereCondition(cursorColumn, FilterOperator.GreaterThan, cursorValue, false, ConditionType.Standard));
         _orderByClauses.Add((cursorColumn, false));
-        _limit = pageSize;
+        _limit = Math.Min(pageSize, QueryLimits.MaxPageSize);
         return this;
     }
 
@@ -329,7 +329,7 @@ internal sealed class MorphQuery : IMorphQuery
     {
         _whereConditions.Add(new WhereCondition(cursorColumn, FilterOperator.LessThan, cursorValue, false, ConditionType.Standard));
         _orderByClauses.Add((cursorColumn, true));
-        _limit = pageSize;
+        _limit = Math.Min(pageSize, QueryLimits.MaxPageSize);
         return this;
     }
 

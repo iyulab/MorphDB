@@ -69,7 +69,9 @@ public sealed class MetadataRepository : IMetadataRepository
         if (includeColumns)
         {
             var columns = await GetColumnsByTableIdAsync(tableId, cancellationToken);
-            table = WithColumns(table, columns);
+            var relations = await GetRelationsByTableIdAsync(tableId, cancellationToken);
+            columns = AttachForeignKeyReferences(columns, relations);
+            table = WithColumnsAndRelations(table, columns, relations);
         }
 
         return table;
@@ -100,7 +102,9 @@ public sealed class MetadataRepository : IMetadataRepository
         if (includeColumns)
         {
             var columns = await GetColumnsByTableIdAsync(table.TableId, cancellationToken);
-            table = WithColumns(table, columns);
+            var relations = await GetRelationsByTableIdAsync(table.TableId, cancellationToken);
+            columns = AttachForeignKeyReferences(columns, relations);
+            table = WithColumnsAndRelations(table, columns, relations);
         }
 
         return table;
@@ -129,7 +133,9 @@ public sealed class MetadataRepository : IMetadataRepository
             for (var i = 0; i < tables.Count; i++)
             {
                 var columns = await GetColumnsByTableIdAsync(tables[i].TableId, cancellationToken);
-                tables[i] = WithColumns(tables[i], columns);
+                var relations = await GetRelationsByTableIdAsync(tables[i].TableId, cancellationToken);
+                columns = AttachForeignKeyReferences(columns, relations);
+                tables[i] = WithColumnsAndRelations(tables[i], columns, relations);
             }
         }
 
@@ -534,6 +540,111 @@ public sealed class MetadataRepository : IMetadataRepository
         SourceTrackingEnabled = table.SourceTrackingEnabled,
         RowStateEnabled = table.RowStateEnabled
     };
+
+    private static TableMetadata WithColumnsAndRelations(
+        TableMetadata table,
+        IReadOnlyList<ColumnMetadata> columns,
+        IReadOnlyList<RelationMetadata> relations) => new()
+    {
+        TableId = table.TableId,
+        TenantId = table.TenantId,
+        LogicalName = table.LogicalName,
+        PhysicalName = table.PhysicalName,
+        SchemaVersion = table.SchemaVersion,
+        Descriptor = table.Descriptor,
+        IsActive = table.IsActive,
+        CreatedAt = table.CreatedAt,
+        UpdatedAt = table.UpdatedAt,
+        Columns = columns,
+        Relations = relations,
+        Indexes = table.Indexes,
+        TimestampsEnabled = table.TimestampsEnabled,
+        VersioningEnabled = table.VersioningEnabled,
+        AuditFieldsEnabled = table.AuditFieldsEnabled,
+        SoftDeleteEnabled = table.SoftDeleteEnabled,
+        OwnershipEnabled = table.OwnershipEnabled,
+        HierarchyEnabled = table.HierarchyEnabled,
+        SourceTrackingEnabled = table.SourceTrackingEnabled,
+        RowStateEnabled = table.RowStateEnabled
+    };
+
+    /// <summary>
+    /// Attaches FK reference metadata to columns that participate as source columns in relations.
+    /// </summary>
+    private static IReadOnlyList<ColumnMetadata> AttachForeignKeyReferences(
+        IReadOnlyList<ColumnMetadata> columns,
+        IReadOnlyList<RelationMetadata> relations)
+    {
+        if (relations.Count == 0)
+            return columns;
+
+        // Build a lookup from source column ID to relation
+        var sourceColRelations = new Dictionary<Guid, RelationMetadata>();
+        foreach (var rel in relations)
+        {
+            // Only include relations where this table is the source
+            sourceColRelations.TryAdd(rel.SourceColumnId, rel);
+        }
+
+        if (sourceColRelations.Count == 0)
+            return columns;
+
+        // Find target column logical names by looking at columns (may be in same table for self-ref)
+        var columnIdToLogicalName = columns.ToDictionary(c => c.ColumnId, c => c.LogicalName);
+
+        var result = new List<ColumnMetadata>(columns.Count);
+        foreach (var col in columns)
+        {
+            if (sourceColRelations.TryGetValue(col.ColumnId, out var rel))
+            {
+                // Target column name: use stored name if available, otherwise fall back to column ID lookup
+                var targetColumnName = rel.TargetColumnName ?? "_id";
+
+                result.Add(new ColumnMetadata
+                {
+                    ColumnId = col.ColumnId,
+                    TableId = col.TableId,
+                    LogicalName = col.LogicalName,
+                    PhysicalName = col.PhysicalName,
+                    DataType = col.DataType,
+                    NativeType = col.NativeType,
+                    IsNullable = col.IsNullable,
+                    IsUnique = col.IsUnique,
+                    IsPrimaryKey = col.IsPrimaryKey,
+                    IsIndexed = col.IsIndexed,
+                    IsEncrypted = col.IsEncrypted,
+                    IsSystemColumn = col.IsSystemColumn,
+                    DefaultValue = col.DefaultValue,
+                    CheckExpression = col.CheckExpression,
+                    OrdinalPosition = col.OrdinalPosition,
+                    Descriptor = col.Descriptor,
+                    IsActive = col.IsActive,
+                    IsRequired = col.IsRequired,
+                    DefaultType = col.DefaultType,
+                    EnforceUniqueOnWrite = col.EnforceUniqueOnWrite,
+                    UniqueCondition = col.UniqueCondition,
+                    ComputedConfig = col.ComputedConfig,
+                    LookupConfig = col.LookupConfig,
+                    RollupConfig = col.RollupConfig,
+                    FormulaConfig = col.FormulaConfig,
+                    ForeignKey = new ForeignKeyReference
+                    {
+                        RelationId = rel.RelationId,
+                        TargetTable = rel.TargetTableName ?? rel.TargetTableId.ToString(),
+                        TargetColumn = targetColumnName,
+                        RelationType = rel.RelationType,
+                        OnDelete = rel.OnDelete
+                    }
+                });
+            }
+            else
+            {
+                result.Add(col);
+            }
+        }
+
+        return result;
+    }
 
     private static TableMetadata MapToTableMetadata(TableRow row)
     {

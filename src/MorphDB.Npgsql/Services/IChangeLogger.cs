@@ -45,6 +45,7 @@ public enum SchemaOperation
     DeleteTable,
     AddColumn,
     UpdateColumn,
+    RenameColumn,
     DeleteColumn,
     CreateIndex,
     DeleteIndex,

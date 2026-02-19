@@ -85,3 +85,5 @@ local-docs/
 research-docs/
 nul
 CLAUDE.md
+dist/
+node_modules/

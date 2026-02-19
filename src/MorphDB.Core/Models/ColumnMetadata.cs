@@ -83,6 +83,12 @@ public sealed class ColumnMetadata
     public FormulaColumnConfig? FormulaConfig { get; init; }
 
     /// <summary>
+    /// FK relationship metadata. Set when this column participates in a relation as a source (foreign key).
+    /// Populated during schema queries when includeColumns is true.
+    /// </summary>
+    public ForeignKeyReference? ForeignKey { get; init; }
+
+    /// <summary>
     /// Whether this column is a derived type (computed, lookup, rollup, or formula).
     /// Derived columns are read-only and computed from other data.
     /// </summary>
@@ -91,6 +97,28 @@ public sealed class ColumnMetadata
         LookupConfig != null ||
         RollupConfig != null ||
         FormulaConfig != null;
+}
+
+/// <summary>
+/// FK reference metadata embedded in a column definition.
+/// Indicates that this column references another table's column.
+/// </summary>
+public sealed class ForeignKeyReference
+{
+    /// <summary>The relation ID from RelationMetadata.</summary>
+    public Guid RelationId { get; init; }
+
+    /// <summary>The logical name of the referenced table.</summary>
+    public required string TargetTable { get; init; }
+
+    /// <summary>The logical name of the referenced column.</summary>
+    public required string TargetColumn { get; init; }
+
+    /// <summary>The relation type (OneToOne, OneToMany, ManyToMany).</summary>
+    public RelationType RelationType { get; init; }
+
+    /// <summary>The delete action for this FK.</summary>
+    public OnDeleteAction OnDelete { get; init; } = OnDeleteAction.NoAction;
 }
 
 /// <summary>

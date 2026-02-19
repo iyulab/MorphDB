@@ -243,7 +243,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         {
             // Create physical table
             var createTableSql = DdlBuilder.BuildCreateTable(physicalTableName, columnDefinitions);
-            await connection.ExecuteAsync(createTableSql, transaction: transaction);
+            await connection.ExecuteAsync(new CommandDefinition(createTableSql, transaction: transaction, cancellationToken: cancellationToken));
 
             // Create tenant_id index for RLS performance
             var tenantIndexSql = DdlBuilder.BuildCreateIndex(new IndexDefinition
@@ -253,7 +253,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
                 Columns = [new IndexColumnInfo { ColumnId = tenantColumn.ColumnId, LogicalName = tenantColumn.LogicalName, PhysicalName = tenantColumn.PhysicalName }],
                 IndexType = IndexType.BTree
             });
-            await connection.ExecuteAsync(tenantIndexSql, transaction: transaction);
+            await connection.ExecuteAsync(new CommandDefinition(tenantIndexSql, transaction: transaction, cancellationToken: cancellationToken));
 
             // Create unique/indexed columns
             foreach (var col in columns.Where(c => c.IsUnique && !c.IsPrimaryKey))
@@ -262,7 +262,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
                     physicalTableName,
                     $"uq_{physicalTableName}_{col.PhysicalName}",
                     col.PhysicalName);
-                await connection.ExecuteAsync(uniqueConstraintSql, transaction: transaction);
+                await connection.ExecuteAsync(new CommandDefinition(uniqueConstraintSql, transaction: transaction, cancellationToken: cancellationToken));
             }
 
             foreach (var col in columns.Where(c => c.IsIndexed && !c.IsPrimaryKey && !c.IsUnique))
@@ -274,7 +274,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
                     Columns = [new IndexColumnInfo { ColumnId = col.ColumnId, LogicalName = col.LogicalName, PhysicalName = col.PhysicalName }],
                     IndexType = TypeMapper.GetRecommendedIndexType(col.DataType)
                 });
-                await connection.ExecuteAsync(indexSql, transaction: transaction);
+                await connection.ExecuteAsync(new CommandDefinition(indexSql, transaction: transaction, cancellationToken: cancellationToken));
             }
 
             await transaction.CommitAsync(cancellationToken);
@@ -416,7 +416,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         // Execute DDL
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         var dropTableSql = DdlBuilder.BuildDropTable(table.PhysicalName);
-        await connection.ExecuteAsync(dropTableSql);
+        await connection.ExecuteAsync(new CommandDefinition(dropTableSql, cancellationToken: cancellationToken));
 
         // Soft delete metadata
         await _repository.SoftDeleteTableAsync(tableId, cancellationToken);
@@ -512,7 +512,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
             try
             {
                 var addColumnSql = DdlBuilder.BuildAddColumn(table.PhysicalName, columnDef);
-                await connection.ExecuteAsync(addColumnSql, transaction: transaction);
+                await connection.ExecuteAsync(new CommandDefinition(addColumnSql, transaction: transaction, cancellationToken: cancellationToken));
 
                 if (request.IsUnique)
                 {
@@ -520,7 +520,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
                         table.PhysicalName,
                         $"uq_{table.PhysicalName}_{physicalColName}",
                         physicalColName);
-                    await connection.ExecuteAsync(uniqueSql, transaction: transaction);
+                    await connection.ExecuteAsync(new CommandDefinition(uniqueSql, transaction: transaction, cancellationToken: cancellationToken));
                 }
 
                 if (request.IsIndexed && !request.IsUnique)
@@ -532,7 +532,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
                         Columns = [new IndexColumnInfo { ColumnId = columnId, LogicalName = request.LogicalName, PhysicalName = physicalColName }],
                         IndexType = TypeMapper.GetRecommendedIndexType(request.DataType)
                     });
-                    await connection.ExecuteAsync(indexSql, transaction: transaction);
+                    await connection.ExecuteAsync(new CommandDefinition(indexSql, transaction: transaction, cancellationToken: cancellationToken));
                 }
 
                 await transaction.CommitAsync(cancellationToken);
@@ -615,6 +615,92 @@ public sealed class PostgresSchemaManager : ISchemaManager
         return (await _repository.GetColumnByIdAsync(request.ColumnId, cancellationToken))!;
     }
 
+    public async Task<ColumnMetadata> RenameColumnAsync(
+        RenameColumnRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        LogicalNameValidator.ValidateColumnName(request.NewLogicalName);
+
+        var column = await _repository.GetColumnByIdAsync(request.ColumnId, cancellationToken)
+            ?? throw new ColumnNotFoundException("unknown", request.ColumnId.ToString());
+
+        var table = await _repository.GetTableByIdAsync(column.TableId, includeColumns: true, cancellationToken)
+            ?? throw new TableNotFoundException(column.TableId.ToString());
+
+        // Check for duplicate column name
+        if (table.Columns.Any(c => c.ColumnId != request.ColumnId &&
+            c.LogicalName.Equals(request.NewLogicalName, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new DuplicateNameException("Column", request.NewLogicalName);
+        }
+
+        // Optimistic concurrency check
+        var currentVersion = await _repository.GetCurrentVersionAsync(column.TableId, cancellationToken);
+        if (currentVersion != request.ExpectedVersion)
+        {
+            throw new SchemaVersionConflictException(request.ExpectedVersion, currentVersion);
+        }
+
+        // Acquire advisory lock
+        await using var lockHandle = await _lockManager.AcquireDdlLockAsync(
+            $"table:{column.TableId}",
+            _options.LockTimeout,
+            cancellationToken);
+
+        // For non-system columns, generate new physical name and execute RENAME COLUMN DDL
+        if (!column.IsSystemColumn && !column.PhysicalName.StartsWith("virtual_", StringComparison.Ordinal))
+        {
+            var newPhysicalName = _nameHasher.GenerateColumnName(column.TableId, request.NewLogicalName);
+
+            await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+            var renameSql = DdlBuilder.BuildRenameColumn(table.PhysicalName, column.PhysicalName, newPhysicalName);
+            await connection.ExecuteAsync(new CommandDefinition(renameSql, cancellationToken: cancellationToken));
+
+            // Update metadata with new logical name and physical name
+            await _repository.UpdateColumnAsync(request.ColumnId, request.NewLogicalName, null, cancellationToken);
+            // Update physical name separately — need to update the physical_name column in metadata
+            await UpdateColumnPhysicalNameAsync(request.ColumnId, newPhysicalName, cancellationToken);
+        }
+        else
+        {
+            // System columns or virtual columns: only update logical name in metadata
+            await _repository.UpdateColumnAsync(request.ColumnId, request.NewLogicalName, null, cancellationToken);
+        }
+
+        await _repository.IncrementVersionAsync(column.TableId, cancellationToken);
+
+        // Log change
+        await _changeLogger.LogChangeAsync(new SchemaChangeEntry
+        {
+            TableId = column.TableId,
+            Operation = SchemaOperation.RenameColumn,
+            SchemaVersion = currentVersion + 1,
+            Changes = new
+            {
+                ColumnId = request.ColumnId,
+                OldLogicalName = column.LogicalName,
+                NewLogicalName = request.NewLogicalName
+            }
+        }, cancellationToken);
+
+        return (await _repository.GetColumnByIdAsync(request.ColumnId, cancellationToken))!;
+    }
+
+    private async Task UpdateColumnPhysicalNameAsync(
+        Guid columnId,
+        string newPhysicalName,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            UPDATE morphdb._morph_columns
+            SET physical_name = @PhysicalName
+            WHERE column_id = @ColumnId
+            """;
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await connection.ExecuteAsync(new CommandDefinition(sql, new { ColumnId = columnId, PhysicalName = newPhysicalName }, cancellationToken: cancellationToken));
+    }
+
     public async Task DeleteColumnAsync(
         Guid columnId,
         CancellationToken cancellationToken = default)
@@ -636,7 +722,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         // Execute DDL
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         var dropColumnSql = DdlBuilder.BuildDropColumn(table.PhysicalName, column.PhysicalName);
-        await connection.ExecuteAsync(dropColumnSql);
+        await connection.ExecuteAsync(new CommandDefinition(dropColumnSql, cancellationToken: cancellationToken));
 
         // Soft delete metadata
         await _repository.SoftDeleteColumnAsync(columnId, cancellationToken);
@@ -717,7 +803,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
             IsUnique = request.IsUnique,
             WhereClause = request.WhereClause
         });
-        await connection.ExecuteAsync(createIndexSql);
+        await connection.ExecuteAsync(new CommandDefinition(createIndexSql, cancellationToken: cancellationToken));
 
         // Insert metadata and increment version
         var insertedIndex = await _repository.InsertIndexAsync(index, cancellationToken);
@@ -760,7 +846,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         // Execute DDL
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         var dropIndexSql = DdlBuilder.BuildDropIndex(index.PhysicalName);
-        await connection.ExecuteAsync(dropIndexSql);
+        await connection.ExecuteAsync(new CommandDefinition(dropIndexSql, cancellationToken: cancellationToken));
 
         // Soft delete metadata
         await _repository.SoftDeleteIndexAsync(indexId, cancellationToken);
@@ -875,7 +961,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
                 TargetColumnPhysicalName = targetColumn.PhysicalName,
                 OnDelete = request.OnDelete
             });
-            await connection.ExecuteAsync(addFkSql);
+            await connection.ExecuteAsync(new CommandDefinition(addFkSql, cancellationToken: cancellationToken));
         }
 
         // Insert metadata and increment version
@@ -996,7 +1082,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         var constraintName = $"fk_{sourceTable.PhysicalName}_{sourceColumn.PhysicalName}";
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         var dropFkSql = DdlBuilder.BuildDropForeignKey(sourceTable.PhysicalName, constraintName);
-        await connection.ExecuteAsync(dropFkSql);
+        await connection.ExecuteAsync(new CommandDefinition(dropFkSql, cancellationToken: cancellationToken));
 
         // Soft delete metadata
         await _repository.SoftDeleteRelationAsync(relationId, cancellationToken);

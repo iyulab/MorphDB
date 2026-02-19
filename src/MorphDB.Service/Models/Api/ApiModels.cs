@@ -873,6 +873,11 @@ public sealed record DataQueryParameters
     public int PageSize { get; init; } = 50;
 
     /// <summary>
+    /// Full-text search query. Searches across all text-type columns using case-insensitive matching.
+    /// </summary>
+    public string? Search { get; init; }
+
+    /// <summary>
     /// Filter by row state: "draft", "valid", "error", or "all".
     /// Only applies to tables with RowStateEnabled.
     /// Default: "valid" (excludes draft and error rows).

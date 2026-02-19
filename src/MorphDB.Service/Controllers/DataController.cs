@@ -5,6 +5,8 @@ using MorphDB.Core.Pipeline;
 using MorphDB.Npgsql.Repositories;
 using MorphDB.Service.Models.Api;
 
+using static MorphDB.Core.Abstractions.QueryLimits;
+
 namespace MorphDB.Service.Controllers;
 
 /// <summary>
@@ -58,7 +60,7 @@ public sealed class DataController : ControllerBase
             var tenantId = GetTenantId();
 
             // Validate pagination
-            var pageSize = Math.Clamp(query.PageSize, 1, 1000);
+            var pageSize = Math.Clamp(query.PageSize, 1, Math.Min(1000, MaxPageSize));
             var page = Math.Max(query.Page, 1);
 
             // Build query
@@ -79,6 +81,18 @@ public sealed class DataController : ControllerBase
             if (!string.IsNullOrEmpty(query.Filter))
             {
                 morphQuery = ApplyFilters(morphQuery, query.Filter);
+            }
+
+            // Apply search across text columns
+            if (!string.IsNullOrEmpty(query.Search))
+            {
+                var tableMetadata = await _metadataRepository.GetTableByNameAsync(
+                    tenantId, table, includeColumns: true, cancellationToken);
+
+                if (tableMetadata is not null)
+                {
+                    morphQuery = ApplySearch(morphQuery, query.Search, tableMetadata.Columns);
+                }
             }
 
             // Apply row state filter if specified
@@ -449,6 +463,48 @@ public sealed class DataController : ControllerBase
             else
             {
                 query = query.OrderBy(column);
+            }
+        }
+
+        return query;
+    }
+
+    /// <summary>
+    /// Determines if a MorphDataType is a text-like type suitable for ILIKE search.
+    /// </summary>
+    private static bool IsTextSearchable(MorphDataType dataType) => dataType is
+        MorphDataType.Text or
+        MorphDataType.LongText or
+        MorphDataType.Email or
+        MorphDataType.Url or
+        MorphDataType.Phone or
+        MorphDataType.SingleSelect;
+
+    private static IMorphQuery ApplySearch(
+        IMorphQuery query,
+        string searchText,
+        IReadOnlyList<ColumnMetadata> columns)
+    {
+        var textColumns = columns
+            .Where(c => !c.IsSystemColumn && !c.IsDerived && IsTextSearchable(c.DataType))
+            .ToList();
+
+        if (textColumns.Count == 0)
+            return query;
+
+        var searchPattern = $"%{searchText}%";
+        var isFirst = true;
+
+        foreach (var column in textColumns)
+        {
+            if (isFirst)
+            {
+                query = query.Where(column.LogicalName, FilterOperator.ILike, searchPattern);
+                isFirst = false;
+            }
+            else
+            {
+                query = query.OrWhere(column.LogicalName, FilterOperator.ILike, searchPattern);
             }
         }
 

@@ -65,6 +65,14 @@ public interface ISchemaManager
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Renames a column (both logical and physical names).
+    /// Uses ALTER TABLE ... RENAME COLUMN instead of drop+add to preserve data.
+    /// </summary>
+    Task<ColumnMetadata> RenameColumnAsync(
+        RenameColumnRequest request,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Soft-deletes a column.
     /// </summary>
     Task DeleteColumnAsync(
@@ -231,6 +239,13 @@ public sealed record UpdateColumnRequest
     public Guid ColumnId { get; init; }
     public string? LogicalName { get; init; }
     public string? DefaultValue { get; init; }
+    public int ExpectedVersion { get; init; }
+}
+
+public sealed record RenameColumnRequest
+{
+    public Guid ColumnId { get; init; }
+    public required string NewLogicalName { get; init; }
     public int ExpectedVersion { get; init; }
 }
 
