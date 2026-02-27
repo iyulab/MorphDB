@@ -132,6 +132,10 @@ public sealed class DataController : ControllerBase
 
             return Ok(response);
         }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "INVALID_FILTER" });
+        }
         catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
         {
             return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_TENANT" });
@@ -425,7 +429,11 @@ public sealed class DataController : ControllerBase
         {
             var parts = filter.Split(':', 3);
             if (parts.Length != 3)
-                continue;
+            {
+                throw new ArgumentException(
+                    $"Invalid filter format: '{filter}'. Expected format: 'column:operator:value'. " +
+                    $"For OData syntax, use the /odata endpoint with $filter parameter instead.");
+            }
 
             var column = parts[0].Trim();
             var op = ApiModelExtensions.ParseFilterOperator(parts[1].Trim());

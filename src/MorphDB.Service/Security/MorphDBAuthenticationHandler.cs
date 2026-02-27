@@ -116,11 +116,23 @@ public sealed class MorphDBAuthenticationHandler : AuthenticationHandler<MorphDB
             }
         }
 
-        // No credentials provided - allow anonymous for now (may be restricted at authorization level)
+        // No credentials provided - authenticate as anonymous with tenant context
+        // This allows [Authorize] endpoints to proceed; authorization logic handles access control
         if (tenantId != Guid.Empty)
         {
             var securityContext = SecurityContext.Anonymous(tenantId);
             _securityContextAccessor.SetContext(securityContext);
+
+            var claims = new List<Claim>
+            {
+                new("tenant_id", tenantId.ToString()),
+                new(ClaimTypes.Role, "anonymous")
+            };
+            var identity = new ClaimsIdentity(claims, Scheme.Name);
+            var principal = new ClaimsPrincipal(identity);
+            var ticket = new AuthenticationTicket(principal, Scheme.Name);
+
+            return AuthenticateResult.Success(ticket);
         }
 
         return AuthenticateResult.NoResult();

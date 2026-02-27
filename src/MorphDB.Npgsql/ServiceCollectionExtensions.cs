@@ -126,8 +126,9 @@ public static class ServiceCollectionExtensions
             {
                 var inner = sp.GetRequiredService<PostgresSchemaManager>();
                 var cache = sp.GetRequiredService<ISchemaCache>();
+                var metadataRepo = sp.GetRequiredService<IMetadataRepository>();
                 var logger = sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<CachingSchemaManagerDecorator>>();
-                return new CachingSchemaManagerDecorator(inner, cache, logger);
+                return new CachingSchemaManagerDecorator(inner, cache, metadataRepo, logger);
             });
         }
         else

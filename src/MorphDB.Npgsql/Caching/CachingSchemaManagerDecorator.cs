@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Models;
+using MorphDB.Npgsql.Repositories;
 
 namespace MorphDB.Npgsql.Caching;
 
@@ -11,15 +12,18 @@ public sealed class CachingSchemaManagerDecorator : ISchemaManager
 {
     private readonly ISchemaManager _inner;
     private readonly ISchemaCache _cache;
+    private readonly IMetadataRepository _metadataRepository;
     private readonly ILogger<CachingSchemaManagerDecorator> _logger;
 
     public CachingSchemaManagerDecorator(
         ISchemaManager inner,
         ISchemaCache cache,
+        IMetadataRepository metadataRepository,
         ILogger<CachingSchemaManagerDecorator> logger)
     {
         _inner = inner;
         _cache = cache;
+        _metadataRepository = metadataRepository;
         _logger = logger;
     }
 
@@ -150,8 +154,17 @@ public sealed class CachingSchemaManagerDecorator : ISchemaManager
     {
         var column = await _inner.AddColumnAsync(request, cancellationToken);
 
-        // Invalidate table cache (columns changed)
-        await _cache.InvalidateTableAsync(request.TableId, cancellationToken);
+        // Invalidate both ID and name-based cache keys
+        var table = await _inner.GetTableByIdAsync(request.TableId, cancellationToken);
+        if (table is not null)
+        {
+            await _cache.InvalidateTableAsync(table.TableId, cancellationToken);
+            await _cache.InvalidateTableAsync(table.TenantId, table.LogicalName, cancellationToken);
+        }
+        else
+        {
+            await _cache.InvalidateTableAsync(request.TableId, cancellationToken);
+        }
 
         return column;
     }
@@ -194,10 +207,17 @@ public sealed class CachingSchemaManagerDecorator : ISchemaManager
         Guid columnId,
         CancellationToken cancellationToken = default)
     {
+        // Find the owning table before deletion so we can invalidate cache
+        var tables = await FindTableForColumnAsync(columnId, cancellationToken);
+
         await _inner.DeleteColumnAsync(columnId, cancellationToken);
 
-        // Note: We don't have the table ID here easily, so we can't invalidate precisely
-        // This is a limitation - consider passing tableId in the request
+        // Invalidate both ID and name-based cache keys
+        if (tables is not null)
+        {
+            await _cache.InvalidateTableAsync(tables.TableId, cancellationToken);
+            await _cache.InvalidateTableAsync(tables.TenantId, tables.LogicalName, cancellationToken);
+        }
     }
 
     public async Task<IndexMetadata> CreateIndexAsync(
@@ -206,8 +226,17 @@ public sealed class CachingSchemaManagerDecorator : ISchemaManager
     {
         var index = await _inner.CreateIndexAsync(request, cancellationToken);
 
-        // Invalidate table cache
-        await _cache.InvalidateTableAsync(request.TableId, cancellationToken);
+        // Invalidate both ID and name-based cache keys
+        var table = await _inner.GetTableByIdAsync(request.TableId, cancellationToken);
+        if (table is not null)
+        {
+            await _cache.InvalidateTableAsync(table.TableId, cancellationToken);
+            await _cache.InvalidateTableAsync(table.TenantId, table.LogicalName, cancellationToken);
+        }
+        else
+        {
+            await _cache.InvalidateTableAsync(request.TableId, cancellationToken);
+        }
 
         return index;
     }
@@ -216,8 +245,17 @@ public sealed class CachingSchemaManagerDecorator : ISchemaManager
         Guid indexId,
         CancellationToken cancellationToken = default)
     {
+        // Find the owning table before deletion so we can invalidate cache
+        var table = await FindTableForIndexAsync(indexId, cancellationToken);
+
         await _inner.DeleteIndexAsync(indexId, cancellationToken);
-        // Similar limitation as DeleteColumnAsync
+
+        // Invalidate both ID and name-based cache keys
+        if (table is not null)
+        {
+            await _cache.InvalidateTableAsync(table.TableId, cancellationToken);
+            await _cache.InvalidateTableAsync(table.TenantId, table.LogicalName, cancellationToken);
+        }
     }
 
     public async Task<RelationMetadata> CreateRelationAsync(
@@ -238,9 +276,59 @@ public sealed class CachingSchemaManagerDecorator : ISchemaManager
         Guid relationId,
         CancellationToken cancellationToken = default)
     {
+        // Find the relation's tables before deletion so we can invalidate cache
+        var relation = await FindRelationAsync(relationId, cancellationToken);
+
         await _inner.DeleteRelationAsync(relationId, cancellationToken);
-        // Similar limitation as DeleteColumnAsync
+
+        // Invalidate both source and target table caches
+        if (relation is not null)
+        {
+            await _cache.InvalidateTableAsync(relation.SourceTableId, cancellationToken);
+            await _cache.InvalidateTableAsync(relation.TargetTableId, cancellationToken);
+
+            var sourceTable = await _inner.GetTableByIdAsync(relation.SourceTableId, cancellationToken);
+            if (sourceTable is not null)
+            {
+                await _cache.InvalidateTableAsync(sourceTable.TenantId, sourceTable.LogicalName, cancellationToken);
+            }
+
+            var targetTable = await _inner.GetTableByIdAsync(relation.TargetTableId, cancellationToken);
+            if (targetTable is not null)
+            {
+                await _cache.InvalidateTableAsync(targetTable.TenantId, targetTable.LogicalName, cancellationToken);
+            }
+        }
     }
+
+    #region Cache Invalidation Helpers
+
+    private async Task<TableMetadata?> FindTableForColumnAsync(
+        Guid columnId,
+        CancellationToken cancellationToken)
+    {
+        var column = await _metadataRepository.GetColumnByIdAsync(columnId, cancellationToken);
+        if (column is null) return null;
+        return await _inner.GetTableByIdAsync(column.TableId, cancellationToken);
+    }
+
+    private async Task<TableMetadata?> FindTableForIndexAsync(
+        Guid indexId,
+        CancellationToken cancellationToken)
+    {
+        var index = await _metadataRepository.GetIndexByIdAsync(indexId, cancellationToken);
+        if (index is null) return null;
+        return await _inner.GetTableByIdAsync(index.TableId, cancellationToken);
+    }
+
+    private async Task<RelationMetadata?> FindRelationAsync(
+        Guid relationId,
+        CancellationToken cancellationToken)
+    {
+        return await _metadataRepository.GetRelationByIdAsync(relationId, cancellationToken);
+    }
+
+    #endregion
 }
 
 internal static partial class CachingSchemaManagerLogs
