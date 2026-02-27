@@ -91,6 +91,11 @@ public sealed class AddColumnRequest
     /// Default value expression.
     /// </summary>
     public string? DefaultValue { get; init; }
+
+    /// <summary>
+    /// Check constraint expression.
+    /// </summary>
+    public string? CheckExpression { get; init; }
 }
 
 /// <summary>
@@ -209,6 +214,11 @@ public sealed class ColumnInfo
     /// Whether the column is indexed.
     /// </summary>
     public bool IsIndexed { get; init; }
+
+    /// <summary>
+    /// Check constraint expression.
+    /// </summary>
+    public string? CheckExpression { get; init; }
 
     /// <summary>
     /// Ordinal position in the table.

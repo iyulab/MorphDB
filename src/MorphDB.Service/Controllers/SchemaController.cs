@@ -92,6 +92,7 @@ public sealed class SchemaController : ControllerBase
                     IsUnique = c.Unique,
                     IsIndexed = c.Indexed,
                     DefaultValue = c.Default,
+                    CheckExpression = c.Check,
                     LookupConfig = c.Lookup?.ToModel(),
                     RollupConfig = c.Rollup?.ToModel(),
                     FormulaConfig = c.Formula?.ToModel()
@@ -307,6 +308,7 @@ public sealed class SchemaController : ControllerBase
                 IsUnique = request.Unique,
                 IsIndexed = request.Indexed,
                 DefaultValue = request.Default,
+                CheckExpression = request.Check,
                 ExpectedVersion = table.SchemaVersion,
                 LookupConfig = request.Lookup?.ToModel(),
                 RollupConfig = request.Rollup?.ToModel(),

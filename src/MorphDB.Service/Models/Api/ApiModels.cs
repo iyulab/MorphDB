@@ -186,6 +186,11 @@ public sealed record CreateColumnApiRequest
     public string? Default { get; init; }
 
     /// <summary>
+    /// CHECK constraint expression (e.g. "price > 0 AND price &lt; 10000").
+    /// </summary>
+    public string? Check { get; init; }
+
+    /// <summary>
     /// Configuration for lookup fields that reference related table data.
     /// When set, creates a virtual lookup column instead of a physical column.
     /// </summary>
@@ -224,6 +229,11 @@ public sealed record AddColumnApiRequest
     public bool Unique { get; init; }
     public bool Indexed { get; init; }
     public string? Default { get; init; }
+
+    /// <summary>
+    /// CHECK constraint expression (e.g. "quantity >= 0 AND quantity &lt;= 10000").
+    /// </summary>
+    public string? Check { get; init; }
 
     /// <summary>
     /// Configuration for lookup fields that reference related table data.
@@ -533,6 +543,7 @@ public sealed record ColumnApiResponse
     public bool PrimaryKey { get; init; }
     public bool Indexed { get; init; }
     public string? Default { get; init; }
+    public string? Check { get; init; }
     public int Position { get; init; }
 
     /// <summary>
@@ -565,6 +576,7 @@ public sealed record ColumnApiResponse
         PrimaryKey = column.IsPrimaryKey,
         Indexed = column.IsIndexed,
         Default = column.DefaultValue,
+        Check = column.CheckExpression,
         Position = column.OrdinalPosition,
         IsDerived = column.IsDerived,
         Lookup = column.LookupConfig != null

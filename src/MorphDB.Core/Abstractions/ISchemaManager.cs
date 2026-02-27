@@ -186,6 +186,12 @@ public sealed record CreateColumnRequest
     public string? DefaultValue { get; init; }
 
     /// <summary>
+    /// SQL CHECK constraint expression (e.g. "price > 0 AND price &lt; 10000").
+    /// Enforced at both application and database level.
+    /// </summary>
+    public string? CheckExpression { get; init; }
+
+    /// <summary>
     /// Configuration for lookup fields that reference related table data.
     /// When set, the column becomes a virtual lookup column.
     /// </summary>
@@ -214,6 +220,12 @@ public sealed record AddColumnRequest
     public bool IsIndexed { get; init; }
     public string? DefaultValue { get; init; }
     public int ExpectedVersion { get; init; }
+
+    /// <summary>
+    /// SQL CHECK constraint expression (e.g. "quantity >= 0 AND quantity &lt;= 10000").
+    /// Enforced at both application and database level.
+    /// </summary>
+    public string? CheckExpression { get; init; }
 
     /// <summary>
     /// Configuration for lookup fields that reference related table data.
