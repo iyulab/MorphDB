@@ -308,7 +308,8 @@ public sealed class CachingSchemaManagerDecorator : ISchemaManager
         CancellationToken cancellationToken)
     {
         var column = await _metadataRepository.GetColumnByIdAsync(columnId, cancellationToken);
-        if (column is null) return null;
+        if (column is null)
+            return null;
         return await _inner.GetTableByIdAsync(column.TableId, cancellationToken);
     }
 
@@ -317,7 +318,8 @@ public sealed class CachingSchemaManagerDecorator : ISchemaManager
         CancellationToken cancellationToken)
     {
         var index = await _metadataRepository.GetIndexByIdAsync(indexId, cancellationToken);
-        if (index is null) return null;
+        if (index is null)
+            return null;
         return await _inner.GetTableByIdAsync(index.TableId, cancellationToken);
     }
 

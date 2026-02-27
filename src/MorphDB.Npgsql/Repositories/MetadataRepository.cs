@@ -545,28 +545,28 @@ public sealed class MetadataRepository : IMetadataRepository
         TableMetadata table,
         IReadOnlyList<ColumnMetadata> columns,
         IReadOnlyList<RelationMetadata> relations) => new()
-    {
-        TableId = table.TableId,
-        TenantId = table.TenantId,
-        LogicalName = table.LogicalName,
-        PhysicalName = table.PhysicalName,
-        SchemaVersion = table.SchemaVersion,
-        Descriptor = table.Descriptor,
-        IsActive = table.IsActive,
-        CreatedAt = table.CreatedAt,
-        UpdatedAt = table.UpdatedAt,
-        Columns = columns,
-        Relations = relations,
-        Indexes = table.Indexes,
-        TimestampsEnabled = table.TimestampsEnabled,
-        VersioningEnabled = table.VersioningEnabled,
-        AuditFieldsEnabled = table.AuditFieldsEnabled,
-        SoftDeleteEnabled = table.SoftDeleteEnabled,
-        OwnershipEnabled = table.OwnershipEnabled,
-        HierarchyEnabled = table.HierarchyEnabled,
-        SourceTrackingEnabled = table.SourceTrackingEnabled,
-        RowStateEnabled = table.RowStateEnabled
-    };
+        {
+            TableId = table.TableId,
+            TenantId = table.TenantId,
+            LogicalName = table.LogicalName,
+            PhysicalName = table.PhysicalName,
+            SchemaVersion = table.SchemaVersion,
+            Descriptor = table.Descriptor,
+            IsActive = table.IsActive,
+            CreatedAt = table.CreatedAt,
+            UpdatedAt = table.UpdatedAt,
+            Columns = columns,
+            Relations = relations,
+            Indexes = table.Indexes,
+            TimestampsEnabled = table.TimestampsEnabled,
+            VersioningEnabled = table.VersioningEnabled,
+            AuditFieldsEnabled = table.AuditFieldsEnabled,
+            SoftDeleteEnabled = table.SoftDeleteEnabled,
+            OwnershipEnabled = table.OwnershipEnabled,
+            HierarchyEnabled = table.HierarchyEnabled,
+            SourceTrackingEnabled = table.SourceTrackingEnabled,
+            RowStateEnabled = table.RowStateEnabled
+        };
 
     /// <summary>
     /// Attaches FK reference metadata to columns that participate as source columns in relations.
