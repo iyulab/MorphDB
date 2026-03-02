@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 using MorphDB.Core.Models;
 using MorphDB.Npgsql.Infrastructure;
 
@@ -618,6 +619,33 @@ public static class DdlBuilder
             """);
 
         return sb.ToString();
+    }
+
+    #endregion
+
+    #region Check Expression Translation
+
+    /// <summary>
+    /// Translates logical column names in a CHECK expression to their quoted physical names.
+    /// Uses word-boundary matching to avoid partial replacements.
+    /// </summary>
+    public static string? TranslateCheckExpression(
+        string? checkExpression,
+        IReadOnlyDictionary<string, string> logicalToPhysicalMap)
+    {
+        if (string.IsNullOrEmpty(checkExpression))
+            return checkExpression;
+
+        var result = checkExpression;
+
+        // Sort by length descending to replace longer names first (e.g., "unit_price" before "price")
+        foreach (var (logicalName, physicalName) in logicalToPhysicalMap.OrderByDescending(kv => kv.Key.Length))
+        {
+            var pattern = $@"\b{Regex.Escape(logicalName)}\b";
+            result = Regex.Replace(result, pattern, QuoteIdentifier(physicalName));
+        }
+
+        return result;
     }
 
     #endregion

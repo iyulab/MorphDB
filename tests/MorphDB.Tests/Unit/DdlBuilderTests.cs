@@ -410,4 +410,45 @@ public class DdlBuilderTests
         sql.Should().Contain("\"table\"\"name\"");
         sql.Should().Contain("\"col\"\"name\"");
     }
+
+    [Fact]
+    public void TranslateCheckExpression_ShouldReplaceLogicalWithPhysicalNames()
+    {
+        // Arrange
+        var columnMappings = new Dictionary<string, string>
+        {
+            ["quantity"] = "col_a1b2c3d4e5f6",
+            ["price"] = "col_f6e5d4c3b2a1"
+        };
+
+        // Act
+        var result = DdlBuilder.TranslateCheckExpression("quantity >= 0 AND price > 0", columnMappings);
+
+        // Assert
+        result.Should().Be("\"col_a1b2c3d4e5f6\" >= 0 AND \"col_f6e5d4c3b2a1\" > 0");
+    }
+
+    [Fact]
+    public void TranslateCheckExpression_ShouldNotReplacePartialMatches()
+    {
+        // "price" should not match "unit_price"
+        var columnMappings = new Dictionary<string, string>
+        {
+            ["price"] = "col_aaa",
+            ["unit_price"] = "col_bbb"
+        };
+
+        var result = DdlBuilder.TranslateCheckExpression("unit_price > 0 AND price < 10000", columnMappings);
+
+        result.Should().Be("\"col_bbb\" > 0 AND \"col_aaa\" < 10000");
+    }
+
+    [Fact]
+    public void TranslateCheckExpression_WithNullOrEmpty_ShouldReturnAsIs()
+    {
+        var mappings = new Dictionary<string, string> { ["x"] = "col_x" };
+
+        DdlBuilder.TranslateCheckExpression(null, mappings).Should().BeNull();
+        DdlBuilder.TranslateCheckExpression("", mappings).Should().Be("");
+    }
 }
