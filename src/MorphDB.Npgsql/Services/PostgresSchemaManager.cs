@@ -208,6 +208,23 @@ public sealed class PostgresSchemaManager : ISchemaManager
             }
         }
 
+        // Translate logical names in CHECK expressions to physical names for DDL
+        var logicalToPhysicalMap = columns
+            .Where(c => !c.PhysicalName.StartsWith("virtual_", StringComparison.Ordinal))
+            .ToDictionary(c => c.LogicalName, c => c.PhysicalName);
+
+        for (var i = 0; i < columnDefinitions.Count; i++)
+        {
+            if (columnDefinitions[i].CheckExpression is not null)
+            {
+                columnDefinitions[i] = columnDefinitions[i] with
+                {
+                    CheckExpression = DdlBuilder.TranslateCheckExpression(
+                        columnDefinitions[i].CheckExpression, logicalToPhysicalMap)
+                };
+            }
+        }
+
         // Serialize system column options into descriptor for persistence
         var descriptor = BuildSystemColumnsDescriptor(sysOpts);
 
@@ -507,6 +524,21 @@ public sealed class PostgresSchemaManager : ISchemaManager
         if (!isVirtualColumn)
         {
             var columnDef = ColumnDefinition.FromMetadata(column);
+
+            // Translate logical names in CHECK expression to physical names
+            if (columnDef.CheckExpression is not null)
+            {
+                var logicalToPhysicalMap = table.Columns
+                    .Where(c => c.IsActive && !c.PhysicalName.StartsWith("virtual_", StringComparison.Ordinal))
+                    .ToDictionary(c => c.LogicalName, c => c.PhysicalName);
+                logicalToPhysicalMap[column.LogicalName] = column.PhysicalName;
+
+                columnDef = columnDef with
+                {
+                    CheckExpression = DdlBuilder.TranslateCheckExpression(
+                        columnDef.CheckExpression, logicalToPhysicalMap)
+                };
+            }
 
             await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
             await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
