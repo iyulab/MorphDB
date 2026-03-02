@@ -129,6 +129,14 @@ public sealed class SchemaController : ControllerBase
                 Message = ex.Message
             });
         }
+        catch (MorphDB.Core.Exceptions.SchemaException ex)
+        {
+            return BadRequest(new ErrorResponse
+            {
+                Error = "SchemaError",
+                Message = ex.Message
+            });
+        }
     }
 
     /// <summary>
@@ -338,6 +346,14 @@ public sealed class SchemaController : ControllerBase
             return Conflict(new ErrorResponse
             {
                 Error = "DuplicateColumn",
+                Message = ex.Message
+            });
+        }
+        catch (MorphDB.Core.Exceptions.SchemaException ex)
+        {
+            return BadRequest(new ErrorResponse
+            {
+                Error = "SchemaError",
                 Message = ex.Message
             });
         }

@@ -297,6 +297,11 @@ public sealed class PostgresSchemaManager : ISchemaManager
 
             await transaction.CommitAsync(cancellationToken);
         }
+        catch (PostgresException ex)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw new SchemaException("DDL_EXECUTION_FAILED", $"DDL execution failed: {ex.MessageText}", ex);
+        }
         catch
         {
             await transaction.RollbackAsync(cancellationToken);
@@ -570,6 +575,11 @@ public sealed class PostgresSchemaManager : ISchemaManager
                 }
 
                 await transaction.CommitAsync(cancellationToken);
+            }
+            catch (PostgresException ex)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                throw new SchemaException("DDL_EXECUTION_FAILED", $"DDL execution failed: {ex.MessageText}", ex);
             }
             catch
             {
