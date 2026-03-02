@@ -451,4 +451,26 @@ public class DdlBuilderTests
         DdlBuilder.TranslateCheckExpression(null, mappings).Should().BeNull();
         DdlBuilder.TranslateCheckExpression("", mappings).Should().Be("");
     }
+
+    [Fact]
+    public void BuildCreateTable_WithHashedPhysicalNameAndCheck_ShouldUsePhysicalNameInCheck()
+    {
+        // Arrange — simulates translated check expression with hashed physical names
+        var columns = new List<ColumnDefinition>
+        {
+            new()
+            {
+                PhysicalName = "col_a1b2c3d4e5f6",
+                NativeType = "INTEGER",
+                IsNullable = false,
+                CheckExpression = "\"col_a1b2c3d4e5f6\" >= 0"
+            }
+        };
+
+        // Act
+        var sql = DdlBuilder.BuildCreateTable("t_test", columns);
+
+        // Assert
+        sql.Should().Contain("CHECK (\"col_a1b2c3d4e5f6\" >= 0)");
+    }
 }
