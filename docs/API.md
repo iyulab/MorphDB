@@ -364,6 +364,55 @@ All fields except `version` are optional. Only provided fields are changed.
 
 ---
 
+## Attachment Type
+
+The `attachment` data type stores file metadata as JSONB. MorphDB does not manage file storage directly — files should be stored in external services (S3, Azure Blob, etc.) and referenced by URL.
+
+### Schema
+
+```json
+{
+  "url": "https://s3.example.com/bucket/file.pdf",
+  "filename": "report.pdf",
+  "size": 1048576,
+  "mimeType": "application/pdf",
+  "uploadedAt": "2026-01-01T00:00:00Z"
+}
+```
+
+### Usage
+
+```http
+POST /api/schema/tables/{name}/columns
+{
+  "name": "document",
+  "type": "attachment",
+  "nullable": true
+}
+```
+
+```http
+POST /api/data/{table}
+{
+  "document": {
+    "url": "https://storage.example.com/file.pdf",
+    "filename": "file.pdf",
+    "size": 2048,
+    "mimeType": "application/pdf"
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `url` | string | Yes | URL to the file in external storage |
+| `filename` | string | Yes | Original file name |
+| `size` | number | No | File size in bytes |
+| `mimeType` | string | No | MIME type |
+| `uploadedAt` | string | No | ISO 8601 timestamp |
+
+---
+
 ## Health Checks
 
 ```http

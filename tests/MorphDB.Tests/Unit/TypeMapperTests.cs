@@ -43,4 +43,16 @@ public class TypeMapperTests
         // Text and Email both map to "text" native type
         TypeMapper.IsTypeCastSafe(MorphDataType.Text, MorphDataType.Email).Should().BeTrue();
     }
+
+    [Fact]
+    public void ToNativeType_Attachment_ReturnsJsonb()
+    {
+        TypeMapper.ToNativeType(MorphDataType.Attachment).Should().Be("jsonb");
+    }
+
+    [Fact]
+    public void GetRecommendedIndexType_Attachment_ReturnsGIN()
+    {
+        TypeMapper.GetRecommendedIndexType(MorphDataType.Attachment).Should().Be(IndexType.GIN);
+    }
 }
