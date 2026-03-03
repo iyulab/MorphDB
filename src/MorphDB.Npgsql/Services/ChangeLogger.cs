@@ -67,6 +67,24 @@ public sealed class ChangeLogger : IChangeLogger
         return rows.Select(MapToEntry).ToList();
     }
 
+    public async Task<IReadOnlyList<SchemaChangeEntry>> GetChangelogAsync(
+        int limit = 100,
+        int offset = 0,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            SELECT change_id, table_id, operation, schema_version, changes, performed_by, performed_at
+            FROM morphdb._morph_changelog
+            ORDER BY performed_at DESC
+            LIMIT @Limit OFFSET @Offset
+            """;
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        var rows = await connection.QueryAsync<ChangeLogRow>(sql, new { Limit = limit, Offset = offset });
+
+        return rows.Select(MapToEntry).ToList();
+    }
+
     private static SchemaChangeEntry MapToEntry(ChangeLogRow row) => new()
     {
         ChangeId = row.change_id,

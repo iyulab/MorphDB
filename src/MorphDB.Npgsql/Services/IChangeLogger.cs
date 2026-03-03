@@ -19,6 +19,14 @@ public interface IChangeLogger
         Guid tableId,
         int limit = 100,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Gets the global changelog across all tables.
+    /// </summary>
+    Task<IReadOnlyList<SchemaChangeEntry>> GetChangelogAsync(
+        int limit = 100,
+        int offset = 0,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>

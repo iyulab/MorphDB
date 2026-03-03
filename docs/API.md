@@ -29,6 +29,10 @@ DELETE /api/schema/tables/{name}/columns/{col} # Delete column
 POST   /api/schema/relations                   # Create relation
 POST   /api/schema/indexes                     # Create index
 POST   /api/schema/batch                       # Batch DDL operations
+
+# Schema Changelog
+GET    /api/schema/tables/{name}/history       # Table change history
+GET    /api/schema/changelog                   # Global schema changelog
 ```
 
 ### Data Operations (DML)

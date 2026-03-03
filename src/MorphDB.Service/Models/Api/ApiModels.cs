@@ -1871,6 +1871,35 @@ public sealed record AggregationMetadataApiResponse
 
 #endregion
 
+#region Changelog Response
+
+/// <summary>
+/// Schema change entry API response.
+/// </summary>
+public sealed record SchemaChangeApiResponse
+{
+    public Guid ChangeId { get; init; }
+    public Guid TableId { get; init; }
+    public string Operation { get; init; } = string.Empty;
+    public int SchemaVersion { get; init; }
+    public object Changes { get; init; } = new { };
+    public string? PerformedBy { get; init; }
+    public DateTimeOffset PerformedAt { get; init; }
+
+    public static SchemaChangeApiResponse FromEntry(MorphDB.Npgsql.Services.SchemaChangeEntry entry) => new()
+    {
+        ChangeId = entry.ChangeId,
+        TableId = entry.TableId,
+        Operation = entry.Operation.ToString(),
+        SchemaVersion = entry.SchemaVersion,
+        Changes = entry.Changes,
+        PerformedBy = entry.PerformedBy,
+        PerformedAt = entry.PerformedAt
+    };
+}
+
+#endregion
+
 #region Helper Extensions
 
 public static class ApiModelExtensions

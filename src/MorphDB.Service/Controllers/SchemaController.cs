@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Exceptions;
+using MorphDB.Npgsql.Services;
 using MorphDB.Service.Models.Api;
 using MorphDB.Service.OData;
 using MorphDB.Service.Realtime;
@@ -35,6 +36,7 @@ internal static partial class SchemaControllerLogs
 public sealed class SchemaController : ControllerBase
 {
     private readonly ISchemaManager _schemaManager;
+    private readonly IChangeLogger _changeLogger;
     private readonly ILogger<SchemaController> _logger;
     private readonly ChangeNotificationSetup _changeNotificationSetup;
     private readonly IEdmModelProvider _edmModelProvider;
@@ -42,12 +44,14 @@ public sealed class SchemaController : ControllerBase
 
     public SchemaController(
         ISchemaManager schemaManager,
+        IChangeLogger changeLogger,
         ILogger<SchemaController> logger,
         ChangeNotificationSetup changeNotificationSetup,
         IEdmModelProvider edmModelProvider,
         ITenantContextAccessor tenantContext)
     {
         _schemaManager = schemaManager;
+        _changeLogger = changeLogger;
         _logger = logger;
         _changeNotificationSetup = changeNotificationSetup;
         _edmModelProvider = edmModelProvider;
@@ -661,6 +665,62 @@ public sealed class SchemaController : ControllerBase
                 Message = ex.Message
             });
         }
+    }
+
+    #endregion
+
+    #region Changelog Operations
+
+    /// <summary>
+    /// Gets the schema change history for a specific table.
+    /// </summary>
+    [HttpGet("tables/{name}/history")]
+    [ProducesResponseType(typeof(IReadOnlyList<SchemaChangeApiResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetTableHistory(
+        string name,
+        [FromQuery] int limit = 50,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var tenantId = _tenantContext.TenantIdOrNull
+                ?? throw new UnauthorizedAccessException("Tenant context required");
+
+            var table = await _schemaManager.GetTableAsync(tenantId, name, cancellationToken)
+                ?? throw new NotFoundException("Table", name);
+
+            var history = await _changeLogger.GetHistoryAsync(
+                table.TableId, Math.Clamp(limit, 1, 500), cancellationToken);
+
+            return Ok(history.Select(SchemaChangeApiResponse.FromEntry).ToList());
+        }
+        catch (NotFoundException ex)
+        {
+            return NotFound(new ErrorResponse
+            {
+                Error = "TableNotFound",
+                Message = ex.Message
+            });
+        }
+    }
+
+    /// <summary>
+    /// Gets the global schema changelog across all tables.
+    /// </summary>
+    [HttpGet("changelog")]
+    [ProducesResponseType(typeof(IReadOnlyList<SchemaChangeApiResponse>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetChangelog(
+        [FromQuery] int limit = 50,
+        [FromQuery] int offset = 0,
+        CancellationToken cancellationToken = default)
+    {
+        var changelog = await _changeLogger.GetChangelogAsync(
+            Math.Clamp(limit, 1, 500),
+            Math.Max(offset, 0),
+            cancellationToken);
+
+        return Ok(changelog.Select(SchemaChangeApiResponse.FromEntry).ToList());
     }
 
     #endregion
