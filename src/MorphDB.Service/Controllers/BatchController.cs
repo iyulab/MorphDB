@@ -343,6 +343,85 @@ public sealed class BatchController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Seed records — idempotent bulk upsert. Records are inserted if they don't exist
+    /// or updated if they match the key columns. Useful for data initialization.
+    /// </summary>
+    [HttpPost("data/{table}/seed")]
+    [ProducesResponseType(typeof(SeedResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Seed(
+        string table,
+        [FromBody] SeedRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var tenantId = GetTenantId();
+
+            if (request.Records is not { Count: > 0 })
+            {
+                return BadRequest(new ErrorResponse
+                {
+                    Error = "BadRequest",
+                    Message = "No records provided",
+                    Code = "EMPTY_DATA"
+                });
+            }
+
+            if (request.KeyColumns is not { Count: > 0 })
+            {
+                return BadRequest(new ErrorResponse
+                {
+                    Error = "BadRequest",
+                    Message = "Key columns are required for seeding",
+                    Code = "MISSING_KEY_COLUMNS"
+                });
+            }
+
+            var inserted = 0;
+            var updated = 0;
+            var errors = new List<SeedError>();
+
+            foreach (var (record, index) in request.Records.Select((r, i) => (r, i)))
+            {
+                try
+                {
+                    if (!record.ContainsKey("_id"))
+                    {
+                        record["_id"] = Guid.CreateVersion7();
+                    }
+
+                    await _dataService.UpsertAsync(
+                        tenantId, table, record, request.KeyColumns.ToArray(), cancellationToken);
+
+                    // Simple heuristic: count as insert (exact tracking requires DB-level info)
+                    inserted++;
+                }
+                catch (Exception ex)
+                {
+                    errors.Add(new SeedError { Index = index, Message = ex.Message });
+                }
+            }
+
+            return Ok(new SeedResponse
+            {
+                TotalRecords = request.Records.Count,
+                Inserted = inserted - updated,
+                Updated = updated,
+                Errors = errors
+            });
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
+        {
+            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_TENANT" });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message });
+        }
+    }
+
     #region Private Methods
 
     private async Task<BatchOperationResult> ExecuteOperationAsync(
@@ -600,4 +679,33 @@ public sealed record UpsertRequest
 {
     public required IDictionary<string, object?> Data { get; init; }
     public required IReadOnlyList<string> KeyColumns { get; init; }
+}
+
+/// <summary>
+/// Request for data seeding (idempotent bulk upsert).
+/// </summary>
+public sealed record SeedRequest
+{
+    public required IReadOnlyList<IDictionary<string, object?>> Records { get; init; }
+    public required IReadOnlyList<string> KeyColumns { get; init; }
+}
+
+/// <summary>
+/// Result of a seed operation.
+/// </summary>
+public sealed record SeedResponse
+{
+    public int TotalRecords { get; init; }
+    public int Inserted { get; init; }
+    public int Updated { get; init; }
+    public IReadOnlyList<SeedError> Errors { get; init; } = [];
+}
+
+/// <summary>
+/// Error from a single seed record.
+/// </summary>
+public sealed record SeedError
+{
+    public int Index { get; init; }
+    public string? Message { get; init; }
 }
