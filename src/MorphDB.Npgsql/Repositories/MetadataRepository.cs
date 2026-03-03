@@ -296,6 +296,39 @@ public sealed class MetadataRepository : IMetadataRepository
         await connection.ExecuteAsync(sql, new { ColumnId = columnId, LogicalName = logicalName, DefaultValue = defaultValue });
     }
 
+    public async Task UpdateColumnMetadataAsync(
+        Guid columnId,
+        string? dataType,
+        string? nativeType,
+        bool? isNullable,
+        bool? isUnique,
+        string? checkExpression,
+        CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            UPDATE morphdb._morph_columns
+            SET data_type = COALESCE(@DataType, data_type),
+                native_type = COALESCE(@NativeType, native_type),
+                is_nullable = COALESCE(@IsNullable, is_nullable),
+                is_unique = COALESCE(@IsUnique, is_unique),
+                check_expression = CASE WHEN @CheckExpressionProvided THEN @CheckExpression ELSE check_expression END,
+                updated_at = NOW()
+            WHERE column_id = @ColumnId
+            """;
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await connection.ExecuteAsync(sql, new
+        {
+            ColumnId = columnId,
+            DataType = dataType,
+            NativeType = nativeType,
+            IsNullable = isNullable,
+            IsUnique = isUnique,
+            CheckExpression = checkExpression,
+            CheckExpressionProvided = checkExpression is not null || dataType is not null
+        });
+    }
+
     public async Task SoftDeleteColumnAsync(
         Guid columnId,
         CancellationToken cancellationToken = default)

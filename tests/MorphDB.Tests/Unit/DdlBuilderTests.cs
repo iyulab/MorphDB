@@ -473,4 +473,38 @@ public class DdlBuilderTests
         // Assert
         sql.Should().Contain("CHECK (\"col_a1b2c3d4e5f6\" >= 0)");
     }
+
+    #region ALTER COLUMN TYPE Tests
+
+    [Fact]
+    public void BuildAlterColumnType_ShouldGenerateValidSql()
+    {
+        // Act
+        var sql = DdlBuilder.BuildAlterColumnType("tbl_abc", "col_def", "bigint");
+
+        // Assert
+        sql.Should().Be("ALTER TABLE \"tbl_abc\" ALTER COLUMN \"col_def\" TYPE bigint USING \"col_def\"::bigint");
+    }
+
+    [Fact]
+    public void BuildAlterColumnType_WithSchema_ShouldQualifyTableName()
+    {
+        // Act
+        var sql = DdlBuilder.BuildAlterColumnType("tbl_abc", "col_def", "text", "tenant_schema");
+
+        // Assert
+        sql.Should().Be("ALTER TABLE \"tenant_schema\".\"tbl_abc\" ALTER COLUMN \"col_def\" TYPE text USING \"col_def\"::text");
+    }
+
+    [Fact]
+    public void BuildDropUniqueConstraint_ShouldGenerateValidSql()
+    {
+        // Act
+        var sql = DdlBuilder.BuildDropUniqueConstraint("tbl_abc", "uq_tbl_abc_col_def");
+
+        // Assert
+        sql.Should().Be("ALTER TABLE \"tbl_abc\" DROP CONSTRAINT IF EXISTS \"uq_tbl_abc_col_def\"");
+    }
+
+    #endregion
 }

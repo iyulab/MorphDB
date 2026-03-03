@@ -64,6 +64,40 @@ public static class TypeMapper
     };
 
     /// <summary>
+    /// Checks if a type change from one MorphDataType to another can be safely cast in PostgreSQL.
+    /// Returns true if the conversion is safe (no data loss expected).
+    /// </summary>
+    public static bool IsTypeCastSafe(MorphDataType fromType, MorphDataType toType)
+    {
+        if (fromType == toType)
+            return true;
+
+        var from = ToNativeType(fromType);
+        var to = ToNativeType(toType);
+
+        if (from == to)
+            return true;
+
+        // Safe widening conversions
+        return (from, to) switch
+        {
+            // Integer widening
+            ("integer", "bigint") => true,
+            ("integer", "numeric") => true,
+            ("bigint", "numeric") => true,
+
+            // Any scalar to text is safe
+            (_, "text") => true,
+
+            // Date/time conversions
+            ("date", "timestamptz") => true,
+
+            // Everything else is potentially unsafe
+            _ => false
+        };
+    }
+
+    /// <summary>
     /// Converts a .NET value to a PostgreSQL-compatible value.
     /// </summary>
     /// <remarks>

@@ -122,6 +122,16 @@ public sealed class AlterColumnRequest
     /// New default value.
     /// </summary>
     public string? DefaultValue { get; init; }
+
+    /// <summary>
+    /// New unique constraint setting.
+    /// </summary>
+    public bool? IsUnique { get; init; }
+
+    /// <summary>
+    /// New check expression.
+    /// </summary>
+    public string? CheckExpression { get; init; }
 }
 
 /// <summary>

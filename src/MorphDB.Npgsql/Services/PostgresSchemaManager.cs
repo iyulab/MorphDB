@@ -617,6 +617,13 @@ public sealed class PostgresSchemaManager : ISchemaManager
         var column = await _repository.GetColumnByIdAsync(request.ColumnId, cancellationToken)
             ?? throw new ColumnNotFoundException("unknown", request.ColumnId.ToString());
 
+        // System columns cannot have type/constraint changes
+        if (column.IsSystemColumn &&
+            (request.DataType.HasValue || request.IsNullable.HasValue || request.IsUnique.HasValue))
+        {
+            throw new ValidationException("SYSTEM_COLUMN", "System columns cannot be modified");
+        }
+
         // Validate new name if provided
         if (request.LogicalName is not null)
         {
@@ -638,8 +645,31 @@ public sealed class PostgresSchemaManager : ISchemaManager
             throw new SchemaVersionConflictException(request.ExpectedVersion, currentVersion);
         }
 
-        // Update metadata only (no DDL for logical name change)
+        // Update simple metadata (logical name, default value)
         await _repository.UpdateColumnAsync(request.ColumnId, request.LogicalName, request.DefaultValue, cancellationToken);
+
+        // Apply DDL changes for type/constraint modifications
+        var hasDdlChanges = request.DataType.HasValue || request.IsNullable.HasValue ||
+                            request.IsUnique.HasValue || request.CheckExpression is not null;
+
+        if (hasDdlChanges)
+        {
+            var table = await _repository.GetTableByIdAsync(column.TableId, includeColumns: true, cancellationToken)
+                ?? throw new TableNotFoundException(column.TableId.ToString());
+
+            await ApplyColumnDdlChangesAsync(table, column, request, cancellationToken);
+
+            // Update metadata for type/constraint changes
+            string? newDataType = request.DataType?.ToString();
+            string? newNativeType = request.DataType.HasValue
+                ? TypeMapper.ToNativeType(request.DataType.Value) : null;
+
+            await _repository.UpdateColumnMetadataAsync(
+                request.ColumnId, newDataType, newNativeType,
+                request.IsNullable, request.IsUnique,
+                request.CheckExpression, cancellationToken);
+        }
+
         await _repository.IncrementVersionAsync(column.TableId, cancellationToken);
 
         // Log change
@@ -652,11 +682,89 @@ public sealed class PostgresSchemaManager : ISchemaManager
             {
                 ColumnId = request.ColumnId,
                 OldLogicalName = column.LogicalName,
-                NewLogicalName = request.LogicalName ?? column.LogicalName
+                NewLogicalName = request.LogicalName ?? column.LogicalName,
+                OldDataType = column.DataType.ToString(),
+                NewDataType = request.DataType?.ToString(),
+                OldIsNullable = column.IsNullable,
+                NewIsNullable = request.IsNullable,
+                OldIsUnique = column.IsUnique,
+                NewIsUnique = request.IsUnique,
+                NewCheckExpression = request.CheckExpression
             }
         }, cancellationToken);
 
         return (await _repository.GetColumnByIdAsync(request.ColumnId, cancellationToken))!;
+    }
+
+    /// <summary>
+    /// Applies physical DDL changes for column type/constraint modifications.
+    /// </summary>
+    private async Task ApplyColumnDdlChangesAsync(
+        TableMetadata table,
+        ColumnMetadata column,
+        UpdateColumnRequest request,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+
+        try
+        {
+            // Type change: ALTER COLUMN TYPE
+            if (request.DataType.HasValue && request.DataType.Value != column.DataType)
+            {
+                var newNativeType = TypeMapper.ToNativeType(request.DataType.Value);
+                if (!TypeMapper.IsTypeCastSafe(column.DataType, request.DataType.Value))
+                {
+                    throw new ValidationException("UNSAFE_TYPE_CAST",
+                        $"Cannot safely convert column '{column.LogicalName}' from {column.DataType} to {request.DataType.Value}. " +
+                        "Data loss may occur. Consider creating a new column and migrating data manually.");
+                }
+
+                var alterTypeSql = DdlBuilder.BuildAlterColumnType(
+                    table.PhysicalName, column.PhysicalName, newNativeType);
+                await connection.ExecuteAsync(new CommandDefinition(
+                    alterTypeSql, transaction: transaction, cancellationToken: cancellationToken));
+            }
+
+            // Unique constraint change
+            if (request.IsUnique.HasValue && request.IsUnique.Value != column.IsUnique)
+            {
+                var constraintName = $"uq_{table.PhysicalName}_{column.PhysicalName}";
+                if (request.IsUnique.Value)
+                {
+                    var addUniqueSql = DdlBuilder.BuildAddUniqueConstraint(
+                        table.PhysicalName, constraintName, column.PhysicalName);
+                    await connection.ExecuteAsync(new CommandDefinition(
+                        addUniqueSql, transaction: transaction, cancellationToken: cancellationToken));
+                }
+                else
+                {
+                    var dropUniqueSql = DdlBuilder.BuildDropUniqueConstraint(
+                        table.PhysicalName, constraintName);
+                    await connection.ExecuteAsync(new CommandDefinition(
+                        dropUniqueSql, transaction: transaction, cancellationToken: cancellationToken));
+                }
+            }
+
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch (PostgresException ex)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw new SchemaException("DDL_EXECUTION_FAILED",
+                $"Column modification DDL failed: {ex.MessageText}", ex);
+        }
+        catch (ValidationException)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
     }
 
     public async Task<ColumnMetadata> RenameColumnAsync(

@@ -468,6 +468,10 @@ public sealed record UpdateColumnApiRequest
 {
     public string? Name { get; init; }
     public string? Default { get; init; }
+    public string? Type { get; init; }
+    public bool? Nullable { get; init; }
+    public bool? Unique { get; init; }
+    public string? Check { get; init; }
     public int Version { get; init; }
 }
 

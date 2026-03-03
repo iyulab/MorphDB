@@ -377,6 +377,10 @@ public sealed class SchemaController : ControllerBase
                 ColumnId = id,
                 LogicalName = request.Name,
                 DefaultValue = request.Default,
+                DataType = request.Type != null ? ApiModelExtensions.ParseDataType(request.Type) : null,
+                IsNullable = request.Nullable,
+                IsUnique = request.Unique,
+                CheckExpression = request.Check,
                 ExpectedVersion = request.Version
             };
 
@@ -392,6 +396,14 @@ public sealed class SchemaController : ControllerBase
             return NotFound(new ErrorResponse
             {
                 Error = "ColumnNotFound",
+                Message = ex.Message
+            });
+        }
+        catch (ValidationException ex)
+        {
+            return BadRequest(new ErrorResponse
+            {
+                Error = "ValidationError",
                 Message = ex.Message
             });
         }

@@ -65,6 +65,15 @@ public interface IMetadataRepository
         string? defaultValue,
         CancellationToken cancellationToken = default);
 
+    Task UpdateColumnMetadataAsync(
+        Guid columnId,
+        string? dataType,
+        string? nativeType,
+        bool? isNullable,
+        bool? isUnique,
+        string? checkExpression,
+        CancellationToken cancellationToken = default);
+
     Task SoftDeleteColumnAsync(
         Guid columnId,
         CancellationToken cancellationToken = default);

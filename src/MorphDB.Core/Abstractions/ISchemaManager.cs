@@ -251,6 +251,10 @@ public sealed record UpdateColumnRequest
     public Guid ColumnId { get; init; }
     public string? LogicalName { get; init; }
     public string? DefaultValue { get; init; }
+    public MorphDataType? DataType { get; init; }
+    public bool? IsNullable { get; init; }
+    public bool? IsUnique { get; init; }
+    public string? CheckExpression { get; init; }
     public int ExpectedVersion { get; init; }
 }
 

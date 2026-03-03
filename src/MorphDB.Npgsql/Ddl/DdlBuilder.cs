@@ -322,6 +322,32 @@ public static class DdlBuilder
     }
 
     /// <summary>
+    /// Builds an ALTER TABLE ALTER COLUMN TYPE statement with USING cast.
+    /// </summary>
+    public static string BuildAlterColumnType(
+        string tablePhysicalName,
+        string columnPhysicalName,
+        string newNativeType,
+        string? schema = null)
+    {
+        var qualifiedName = QualifyName(tablePhysicalName, schema);
+        var quotedColumn = QuoteIdentifier(columnPhysicalName);
+        return $"ALTER TABLE {qualifiedName} ALTER COLUMN {quotedColumn} TYPE {newNativeType} USING {quotedColumn}::{newNativeType}";
+    }
+
+    /// <summary>
+    /// Builds an ALTER TABLE DROP CONSTRAINT statement for removing a unique constraint.
+    /// </summary>
+    public static string BuildDropUniqueConstraint(
+        string tablePhysicalName,
+        string constraintName,
+        string? schema = null)
+    {
+        var qualifiedName = QualifyName(tablePhysicalName, schema);
+        return $"ALTER TABLE {qualifiedName} DROP CONSTRAINT IF EXISTS {QuoteIdentifier(constraintName)}";
+    }
+
+    /// <summary>
     /// Builds an ALTER TABLE RENAME COLUMN statement.
     /// </summary>
     public static string BuildRenameColumn(
