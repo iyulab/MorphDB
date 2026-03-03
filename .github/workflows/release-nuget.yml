@@ -1,0 +1,52 @@
+name: Release NuGet Packages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Directory.Build.props'
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_NOLOGO: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read version from Directory.Build.props
+        id: version
+        run: |
+          VERSION=$(grep -oP '<Version>\K[^<]+' Directory.Build.props)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Detected version: $VERSION"
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Pack
+        run: dotnet pack --no-build --configuration Release --output ./nupkgs /p:PackageVersion=${{ steps.version.outputs.version }}
+
+      - name: Push to NuGet.org
+        run: dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+      - name: Push to GitHub Packages
+        run: dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.GITHUB_TOKEN }} --source https://nuget.pkg.github.com/iyulab/index.json --skip-duplicate
