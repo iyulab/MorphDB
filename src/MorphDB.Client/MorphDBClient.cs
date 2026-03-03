@@ -34,6 +34,8 @@ public sealed class MorphDBClient : IAsyncDisposable
         Data = new DataClient(_httpClient);
         Webhooks = new WebhookClient(_httpClient);
         Bulk = new BulkClient(_httpClient);
+        Transactions = new TransactionClient(_httpClient);
+        Views = new ViewClient(_httpClient);
         Realtime = new RealtimeClient(_baseUrl, _options);
     }
 
@@ -55,6 +57,8 @@ public sealed class MorphDBClient : IAsyncDisposable
         Data = new DataClient(_httpClient);
         Webhooks = new WebhookClient(_httpClient);
         Bulk = new BulkClient(_httpClient);
+        Transactions = new TransactionClient(_httpClient);
+        Views = new ViewClient(_httpClient);
         Realtime = new RealtimeClient(_baseUrl, _options);
     }
 
@@ -77,6 +81,16 @@ public sealed class MorphDBClient : IAsyncDisposable
     /// Bulk import/export operations.
     /// </summary>
     public BulkClient Bulk { get; }
+
+    /// <summary>
+    /// Transaction operations (atomic batch, finalize).
+    /// </summary>
+    public TransactionClient Transactions { get; }
+
+    /// <summary>
+    /// View operations (create, query, refresh).
+    /// </summary>
+    public ViewClient Views { get; }
 
     /// <summary>
     /// Real-time subscription operations.

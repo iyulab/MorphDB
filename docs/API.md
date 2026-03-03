@@ -329,6 +329,41 @@ GET /api/bulk/{table}/export?format=xlsx
 
 ---
 
+## Schema Evolution
+
+### Update Column
+
+Update a column's metadata and/or physical constraints:
+
+```http
+PATCH /api/schema/columns/{columnId}
+Content-Type: application/json
+
+{
+  "name": "new_column_name",
+  "type": "biginteger",
+  "nullable": true,
+  "unique": false,
+  "check": "value > 0",
+  "default": "0",
+  "version": 3
+}
+```
+
+All fields except `version` are optional. Only provided fields are changed.
+
+| Field | Description |
+|-------|-------------|
+| `name` | New logical column name |
+| `type` | New data type (safe type widening only: integer→biginteger→decimal, *→text) |
+| `nullable` | Whether the column allows null (virtual constraint) |
+| `unique` | Whether the column has a unique constraint (physical DDL) |
+| `check` | Check expression (virtual constraint) |
+| `default` | Default value expression |
+| `version` | Expected schema version for optimistic concurrency |
+
+---
+
 ## Health Checks
 
 ```http
