@@ -49,15 +49,34 @@ POST   /api/data/{table}/batch                 # Batch operations
 ### Query Parameters
 
 ```http
-GET /api/data/customers?filter=grade:VIP&sort=-createdAt&page=1&pageSize=20
+GET /api/data/customers?filter=grade:eq:VIP&orderBy=_created_at:desc&page=1&pageSize=20
 ```
 
 | Parameter | Description | Example |
 |-----------|-------------|---------|
-| `filter` | Field filtering | `grade:VIP`, `status:active` |
-| `sort` | Sort order (- for desc) | `name`, `-createdAt` |
+| `filter` | Field filtering (`column:operator:value`) | `grade:eq:VIP`, `status:neq:inactive` |
+| `orderBy` | Sort order (`column:asc` or `column:desc`) | `name:asc`, `_created_at:desc` |
+| `search` | Full-text search across text columns | `john` |
+| `select` | Comma-separated column names | `name,email,grade` |
+| `state` | Row state filter (if enabled) | `valid`, `draft`, `error`, `all` |
 | `page` | Page number | `1` |
-| `pageSize` | Records per page | `20` |
+| `pageSize` | Records per page (max 1000) | `20` |
+
+#### Filter Operators
+
+| Operator | Description | Example |
+|----------|-------------|---------|
+| `eq` | Equals | `status:eq:active` |
+| `neq` | Not equals | `status:neq:deleted` |
+| `gt` | Greater than | `price:gt:100` |
+| `gte` | Greater than or equal | `age:gte:18` |
+| `lt` | Less than | `stock:lt:10` |
+| `lte` | Less than or equal | `score:lte:50` |
+| `contains` | String contains | `name:contains:john` |
+| `startswith` | String starts with | `email:startswith:admin` |
+| `endswith` | String ends with | `file:endswith:.pdf` |
+| `in` | Value in list | `status:in:active,pending` |
+| `isnull` | Is null check | `email:isnull:true` |
 
 ### Batch Operations
 

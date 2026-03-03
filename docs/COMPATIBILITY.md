@@ -6,7 +6,8 @@ This document defines the compatibility relationships between MorphDB components
 
 | Component | Current Version | Status |
 |-----------|----------------|--------|
-| **Server** (MorphDB.Service) | 0.10.0 | Production Ready |
+| **Server** (MorphDB.Service) | 0.2.2 | Development |
+| **.NET SDK** (MorphDB.Client) | 0.2.2 | Development |
 | **Python SDK** (morphdb) | 0.13.0 | Beta |
 | **TypeScript SDK** (@morphdb/client) | 0.13.0 | Beta |
 | **Desk** (morphdb-studio) | 0.1.0 | Alpha |
@@ -15,18 +16,15 @@ This document defines the compatibility relationships between MorphDB components
 
 ### Server ↔ SDK Compatibility
 
-| Server Version | Python SDK | TypeScript SDK | Notes |
-|---------------|------------|----------------|-------|
-| 0.10.x | 0.13.x | 0.13.x | Current stable combination |
-| 0.9.x | 0.12.x | 0.12.x | Previous release |
-| 0.8.x | 0.11.x | 0.11.x | Legacy support |
+| Server Version | .NET SDK | Python SDK | TypeScript SDK | Notes |
+|---------------|----------|------------|----------------|-------|
+| 0.2.x | 0.2.x | - | - | Current development |
 
 ### Server ↔ Desk Compatibility
 
 | Server Version | Desk Version | Notes |
 |---------------|--------------|-------|
-| 0.10.x | 0.1.x | Current development |
-| 0.9.x | 0.1.x | Compatible with warnings |
+| 0.2.x | 0.1.x | Current development |
 
 ## API Version Support
 
@@ -86,14 +84,12 @@ The MorphDB Server maintains backward compatibility within minor versions:
 
 ## Breaking Changes
 
-### v0.10.0 → v0.11.0 (Planned)
+### v0.2.x (Current)
 
-- No breaking changes expected
-
-### v0.9.0 → v0.10.0
-
-- Added system columns (`_created_at`, `_updated_at`, `_version`)
-- Schema response format expanded
+- Dynamic schema with logical-physical separation
+- Write pipeline with virtual constraints
+- System columns (`_created_at`, `_updated_at`, `_version`)
+- Multi-tenant support
 
 ## Upgrade Guidelines
 
@@ -171,19 +167,12 @@ The CI pipeline runs compatibility tests against:
 
 ### Server (MorphDB.Service)
 
-- **0.10.0** - Production hardening, system columns
-- **0.9.5** - Philosophy alignment
-- **0.9.0** - GraphQL, OData support
+- **0.2.2** - Check expression physical name translation, error handling improvements
+- **0.2.0** - Write pipeline, virtual constraints, multi-tenant
 
-### Python SDK (morphdb)
+### .NET SDK (MorphDB.Client)
 
-- **0.13.0** - Integration test support
-- **0.12.0** - Batch operations
-
-### TypeScript SDK (@morphdb/client)
-
-- **0.13.0** - Integration test support
-- **0.12.0** - Real-time client
+- **0.2.2** - Schema, Data, Webhooks, Bulk, Realtime clients
 
 ### Desk (morphdb-studio)
 
@@ -191,5 +180,5 @@ The CI pipeline runs compatibility tests against:
 
 ---
 
-*Last Updated: 2025-01-05*
-*Document Version: 1.0.0*
+*Last Updated: 2026-03-03*
+*Document Version: 1.1.0*

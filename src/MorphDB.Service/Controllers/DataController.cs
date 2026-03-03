@@ -9,6 +9,24 @@ using static MorphDB.Core.Abstractions.QueryLimits;
 
 namespace MorphDB.Service.Controllers;
 
+internal static partial class DataControllerLogs
+{
+    [LoggerMessage(LogLevel.Error, "Unexpected error querying table '{TableName}'")]
+    public static partial void QueryError(ILogger logger, Exception exception, string tableName);
+
+    [LoggerMessage(LogLevel.Error, "Unexpected error getting record '{RecordId}' from table '{TableName}'")]
+    public static partial void GetByIdError(ILogger logger, Exception exception, Guid recordId, string tableName);
+
+    [LoggerMessage(LogLevel.Error, "Unexpected error inserting into table '{TableName}'")]
+    public static partial void InsertError(ILogger logger, Exception exception, string tableName);
+
+    [LoggerMessage(LogLevel.Error, "Unexpected error updating record '{RecordId}' in table '{TableName}'")]
+    public static partial void UpdateError(ILogger logger, Exception exception, Guid recordId, string tableName);
+
+    [LoggerMessage(LogLevel.Error, "Unexpected error deleting record '{RecordId}' from table '{TableName}'")]
+    public static partial void DeleteError(ILogger logger, Exception exception, Guid recordId, string tableName);
+}
+
 /// <summary>
 /// Controller for data CRUD operations.
 /// </summary>
@@ -19,15 +37,18 @@ public sealed class DataController : ControllerBase
     private readonly IMorphDataService _dataService;
     private readonly IWritePipeline _writePipeline;
     private readonly IMetadataRepository _metadataRepository;
+    private readonly ILogger<DataController> _logger;
 
     public DataController(
         IMorphDataService dataService,
         IWritePipeline writePipeline,
-        IMetadataRepository metadataRepository)
+        IMetadataRepository metadataRepository,
+        ILogger<DataController> logger)
     {
         _dataService = dataService;
         _writePipeline = writePipeline;
         _metadataRepository = metadataRepository;
+        _logger = logger;
     }
 
     private Guid GetTenantId()
@@ -146,7 +167,9 @@ public sealed class DataController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message });
+            DataControllerLogs.QueryError(_logger, ex, table);
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new ErrorResponse { Error = "InternalError", Message = "An unexpected error occurred", Code = "INTERNAL_ERROR" });
         }
     }
 
@@ -193,7 +216,9 @@ public sealed class DataController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message });
+            DataControllerLogs.GetByIdError(_logger, ex, id, table);
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new ErrorResponse { Error = "InternalError", Message = "An unexpected error occurred", Code = "INTERNAL_ERROR" });
         }
     }
 
@@ -280,7 +305,9 @@ public sealed class DataController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message });
+            DataControllerLogs.InsertError(_logger, ex, table);
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new ErrorResponse { Error = "InternalError", Message = "An unexpected error occurred", Code = "INTERNAL_ERROR" });
         }
     }
 
@@ -354,7 +381,9 @@ public sealed class DataController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message });
+            DataControllerLogs.UpdateError(_logger, ex, id, table);
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new ErrorResponse { Error = "InternalError", Message = "An unexpected error occurred", Code = "INTERNAL_ERROR" });
         }
     }
 
@@ -411,7 +440,9 @@ public sealed class DataController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message });
+            DataControllerLogs.DeleteError(_logger, ex, id, table);
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new ErrorResponse { Error = "InternalError", Message = "An unexpected error occurred", Code = "INTERNAL_ERROR" });
         }
     }
 
