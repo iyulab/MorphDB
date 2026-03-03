@@ -106,7 +106,55 @@ public interface ISchemaManager
     Task DeleteRelationAsync(
         Guid relationId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Executes a batch of DDL operations atomically within a single transaction.
+    /// If any operation fails, all operations are rolled back.
+    /// </summary>
+    Task<BatchDdlResult> ExecuteBatchDdlAsync(
+        BatchDdlRequest request,
+        CancellationToken cancellationToken = default);
 }
+
+#region Batch DDL Models
+
+/// <summary>
+/// Request to execute multiple DDL operations atomically.
+/// </summary>
+public sealed record BatchDdlRequest
+{
+    public Guid TableId { get; init; }
+    public int ExpectedVersion { get; init; }
+    public required IReadOnlyList<BatchDdlOperation> Operations { get; init; }
+}
+
+/// <summary>
+/// A single DDL operation within a batch.
+/// </summary>
+public sealed record BatchDdlOperation
+{
+    public required string Type { get; init; } // addColumn, updateColumn, deleteColumn, createIndex, deleteIndex, createRelation, deleteRelation
+    public AddColumnRequest? AddColumn { get; init; }
+    public UpdateColumnRequest? UpdateColumn { get; init; }
+    public Guid? DeleteColumnId { get; init; }
+    public CreateIndexRequest? CreateIndex { get; init; }
+    public Guid? DeleteIndexId { get; init; }
+    public CreateRelationRequest? CreateRelation { get; init; }
+    public Guid? DeleteRelationId { get; init; }
+}
+
+/// <summary>
+/// Result of a batch DDL execution.
+/// </summary>
+public sealed record BatchDdlResult
+{
+    public bool Success { get; init; }
+    public int OperationsExecuted { get; init; }
+    public int NewSchemaVersion { get; init; }
+    public string? Error { get; init; }
+}
+
+#endregion
 
 #region Request Models
 

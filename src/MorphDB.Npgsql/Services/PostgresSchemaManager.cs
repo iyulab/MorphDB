@@ -1307,6 +1307,81 @@ public sealed class PostgresSchemaManager : ISchemaManager
         });
         return JsonDocument.Parse(json);
     }
+
+    public async Task<BatchDdlResult> ExecuteBatchDdlAsync(
+        BatchDdlRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var table = await _repository.GetTableByIdAsync(request.TableId, includeColumns: true, cancellationToken)
+            ?? throw new TableNotFoundException(request.TableId.ToString());
+
+        // Optimistic concurrency check
+        var currentVersion = await _repository.GetCurrentVersionAsync(request.TableId, cancellationToken);
+        if (currentVersion != request.ExpectedVersion)
+        {
+            throw new SchemaVersionConflictException(request.ExpectedVersion, currentVersion);
+        }
+
+        var executedCount = 0;
+
+        try
+        {
+            foreach (var op in request.Operations)
+            {
+                switch (op.Type.ToLowerInvariant())
+                {
+                    case "addcolumn" when op.AddColumn is not null:
+                        var addReq = op.AddColumn with { TableId = request.TableId };
+                        await AddColumnAsync(addReq, cancellationToken);
+                        break;
+
+                    case "updatecolumn" when op.UpdateColumn is not null:
+                        await UpdateColumnAsync(op.UpdateColumn, cancellationToken);
+                        break;
+
+                    case "deletecolumn" when op.DeleteColumnId.HasValue:
+                        await DeleteColumnAsync(op.DeleteColumnId.Value, cancellationToken);
+                        break;
+
+                    case "createindex" when op.CreateIndex is not null:
+                        var idxReq = op.CreateIndex with { TableId = request.TableId };
+                        await CreateIndexAsync(idxReq, cancellationToken);
+                        break;
+
+                    case "deleteindex" when op.DeleteIndexId.HasValue:
+                        await DeleteIndexAsync(op.DeleteIndexId.Value, cancellationToken);
+                        break;
+
+                    case "createrelation" when op.CreateRelation is not null:
+                        await CreateRelationAsync(op.CreateRelation, cancellationToken);
+                        break;
+
+                    case "deleterelation" when op.DeleteRelationId.HasValue:
+                        await DeleteRelationAsync(op.DeleteRelationId.Value, cancellationToken);
+                        break;
+
+                    default:
+                        throw new ValidationException("INVALID_OPERATION",
+                            $"Unknown or incomplete batch operation type: '{op.Type}'");
+                }
+
+                executedCount++;
+            }
+
+            var newVersion = await _repository.GetCurrentVersionAsync(request.TableId, cancellationToken);
+            return new BatchDdlResult
+            {
+                Success = true,
+                OperationsExecuted = executedCount,
+                NewSchemaVersion = newVersion
+            };
+        }
+        catch (Exception ex) when (ex is not ValidationException and not SchemaException)
+        {
+            throw new SchemaException("BATCH_DDL_FAILED",
+                $"Batch DDL failed after {executedCount}/{request.Operations.Count} operations: {ex.Message}", ex);
+        }
+    }
 }
 
 /// <summary>

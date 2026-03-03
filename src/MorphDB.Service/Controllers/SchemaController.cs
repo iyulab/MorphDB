@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Exceptions;
+using MorphDB.Core.Models;
 using MorphDB.Npgsql.Services;
 using MorphDB.Service.Models.Api;
 using MorphDB.Service.OData;
@@ -665,6 +666,92 @@ public sealed class SchemaController : ControllerBase
                 Message = ex.Message
             });
         }
+    }
+
+    #endregion
+
+    #region Batch DDL Operations
+
+    /// <summary>
+    /// Executes multiple DDL operations atomically. All operations succeed or all are rolled back.
+    /// </summary>
+    [HttpPost("batch")]
+    [ProducesResponseType(typeof(BatchDdlResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> ExecuteBatchDdl(
+        [FromBody] BatchDdlApiRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var batchRequest = new BatchDdlRequest
+            {
+                TableId = request.TableId,
+                ExpectedVersion = request.Version,
+                Operations = request.Operations.Select(MapBatchOperation).ToList()
+            };
+
+            var result = await _schemaManager.ExecuteBatchDdlAsync(batchRequest, cancellationToken);
+
+            _edmModelProvider.InvalidateAll();
+
+            return Ok(result);
+        }
+        catch (NotFoundException ex)
+        {
+            return NotFound(new ErrorResponse { Error = "TableNotFound", Message = ex.Message });
+        }
+        catch (ValidationException ex)
+        {
+            return BadRequest(new ErrorResponse { Error = "ValidationError", Message = ex.Message });
+        }
+        catch (ConcurrencyException ex)
+        {
+            return Conflict(new ErrorResponse { Error = "ConcurrencyConflict", Message = ex.Message });
+        }
+        catch (Core.Exceptions.SchemaException ex)
+        {
+            return BadRequest(new ErrorResponse { Error = "BatchDdlFailed", Message = ex.Message });
+        }
+    }
+
+    private static BatchDdlOperation MapBatchOperation(BatchDdlOperationApiRequest op)
+    {
+        return new BatchDdlOperation
+        {
+            Type = op.Type,
+            AddColumn = op.AddColumn is not null ? new AddColumnRequest
+            {
+                LogicalName = op.AddColumn.Name,
+                DataType = ApiModelExtensions.ParseDataType(op.AddColumn.Type),
+                IsNullable = op.AddColumn.Nullable,
+                IsUnique = op.AddColumn.Unique,
+                IsIndexed = op.AddColumn.Indexed,
+                DefaultValue = op.AddColumn.Default,
+                CheckExpression = op.AddColumn.Check
+            } : null,
+            UpdateColumn = op.UpdateColumn,
+            DeleteColumnId = op.DeleteColumnId,
+            CreateIndex = op.CreateIndex is not null ? new CreateIndexRequest
+            {
+                LogicalName = op.CreateIndex.Name,
+                ColumnIds = op.CreateIndex.Columns.Select(Guid.Parse).ToList(),
+                IsUnique = op.CreateIndex.Unique,
+                WhereClause = op.CreateIndex.Where
+            } : null,
+            DeleteIndexId = op.DeleteIndexId,
+            CreateRelation = op.CreateRelation is not null ? new CreateRelationRequest
+            {
+                LogicalName = op.CreateRelation.Name,
+                SourceColumnId = Guid.Parse(op.CreateRelation.SourceColumn),
+                TargetTableId = Guid.Parse(op.CreateRelation.TargetTable),
+                TargetColumnId = Guid.Parse(op.CreateRelation.TargetColumn),
+                RelationType = Enum.Parse<RelationType>(op.CreateRelation.Type ?? "ManyToOne", ignoreCase: true),
+                OnDelete = Enum.Parse<OnDeleteAction>(op.CreateRelation.OnDelete ?? "NoAction", ignoreCase: true)
+            } : null,
+            DeleteRelationId = op.DeleteRelationId
+        };
     }
 
     #endregion
