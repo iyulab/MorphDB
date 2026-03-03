@@ -1642,7 +1642,7 @@ public sealed record AggregationApiRequest
     /// <summary>
     /// Filter conditions (applied before grouping).
     /// </summary>
-    public IReadOnlyList<FilterConditionApiRequest>? Filter { get; init; }
+    public IReadOnlyList<QueryFilterConditionApiRequest>? Filter { get; init; }
 
     /// <summary>
     /// Having conditions (applied after grouping).
@@ -1733,7 +1733,7 @@ public sealed record AggregationColumnApiRequest
 /// <summary>
 /// Filter condition for aggregation WHERE clause.
 /// </summary>
-public sealed record FilterConditionApiRequest
+public sealed record QueryFilterConditionApiRequest
 {
     /// <summary>
     /// Column to filter on (logical name).
@@ -1753,7 +1753,7 @@ public sealed record FilterConditionApiRequest
     /// <summary>
     /// Converts to core FilterCondition model.
     /// </summary>
-    public FilterCondition ToModel() => new()
+    public MorphDB.Core.Abstractions.FilterCondition ToModel() => new()
     {
         Column = Column,
         Operator = ApiModelExtensions.ParseFilterOperator(Operator),
@@ -1867,6 +1867,67 @@ public sealed record AggregationMetadataApiResponse
         RowsScanned = metadata.RowsScanned,
         ExecutionTimeMs = metadata.ExecutionTimeMs
     };
+}
+
+#endregion
+
+#region Complex Query API Models
+
+/// <summary>
+/// Request for complex queries with AND/OR filter support.
+/// </summary>
+public sealed record ComplexQueryApiRequest
+{
+    /// <summary>
+    /// Filter tree with AND/OR support.
+    /// </summary>
+    public FilterNode? Filter { get; init; }
+
+    /// <summary>
+    /// Columns to select. Null selects all.
+    /// </summary>
+    public IReadOnlyList<string>? Select { get; init; }
+
+    /// <summary>
+    /// Order by expressions (column:asc or column:desc).
+    /// </summary>
+    public IReadOnlyList<string>? OrderBy { get; init; }
+
+    public int Page { get; init; } = 1;
+    public int PageSize { get; init; } = 20;
+}
+
+/// <summary>
+/// A filter node that can be a condition or a logical group (AND/OR).
+/// </summary>
+[JsonDerivedType(typeof(QueryFilterCondition), "condition")]
+[JsonDerivedType(typeof(QueryFilterGroup), "group")]
+public abstract record FilterNode;
+
+/// <summary>
+/// A single filter condition: column operator value.
+/// </summary>
+public sealed record QueryFilterCondition : FilterNode
+{
+    public required string Column { get; init; }
+    public required string Operator { get; init; }
+    public object? Value { get; init; }
+}
+
+/// <summary>
+/// A logical group of filter nodes (AND/OR).
+/// </summary>
+public sealed record QueryFilterGroup : FilterNode
+{
+    /// <summary>
+    /// Logical operator: "and" or "or".
+    /// </summary>
+    public required string Logic { get; init; }
+
+    /// <summary>
+    /// Child filter nodes.
+    /// </summary>
+    public required IReadOnlyList<FilterNode> Filters { get; init; }
 }
 
 #endregion

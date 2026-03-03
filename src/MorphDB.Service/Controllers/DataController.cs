@@ -222,6 +222,88 @@ public sealed class DataController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Complex query with JSON-based AND/OR filter support.
+    /// </summary>
+    [HttpPost("{table}/query")]
+    [ProducesResponseType(typeof(PagedResponse<DataRecordResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ComplexQuery(
+        string table,
+        [FromBody] ComplexQueryApiRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var tenantId = GetTenantId();
+            var pageSize = Math.Clamp(request.PageSize, 1, Math.Min(1000, MaxPageSize));
+            var page = Math.Max(request.Page, 1);
+
+            var morphQuery = _dataService.Query(tenantId).From(table);
+
+            // Select
+            if (request.Select is { Count: > 0 })
+            {
+                morphQuery = morphQuery.SelectColumns([.. request.Select]);
+            }
+            else
+            {
+                morphQuery = morphQuery.SelectAll();
+            }
+
+            // Apply complex filter
+            if (request.Filter is not null)
+            {
+                morphQuery = ApplyFilterNode(morphQuery, request.Filter, isFirst: true);
+            }
+
+            // Ordering
+            if (request.OrderBy is { Count: > 0 })
+            {
+                morphQuery = ApplyOrdering(morphQuery, string.Join(",", request.OrderBy));
+            }
+
+            var totalCount = await morphQuery.CountAsync(cancellationToken);
+            morphQuery = morphQuery.Limit(pageSize).Offset((page - 1) * pageSize);
+
+            var results = await morphQuery.ToListAsync(cancellationToken);
+            var records = results.Select(r => new DataRecordResponse
+            {
+                Id = r.TryGetValue("_id", out var id) && id is Guid guid ? guid : Guid.Empty,
+                Data = r
+            }).ToList();
+
+            return Ok(new PagedResponse<DataRecordResponse>
+            {
+                Data = records,
+                Pagination = new PaginationInfo
+                {
+                    Page = page,
+                    PageSize = pageSize,
+                    TotalCount = totalCount
+                }
+            });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "INVALID_FILTER" });
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
+        {
+            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_TENANT" });
+        }
+        catch (System.Collections.Generic.KeyNotFoundException ex)
+        {
+            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = "TABLE_NOT_FOUND" });
+        }
+        catch (Exception ex)
+        {
+            DataControllerLogs.QueryError(_logger, ex, table);
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new ErrorResponse { Error = "InternalError", Message = "An unexpected error occurred", Code = "INTERNAL_ERROR" });
+        }
+    }
+
     #endregion
 
     #region Insert Operations
@@ -449,6 +531,82 @@ public sealed class DataController : ControllerBase
     #endregion
 
     #region Helper Methods
+
+    private static IMorphQuery ApplyFilterNode(IMorphQuery query, FilterNode node, bool isFirst)
+    {
+        return node switch
+        {
+            QueryFilterCondition condition => ApplyCondition(query, condition, isFirst),
+            QueryFilterGroup group => ApplyGroup(query, group),
+            _ => query
+        };
+    }
+
+    private static IMorphQuery ApplyCondition(IMorphQuery query, QueryFilterCondition condition, bool isFirst)
+    {
+        var op = ApiModelExtensions.ParseFilterOperator(condition.Operator);
+        var value = condition.Value is System.Text.Json.JsonElement je
+            ? ParseJsonFilterValue(je)
+            : condition.Value;
+
+        return isFirst
+            ? query.Where(condition.Column, op, value)
+            : query.AndWhere(condition.Column, op, value);
+    }
+
+    private static IMorphQuery ApplyGroup(IMorphQuery query, QueryFilterGroup group)
+    {
+        if (group.Filters.Count == 0)
+            return query;
+
+        var isOr = group.Logic.Equals("or", StringComparison.OrdinalIgnoreCase);
+        var isFirst = true;
+
+        foreach (var child in group.Filters)
+        {
+            if (child is QueryFilterCondition condition)
+            {
+                var op = ApiModelExtensions.ParseFilterOperator(condition.Operator);
+                var value = condition.Value is System.Text.Json.JsonElement je
+                    ? ParseJsonFilterValue(je)
+                    : condition.Value;
+
+                if (isFirst)
+                {
+                    query = query.Where(condition.Column, op, value);
+                    isFirst = false;
+                }
+                else if (isOr)
+                {
+                    query = query.OrWhere(condition.Column, op, value);
+                }
+                else
+                {
+                    query = query.AndWhere(condition.Column, op, value);
+                }
+            }
+            else if (child is QueryFilterGroup nestedGroup)
+            {
+                // Recursively apply nested groups
+                query = ApplyGroup(query, nestedGroup);
+            }
+        }
+
+        return query;
+    }
+
+    private static object? ParseJsonFilterValue(System.Text.Json.JsonElement element)
+    {
+        return element.ValueKind switch
+        {
+            System.Text.Json.JsonValueKind.String => element.GetString(),
+            System.Text.Json.JsonValueKind.Number => element.TryGetInt64(out var l) ? l : element.GetDecimal(),
+            System.Text.Json.JsonValueKind.True => true,
+            System.Text.Json.JsonValueKind.False => false,
+            System.Text.Json.JsonValueKind.Null => null,
+            _ => element.GetRawText()
+        };
+    }
 
     private static IMorphQuery ApplyFilters(IMorphQuery query, string filterExpression)
     {

@@ -264,7 +264,7 @@ public class AggregationApiTests
             ],
             Filter =
             [
-                new FilterConditionApiRequest
+                new QueryFilterConditionApiRequest
                 {
                     Column = "status",
                     Operator = "eq",
