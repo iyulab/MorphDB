@@ -714,11 +714,11 @@ public sealed class PostgresSchemaManager : ISchemaManager
             if (request.DataType.HasValue && request.DataType.Value != column.DataType)
             {
                 var newNativeType = TypeMapper.ToNativeType(request.DataType.Value);
-                if (!TypeMapper.IsTypeCastSafe(column.DataType, request.DataType.Value))
+                if (!TypeMapper.IsTypeCastSafe(column.DataType, request.DataType.Value) && !request.ForceCast)
                 {
                     throw new ValidationException("UNSAFE_TYPE_CAST",
                         $"Cannot safely convert column '{column.LogicalName}' from {column.DataType} to {request.DataType.Value}. " +
-                        "Data loss may occur. Consider creating a new column and migrating data manually.");
+                        "Data loss may occur. Set ForceCast=true to attempt the conversion, or create a new column and migrate data manually.");
                 }
 
                 var alterTypeSql = DdlBuilder.BuildAlterColumnType(

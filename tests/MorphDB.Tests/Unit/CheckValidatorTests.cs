@@ -147,6 +147,80 @@ public class CheckValidatorTests
     }
 
     [Theory]
+    [InlineData("email MATCHES '^[^@]+@[^@]+\\.[^@]+$'", "user@example.com", true)]
+    [InlineData("email MATCHES '^[^@]+@[^@]+\\.[^@]+$'", "invalid-email", false)]
+    [InlineData("code MATCHES '^[A-Z]{3}-\\d{4}$'", "ABC-1234", true)]
+    [InlineData("code MATCHES '^[A-Z]{3}-\\d{4}$'", "abc-1234", false)]
+    [InlineData("code MATCHES '^[A-Z]{3}-\\d{4}$'", "ABCD-123", false)]
+    public void MatchesExpression_ShouldEvaluateCorrectly(string expression, string value, bool expected)
+    {
+        // Arrange
+        var columnName = expression.Split(' ')[0];
+        var context = CreateMockContextForString(columnName, expression, value);
+
+        // Act
+        _validator.ExecuteAsync(context);
+
+        // Assert
+        if (expected)
+        {
+            context.Errors.Should().BeEmpty();
+        }
+        else
+        {
+            context.Errors.Should().NotBeEmpty();
+        }
+    }
+
+    [Fact]
+    public void MatchesExpression_WithNullValue_ShouldBypassValidation()
+    {
+        // Arrange
+        var context = CreateMockContextForString("email", "email MATCHES '^.+@.+$'", null);
+
+        // Act
+        _validator.ExecuteAsync(context);
+
+        // Assert
+        context.Errors.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void MatchesExpression_WithInvalidRegex_ShouldPassValidation()
+    {
+        // Arrange — invalid regex pattern (unmatched parenthesis)
+        var context = CreateMockContextForString("code", "code MATCHES '([invalid'", "anything");
+
+        // Act
+        _validator.ExecuteAsync(context);
+
+        // Assert — invalid regex patterns should not block data
+        context.Errors.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("email MATCHES '^.+@.+$' AND email != ''", "user@test.com", true)]
+    [InlineData("email MATCHES '^.+@.+$' AND email != ''", "invalid", false)]
+    public void MatchesWithAndExpression_ShouldEvaluateCorrectly(string expression, string value, bool expected)
+    {
+        // Arrange
+        var context = CreateMockContextForString("email", expression, value);
+
+        // Act
+        _validator.ExecuteAsync(context);
+
+        // Assert
+        if (expected)
+        {
+            context.Errors.Should().BeEmpty();
+        }
+        else
+        {
+            context.Errors.Should().NotBeEmpty();
+        }
+    }
+
+    [Theory]
     [InlineData("age >= 18 AND age <= 65", 30, true)]
     [InlineData("age >= 18 AND age <= 65", 17, false)]
     [InlineData("age >= 18 AND age <= 65", 66, false)]
@@ -167,6 +241,41 @@ public class CheckValidatorTests
         {
             context.Errors.Should().NotBeEmpty();
         }
+    }
+
+    private static WriteContext CreateMockContextForString(string columnName, string checkExpression, object? value)
+    {
+        var column = new ColumnMetadata
+        {
+            ColumnId = Guid.NewGuid(),
+            TableId = Guid.NewGuid(),
+            LogicalName = columnName,
+            PhysicalName = $"c_{columnName}",
+            DataType = MorphDataType.Text,
+            NativeType = "TEXT",
+            OrdinalPosition = 1,
+            CheckExpression = checkExpression,
+            IsActive = true
+        };
+
+        var table = new TableMetadata
+        {
+            TableId = column.TableId,
+            TenantId = Guid.NewGuid(),
+            LogicalName = "test_table",
+            PhysicalName = "t_test",
+            Columns = [column],
+            SchemaVersion = 1
+        };
+
+        return new WriteContext
+        {
+            TenantId = table.TenantId,
+            Table = table,
+            OperationType = WriteOperationType.Insert,
+            Data = new Dictionary<string, object?> { [columnName] = value },
+            Options = new WriteOptions { ValidateCheck = true }
+        };
     }
 
     private static WriteContext CreateMockContext(string columnName, string checkExpression, object? value)

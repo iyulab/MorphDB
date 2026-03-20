@@ -654,6 +654,7 @@ public static class DdlBuilder
     /// <summary>
     /// Translates logical column names in a CHECK expression to their quoted physical names.
     /// Uses word-boundary matching to avoid partial replacements.
+    /// Also translates the MATCHES operator to PostgreSQL's native ~ (regex match) operator.
     /// </summary>
     public static string? TranslateCheckExpression(
         string? checkExpression,
@@ -670,6 +671,9 @@ public static class DdlBuilder
             var pattern = $@"\b{Regex.Escape(logicalName)}\b";
             result = Regex.Replace(result, pattern, QuoteIdentifier(physicalName));
         }
+
+        // Translate MATCHES operator to PostgreSQL's native ~ (regex match) operator
+        result = Regex.Replace(result, @"\bMATCHES\b", "~", RegexOptions.IgnoreCase);
 
         return result;
     }

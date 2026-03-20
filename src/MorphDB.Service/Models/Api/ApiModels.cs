@@ -473,6 +473,12 @@ public sealed record UpdateColumnApiRequest
     public bool? Unique { get; init; }
     public string? Check { get; init; }
     public int Version { get; init; }
+
+    /// <summary>
+    /// When true, forces type conversion even if it may cause data loss.
+    /// PostgreSQL will attempt CAST using the USING clause.
+    /// </summary>
+    public bool ForceCast { get; init; }
 }
 
 /// <summary>

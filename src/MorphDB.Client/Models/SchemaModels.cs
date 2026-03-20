@@ -132,6 +132,11 @@ public sealed class AlterColumnRequest
     /// New check expression.
     /// </summary>
     public string? CheckExpression { get; init; }
+
+    /// <summary>
+    /// When true, forces type conversion even if it may cause data loss.
+    /// </summary>
+    public bool ForceCast { get; init; }
 }
 
 /// <summary>

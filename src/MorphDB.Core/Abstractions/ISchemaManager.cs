@@ -304,6 +304,14 @@ public sealed record UpdateColumnRequest
     public bool? IsUnique { get; init; }
     public string? CheckExpression { get; init; }
     public int ExpectedVersion { get; init; }
+
+    /// <summary>
+    /// When true, forces type changes even if the conversion is not in the safe-cast list.
+    /// PostgreSQL will attempt the cast using USING column::new_type.
+    /// If the cast fails at the database level, the operation rolls back.
+    /// Default: false (only safe, widening conversions are allowed).
+    /// </summary>
+    public bool ForceCast { get; init; }
 }
 
 public sealed record RenameColumnRequest

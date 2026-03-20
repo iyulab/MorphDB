@@ -209,6 +209,23 @@ public sealed partial class CheckValidator : IValidator
             }
         }
 
+        // Pattern: field MATCHES 'regex_pattern'
+        // Supports regex validation for CHECK expressions generated from @pattern annotations.
+        var matchesMatch = MatchesCheckPattern().Match(expression);
+        if (matchesMatch.Success)
+        {
+            var field = matchesMatch.Groups["field"].Value.Trim();
+            var pattern = matchesMatch.Groups["pattern"].Value;
+
+            var fieldValue = GetFieldValue(field, columnName, value, data);
+            if (fieldValue is string strValue)
+            {
+                try { return Regex.IsMatch(strValue, pattern); }
+                catch { return true; } // Invalid regex patterns pass validation
+            }
+            return true; // Non-string or null values pass
+        }
+
         // Unknown expression format, assume valid
         return true;
     }
@@ -273,6 +290,17 @@ public sealed partial class CheckValidator : IValidator
                 "!=" or "<>" => leftDt != rightDt,
                 _ => true
             };
+        }
+
+        // MATCHES / ~ operator (regex)
+        if (op is "MATCHES" or "~")
+        {
+            if (left is string s && right is string p)
+            {
+                try { return Regex.IsMatch(s, p); }
+                catch { return true; }
+            }
+            return true;
         }
 
         // String comparison
@@ -341,4 +369,7 @@ public sealed partial class CheckValidator : IValidator
 
     [GeneratedRegex(@"^(?<field1>\w+)\s*(?<op>[><=!]+)\s*(?<field2>\w+)$")]
     private static partial Regex CrossFieldCheckPattern();
+
+    [GeneratedRegex(@"^(?<field>\w+)\s+MATCHES\s+'(?<pattern>[^']+)'$", RegexOptions.IgnoreCase)]
+    private static partial Regex MatchesCheckPattern();
 }

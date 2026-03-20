@@ -453,6 +453,32 @@ public class DdlBuilderTests
     }
 
     [Fact]
+    public void TranslateCheckExpression_ShouldTranslateMatchesToTildeOperator()
+    {
+        var columnMappings = new Dictionary<string, string>
+        {
+            ["email"] = "col_email_hash"
+        };
+
+        var result = DdlBuilder.TranslateCheckExpression("email MATCHES '^[^@]+@[^@]+$'", columnMappings);
+
+        result.Should().Be("\"col_email_hash\" ~ '^[^@]+@[^@]+$'");
+    }
+
+    [Fact]
+    public void TranslateCheckExpression_ShouldTranslateMatchesCaseInsensitive()
+    {
+        var columnMappings = new Dictionary<string, string>
+        {
+            ["code"] = "col_code"
+        };
+
+        var result = DdlBuilder.TranslateCheckExpression("code matches '^[A-Z]+$'", columnMappings);
+
+        result.Should().Be("\"col_code\" ~ '^[A-Z]+$'");
+    }
+
+    [Fact]
     public void BuildCreateTable_WithHashedPhysicalNameAndCheck_ShouldUsePhysicalNameInCheck()
     {
         // Arrange — simulates translated check expression with hashed physical names

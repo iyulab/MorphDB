@@ -386,7 +386,8 @@ public sealed class SchemaController : ControllerBase
                 IsNullable = request.Nullable,
                 IsUnique = request.Unique,
                 CheckExpression = request.Check,
-                ExpectedVersion = request.Version
+                ExpectedVersion = request.Version,
+                ForceCast = request.ForceCast
             };
 
             var column = await _schemaManager.UpdateColumnAsync(updateRequest, cancellationToken);
