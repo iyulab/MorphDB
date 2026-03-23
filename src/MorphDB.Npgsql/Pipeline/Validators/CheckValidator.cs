@@ -220,8 +220,14 @@ public sealed partial class CheckValidator : IValidator
             var fieldValue = GetFieldValue(field, columnName, value, data);
             if (fieldValue is string strValue)
             {
-                try { return Regex.IsMatch(strValue, pattern); }
-                catch { return true; } // Invalid regex patterns pass validation
+                try
+                {
+                    return Regex.IsMatch(strValue, pattern);
+                }
+                catch
+                {
+                    return true; // Invalid regex patterns pass validation
+                }
             }
             return true; // Non-string or null values pass
         }
@@ -297,8 +303,14 @@ public sealed partial class CheckValidator : IValidator
         {
             if (left is string s && right is string p)
             {
-                try { return Regex.IsMatch(s, p); }
-                catch { return true; }
+                try
+                {
+                    return Regex.IsMatch(s, p);
+                }
+                catch
+                {
+                    return true;
+                }
             }
             return true;
         }
