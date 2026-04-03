@@ -261,6 +261,9 @@ try
 
     var app = builder.Build();
 
+    // Ensure global morphdb schema exists (replaces init.sql for embedded mode)
+    await app.Services.EnsureMorphDbSchemaAsync();
+
     // Configure the HTTP request pipeline
     app.UseSerilogRequestLogging();
     app.UseRequestTracking(); // Graceful shutdown request tracking (Phase 24)

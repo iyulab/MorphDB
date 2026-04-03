@@ -64,6 +64,17 @@ public static class TypeMapper
     };
 
     /// <summary>
+    /// Checks if the data type maps to PostgreSQL jsonb.
+    /// Used to append ::jsonb casts to SQL parameters.
+    /// </summary>
+    public static bool IsJsonbType(MorphDataType dataType) => dataType switch
+    {
+        MorphDataType.Json or MorphDataType.Array or MorphDataType.MultiSelect
+            or MorphDataType.Attachment or MorphDataType.Rollup => true,
+        _ => false
+    };
+
+    /// <summary>
     /// Checks if a type change from one MorphDataType to another can be safely cast in PostgreSQL.
     /// Returns true if the conversion is safe (no data loss expected).
     /// </summary>

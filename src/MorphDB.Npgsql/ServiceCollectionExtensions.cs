@@ -198,6 +198,19 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
+    /// Ensures the global morphdb schema and all system control-plane tables exist.
+    /// Call this after building the service provider, typically in application startup.
+    /// Safe to call repeatedly — uses IF NOT EXISTS internally.
+    /// </summary>
+    public static async Task EnsureMorphDbSchemaAsync(
+        this IServiceProvider services,
+        CancellationToken cancellationToken = default)
+    {
+        var schemaLayerService = services.GetRequiredService<ISchemaLayerService>();
+        await schemaLayerService.EnsureGlobalSchemaAsync(cancellationToken);
+    }
+
+    /// <summary>
     /// Registers Write Pipeline components for Virtual Constraint enforcement.
     /// </summary>
     public static IServiceCollection AddWritePipeline(this IServiceCollection services)

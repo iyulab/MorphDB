@@ -9,6 +9,12 @@ namespace MorphDB.Core.Abstractions;
 public interface ISchemaLayerService
 {
     /// <summary>
+    /// Ensures the global morphdb schema and all system control-plane tables exist.
+    /// Safe to call on every startup; uses IF NOT EXISTS internally.
+    /// </summary>
+    Task EnsureGlobalSchemaAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Creates both system and data schemas for a new project.
     /// Also creates the required system tables in the system schema.
     /// </summary>

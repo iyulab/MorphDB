@@ -27,6 +27,18 @@ public sealed partial class PostgresSchemaLayerService : ISchemaLayerService
     }
 
     /// <inheritdoc/>
+    public async Task EnsureGlobalSchemaAsync(CancellationToken cancellationToken = default)
+    {
+        LogEnsuringGlobalSchema(_logger);
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        var ddl = DdlBuilder.BuildGlobalSystemSchemaDdl();
+        await connection.ExecuteAsync(ddl);
+
+        LogGlobalSchemaEnsured(_logger);
+    }
+
+    /// <inheritdoc/>
     public async Task<SchemaNames> ProvisionProjectSchemasAsync(
         Guid projectId,
         CancellationToken cancellationToken = default)
@@ -361,6 +373,12 @@ public sealed partial class PostgresSchemaLayerService : ISchemaLayerService
     }
 
     // LoggerMessage delegates for high-performance logging
+    [LoggerMessage(LogLevel.Information, "Ensuring global morphdb schema exists")]
+    private static partial void LogEnsuringGlobalSchema(ILogger logger);
+
+    [LoggerMessage(LogLevel.Information, "Global morphdb schema ensured")]
+    private static partial void LogGlobalSchemaEnsured(ILogger logger);
+
     [LoggerMessage(LogLevel.Information, "Provisioning schemas for project {ProjectId}: {SystemSchema}, {DataSchema}")]
     private static partial void LogProvisioningSchemas(ILogger logger, Guid projectId, string systemSchema, string dataSchema);
 

@@ -393,7 +393,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
 
             physicalColumns.Add(column.PhysicalName);
             var pName = $"@p{paramIndex}";
-            parameterNames.Add(pName);
+            parameterNames.Add(TypeMapper.IsJsonbType(column.DataType) ? $"{pName}::jsonb" : pName);
 
             var dbValue = TypeMapper.ToDbValue(value, column.DataType);
             valuesDict[$"p{paramIndex}"] = dbValue;
@@ -439,7 +439,8 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
                 continue;
 
             var paramName = $"@p{paramIndex}";
-            setColumns.Add((column.PhysicalName, paramName));
+            var paramExpr = TypeMapper.IsJsonbType(column.DataType) ? $"{paramName}::jsonb" : paramName;
+            setColumns.Add((column.PhysicalName, paramExpr));
 
             var dbValue = TypeMapper.ToDbValue(value, column.DataType);
             valuesDict[$"p{paramIndex}"] = dbValue;

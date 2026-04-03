@@ -438,7 +438,7 @@ public sealed class PostgresDataService : IMorphDataService
 
             physicalColumns.Add(column.PhysicalName);
             var paramName = $"@p{paramIndex}";
-            parameterNames.Add(paramName);
+            parameterNames.Add(TypeMapper.IsJsonbType(column.DataType) ? $"{paramName}::jsonb" : paramName);
 
             // Convert value to database type
             var dbValue = TypeMapper.ToDbValue(value, column.DataType);
@@ -472,7 +472,8 @@ public sealed class PostgresDataService : IMorphDataService
                 continue;
 
             var paramName = $"@p{paramIndex}";
-            setColumns.Add((column.PhysicalName, paramName));
+            var paramExpr = TypeMapper.IsJsonbType(column.DataType) ? $"{paramName}::jsonb" : paramName;
+            setColumns.Add((column.PhysicalName, paramExpr));
 
             // Convert value to database type
             var dbValue = TypeMapper.ToDbValue(value, column.DataType);
