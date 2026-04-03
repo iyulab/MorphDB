@@ -83,6 +83,7 @@ coverage/
 .serena/
 local-docs/
 research-docs/
+claudedocs/
 nul
 CLAUDE.md
 dist/
