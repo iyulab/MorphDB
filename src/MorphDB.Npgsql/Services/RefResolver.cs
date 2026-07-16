@@ -182,6 +182,14 @@ public sealed partial class RefResolver : IRefResolver
     /// </summary>
     public Guid? ResolveId(object? id)
     {
+        // REST deserialization (System.Text.Json) delivers ids as JsonElement, not string
+        // — unwrap the string kind before matching so transaction UPDATE/DELETE and $ref
+        // ids resolve over HTTP, not just for in-process callers.
+        if (id is JsonElement { ValueKind: JsonValueKind.String } je)
+        {
+            id = je.GetString();
+        }
+
         return id switch
         {
             Guid g => g,

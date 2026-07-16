@@ -472,6 +472,10 @@ public sealed class PostgresViewManager : IViewManager
 
     private static string FormatValue(object? value)
     {
+        // Filter values cross the API boundary (and JSONB storage) as JsonElement; unwrap so the
+        // type checks below quote/render them correctly instead of falling through to ToString().
+        value = JsonValueConverter.ToClrValue(value);
+
         if (value == null)
             return "NULL";
         if (value is string s)

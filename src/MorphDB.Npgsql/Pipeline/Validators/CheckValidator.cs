@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using MorphDB.Core.Models;
 using MorphDB.Core.Pipeline;
+using MorphDB.Npgsql.Infrastructure;
 
 namespace MorphDB.Npgsql.Pipeline.Validators;
 
@@ -37,6 +38,11 @@ public sealed partial class CheckValidator : IValidator
                     continue;
                 }
             }
+
+            // REST binding delivers values as JsonElement; the in-memory comparisons below
+            // (`is string`, MATCHES) do not match a JsonElement and would silently bypass the
+            // constraint. Unwrap to a CLR value so string/regex CHECKs are actually enforced.
+            value = JsonValueConverter.ToClrValue(value);
 
             // Evaluate the check expression
             var isValid = EvaluateCheckExpression(column.CheckExpression!, column.LogicalName, value, context.Data);
@@ -246,7 +252,8 @@ public sealed partial class CheckValidator : IValidator
             return currentValue;
         }
 
-        return data.TryGetValue(field, out var fieldValue) ? fieldValue : null;
+        // Cross-field lookups read straight from the payload, so unwrap JsonElement here too.
+        return data.TryGetValue(field, out var fieldValue) ? JsonValueConverter.ToClrValue(fieldValue) : null;
     }
 
     private static bool CompareValues(object? left, string op, object? right)

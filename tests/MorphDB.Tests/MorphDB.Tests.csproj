@@ -12,6 +12,7 @@
     <ProjectReference Include="..\..\src\MorphDB.Core\MorphDB.Core.csproj" />
     <ProjectReference Include="..\..\src\MorphDB.Npgsql\MorphDB.Npgsql.csproj" />
     <ProjectReference Include="..\..\src\MorphDB.Service\MorphDB.Service.csproj" />
+    <ProjectReference Include="..\..\src\MorphDB.Client\MorphDB.Client.csproj" />
   </ItemGroup>
 
   <ItemGroup>

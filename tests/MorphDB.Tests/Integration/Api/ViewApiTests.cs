@@ -138,6 +138,41 @@ public class ViewApiTests
     }
 
     [Fact]
+    public async Task CreateView_WithStringFilter_ShouldReturnCreated()
+    {
+        // Regression (issue rest-jsonelement-defects, audit finding): a string filter value
+        // arrives as a JsonElement over REST. The view SQL builder's `value is string` check did
+        // not match a JsonElement, so the value was emitted unquoted (field = Alice) -> invalid
+        // SQL -> view creation failure. It must now be quoted correctly.
+        // Arrange
+        var baseTable = await CreateBaseTableAsync();
+        var viewName = $"vw_strfilter_{Guid.NewGuid():N}"[..30];
+
+        var request = new CreateViewApiRequest
+        {
+            Name = viewName,
+            BaseTable = baseTable,
+            Columns =
+            [
+                new ViewColumnApiSpec { Source = "name", Alias = "name" },
+                new ViewColumnApiSpec { Source = "age", Alias = "age" }
+            ],
+            Filters =
+            [
+                new ViewFilterApiSpec { Field = "name", Operator = "eq", Value = "Alice" }
+            ]
+        };
+
+        // Act
+        var response = await _client.PostAsJsonAsync("/api/views", request);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        var view = await response.Content.ReadFromJsonAsync<ViewApiResponse>();
+        view!.Name.Should().Be(viewName);
+    }
+
+    [Fact]
     public async Task CreateView_WithAggregation_ShouldReturnCreated()
     {
         // Arrange
