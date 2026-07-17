@@ -48,10 +48,15 @@ public sealed class UniqueValidator : IValidator
                 continue;
             }
 
+            // Raw JsonElement values (from System.Text.Json binding on the REST path)
+            // are not bindable by Dapper — convert to the column's DB value first, and
+            // reuse the converted value so the error report never leaks a raw JsonElement.
+            var dbValue = TypeMapper.ToDbValue(value, column.DataType);
+
             // Build the unique check query
             var sql = BuildUniqueCheckQuery(context, column);
             var parameters = new DynamicParameters();
-            parameters.Add("value", value);
+            parameters.Add("value", dbValue);
 
             // Exclude current record for updates
             if (context.OperationType == WriteOperationType.Update && context.RecordId.HasValue)
@@ -67,8 +72,8 @@ public sealed class UniqueValidator : IValidator
                 ((WriteContext)context).AddError(
                     column.LogicalName,
                     ValidationErrorCodes.UniqueViolation,
-                    $"Value '{value}' already exists for field '{column.LogicalName}'.",
-                    value);
+                    $"Value '{dbValue}' already exists for field '{column.LogicalName}'.",
+                    dbValue);
             }
         }
     }

@@ -243,6 +243,70 @@ public class CheckValidatorTests
         }
     }
 
+    // ---- REST JsonElement regression (issue rest-jsonelement-defects, audit finding #3) ----
+    // Over REST the field value arrives as a System.Text.Json.JsonElement. CheckValidator's
+    // typed comparisons (`left is string`, MATCHES `fieldValue is string`) did not match a
+    // JsonElement, so string/regex CHECK constraints were *silently bypassed* (returned valid)
+    // — a data-integrity defect. Numeric checks happened to work via ToString() parsing.
+
+    [Theory]
+    [InlineData("active", true)]    // satisfies the constraint
+    [InlineData("pending", true)]
+    [InlineData("banned", false)]   // violates it — MUST be rejected, was silently bypassed
+    public void StringEquality_WithJsonElementValue_ShouldEnforceConstraint(string value, bool expectedValid)
+    {
+        // Arrange — value as JsonElement, exactly like REST model binding produces
+        var jsonValue = System.Text.Json.JsonSerializer.SerializeToElement(value);
+        var context = CreateMockContextForString("status", "status = 'active' OR status = 'pending'", jsonValue);
+
+        // Act
+        _validator.ExecuteAsync(context);
+
+        // Assert
+        if (expectedValid)
+            context.Errors.Should().BeEmpty();
+        else
+            context.Errors.Should().NotBeEmpty("string CHECK must be enforced even when the value is a JsonElement");
+    }
+
+    [Theory]
+    [InlineData("user@example.com", true)]
+    [InlineData("invalid-email", false)]   // violates regex — MUST be rejected, was silently bypassed
+    public void MatchesExpression_WithJsonElementValue_ShouldEnforceConstraint(string value, bool expectedValid)
+    {
+        // Arrange
+        var jsonValue = System.Text.Json.JsonSerializer.SerializeToElement(value);
+        var context = CreateMockContextForString("email", "email MATCHES '^[^@]+@[^@]+\\.[^@]+$'", jsonValue);
+
+        // Act
+        _validator.ExecuteAsync(context);
+
+        // Assert
+        if (expectedValid)
+            context.Errors.Should().BeEmpty();
+        else
+            context.Errors.Should().NotBeEmpty("regex CHECK must be enforced even when the value is a JsonElement");
+    }
+
+    [Theory]
+    [InlineData(10, true)]
+    [InlineData(-5, false)]
+    public void NumericExpression_WithJsonElementValue_ShouldEnforceConstraint(int value, bool expectedValid)
+    {
+        // Arrange — guards against a regression in the (previously accidental) numeric path
+        var jsonValue = System.Text.Json.JsonSerializer.SerializeToElement(value);
+        var context = CreateMockContext("price", "price > 0", jsonValue);
+
+        // Act
+        _validator.ExecuteAsync(context);
+
+        // Assert
+        if (expectedValid)
+            context.Errors.Should().BeEmpty();
+        else
+            context.Errors.Should().NotBeEmpty();
+    }
+
     private static WriteContext CreateMockContextForString(string columnName, string checkExpression, object? value)
     {
         var column = new ColumnMetadata

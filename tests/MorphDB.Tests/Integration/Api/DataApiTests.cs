@@ -376,4 +376,148 @@ public class DataApiTests
     }
 
     #endregion
+
+    #region Unique Constraint Tests (REST JsonElement regression — issue rest-jsonelement-defects #1)
+
+    private async Task<string> SetupUniqueTableAsync()
+    {
+        var tableName = $"uniq_test_{Guid.NewGuid():N}"[..25];
+        await _client.PostAsJsonAsync("/api/schema/tables", new CreateTableApiRequest
+        {
+            Name = tableName,
+            Columns =
+            [
+                new CreateColumnApiRequest { Name = "name", Type = "text", Nullable = false },
+                new CreateColumnApiRequest { Name = "sku", Type = "text", Nullable = false, Unique = true }
+            ]
+        });
+        return tableName;
+    }
+
+    [Fact]
+    public async Task Insert_IntoUniqueColumnTable_ShouldSucceed()
+    {
+        // Regression: unique column + REST insert previously threw
+        // NotSupportedException (JsonElement not bindable by Dapper) -> 500.
+        // Arrange
+        var tableName = await SetupUniqueTableAsync();
+        var data = new Dictionary<string, object?>
+        {
+            ["name"] = "Widget",
+            ["sku"] = "SKU-001"
+        };
+
+        // Act
+        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}", data);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        var result = await response.Content.ReadFromJsonAsync<DataRecordResponse>();
+        result.Should().NotBeNull();
+        result!.Data["sku"]?.ToString().Should().Be("SKU-001");
+    }
+
+    [Fact]
+    public async Task Insert_DuplicateUniqueValue_ShouldReturnValidationError()
+    {
+        // Regression: the unique check must actually execute over REST (JsonElement
+        // value converted before the Dapper query) and reject duplicates.
+        // Arrange
+        var tableName = await SetupUniqueTableAsync();
+        var data = new Dictionary<string, object?>
+        {
+            ["name"] = "Widget",
+            ["sku"] = "SKU-DUP"
+        };
+        var first = await _client.PostAsJsonAsync($"/api/data/{tableName}", data);
+        first.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        // Act — insert a second row with the same unique value
+        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}", new Dictionary<string, object?>
+        {
+            ["name"] = "Widget Clone",
+            ["sku"] = "SKU-DUP"
+        });
+
+        // Assert — unique violation surfaces as a validation error, not a 500
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        error!.Code.Should().Be("VALIDATION_FAILED");
+    }
+
+    #endregion
+
+    #region CHECK Constraint Tests (REST JsonElement regression — audit finding #3)
+
+    [Fact]
+    public async Task Insert_ViolatingStringCheckConstraint_ShouldReturnValidationError()
+    {
+        // Regression: over REST the value is a JsonElement, which CheckValidator's
+        // `left is string` comparison did not match, so the app-layer CHECK was bypassed
+        // (the violation only surfaced later as a DB constraint error -> 500). It must now
+        // be caught at the validation layer as a clean 400.
+        // Arrange
+        var tableName = $"chk_test_{Guid.NewGuid():N}"[..25];
+        await _client.PostAsJsonAsync("/api/schema/tables", new CreateTableApiRequest
+        {
+            Name = tableName,
+            Columns =
+            [
+                new CreateColumnApiRequest { Name = "name", Type = "text", Nullable = false },
+                new CreateColumnApiRequest
+                {
+                    Name = "status",
+                    Type = "text",
+                    Nullable = false,
+                    Check = "status = 'active' OR status = 'pending'"
+                }
+            ]
+        });
+
+        // Act — insert a value that violates the CHECK constraint
+        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}", new Dictionary<string, object?>
+        {
+            ["name"] = "Test",
+            ["status"] = "banned"
+        });
+
+        // Assert — rejected at the validation layer with a clean 400
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        error!.Code.Should().Be("VALIDATION_FAILED");
+    }
+
+    [Fact]
+    public async Task Insert_SatisfyingStringCheckConstraint_ShouldSucceed()
+    {
+        // Arrange
+        var tableName = $"chk_ok_{Guid.NewGuid():N}"[..25];
+        await _client.PostAsJsonAsync("/api/schema/tables", new CreateTableApiRequest
+        {
+            Name = tableName,
+            Columns =
+            [
+                new CreateColumnApiRequest { Name = "name", Type = "text", Nullable = false },
+                new CreateColumnApiRequest
+                {
+                    Name = "status",
+                    Type = "text",
+                    Nullable = false,
+                    Check = "status = 'active' OR status = 'pending'"
+                }
+            ]
+        });
+
+        // Act
+        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}", new Dictionary<string, object?>
+        {
+            ["name"] = "Test",
+            ["status"] = "active"
+        });
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+    }
+
+    #endregion
 }

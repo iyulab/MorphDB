@@ -343,6 +343,145 @@ public class TransactionApiTests
     }
 
     [Fact]
+    public async Task Transaction_UpdateWithLiteralGuidId_ShouldResolveAndSucceed()
+    {
+        // Regression (issue rest-jsonelement-defects #2): over REST the operation Id
+        // arrives as a JsonElement(string), which RefResolver.ResolveId failed to match
+        // -> "UPDATE requires a valid record ID". A literal GUID id must resolve.
+        // Arrange — create a record via the normal data API first
+        var tableName = await SetupRowStateTableAsync();
+        var insertResponse = await _client.PostAsJsonAsync($"/api/data/{tableName}", new Dictionary<string, object?>
+        {
+            ["name"] = "Original",
+            ["email"] = "original@test.com",
+            ["score"] = 1
+        });
+        var inserted = await insertResponse.Content.ReadFromJsonAsync<DataRecordResponse>();
+
+        var transactionRequest = new TransactionApiRequest
+        {
+            Operations =
+            [
+                new TransactionOperationApiRequest
+                {
+                    Method = "UPDATE",
+                    Table = tableName,
+                    Id = inserted!.Id, // serialized to a JSON string -> JsonElement server-side
+                    Data = new Dictionary<string, object?>
+                    {
+                        ["score"] = 99
+                    }
+                }
+            ]
+        };
+
+        // Act
+        var response = await _client.PostAsJsonAsync("/api/batch/transaction", transactionRequest);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var result = await response.Content.ReadFromJsonAsync<TransactionApiResponse>();
+        result!.Success.Should().BeTrue();
+        result.Results.Should().HaveCount(1);
+        result.Results[0].Success.Should().BeTrue();
+
+        // Verify the update actually landed
+        var getResponse = await _client.GetAsync($"/api/data/{tableName}/{inserted.Id}");
+        var updated = await getResponse.Content.ReadFromJsonAsync<DataRecordResponse>();
+        updated!.Data["score"]?.ToString().Should().Be("99");
+    }
+
+    [Fact]
+    public async Task Transaction_UpdateWithRefId_ShouldResolveAndSucceed()
+    {
+        // Regression (issue rest-jsonelement-defects #2): the documented "$ref._id" id
+        // (ApiModels.cs) also arrives as JsonElement over REST. INSERT then UPDATE that
+        // references the inserted row's id via $ref must resolve within one transaction.
+        // Arrange
+        var tableName = await SetupRowStateTableAsync();
+        var transactionRequest = new TransactionApiRequest
+        {
+            Operations =
+            [
+                new TransactionOperationApiRequest
+                {
+                    Method = "INSERT",
+                    Table = tableName,
+                    Ref = "rec1",
+                    Data = new Dictionary<string, object?>
+                    {
+                        ["name"] = "RefTarget",
+                        ["email"] = "ref@test.com",
+                        ["score"] = 10
+                    }
+                },
+                new TransactionOperationApiRequest
+                {
+                    Method = "UPDATE",
+                    Table = tableName,
+                    Id = "$rec1._id",
+                    Data = new Dictionary<string, object?>
+                    {
+                        ["score"] = 42
+                    }
+                }
+            ]
+        };
+
+        // Act
+        var response = await _client.PostAsJsonAsync("/api/batch/transaction", transactionRequest);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var result = await response.Content.ReadFromJsonAsync<TransactionApiResponse>();
+        result!.Success.Should().BeTrue();
+        result.Results.Should().HaveCount(2);
+        result.Results.Should().AllSatisfy(r => r.Success.Should().BeTrue());
+    }
+
+    [Fact]
+    public async Task Transaction_DeleteWithLiteralGuidId_ShouldResolveAndSucceed()
+    {
+        // Regression (issue rest-jsonelement-defects #2): DELETE resolves its id through
+        // the same ResolveId path and was equally broken over REST.
+        // Arrange
+        var tableName = await SetupRowStateTableAsync();
+        var insertResponse = await _client.PostAsJsonAsync($"/api/data/{tableName}", new Dictionary<string, object?>
+        {
+            ["name"] = "ToDelete",
+            ["email"] = "delete@test.com",
+            ["score"] = 5
+        });
+        var inserted = await insertResponse.Content.ReadFromJsonAsync<DataRecordResponse>();
+
+        var transactionRequest = new TransactionApiRequest
+        {
+            Operations =
+            [
+                new TransactionOperationApiRequest
+                {
+                    Method = "DELETE",
+                    Table = tableName,
+                    Id = inserted!.Id
+                }
+            ]
+        };
+
+        // Act
+        var response = await _client.PostAsJsonAsync("/api/batch/transaction", transactionRequest);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var result = await response.Content.ReadFromJsonAsync<TransactionApiResponse>();
+        result!.Success.Should().BeTrue();
+        result.Results[0].Success.Should().BeTrue();
+
+        // Verify the record is gone
+        var getResponse = await _client.GetAsync($"/api/data/{tableName}/{inserted.Id}");
+        getResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
     public async Task Transaction_WithEmptyOperations_ShouldReturnBadRequest()
     {
         // Arrange

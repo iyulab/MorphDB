@@ -3,6 +3,7 @@ using System.Text;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Models;
 using MorphDB.Npgsql.Ddl;
+using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Repositories;
 
 namespace MorphDB.Npgsql.Query;
@@ -225,6 +226,10 @@ public sealed class ViewQueryBuilder
 
     private static string FormatFilterValue(object? value, FilterOperator op)
     {
+        // Filter values cross the API boundary (and JSONB storage) as JsonElement; unwrap so the
+        // type checks below quote/render them correctly instead of falling through to ToString().
+        value = JsonValueConverter.ToClrValue(value);
+
         if (value == null)
             return "NULL";
 
