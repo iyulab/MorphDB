@@ -1,6 +1,6 @@
 # MorphDB
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![.NET](https://img.shields.io/badge/.NET-10.0-blue.svg)](https://dotnet.microsoft.com/)
 [![Docker](https://img.shields.io/badge/ghcr.io-morphdb-blue?logo=docker)](https://ghcr.io/iyulab/morphdb)
 
@@ -168,7 +168,7 @@ MorphDB/
 
 ## License
 
-MIT License - see [LICENSE](./LICENSE)
+Apache License 2.0 - see [LICENSE](./LICENSE)
 
 ---
 

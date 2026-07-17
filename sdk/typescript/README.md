@@ -245,4 +245,4 @@ client.setJwtToken('new-jwt-token');
 
 ## License
 
-MIT License
+Apache License 2.0

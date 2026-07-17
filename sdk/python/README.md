@@ -283,4 +283,4 @@ client.set_jwt_token("new-jwt-token")
 
 ## License
 
-MIT License
+Apache License 2.0
