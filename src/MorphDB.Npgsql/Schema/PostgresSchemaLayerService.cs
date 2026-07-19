@@ -32,6 +32,11 @@ public sealed partial class PostgresSchemaLayerService : ISchemaLayerService
         LogEnsuringGlobalSchema(_logger);
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+
+        // Repair first: the canonical DDL is IF NOT EXISTS throughout, so it can neither remove nor
+        // reshape anything an older version left behind.
+        await connection.ExecuteAsync(GlobalSchemaMigrations.BuildPreBootstrapDdl());
+
         var ddl = DdlBuilder.BuildGlobalSystemSchemaDdl();
         await connection.ExecuteAsync(ddl);
 

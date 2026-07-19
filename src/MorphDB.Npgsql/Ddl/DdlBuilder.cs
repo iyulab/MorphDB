@@ -866,6 +866,49 @@ public static class DdlBuilder
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
 
+            CREATE TABLE IF NOT EXISTS morphdb._morph_security_policies (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                tenant_id UUID NOT NULL,
+                table_id UUID NOT NULL REFERENCES morphdb._morph_tables(table_id) ON DELETE CASCADE,
+                name VARCHAR(255) NOT NULL,
+                description TEXT,
+                policy_type INTEGER NOT NULL,
+                expression TEXT NOT NULL,
+                is_active BOOLEAN NOT NULL DEFAULT true,
+                ordinal_position INTEGER NOT NULL DEFAULT 0,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE (tenant_id, table_id, name)
+            );
+
+            CREATE TABLE IF NOT EXISTS morphdb._morph_views (
+                view_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                tenant_id UUID NOT NULL,
+                logical_name VARCHAR(255) NOT NULL,
+                physical_name VARCHAR(63) NOT NULL UNIQUE,
+                definition JSONB NOT NULL,
+                is_materialized BOOLEAN NOT NULL DEFAULT false,
+                refresh_policy VARCHAR(20) NOT NULL DEFAULT 'OnDemand',
+                refresh_schedule TEXT,
+                last_refreshed_at TIMESTAMPTZ,
+                is_stale BOOLEAN NOT NULL DEFAULT false,
+                descriptor JSONB,
+                is_active BOOLEAN NOT NULL DEFAULT true,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE (tenant_id, logical_name)
+            );
+
+            CREATE TABLE IF NOT EXISTS morphdb._morph_view_columns (
+                column_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                view_id UUID NOT NULL REFERENCES morphdb._morph_views(view_id) ON DELETE CASCADE,
+                logical_name VARCHAR(255) NOT NULL,
+                data_type VARCHAR(50) NOT NULL,
+                is_computed BOOLEAN NOT NULL DEFAULT false,
+                expression TEXT,
+                ordinal_position INTEGER NOT NULL
+            );
+
             -- Indexes (IF NOT EXISTS)
             CREATE INDEX IF NOT EXISTS idx_morph_tables_tenant ON morphdb._morph_tables(tenant_id);
             CREATE INDEX IF NOT EXISTS idx_morph_columns_table ON morphdb._morph_columns(table_id);
@@ -890,6 +933,9 @@ public static class DdlBuilder
             CREATE INDEX IF NOT EXISTS idx_morph_export_jobs_expires ON morphdb._morph_export_jobs(expires_at) WHERE expires_at IS NOT NULL;
             CREATE INDEX IF NOT EXISTS idx_morph_projects_status ON morphdb._morph_projects(status);
             CREATE INDEX IF NOT EXISTS idx_morph_projects_slug ON morphdb._morph_projects(slug);
+            CREATE INDEX IF NOT EXISTS idx_security_policies_tenant_table ON morphdb._morph_security_policies(tenant_id, table_id) WHERE is_active = true;
+            CREATE INDEX IF NOT EXISTS idx_morph_views_tenant ON morphdb._morph_views(tenant_id);
+            CREATE INDEX IF NOT EXISTS idx_morph_view_columns_view ON morphdb._morph_view_columns(view_id);
 
             -- Functions
             CREATE OR REPLACE FUNCTION morphdb.notify_schema_change()
