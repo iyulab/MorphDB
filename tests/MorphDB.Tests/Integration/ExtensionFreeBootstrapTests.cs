@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using MorphDB.Core.Models;
 using MorphDB.Npgsql.Ddl;
 using MorphDB.Npgsql.Schema;
 using Moq;
@@ -90,6 +91,63 @@ public class ExtensionFreeBootstrapTests
                 "creating a tenant must work where the caller cannot create extensions — otherwise the service starts but no project can ever be provisioned");
 
             names.SystemSchema.Should().NotBeNullOrEmpty();
+        }
+        finally
+        {
+            await container.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task Every_allowed_function_default_works_without_an_extension()
+    {
+        // The allow-list is a published contract: a caller told "these are supported" must not then
+        // meet a database error. Each entry is exercised against a database with nothing installed.
+        string[] allowed =
+        [
+            "gen_random_uuid()",
+            "now()",
+            "transaction_timestamp()",
+            "statement_timestamp()",
+            "clock_timestamp()"
+        ];
+
+        var container = new PostgreSqlBuilder("postgres:15-alpine")
+            .WithDatabase("morphdb_defaults_test")
+            .WithUsername("test")
+            .WithPassword("test")
+            .Build();
+
+        await container.StartAsync();
+        try
+        {
+            await using var connection = new NpgsqlConnection(container.GetConnectionString());
+            await connection.OpenAsync();
+
+            foreach (var declared in allowed)
+            {
+                var isUuid = declared.Contains("uuid", StringComparison.Ordinal);
+                var column = ColumnDefinition.FromMetadata(new ColumnMetadata
+                {
+                    LogicalName = "c",
+                    PhysicalName = "c",
+                    DataType = isUuid ? MorphDataType.Uuid : MorphDataType.DateTime,
+                    NativeType = isUuid ? "UUID" : "TIMESTAMPTZ",
+                    DefaultValue = declared
+                });
+
+                var table = $"t_{allowed.ToList().IndexOf(declared)}";
+                await ExecuteAsync(connection, DdlBuilder.BuildCreateTable(table, [column]));
+                await ExecuteAsync(connection, $"INSERT INTO \"{table}\" DEFAULT VALUES");
+
+                await using var read = new NpgsqlCommand($"SELECT c FROM \"{table}\"", connection);
+                var value = await read.ExecuteScalarAsync();
+
+                value.Should().NotBeNull($"the default {declared} must produce a value");
+            }
+
+            var extensions = await ReadExtensionsAsync(connection);
+            extensions.Should().NotContain("uuid-ossp").And.NotContain("pgcrypto");
         }
         finally
         {

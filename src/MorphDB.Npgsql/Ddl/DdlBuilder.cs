@@ -1173,7 +1173,13 @@ public sealed record ColumnDefinition
         new(StringComparer.OrdinalIgnoreCase)
         {
             ["gen_random_uuid()"] = "gen_random_uuid()",
-            ["now()"] = "now()"
+            ["now()"] = "now()",
+            // now() is the transaction's start time. These are the other two clocks PostgreSQL
+            // exposes, and a caller who wants one of them means it — the difference is observable
+            // inside a transaction that writes more than one row.
+            ["transaction_timestamp()"] = "transaction_timestamp()",
+            ["statement_timestamp()"] = "statement_timestamp()",
+            ["clock_timestamp()"] = "clock_timestamp()"
         };
 
     /// <summary>

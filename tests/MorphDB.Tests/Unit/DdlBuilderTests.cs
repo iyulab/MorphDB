@@ -550,6 +550,9 @@ public class DdlBuilderTests
     [InlineData("gen_random_uuid()", "gen_random_uuid()")]
     [InlineData("NOW()", "now()")]
     [InlineData("  now()  ", "now()")]
+    [InlineData("clock_timestamp()", "clock_timestamp()")]
+    [InlineData("statement_timestamp()", "statement_timestamp()")]
+    [InlineData("transaction_timestamp()", "transaction_timestamp()")]
     public void FromMetadata_ShouldEmitSupportedFunctionDefaultsUnquoted(string declared, string expected)
     {
         // Act
