@@ -28,7 +28,7 @@ public sealed class TransactionClient
             request,
             cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<TransactionResponse>(cancellationToken: cancellationToken)
+        return await response.Content.ReadFromJsonAsync<TransactionResponse>(MorphDBJson.Options, cancellationToken)
             ?? new TransactionResponse { Success = false, Error = "Failed to deserialize response" };
     }
 
@@ -45,7 +45,7 @@ public sealed class TransactionClient
             null,
             cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<FinalizeResponse>(cancellationToken: cancellationToken)
+        return await response.Content.ReadFromJsonAsync<FinalizeResponse>(MorphDBJson.Options, cancellationToken)
             ?? new FinalizeResponse();
     }
 
@@ -62,7 +62,7 @@ public sealed class TransactionClient
             request,
             cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<FinalizeResponse>(cancellationToken: cancellationToken)
+        return await response.Content.ReadFromJsonAsync<FinalizeResponse>(MorphDBJson.Options, cancellationToken)
             ?? new FinalizeResponse();
     }
 

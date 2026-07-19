@@ -4,6 +4,7 @@ MorphDB Python SDK
 Official Python client for MorphDB - a PostgreSQL-based dynamic schema database service.
 """
 
+from morphdb.batch import BatchClient
 from morphdb.client import MorphDBClient
 from morphdb.exceptions import (
     MorphDBApiError,
@@ -16,42 +17,44 @@ from morphdb.exceptions import (
     MorphDBValidationError,
 )
 from morphdb.models import (
-    # Bulk models
-    CsvExportOptions,
-    CsvImportOptions,
-    ExportJobStatus,
-    ImportJobStatus,
-    JsonExportOptions,
-    JsonImportOptions,
-    XlsxExportOptions,
-    # Data models
-    BatchRequest,
-    BatchResponse,
-    DataRecord,
-    Filter,
-    FilterOperator,
-    OrderBy,
-    PagedResponse,
-    QueryRequest,
-    # Realtime models
-    ChangeNotification,
-    ChangeOperation,
-    SubscriptionOptions,
     # Schema models
     AddColumnRequest,
     AlterColumnRequest,
+    # Data models
+    BatchOperation,
+    BatchOperationResult,
+    BatchRequest,
+    BatchResponse,
+    # Realtime models
+    ChangeNotification,
+    ChangeOperation,
     ColumnInfo,
     CreateColumnRequest,
     CreateTableRequest,
-    TableInfo,
     # Webhook models
     CreateWebhookRequest,
+    # Bulk models
+    CsvExportOptions,
+    CsvImportOptions,
+    DataRecord,
+    ExportJobStatus,
+    Filter,
+    FilterOperator,
+    ImportJobStatus,
+    JsonExportOptions,
+    JsonImportOptions,
+    OrderBy,
+    PagedResponse,
+    QueryRequest,
+    SubscriptionOptions,
+    TableInfo,
     WebhookDelivery,
     WebhookInfo,
+    XlsxExportOptions,
 )
 from morphdb.realtime import Subscription
 
-__version__ = "0.1.0"
+__version__ = "0.14.0"
 __all__ = [
     # Client
     "MorphDBClient",
@@ -78,6 +81,9 @@ __all__ = [
     "OrderBy",
     "PagedResponse",
     "DataRecord",
+    "BatchClient",
+    "BatchOperation",
+    "BatchOperationResult",
     "BatchRequest",
     "BatchResponse",
     # Webhook models

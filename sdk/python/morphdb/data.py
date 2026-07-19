@@ -3,10 +3,11 @@
 from typing import Any
 from uuid import UUID
 
+from morphdb.batch import BatchClient
 from morphdb.http import HttpClient
 from morphdb.models import (
+    BatchOperation,
     BatchRequest,
-    BatchResponse,
     DataRecord,
     PagedResponse,
     QueryRequest,
@@ -60,37 +61,29 @@ class DataClient:
         """Delete a record."""
         await self._http.delete(f"/api/data/{table_name}/{record_id}")
 
-    async def batch(
-        self,
-        table_name: str,
-        request: BatchRequest,
-    ) -> BatchResponse:
-        """Execute batch operations."""
-        # Convert UUIDs to strings in delete list
-        body = request.model_dump(by_alias=True, exclude_none=True)
-        if "deletes" in body and body["deletes"]:
-            body["deletes"] = [str(uid) for uid in body["deletes"]]
-
-        data = await self._http.post(f"/api/data/{table_name}/batch", body)
-        return BatchResponse.model_validate(data)
-
     async def insert_many(
         self,
         table_name: str,
         records: list[dict[str, Any]],
-    ) -> list[DataRecord]:
-        """Insert multiple records."""
-        request = BatchRequest(inserts=records)
-        response = await self.batch(table_name, request)
-        return response.inserted
+    ) -> int:
+        """Insert multiple records, returning how many landed.
+
+        Delegates to the batch endpoint; use ``client.batch`` directly for per-operation results.
+        """
+        response = await BatchClient(self._http).insert_many(table_name, records)
+        return response.success_count
 
     async def delete_many(
         self,
         table_name: str,
         record_ids: list[UUID | str],
     ) -> int:
-        """Delete multiple records."""
-        uuids = [UUID(str(rid)) if not isinstance(rid, UUID) else rid for rid in record_ids]
-        request = BatchRequest(deletes=uuids)
-        response = await self.batch(table_name, request)
-        return response.deleted
+        """Delete multiple records by id, returning how many were deleted."""
+        request = BatchRequest(
+            operations=[
+                BatchOperation(method="DELETE", table=table_name, id=UUID(str(rid)))
+                for rid in record_ids
+            ]
+        )
+        response = await BatchClient(self._http).execute(request)
+        return response.success_count

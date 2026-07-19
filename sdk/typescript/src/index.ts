@@ -4,6 +4,7 @@ export { MorphDBClient } from './client.js';
 // Sub-clients
 export { SchemaClient } from './schema.js';
 export { DataClient } from './data.js';
+export { BatchClient } from './batch.js';
 export { WebhookClient } from './webhook.js';
 export { BulkClient } from './bulk.js';
 export { RealtimeClient } from './realtime.js';
@@ -42,6 +43,9 @@ export type {
   PagedResponse,
   PaginationInfo,
   DataRecord,
+  BatchMethod,
+  BatchOperation,
+  BatchOperationResult,
   BatchRequest,
   BatchResponse,
 

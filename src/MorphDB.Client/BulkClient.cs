@@ -45,7 +45,7 @@ public sealed class BulkClient
             content,
             cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<ImportJobStatus>(cancellationToken: cancellationToken)
+        return await response.Content.ReadFromJsonAsync<ImportJobStatus>(MorphDBJson.Options, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize import job response");
     }
 
@@ -75,7 +75,7 @@ public sealed class BulkClient
             content,
             cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<ImportJobStatus>(cancellationToken: cancellationToken)
+        return await response.Content.ReadFromJsonAsync<ImportJobStatus>(MorphDBJson.Options, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize import job response");
     }
 
@@ -103,7 +103,7 @@ public sealed class BulkClient
             content,
             cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<ImportJobStatus>(cancellationToken: cancellationToken)
+        return await response.Content.ReadFromJsonAsync<ImportJobStatus>(MorphDBJson.Options, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize import job response");
     }
 
@@ -118,7 +118,7 @@ public sealed class BulkClient
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             return null;
         await EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<ImportJobStatus>(cancellationToken: cancellationToken);
+        return await response.Content.ReadFromJsonAsync<ImportJobStatus>(MorphDBJson.Options, cancellationToken);
     }
 
     /// <summary>
@@ -147,7 +147,7 @@ public sealed class BulkClient
             options ?? new CsvExportOptions(),
             cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<ExportJobStatus>(cancellationToken: cancellationToken)
+        return await response.Content.ReadFromJsonAsync<ExportJobStatus>(MorphDBJson.Options, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize export job response");
     }
 
@@ -164,7 +164,7 @@ public sealed class BulkClient
             options ?? new JsonExportOptions(),
             cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<ExportJobStatus>(cancellationToken: cancellationToken)
+        return await response.Content.ReadFromJsonAsync<ExportJobStatus>(MorphDBJson.Options, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize export job response");
     }
 
@@ -181,7 +181,7 @@ public sealed class BulkClient
             options ?? new XlsxExportOptions(),
             cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<ExportJobStatus>(cancellationToken: cancellationToken)
+        return await response.Content.ReadFromJsonAsync<ExportJobStatus>(MorphDBJson.Options, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize export job response");
     }
 
@@ -196,7 +196,7 @@ public sealed class BulkClient
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             return null;
         await EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<ExportJobStatus>(cancellationToken: cancellationToken);
+        return await response.Content.ReadFromJsonAsync<ExportJobStatus>(MorphDBJson.Options, cancellationToken);
     }
 
     /// <summary>

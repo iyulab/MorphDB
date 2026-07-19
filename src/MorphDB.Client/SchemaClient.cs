@@ -22,7 +22,7 @@ public sealed class SchemaClient
     {
         var response = await _httpClient.GetAsync("/api/schema/tables", cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<List<TableInfo>>(cancellationToken: cancellationToken) ?? [];
+        return await response.Content.ReadFromJsonAsync<List<TableInfo>>(MorphDBJson.Options, cancellationToken) ?? [];
     }
 
     /// <summary>
@@ -34,7 +34,7 @@ public sealed class SchemaClient
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             return null;
         await EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<TableInfo>(cancellationToken: cancellationToken);
+        return await response.Content.ReadFromJsonAsync<TableInfo>(MorphDBJson.Options, cancellationToken);
     }
 
     /// <summary>
@@ -44,7 +44,7 @@ public sealed class SchemaClient
     {
         var response = await _httpClient.PostAsJsonAsync("/api/schema/tables", request, cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<TableInfo>(cancellationToken: cancellationToken)
+        return await response.Content.ReadFromJsonAsync<TableInfo>(MorphDBJson.Options, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize table response");
     }
 
@@ -67,7 +67,7 @@ public sealed class SchemaClient
             request,
             cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<ColumnInfo>(cancellationToken: cancellationToken)
+        return await response.Content.ReadFromJsonAsync<ColumnInfo>(MorphDBJson.Options, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize column response");
     }
 
@@ -81,7 +81,7 @@ public sealed class SchemaClient
             request,
             cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<ColumnInfo>(cancellationToken: cancellationToken)
+        return await response.Content.ReadFromJsonAsync<ColumnInfo>(MorphDBJson.Options, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize column response");
     }
 

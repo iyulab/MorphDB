@@ -3,8 +3,6 @@ import type {
   QueryRequest,
   PagedResponse,
   DataRecord,
-  BatchRequest,
-  BatchResponse,
 } from './types.js';
 
 /**
@@ -68,16 +66,6 @@ export class DataClient {
    */
   async delete(tableName: string, id: string): Promise<void> {
     await this.http.delete(`/api/data/${encodeURIComponent(tableName)}/${id}`);
-  }
-
-  /**
-   * Performs batch operations
-   */
-  async batch(tableName: string, request: BatchRequest): Promise<BatchResponse> {
-    return this.http.post<BatchResponse>(
-      `/api/data/${encodeURIComponent(tableName)}/batch`,
-      request
-    );
   }
 
   /**

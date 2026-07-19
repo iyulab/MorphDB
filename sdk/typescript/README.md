@@ -135,12 +135,31 @@ const updated = await client.data.update('users', 'uuid-here', {
 // Delete
 await client.data.delete('users', 'uuid-here');
 
-// Batch operations
-const result = await client.data.batch('users', {
-  inserts: [{ name: 'User 1' }, { name: 'User 2' }],
-  updates: [{ id: 'uuid-1', name: 'Updated User' }],
-  deletes: ['uuid-to-delete'],
+```
+
+### Batch Client
+
+```typescript
+// Insert many records into one table
+const inserted = await client.batch.insertMany('users', [
+  { name: 'User 1' },
+  { name: 'User 2' },
+]);
+console.log(inserted.successCount);
+
+// Mixed operations, in order, across tables
+const result = await client.batch.execute({
+  operations: [
+    { method: 'INSERT', table: 'users', data: { name: 'User 3' } },
+    { method: 'UPDATE', table: 'users', id: 'uuid-1', data: { name: 'Updated User' } },
+    { method: 'DELETE', table: 'orders', id: 'uuid-to-delete' },
+  ],
 });
+
+// A batch with failed operations still succeeds as a request — check the per-operation results
+for (const failure of result.results.filter((r) => !r.success)) {
+  console.error(failure.index, failure.error);
+}
 ```
 
 ### Bulk Client

@@ -226,43 +226,108 @@ public sealed class DataRecord
 }
 
 /// <summary>
-/// Batch operation request.
+/// The operation kinds a batch entry can carry.
+/// </summary>
+public static class BatchMethod
+{
+    public const string Insert = "INSERT";
+    public const string Update = "UPDATE";
+    public const string Delete = "DELETE";
+    public const string Upsert = "UPSERT";
+}
+
+/// <summary>
+/// A batch of data operations. Operations run in order and each carries its own table, so one
+/// batch may span tables.
 /// </summary>
 public sealed class BatchRequest
 {
     /// <summary>
-    /// Records to insert.
+    /// Operations to execute, in order.
     /// </summary>
-    public IReadOnlyList<IDictionary<string, object?>> Inserts { get; init; } = [];
-
-    /// <summary>
-    /// Records to update (must include ID).
-    /// </summary>
-    public IReadOnlyList<IDictionary<string, object?>> Updates { get; init; } = [];
-
-    /// <summary>
-    /// Record IDs to delete.
-    /// </summary>
-    public IReadOnlyList<Guid> Deletes { get; init; } = [];
+    public IReadOnlyList<BatchOperation> Operations { get; init; } = [];
 }
 
 /// <summary>
-/// Batch operation response.
+/// A single operation within a <see cref="BatchRequest"/>.
+/// </summary>
+public sealed class BatchOperation
+{
+    /// <summary>
+    /// One of the <see cref="BatchMethod"/> values.
+    /// </summary>
+    public required string Method { get; init; }
+
+    /// <summary>
+    /// Table the operation applies to.
+    /// </summary>
+    public required string Table { get; init; }
+
+    /// <summary>
+    /// Target record, for UPDATE and DELETE.
+    /// </summary>
+    public Guid? Id { get; init; }
+
+    /// <summary>
+    /// Record payload, for INSERT, UPDATE, and UPSERT.
+    /// </summary>
+    public IDictionary<string, object?>? Data { get; init; }
+
+    /// <summary>
+    /// Columns identifying an existing row, for UPSERT.
+    /// </summary>
+    public IReadOnlyList<string>? KeyColumns { get; init; }
+}
+
+/// <summary>
+/// Per-operation outcomes of a batch. Operations are reported individually, so a partial failure is
+/// visible rather than collapsed into one status.
 /// </summary>
 public sealed class BatchResponse
 {
     /// <summary>
-    /// Inserted record results.
+    /// One result per operation, in request order.
     /// </summary>
-    public IReadOnlyList<DataRecord> Inserted { get; init; } = [];
+    public IReadOnlyList<BatchOperationResult> Results { get; init; } = [];
 
     /// <summary>
-    /// Updated record results.
+    /// Number of operations that succeeded.
     /// </summary>
-    public IReadOnlyList<DataRecord> Updated { get; init; } = [];
+    public int SuccessCount { get; init; }
 
     /// <summary>
-    /// Number of deleted records.
+    /// Number of operations that failed.
     /// </summary>
-    public int Deleted { get; init; }
+    public int FailureCount { get; init; }
+}
+
+/// <summary>
+/// Outcome of one operation in a batch.
+/// </summary>
+public sealed class BatchOperationResult
+{
+    /// <summary>
+    /// Position of the operation in the request.
+    /// </summary>
+    public int Index { get; init; }
+
+    /// <summary>
+    /// Whether the operation succeeded.
+    /// </summary>
+    public bool Success { get; init; }
+
+    /// <summary>
+    /// Identifying data for the affected record — for inserts, the generated <c>_id</c>.
+    /// </summary>
+    public IDictionary<string, object?>? Data { get; init; }
+
+    /// <summary>
+    /// Failure reason, when <see cref="Success"/> is false.
+    /// </summary>
+    public string? Error { get; init; }
+
+    /// <summary>
+    /// Rows the operation affected.
+    /// </summary>
+    public int? AffectedRows { get; init; }
 }

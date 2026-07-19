@@ -1,6 +1,7 @@
 import { HttpClient } from './http.js';
 import { SchemaClient } from './schema.js';
 import { DataClient } from './data.js';
+import { BatchClient } from './batch.js';
 import { WebhookClient } from './webhook.js';
 import { BulkClient } from './bulk.js';
 import { RealtimeClient } from './realtime.js';
@@ -23,6 +24,11 @@ export class MorphDBClient {
    * Data operations
    */
   public readonly data: DataClient;
+
+  /**
+   * Batch data operations (many writes in one request)
+   */
+  public readonly batch: BatchClient;
 
   /**
    * Webhook operations
@@ -51,6 +57,7 @@ export class MorphDBClient {
 
     this.schema = new SchemaClient(this.http);
     this.data = new DataClient(this.http);
+    this.batch = new BatchClient(this.http);
     this.webhooks = new WebhookClient(this.http);
     this.bulk = new BulkClient(this.http);
     this.realtime = new RealtimeClient(this.baseUrl, options);

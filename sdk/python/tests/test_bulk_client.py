@@ -2,6 +2,7 @@
 
 from typing import Any
 from unittest.mock import AsyncMock
+from uuid import uuid4
 
 import pytest
 
@@ -285,7 +286,8 @@ class TestImportJobStatus:
         now = datetime.now(timezone.utc).isoformat()
         job = ImportJobStatus.model_validate(
             {
-                "jobId": "test-id",
+                # ImportJobStatus.job_id is a UUID; a placeholder string never parsed.
+                "jobId": str(uuid4()),
                 "tableName": "users",
                 "format": "csv",
                 "status": "pending",

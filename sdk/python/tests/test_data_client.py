@@ -9,8 +9,6 @@ import pytest
 from morphdb.data import DataClient
 from morphdb.http import HttpClient
 from morphdb.models import (
-    BatchRequest,
-    BatchResponse,
     DataRecord,
     Filter,
     FilterOperator,
@@ -208,35 +206,13 @@ class TestDataClient:
         mock_http_client.delete.assert_called_once_with(f"/api/data/users/{record_id}")
 
     @pytest.mark.asyncio
-    async def test_batch(
-        self,
-        data_client: DataClient,
-        mock_http_client: HttpClient,
-        sample_batch_response: dict[str, Any],
-    ) -> None:
-        """Test batch operations."""
-        mock_http_client.post = AsyncMock(return_value=sample_batch_response)
-
-        request = BatchRequest(
-            inserts=[{"name": "User 1", "email": "user1@example.com"}],
-            updates=[{"_id": str(uuid4()), "name": "Updated User"}],
-            deletes=[uuid4(), uuid4()],
-        )
-        result = await data_client.batch("users", request)
-
-        assert isinstance(result, BatchResponse)
-        assert len(result.inserted) == 1
-        assert len(result.updated) == 1
-        assert result.deleted == 2
-
-    @pytest.mark.asyncio
     async def test_insert_many(
         self,
         data_client: DataClient,
         mock_http_client: HttpClient,
         sample_batch_response: dict[str, Any],
     ) -> None:
-        """Test inserting multiple records."""
+        """Inserting many delegates to the batch route and reports how many landed."""
         mock_http_client.post = AsyncMock(return_value=sample_batch_response)
 
         records = [
@@ -245,8 +221,10 @@ class TestDataClient:
         ]
         result = await data_client.insert_many("users", records)
 
-        assert isinstance(result, list)
-        assert all(isinstance(r, DataRecord) for r in result)
+        mock_http_client.post.assert_called_once_with(
+            "/api/batch/data/users/insert", records
+        )
+        assert result == 2
 
     @pytest.mark.asyncio
     async def test_delete_many(
@@ -255,12 +233,16 @@ class TestDataClient:
         mock_http_client: HttpClient,
         sample_batch_response: dict[str, Any],
     ) -> None:
-        """Test deleting multiple records."""
+        """Deleting many sends one DELETE operation per id to the batch route."""
         mock_http_client.post = AsyncMock(return_value=sample_batch_response)
 
         record_ids = [uuid4(), uuid4()]
         result = await data_client.delete_many("users", record_ids)
 
+        path, body = mock_http_client.post.call_args.args
+        assert path == "/api/batch/data"
+        assert [op["method"] for op in body["operations"]] == ["DELETE", "DELETE"]
+        assert [op["id"] for op in body["operations"]] == [str(i) for i in record_ids]
         assert result == 2
 
 

@@ -47,8 +47,9 @@ DELETE /api/data/{table}/{id}                  # Delete record
 
 # Advanced
 POST   /api/data/{table}/query                 # Complex query
-POST   /api/data/{table}/batch                 # Batch operations
 ```
+
+> Batch writes live under `/api/batch`, not under `/api/data` — see [Batch Operations](#batch-operations).
 
 ### Query Parameters
 
@@ -84,16 +85,53 @@ GET /api/data/customers?filter=grade:eq:VIP&orderBy=_created_at:desc&page=1&page
 
 ### Batch Operations
 
+```yaml
+POST   /api/batch/data                         # Mixed operations, in order, across tables
+POST   /api/batch/data/{table}/insert          # Insert many into one table
+PATCH  /api/batch/data/{table}                 # Update many, selected by filter
+DELETE /api/batch/data/{table}?filter=...      # Delete many, selected by filter
+PUT    /api/batch/data/{table}                 # Upsert many, matched on key columns
+POST   /api/batch/data/{table}/seed            # Seed rows (upsert, ignoring conflicts)
+POST   /api/batch/transaction                  # Atomic cross-entity operations
+```
+
+An operation names a **table and a data method** — it is not an embedded HTTP request:
+
 ```http
-POST /api/batch
+POST /api/batch/data
 Content-Type: application/json
+X-Tenant-Id: <project id>
 
 {
   "operations": [
-    { "method": "POST", "path": "/api/data/customers", "body": {...} },
-    { "method": "PATCH", "path": "/api/data/customers/123", "body": {...} }
+    { "method": "INSERT", "table": "customers", "data": { "name": "Acme" } },
+    { "method": "UPDATE", "table": "customers", "id": "…", "data": { "grade": "VIP" } },
+    { "method": "DELETE", "table": "orders", "id": "…" },
+    { "method": "UPSERT", "table": "customers", "data": {...}, "keyColumns": ["email"] }
   ]
 }
+```
+
+Operations run in order and are reported individually. **A batch containing failed operations still
+returns 200** — read `results` rather than the status code:
+
+```json
+{
+  "results": [
+    { "index": 0, "success": true, "data": { "_id": "…" }, "affectedRows": 1 },
+    { "index": 1, "success": false, "error": "null value in column 'name'" }
+  ],
+  "successCount": 1,
+  "failureCount": 1
+}
+```
+
+Inserting many rows into one table has a shorter form that takes a bare array and returns the same
+response shape:
+
+```http
+POST /api/batch/data/customers/insert
+[ { "name": "Acme" }, { "name": "Globex" } ]
 ```
 
 ---

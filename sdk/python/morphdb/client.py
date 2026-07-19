@@ -1,5 +1,6 @@
 """MorphDB Python SDK client."""
 
+from morphdb.batch import BatchClient
 from morphdb.bulk import BulkClient
 from morphdb.data import DataClient
 from morphdb.http import HttpClient
@@ -88,6 +89,7 @@ class MorphDBClient:
         # Initialize sub-clients
         self._schema = SchemaClient(self._http)
         self._data = DataClient(self._http)
+        self._batch = BatchClient(self._http)
         self._webhooks = WebhookClient(self._http)
         self._bulk = BulkClient(self._http)
 
@@ -100,6 +102,11 @@ class MorphDBClient:
     def data(self) -> DataClient:
         """Get the data client for CRUD operations."""
         return self._data
+
+    @property
+    def batch(self) -> BatchClient:
+        """Get the batch client for many-writes-in-one-request operations."""
+        return self._batch
 
     @property
     def webhooks(self) -> WebhookClient:

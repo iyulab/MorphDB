@@ -4,10 +4,9 @@ import {
   createMockHttpClient,
   createSampleDataRecord,
   createSamplePagedResponse,
-  createSampleBatchResponse,
 } from './test-utils.js';
 import type { HttpClient } from '../src/http.js';
-import type { QueryRequest, BatchRequest } from '../src/types.js';
+import type { QueryRequest } from '../src/types.js';
 
 describe('DataClient', () => {
   let dataClient: DataClient;
@@ -157,24 +156,6 @@ describe('DataClient', () => {
       await dataClient.delete('users', 'record-123');
 
       expect(mockHttp.delete).toHaveBeenCalledWith('/api/data/users/record-123');
-    });
-  });
-
-  describe('batch', () => {
-    it('performs batch operations', async () => {
-      const response = createSampleBatchResponse();
-      (mockHttp.post as Mock).mockResolvedValue(response);
-
-      const request: BatchRequest = {
-        inserts: [{ name: 'User 1' }],
-        updates: [{ name: 'Updated User' }],
-        deletes: ['id-1', 'id-2'],
-      };
-
-      const result = await dataClient.batch('users', request);
-
-      expect(result).toEqual(response);
-      expect(mockHttp.post).toHaveBeenCalledWith('/api/data/users/batch', request);
     });
   });
 

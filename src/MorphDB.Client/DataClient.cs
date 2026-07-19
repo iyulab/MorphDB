@@ -31,7 +31,7 @@ public sealed class DataClient
             $"/api/data/{Uri.EscapeDataString(tableName)}{queryString}",
             cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<PagedResponse<DataRecord>>(cancellationToken: cancellationToken)
+        return await response.Content.ReadFromJsonAsync<PagedResponse<DataRecord>>(MorphDBJson.Options, cancellationToken)
             ?? new PagedResponse<DataRecord> { Data = [], Pagination = new PaginationInfo() };
     }
 
@@ -49,7 +49,7 @@ public sealed class DataClient
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             return null;
         await EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<DataRecord>(cancellationToken: cancellationToken);
+        return await response.Content.ReadFromJsonAsync<DataRecord>(MorphDBJson.Options, cancellationToken);
     }
 
     /// <summary>
@@ -65,7 +65,7 @@ public sealed class DataClient
             data,
             cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<DataRecord>(cancellationToken: cancellationToken)
+        return await response.Content.ReadFromJsonAsync<DataRecord>(MorphDBJson.Options, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize record response");
     }
 
@@ -83,7 +83,7 @@ public sealed class DataClient
             data,
             cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<DataRecord>(cancellationToken: cancellationToken)
+        return await response.Content.ReadFromJsonAsync<DataRecord>(MorphDBJson.Options, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize record response");
     }
 
@@ -102,23 +102,6 @@ public sealed class DataClient
     }
 
     /// <summary>
-    /// Performs batch operations.
-    /// </summary>
-    public async Task<BatchResponse> BatchAsync(
-        string tableName,
-        BatchRequest request,
-        CancellationToken cancellationToken = default)
-    {
-        var response = await _httpClient.PostAsJsonAsync(
-            $"/api/data/{Uri.EscapeDataString(tableName)}/batch",
-            request,
-            cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<BatchResponse>(cancellationToken: cancellationToken)
-            ?? new BatchResponse();
-    }
-
-    /// <summary>
     /// Upserts a record (insert or update based on ID).
     /// </summary>
     public async Task<DataRecord> UpsertAsync(
@@ -131,7 +114,7 @@ public sealed class DataClient
             data,
             cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<DataRecord>(cancellationToken: cancellationToken)
+        return await response.Content.ReadFromJsonAsync<DataRecord>(MorphDBJson.Options, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize record response");
     }
 
@@ -153,7 +136,7 @@ public sealed class DataClient
             apiRequest,
             cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<AggregationResponse>(cancellationToken: cancellationToken)
+        return await response.Content.ReadFromJsonAsync<AggregationResponse>(MorphDBJson.Options, cancellationToken)
             ?? new AggregationResponse { Data = [] };
     }
 

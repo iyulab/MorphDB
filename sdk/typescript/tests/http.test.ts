@@ -249,13 +249,17 @@ describe('HttpClient', () => {
     });
 
     it('throws MorphDBApiError for other errors', async () => {
+      // A 5xx is retryable, so the shared client would spend its retry budget here and outlast the
+      // test's timeout. This case is about the error mapping, not the retrying — retries are covered
+      // by their own tests below.
+      const noRetry = new HttpClient('http://localhost:5000', { retryCount: 0 });
       fetchMock.mockResolvedValue({
         ok: false,
         status: 500,
         text: () => Promise.resolve('Server error'),
       });
 
-      await expect(httpClient.get('/test')).rejects.toThrow(MorphDBApiError);
+      await expect(noRetry.get('/test')).rejects.toThrow(MorphDBApiError);
     });
 
     it('does not retry on client errors (4xx)', async () => {

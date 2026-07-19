@@ -193,24 +193,12 @@ def sample_export_job_response() -> dict[str, Any]:
 
 @pytest.fixture
 def sample_batch_response() -> dict[str, Any]:
-    """Return a sample batch response."""
-    now = datetime.now(timezone.utc).isoformat()
+    """Return a batch response exactly as BatchController serializes it."""
     return {
-        "inserted": [
-            {
-                "id": str(uuid4()),
-                "data": {"name": "User 1", "email": "user1@example.com"},
-                "createdAt": now,
-                "updatedAt": now,
-            }
+        "results": [
+            {"index": 0, "success": True, "data": {"_id": str(uuid4())}, "affectedRows": 1},
+            {"index": 1, "success": True, "data": {"_id": str(uuid4())}, "affectedRows": 1},
         ],
-        "updated": [
-            {
-                "id": str(uuid4()),
-                "data": {"name": "Updated User", "email": "updated@example.com"},
-                "createdAt": now,
-                "updatedAt": now,
-            }
-        ],
-        "deleted": 2,
+        "successCount": 2,
+        "failureCount": 0,
     }

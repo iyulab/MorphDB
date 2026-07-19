@@ -32,6 +32,7 @@ public sealed class MorphDBClient : IAsyncDisposable
 
         Schema = new SchemaClient(_httpClient);
         Data = new DataClient(_httpClient);
+        Batch = new BatchClient(_httpClient);
         Webhooks = new WebhookClient(_httpClient);
         Bulk = new BulkClient(_httpClient);
         Transactions = new TransactionClient(_httpClient);
@@ -55,6 +56,7 @@ public sealed class MorphDBClient : IAsyncDisposable
 
         Schema = new SchemaClient(_httpClient);
         Data = new DataClient(_httpClient);
+        Batch = new BatchClient(_httpClient);
         Webhooks = new WebhookClient(_httpClient);
         Bulk = new BulkClient(_httpClient);
         Transactions = new TransactionClient(_httpClient);
@@ -71,6 +73,11 @@ public sealed class MorphDBClient : IAsyncDisposable
     /// Data operations.
     /// </summary>
     public DataClient Data { get; }
+
+    /// <summary>
+    /// Batch data operations (many writes in one request).
+    /// </summary>
+    public BatchClient Batch { get; }
 
     /// <summary>
     /// Webhook operations.

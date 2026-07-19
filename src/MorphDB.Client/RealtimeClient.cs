@@ -66,7 +66,7 @@ public sealed class RealtimeClient : IAsyncDisposable
 
                     var data = string.IsNullOrEmpty(dataJson)
                         ? null
-                        : JsonSerializer.Deserialize<Dictionary<string, object?>>(dataJson);
+                        : JsonSerializer.Deserialize<Dictionary<string, object?>>(dataJson, MorphDBJson.Options);
 
                     var notification = new ChangeNotification
                     {

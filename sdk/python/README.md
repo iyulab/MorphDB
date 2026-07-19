@@ -141,20 +141,37 @@ updated = await client.data.update("users", "uuid-here", {
 # Delete
 await client.data.delete("users", "uuid-here")
 
-# Batch operations
-result = await client.data.batch("users", BatchRequest(
-    inserts=[{"name": "User 1"}, {"name": "User 2"}],
-    updates=[{"id": "uuid-1", "name": "Updated User"}],
-    deletes=["uuid-to-delete"],
-))
-
-# Convenience methods
-users = await client.data.insert_many("users", [
+# Convenience methods, delegating to the batch endpoints
+inserted_count = await client.data.insert_many("users", [
     {"name": "User 1"},
     {"name": "User 2"},
 ])
 
 deleted_count = await client.data.delete_many("users", ["uuid-1", "uuid-2"])
+```
+
+### Batch Client
+
+```python
+from morphdb import BatchOperation, BatchRequest
+
+# Insert many records into one table
+result = await client.batch.insert_many("users", [
+    {"name": "User 1"},
+    {"name": "User 2"},
+])
+print(result.success_count)
+
+# Mixed operations, in order, across tables
+result = await client.batch.execute(BatchRequest(operations=[
+    BatchOperation(method="INSERT", table="users", data={"name": "User 3"}),
+    BatchOperation(method="UPDATE", table="users", id="uuid-1", data={"name": "Updated User"}),
+    BatchOperation(method="DELETE", table="orders", id="uuid-to-delete"),
+]))
+
+# A batch with failed operations still succeeds as a request — check the per-operation results
+for failure in (r for r in result.results if not r.success):
+    print(failure.index, failure.error)
 ```
 
 ### Bulk Client

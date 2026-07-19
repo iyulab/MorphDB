@@ -2,11 +2,10 @@
 
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
-
 
 # Schema Models
 
@@ -166,20 +165,46 @@ class PagedResponse(BaseModel):
     pagination: PaginationInfo
 
 
-class BatchRequest(BaseModel):
-    """Batch operation request."""
+class BatchOperation(BaseModel):
+    """A single operation within a batch."""
 
-    inserts: list[dict[str, Any]] | None = None
-    updates: list[dict[str, Any]] | None = None
-    deletes: list[UUID] | None = None
+    method: Literal["INSERT", "UPDATE", "DELETE", "UPSERT"]
+    table: str
+    id: UUID | None = None
+    """Target record, for UPDATE and DELETE."""
+    data: dict[str, Any] | None = None
+    """Record payload, for INSERT, UPDATE and UPSERT."""
+    key_columns: list[str] | None = Field(default=None, alias="keyColumns")
+    """Columns identifying an existing row, for UPSERT."""
+
+
+class BatchRequest(BaseModel):
+    """A batch of data operations, executed in order."""
+
+    operations: list[BatchOperation]
+
+
+class BatchOperationResult(BaseModel):
+    """Outcome of one operation in a batch."""
+
+    index: int
+    success: bool
+    data: dict[str, Any] | None = None
+    """Identifying data for the affected record — for inserts, the generated ``_id``."""
+    error: str | None = None
+    affected_rows: int | None = Field(default=None, alias="affectedRows")
 
 
 class BatchResponse(BaseModel):
-    """Batch operation response."""
+    """Per-operation outcomes of a batch.
 
-    inserted: list[DataRecord]
-    updated: list[DataRecord]
-    deleted: int
+    Operations are reported individually, so a partial failure is visible rather than collapsed
+    into one status.
+    """
+
+    results: list[BatchOperationResult]
+    success_count: int = Field(alias="successCount")
+    failure_count: int = Field(alias="failureCount")
 
 
 # Webhook Models

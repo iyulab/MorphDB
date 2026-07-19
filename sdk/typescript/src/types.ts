@@ -141,16 +141,36 @@ export interface DataRecord {
   updatedAt: string;
 }
 
+export type BatchMethod = 'INSERT' | 'UPDATE' | 'DELETE' | 'UPSERT';
+
+export interface BatchOperation {
+  method: BatchMethod;
+  table: string;
+  /** Target record, for UPDATE and DELETE */
+  id?: string;
+  /** Record payload, for INSERT, UPDATE and UPSERT */
+  data?: Record<string, unknown>;
+  /** Columns identifying an existing row, for UPSERT */
+  keyColumns?: string[];
+}
+
 export interface BatchRequest {
-  inserts?: Record<string, unknown>[];
-  updates?: Record<string, unknown>[];
-  deletes?: string[];
+  operations: BatchOperation[];
+}
+
+export interface BatchOperationResult {
+  index: number;
+  success: boolean;
+  /** Identifying data for the affected record — for inserts, the generated `_id` */
+  data?: Record<string, unknown>;
+  error?: string;
+  affectedRows?: number;
 }
 
 export interface BatchResponse {
-  inserted: DataRecord[];
-  updated: DataRecord[];
-  deleted: number;
+  results: BatchOperationResult[];
+  successCount: number;
+  failureCount: number;
 }
 
 // Webhook Types

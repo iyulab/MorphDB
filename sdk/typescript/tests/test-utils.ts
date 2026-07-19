@@ -183,8 +183,11 @@ export function createSampleExportJobStatus(): ExportJobStatus {
  */
 export function createSampleBatchResponse(): BatchResponse {
   return {
-    inserted: [createSampleDataRecord()],
-    updated: [createSampleDataRecord({ name: 'Updated User' })],
-    deleted: 2,
+    results: [
+      { index: 0, success: true, data: { _id: 'record-123' }, affectedRows: 1 },
+      { index: 1, success: true, data: { _id: 'record-456' }, affectedRows: 1 },
+    ],
+    successCount: 2,
+    failureCount: 0,
   };
 }

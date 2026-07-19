@@ -23,7 +23,7 @@ public sealed class ViewClient
     {
         var response = await _httpClient.GetAsync("/api/views", cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<IReadOnlyList<ViewInfo>>(cancellationToken: cancellationToken)
+        return await response.Content.ReadFromJsonAsync<IReadOnlyList<ViewInfo>>(MorphDBJson.Options, cancellationToken)
             ?? [];
     }
 
@@ -40,7 +40,7 @@ public sealed class ViewClient
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             return null;
         await EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<ViewInfo>(cancellationToken: cancellationToken);
+        return await response.Content.ReadFromJsonAsync<ViewInfo>(MorphDBJson.Options, cancellationToken);
     }
 
     /// <summary>
@@ -52,7 +52,7 @@ public sealed class ViewClient
     {
         var response = await _httpClient.PostAsJsonAsync("/api/views", request, cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<ViewInfo>(cancellationToken: cancellationToken)
+        return await response.Content.ReadFromJsonAsync<ViewInfo>(MorphDBJson.Options, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize view response");
     }
 
@@ -96,7 +96,7 @@ public sealed class ViewClient
             $"/api/views/{Uri.EscapeDataString(viewName)}/data{queryString}",
             cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<PagedResponse<DataRecord>>(cancellationToken: cancellationToken)
+        return await response.Content.ReadFromJsonAsync<PagedResponse<DataRecord>>(MorphDBJson.Options, cancellationToken)
             ?? new PagedResponse<DataRecord> { Data = [], Pagination = new PaginationInfo() };
     }
 
