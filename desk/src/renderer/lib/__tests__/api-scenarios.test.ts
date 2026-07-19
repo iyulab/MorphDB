@@ -695,7 +695,7 @@ describe('API Scenario: Import/Export Workflow', () => {
   })
 })
 
-describe('API Scenario: Organization & Project Management', () => {
+describe('API Scenario: Project Management', () => {
   let client: MorphDBClient
 
   beforeEach(() => {
@@ -704,44 +704,6 @@ describe('API Scenario: Organization & Project Management', () => {
       url: 'http://localhost:5000',
       apiKey: 'test-api-key',
     })
-  })
-
-  it('should manage organization lifecycle', async () => {
-    // Create organization
-    const org = {
-      organizationId: 'org-123',
-      name: 'Acme Corp',
-      slug: 'acme-corp',
-      status: 'Active',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    }
-
-    mockFetch.mockResolvedValueOnce(createMockResponse(org))
-
-    const created = await client.createOrganization({
-      name: 'Acme Corp',
-      slug: 'acme-corp',
-    })
-
-    expect(created.name).toBe('Acme Corp')
-
-    // Get organization stats
-    const stats = {
-      organizationId: 'org-123',
-      memberCount: 15,
-      projectCount: 5,
-      totalTables: 48,
-      totalRows: 1000000,
-      storageUsageBytes: 512000000,
-    }
-
-    mockFetch.mockResolvedValueOnce(createMockResponse(stats))
-
-    const orgStats = await client.getOrganizationStats('org-123')
-
-    expect(orgStats.memberCount).toBe(15)
-    expect(orgStats.projectCount).toBe(5)
   })
 
   it('should manage project with settings', async () => {
@@ -987,46 +949,6 @@ describe('API Scenario: Audit & Monitoring', () => {
 
     expect(logs.items).toHaveLength(1)
     expect(logs.items[0].action).toBe('create')
-  })
-
-  it('should get quota usage and limits', async () => {
-    const quotaSummary = {
-      usage: {
-        projectId: 'proj-123',
-        period: '2025-01',
-        apiRequests: 45000,
-        dataReads: 150000,
-        dataWrites: 25000,
-        storageBytes: 2147483648, // 2GB
-        bandwidthBytes: 10737418240,
-        lastUpdated: new Date().toISOString(),
-      },
-      limits: {
-        projectId: 'proj-123',
-        maxApiRequests: 100000,
-        maxDataReads: 500000,
-        maxDataWrites: 100000,
-        maxStorageBytes: 10737418240,
-        maxBandwidthBytes: 107374182400,
-        tier: 'Pro',
-      },
-      rateLimit: {
-        key: 'proj-123',
-        available: 950,
-        limit: 1000,
-        windowSeconds: 60,
-        resetAt: new Date().toISOString(),
-        requestCount: 50,
-      },
-    }
-
-    mockFetch.mockResolvedValueOnce(createMockResponse(quotaSummary))
-
-    const summary = await client.getQuotaSummary('proj-123')
-
-    expect(summary.usage.apiRequests).toBe(45000)
-    expect(summary.limits.tier).toBe('Pro')
-    expect(summary.rateLimit.available).toBe(950)
   })
 })
 

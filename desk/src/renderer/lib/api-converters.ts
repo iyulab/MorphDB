@@ -92,7 +92,6 @@ export interface SystemColumnOptionsResponse {
 
 export interface ProjectApiResponse {
   id: string
-  organizationId?: string
   name: string
   slug: string
   systemSchema: string
@@ -383,7 +382,6 @@ export function toTableApiResponse(raw: RawTableApiResponse): TableApiResponse {
 export function toProjectApiResponse(raw: RawProjectApiResponse): ProjectApiResponse {
   return {
     id: raw.id,
-    organizationId: raw.organizationId,
     name: raw.name,
     slug: raw.slug,
     systemSchema: raw.systemSchema,

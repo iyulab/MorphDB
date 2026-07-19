@@ -88,23 +88,11 @@ export function useGlobalShortcuts(callbacks: {
     {
       key: '5',
       ctrl: true,
-      description: 'Go to Organizations',
-      action: () => navigate('/organizations')
-    },
-    {
-      key: '6',
-      ctrl: true,
-      description: 'Go to Backups',
-      action: () => navigate('/backups')
-    },
-    {
-      key: '7',
-      ctrl: true,
       description: 'Go to Audit Logs',
       action: () => navigate('/audit')
     },
     {
-      key: '8',
+      key: '6',
       ctrl: true,
       description: 'Go to Settings',
       action: () => navigate('/settings')
@@ -186,10 +174,8 @@ export function getShortcutsList(): Array<{ category: string; shortcuts: Array<{
         { key: `${mod}+2`, description: 'Go to Projects' },
         { key: `${mod}+3`, description: 'Go to Views' },
         { key: `${mod}+4`, description: 'Go to Webhooks' },
-        { key: `${mod}+5`, description: 'Go to Organizations' },
-        { key: `${mod}+6`, description: 'Go to Backups' },
-        { key: `${mod}+7`, description: 'Go to Audit Logs' },
-        { key: `${mod}+8`, description: 'Go to Settings' }
+        { key: `${mod}+5`, description: 'Go to Audit Logs' },
+        { key: `${mod}+6`, description: 'Go to Settings' }
       ]
     },
     {

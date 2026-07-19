@@ -121,7 +121,6 @@ export type ProjectSettings = {
 export interface CreateProjectRequest {
   name: string
   slug?: string
-  organizationId?: string
   settings?: ProjectSettings
 }
 
@@ -390,143 +389,6 @@ export interface ArchiveDlqApiResponse {
   archivedCount: number
 }
 
-// Organization types
-export type OrganizationRole = 'Owner' | 'Admin' | 'Member' | 'Viewer'
-export type OrganizationStatus = 'Active' | 'Suspended' | 'Deleted'
-export type MembershipStatus = 'Active' | 'Inactive' | 'Suspended'
-export type InvitationStatus = 'Pending' | 'Accepted' | 'Expired' | 'Revoked'
-
-export interface OrganizationSettings {
-  maxProjects?: number
-  maxMembersPerProject?: number
-  enableAuditLog?: boolean
-  defaultProjectEnvironment?: string
-}
-
-export interface OrganizationApiResponse {
-  organizationId: string
-  name: string
-  slug: string
-  description?: string
-  settings?: OrganizationSettings
-  status: OrganizationStatus
-  createdAt: string
-  updatedAt: string
-}
-
-export interface CreateOrganizationApiRequest {
-  name: string
-  slug?: string
-  description?: string
-  settings?: OrganizationSettings
-}
-
-export interface UpdateOrganizationApiRequest {
-  name?: string
-  description?: string
-  settings?: OrganizationSettings
-}
-
-export interface OrganizationStats {
-  organizationId: string
-  memberCount: number
-  projectCount: number
-  totalTables: number
-  totalRows: number
-  storageUsageBytes: number
-}
-
-export interface OrganizationMemberApiResponse {
-  memberId: string
-  organizationId: string
-  userId: string
-  email: string
-  displayName?: string
-  role: OrganizationRole
-  status: MembershipStatus
-  joinedAt: string
-}
-
-export interface AddMemberApiRequest {
-  userId: string
-  email: string
-  displayName?: string
-  role?: OrganizationRole
-}
-
-export interface UpdateMemberApiRequest {
-  role?: OrganizationRole
-  displayName?: string
-}
-
-export interface InvitationApiResponse {
-  invitationId: string
-  organizationId: string
-  email: string
-  role: OrganizationRole
-  status: InvitationStatus
-  createdAt: string
-  expiresAt: string
-  invitedBy: string
-}
-
-export interface CreateInvitationApiRequest {
-  email: string
-  role?: OrganizationRole
-}
-
-// Backup types
-export type BackupType = 'Full' | 'SchemaOnly' | 'DataOnly'
-export type BackupStatus = 'Pending' | 'InProgress' | 'Completed' | 'Failed' | 'Cancelled' | 'Expired'
-export type BackupStorageType = 'Local' | 'S3' | 'Gcs' | 'AzureBlob'
-export type BackupCompression = 'None' | 'Gzip' | 'Zstd'
-
-export interface BackupMetadataApiResponse {
-  postgresVersion?: string
-  tableCount: number
-  estimatedRowCount: number
-  schemas?: string[]
-  tables?: string[]
-  durationMs: number
-}
-
-export interface BackupApiResponse {
-  backupId: string
-  projectId: string
-  name: string
-  description?: string
-  type: BackupType
-  status: BackupStatus
-  sizeBytes: number
-  storageType: BackupStorageType
-  compression: BackupCompression
-  checksum?: string
-  errorMessage?: string
-  initiatedBy?: string
-  startedAt: string
-  completedAt?: string
-  expiresAt?: string
-  metadata?: BackupMetadataApiResponse
-}
-
-export interface CreateBackupApiRequest {
-  name: string
-  description?: string
-  type?: BackupType
-  expiresInDays?: number
-}
-
-export interface RestoreBackupApiRequest {
-  targetProjectId?: string
-  dropExisting?: boolean
-}
-
-export interface RestoreResultApiResponse {
-  success: boolean
-  tablesRestored: number
-  durationMs: number
-}
-
 // Audit types
 export type AuditCategory = 'auth' | 'data' | 'schema' | 'admin' | 'security' | 'system'
 export type AuditSeverity = 'debug' | 'info' | 'warning' | 'error' | 'critical'
@@ -598,43 +460,6 @@ export interface AuditStatsApiResponse {
   errorRate: number
   from: string
   to: string
-}
-
-// Quota types
-export interface QuotaUsageApiResponse {
-  projectId: string
-  period: string
-  apiRequests: number
-  dataReads: number
-  dataWrites: number
-  storageBytes: number
-  bandwidthBytes: number
-  lastUpdated: string
-}
-
-export interface QuotaLimitsApiResponse {
-  projectId: string
-  maxApiRequests: number
-  maxDataReads: number
-  maxDataWrites: number
-  maxStorageBytes: number
-  maxBandwidthBytes: number
-  tier: string
-}
-
-export interface RateLimitStatusApiResponse {
-  key: string
-  available: number
-  limit: number
-  windowSeconds: number
-  resetAt: string
-  requestCount: number
-}
-
-export interface QuotaSummaryApiResponse {
-  usage: QuotaUsageApiResponse
-  limits: QuotaLimitsApiResponse
-  rateLimit: RateLimitStatusApiResponse
 }
 
 // ============================================================================
@@ -746,76 +571,6 @@ export interface KeyValidationResultApiResponse {
   oldVersionCount: number
   unencryptedCount: number
   versionBreakdown: Record<string, number>
-}
-
-// ============================================================================
-// SSO Types
-// ============================================================================
-
-export type SsoProviderType = 'oidc' | 'entraId' | 'google' | 'okta' | 'auth0' | 'keycloak' | 'saml'
-export type SsoConfigStatus = 'disabled' | 'active' | 'testing' | 'error'
-// Note: OrganizationRole is already defined above as 'Owner' | 'Admin' | 'Member' | 'Viewer'
-
-export interface SsoClaimMappingsApiResponse {
-  subjectClaim?: string
-  emailClaim?: string
-  nameClaim?: string
-  firstNameClaim?: string
-  lastNameClaim?: string
-  groupsClaim?: string
-  groupRoleMappings?: Record<string, OrganizationRole>
-}
-
-export interface SsoConfigApiResponse {
-  ssoConfigId: string
-  organizationId: string
-  name: string
-  providerType: SsoProviderType
-  authority: string
-  clientId: string
-  hasClientSecret: boolean
-  scopes: string[]
-  allowedDomains?: string[]
-  claimMappings?: SsoClaimMappingsApiResponse
-  autoProvisionUsers: boolean
-  defaultRole: OrganizationRole
-  status: SsoConfigStatus
-  lastError?: string
-  createdAt: string
-  updatedAt: string
-  lastUsedAt?: string
-}
-
-export interface CreateSsoConfigApiRequest {
-  name: string
-  providerType: SsoProviderType
-  authority: string
-  clientId: string
-  clientSecret?: string
-  scopes?: string[]
-  allowedDomains?: string[]
-  claimMappings?: SsoClaimMappingsApiResponse
-  autoProvisionUsers?: boolean
-  defaultRole?: OrganizationRole
-}
-
-export interface UpdateSsoConfigApiRequest {
-  name?: string
-  providerType?: SsoProviderType
-  authority?: string
-  clientId?: string
-  clientSecret?: string
-  scopes?: string[]
-  allowedDomains?: string[]
-  claimMappings?: SsoClaimMappingsApiResponse
-  autoProvisionUsers?: boolean
-  defaultRole?: OrganizationRole
-}
-
-export interface SsoTestResultApiResponse {
-  success: boolean
-  message: string
-  details?: Record<string, string>
 }
 
 // Import derived field config types from api-types for backward compatibility
@@ -938,9 +693,8 @@ export class MorphDBClient {
   }
 
   // Projects
-  async listProjects(organizationId?: string, status?: ProjectStatus): Promise<ProjectApiResponse[]> {
+  async listProjects(status?: ProjectStatus): Promise<ProjectApiResponse[]> {
     const params = new URLSearchParams()
-    if (organizationId) params.append('organizationId', organizationId)
     if (status) params.append('status', status)
     const query = params.toString() ? `?${params.toString()}` : ''
     const response = await this.request<PagedResponse<ProjectApiResponse>>(`/api/projects${query}`)
@@ -1543,162 +1297,6 @@ export class MorphDBClient {
     })
   }
 
-  // Organizations
-  async listOrganizations(): Promise<OrganizationApiResponse[]> {
-    return this.request<OrganizationApiResponse[]>('/api/organizations')
-  }
-
-  async getOrganization(id: string): Promise<OrganizationApiResponse> {
-    return this.request<OrganizationApiResponse>(`/api/organizations/${id}`)
-  }
-
-  async createOrganization(data: CreateOrganizationApiRequest): Promise<OrganizationApiResponse> {
-    return this.request<OrganizationApiResponse>('/api/organizations', {
-      method: 'POST',
-      body: JSON.stringify(data)
-    })
-  }
-
-  async updateOrganization(
-    id: string,
-    data: UpdateOrganizationApiRequest
-  ): Promise<OrganizationApiResponse> {
-    return this.request<OrganizationApiResponse>(`/api/organizations/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(data)
-    })
-  }
-
-  async deleteOrganization(id: string): Promise<void> {
-    await this.request<void>(`/api/organizations/${id}`, {
-      method: 'DELETE'
-    })
-  }
-
-  async getOrganizationStats(id: string): Promise<OrganizationStats> {
-    return this.request<OrganizationStats>(`/api/organizations/${id}/stats`)
-  }
-
-  // Organization Members
-  async listOrganizationMembers(
-    organizationId: string,
-    options?: { offset?: number; limit?: number }
-  ): Promise<OrganizationMemberApiResponse[]> {
-    const params = new URLSearchParams()
-    if (options?.offset) params.append('offset', options.offset.toString())
-    if (options?.limit) params.append('limit', options.limit.toString())
-
-    const query = params.toString() ? `?${params.toString()}` : ''
-    return this.request<OrganizationMemberApiResponse[]>(
-      `/api/organizations/${organizationId}/members${query}`
-    )
-  }
-
-  async addOrganizationMember(
-    organizationId: string,
-    data: AddMemberApiRequest
-  ): Promise<OrganizationMemberApiResponse> {
-    return this.request<OrganizationMemberApiResponse>(
-      `/api/organizations/${organizationId}/members`,
-      {
-        method: 'POST',
-        body: JSON.stringify(data)
-      }
-    )
-  }
-
-  async updateOrganizationMember(
-    organizationId: string,
-    memberId: string,
-    data: UpdateMemberApiRequest
-  ): Promise<OrganizationMemberApiResponse> {
-    return this.request<OrganizationMemberApiResponse>(
-      `/api/organizations/${organizationId}/members/${memberId}`,
-      {
-        method: 'PATCH',
-        body: JSON.stringify(data)
-      }
-    )
-  }
-
-  async removeOrganizationMember(organizationId: string, memberId: string): Promise<void> {
-    await this.request<void>(`/api/organizations/${organizationId}/members/${memberId}`, {
-      method: 'DELETE'
-    })
-  }
-
-  // Organization Invitations
-  async listInvitations(organizationId: string): Promise<InvitationApiResponse[]> {
-    return this.request<InvitationApiResponse[]>(
-      `/api/organizations/${organizationId}/invitations`
-    )
-  }
-
-  async createInvitation(
-    organizationId: string,
-    data: CreateInvitationApiRequest
-  ): Promise<InvitationApiResponse> {
-    return this.request<InvitationApiResponse>(
-      `/api/organizations/${organizationId}/invitations`,
-      {
-        method: 'POST',
-        body: JSON.stringify(data)
-      }
-    )
-  }
-
-  async revokeInvitation(organizationId: string, invitationId: string): Promise<void> {
-    await this.request<void>(
-      `/api/organizations/${organizationId}/invitations/${invitationId}`,
-      {
-        method: 'DELETE'
-      }
-    )
-  }
-
-  // Backup operations
-  async listBackups(projectId: string): Promise<BackupApiResponse[]> {
-    return this.request<BackupApiResponse[]>(`/api/projects/${projectId}/backups`)
-  }
-
-  async getBackup(projectId: string, backupId: string): Promise<BackupApiResponse> {
-    return this.request<BackupApiResponse>(`/api/projects/${projectId}/backups/${backupId}`)
-  }
-
-  async createBackup(
-    projectId: string,
-    data: CreateBackupApiRequest
-  ): Promise<BackupApiResponse> {
-    return this.request<BackupApiResponse>(`/api/projects/${projectId}/backups`, {
-      method: 'POST',
-      body: JSON.stringify(data)
-    })
-  }
-
-  async restoreBackup(
-    projectId: string,
-    backupId: string,
-    data?: RestoreBackupApiRequest
-  ): Promise<RestoreResultApiResponse> {
-    return this.request<RestoreResultApiResponse>(
-      `/api/projects/${projectId}/backups/${backupId}/restore`,
-      {
-        method: 'POST',
-        body: data ? JSON.stringify(data) : undefined
-      }
-    )
-  }
-
-  async deleteBackup(projectId: string, backupId: string): Promise<void> {
-    await this.request<void>(`/api/projects/${projectId}/backups/${backupId}`, {
-      method: 'DELETE'
-    })
-  }
-
-  getBackupDownloadUrl(projectId: string, backupId: string): string {
-    return `${this.baseUrl}/api/projects/${projectId}/backups/${backupId}/download`
-  }
-
   // Audit API
   async queryAuditLogs(
     projectId: string,
@@ -1744,26 +1342,6 @@ export class MorphDBClient {
     const queryString = searchParams.toString()
     const url = `/api/projects/${projectId}/audit/stats${queryString ? `?${queryString}` : ''}`
     return this.request<AuditStatsApiResponse>(url)
-  }
-
-  // Quota API
-  async getQuotaSummary(projectId: string): Promise<QuotaSummaryApiResponse> {
-    return this.request<QuotaSummaryApiResponse>(`/api/projects/${projectId}/quota`)
-  }
-
-  async getQuotaUsage(projectId: string, period?: string): Promise<QuotaUsageApiResponse> {
-    const url = period
-      ? `/api/projects/${projectId}/quota/usage?period=${period}`
-      : `/api/projects/${projectId}/quota/usage`
-    return this.request<QuotaUsageApiResponse>(url)
-  }
-
-  async getQuotaLimits(projectId: string): Promise<QuotaLimitsApiResponse> {
-    return this.request<QuotaLimitsApiResponse>(`/api/projects/${projectId}/quota/limits`)
-  }
-
-  async getRateLimitStatus(projectId: string): Promise<RateLimitStatusApiResponse> {
-    return this.request<RateLimitStatusApiResponse>(`/api/projects/${projectId}/quota/rate-limit`)
   }
 
   // ============================================================================
@@ -1858,68 +1436,6 @@ export class MorphDBClient {
     return this.request<KeyValidationResultApiResponse>(
       `/api/security/encryption/validate/${tableName}`
     )
-  }
-
-  // ============================================================================
-  // SSO API
-  // ============================================================================
-
-  async listSsoConfigs(organizationId: string): Promise<SsoConfigApiResponse[]> {
-    return this.request<SsoConfigApiResponse[]>(
-      `/api/sso/organizations/${organizationId}/configs`
-    )
-  }
-
-  async getSsoConfig(ssoConfigId: string): Promise<SsoConfigApiResponse> {
-    return this.request<SsoConfigApiResponse>(`/api/sso/configs/${ssoConfigId}`)
-  }
-
-  async createSsoConfig(
-    organizationId: string,
-    request: CreateSsoConfigApiRequest
-  ): Promise<SsoConfigApiResponse> {
-    return this.request<SsoConfigApiResponse>(
-      `/api/sso/organizations/${organizationId}/configs`,
-      {
-        method: 'POST',
-        body: JSON.stringify(request)
-      }
-    )
-  }
-
-  async updateSsoConfig(
-    ssoConfigId: string,
-    request: UpdateSsoConfigApiRequest
-  ): Promise<SsoConfigApiResponse> {
-    return this.request<SsoConfigApiResponse>(`/api/sso/configs/${ssoConfigId}`, {
-      method: 'PUT',
-      body: JSON.stringify(request)
-    })
-  }
-
-  async deleteSsoConfig(ssoConfigId: string): Promise<void> {
-    await this.request<void>(`/api/sso/configs/${ssoConfigId}`, {
-      method: 'DELETE'
-    })
-  }
-
-  async testSsoConfig(ssoConfigId: string): Promise<SsoTestResultApiResponse> {
-    return this.request<SsoTestResultApiResponse>(
-      `/api/sso/configs/${ssoConfigId}/test`,
-      { method: 'POST' }
-    )
-  }
-
-  async activateSsoConfig(ssoConfigId: string): Promise<void> {
-    await this.request<void>(`/api/sso/configs/${ssoConfigId}/activate`, {
-      method: 'POST'
-    })
-  }
-
-  async deactivateSsoConfig(ssoConfigId: string): Promise<void> {
-    await this.request<void>(`/api/sso/configs/${ssoConfigId}/deactivate`, {
-      method: 'POST'
-    })
   }
 }
 

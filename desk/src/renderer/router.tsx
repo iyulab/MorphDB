@@ -5,12 +5,8 @@ import { SettingsPage } from './routes/settings'
 import { ProjectsPage } from './routes/projects'
 import { ViewsPage } from './routes/views'
 import { WebhooksPage } from './routes/webhooks'
-import { OrganizationsPage } from './routes/organizations'
-import { BackupsPage } from './routes/backups'
 import { AuditPage } from './routes/audit'
-import { QuotaPage } from './routes/quota'
 import { SecurityPage } from './routes/security'
-import { SsoPage } from './routes/sso'
 import { RouteErrorBoundary } from './components/ErrorBoundary'
 
 export const router = createHashRouter([
@@ -49,33 +45,13 @@ export const router = createHashRouter([
         errorElement: <RouteErrorBoundary />
       },
       {
-        path: 'organizations',
-        element: <OrganizationsPage />,
-        errorElement: <RouteErrorBoundary />
-      },
-      {
-        path: 'backups',
-        element: <BackupsPage />,
-        errorElement: <RouteErrorBoundary />
-      },
-      {
         path: 'audit',
         element: <AuditPage />,
         errorElement: <RouteErrorBoundary />
       },
       {
-        path: 'quota',
-        element: <QuotaPage />,
-        errorElement: <RouteErrorBoundary />
-      },
-      {
         path: 'security',
         element: <SecurityPage />,
-        errorElement: <RouteErrorBoundary />
-      },
-      {
-        path: 'sso',
-        element: <SsoPage />,
         errorElement: <RouteErrorBoundary />
       },
       {

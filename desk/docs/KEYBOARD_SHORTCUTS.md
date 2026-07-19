@@ -22,10 +22,8 @@ This document lists all keyboard shortcuts available in MorphDB Desk.
 | `Cmd/Ctrl + 2` | Go to Projects | Navigate to projects list |
 | `Cmd/Ctrl + 3` | Go to Views | Navigate to views management |
 | `Cmd/Ctrl + 4` | Go to Webhooks | Navigate to webhooks configuration |
-| `Cmd/Ctrl + 5` | Go to Organizations | Navigate to organizations |
-| `Cmd/Ctrl + 6` | Go to Backups | Navigate to backup management |
-| `Cmd/Ctrl + 7` | Go to Audit Logs | Navigate to audit log viewer |
-| `Cmd/Ctrl + 8` | Go to Settings | Navigate to application settings |
+| `Cmd/Ctrl + 5` | Go to Audit Logs | Navigate to audit log viewer |
+| `Cmd/Ctrl + 6` | Go to Settings | Navigate to application settings |
 
 ## Command Palette
 

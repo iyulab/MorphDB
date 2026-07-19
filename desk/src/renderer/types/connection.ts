@@ -20,7 +20,6 @@ export interface ConnectionFormData {
 
 export interface Project {
   projectId: string
-  organizationId: string
   name: string
   slug: string
   description?: string

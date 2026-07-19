@@ -167,8 +167,6 @@ test.describe('Critical Path: Navigation', () => {
 
   test('should have admin section in sidebar', async ({ page }) => {
     // Check for admin navigation items
-    await expect(page.getByText('Organizations')).toBeVisible()
-    await expect(page.getByText('Backups')).toBeVisible()
     await expect(page.getByText('Audit Log')).toBeVisible()
   })
 

@@ -21,7 +21,6 @@ export function ProjectDialog({
   const [formData, setFormData] = useState({
     name: '',
     slug: '',
-    organizationId: '',
     enableAuditLog: false,
     maxTables: 100,
     timezone: '',
@@ -36,7 +35,6 @@ export function ProjectDialog({
         setFormData({
           name: project.name,
           slug: project.slug,
-          organizationId: project.organizationId ?? '',
           enableAuditLog: project.settings?.enableAuditLog ?? false,
           maxTables: project.settings?.maxTables ?? 100,
           timezone: project.settings?.timezone ?? '',
@@ -46,7 +44,6 @@ export function ProjectDialog({
         setFormData({
           name: '',
           slug: '',
-          organizationId: '',
           enableAuditLog: false,
           maxTables: 100,
           timezone: '',
@@ -105,7 +102,6 @@ export function ProjectDialog({
         await onSubmit({
           name: formData.name,
           slug: formData.slug,
-          organizationId: formData.organizationId || undefined,
           settings
         } as CreateProjectRequest)
       }
@@ -162,18 +158,6 @@ export function ProjectDialog({
               </div>
             )}
 
-            {!isEditing && (
-              <div>
-                <label className="block text-sm font-medium mb-1">Organization ID</label>
-                <input
-                  type="text"
-                  value={formData.organizationId}
-                  onChange={(e) => setFormData(prev => ({ ...prev, organizationId: e.target.value }))}
-                  placeholder="Optional organization UUID"
-                  className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-              </div>
-            )}
           </div>
 
           {/* Settings */}

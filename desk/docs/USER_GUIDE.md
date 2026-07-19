@@ -99,12 +99,8 @@ The sidebar provides quick access to all major sections:
 | **Projects** | Project management |
 | **Views** | Saved data views |
 | **Webhooks** | Webhook configuration |
-| **Organizations** | Organization settings |
-| **Backups** | Backup management |
 | **Audit Logs** | Activity logging |
-| **Usage & Quota** | Resource monitoring |
 | **Security** | Security settings |
-| **SSO** | Single Sign-On configuration |
 | **Settings** | Application settings |
 
 ### Collapsible Sidebar
@@ -115,7 +111,7 @@ The sidebar provides quick access to all major sections:
 
 ### Quick Navigation
 
-Use `Cmd/Ctrl + 1` through `Cmd/Ctrl + 8` to jump directly to sections:
+Use `Cmd/Ctrl + 1` through `Cmd/Ctrl + 6` to jump directly to sections:
 
 | Shortcut | Section |
 |----------|---------|
@@ -123,10 +119,8 @@ Use `Cmd/Ctrl + 1` through `Cmd/Ctrl + 8` to jump directly to sections:
 | `Cmd/Ctrl + 2` | Projects |
 | `Cmd/Ctrl + 3` | Views |
 | `Cmd/Ctrl + 4` | Webhooks |
-| `Cmd/Ctrl + 5` | Organizations |
-| `Cmd/Ctrl + 6` | Backups |
-| `Cmd/Ctrl + 7` | Audit Logs |
-| `Cmd/Ctrl + 8` | Settings |
+| `Cmd/Ctrl + 5` | Audit Logs |
+| `Cmd/Ctrl + 6` | Settings |
 
 ---
 

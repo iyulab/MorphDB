@@ -161,16 +161,11 @@ export function ProjectCard({
         </span>
       </div>
 
-      {/* Schema & Org */}
+      {/* Schema */}
       <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
         <span className="px-2 py-0.5 rounded bg-muted">
           {project.dataSchema}
         </span>
-        {project.organizationId && (
-          <span className="truncate" title={project.organizationId}>
-            Org: {project.organizationId.slice(0, 8)}...
-          </span>
-        )}
       </div>
 
       {/* Settings Summary */}

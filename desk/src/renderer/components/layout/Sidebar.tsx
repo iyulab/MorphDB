@@ -15,12 +15,8 @@ import {
   TableProperties,
   Eye,
   Webhook,
-  Building2,
-  HardDrive,
   FileText,
-  Gauge,
   Shield,
-  KeyRound,
   PanelLeftClose,
   PanelLeft
 } from 'lucide-react'
@@ -348,12 +344,8 @@ export function Sidebar({ onNewConnection, onEditConnection }: SidebarProps): Re
         <NavItem to="/projects" icon={<FolderKanban className="h-4 w-4 flex-shrink-0" />} label="Projects" collapsed={sidebarCollapsed} />
         <NavItem to="/views" icon={<Eye className="h-4 w-4 flex-shrink-0" />} label="Views" collapsed={sidebarCollapsed} />
         <NavItem to="/webhooks" icon={<Webhook className="h-4 w-4 flex-shrink-0" />} label="Webhooks" collapsed={sidebarCollapsed} />
-        <NavItem to="/organizations" icon={<Building2 className="h-4 w-4 flex-shrink-0" />} label="Organizations" collapsed={sidebarCollapsed} />
-        <NavItem to="/backups" icon={<HardDrive className="h-4 w-4 flex-shrink-0" />} label="Backups" collapsed={sidebarCollapsed} />
         <NavItem to="/audit" icon={<FileText className="h-4 w-4 flex-shrink-0" />} label="Audit Logs" collapsed={sidebarCollapsed} />
-        <NavItem to="/quota" icon={<Gauge className="h-4 w-4 flex-shrink-0" />} label="Usage & Quota" collapsed={sidebarCollapsed} />
         <NavItem to="/security" icon={<Shield className="h-4 w-4 flex-shrink-0" />} label="Security" collapsed={sidebarCollapsed} />
-        <NavItem to="/sso" icon={<KeyRound className="h-4 w-4 flex-shrink-0" />} label="SSO" collapsed={sidebarCollapsed} />
         <NavItem to="/settings" icon={<Settings className="h-4 w-4 flex-shrink-0" />} label="Settings" collapsed={sidebarCollapsed} />
       </div>
 

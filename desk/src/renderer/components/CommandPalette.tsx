@@ -6,12 +6,8 @@ import {
   FolderKanban,
   Eye,
   Webhook,
-  Building2,
-  HardDrive,
   FileText,
-  Gauge,
   Shield,
-  KeyRound,
   Settings,
   Plus,
   Search,
@@ -101,20 +97,6 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): Rea
               <span>Webhooks</span>
             </Command.Item>
             <Command.Item
-              onSelect={() => runCommand(() => navigate('/organizations'))}
-              className="command-item"
-            >
-              <Building2 className="command-item-icon" />
-              <span>Organizations</span>
-            </Command.Item>
-            <Command.Item
-              onSelect={() => runCommand(() => navigate('/backups'))}
-              className="command-item"
-            >
-              <HardDrive className="command-item-icon" />
-              <span>Backups</span>
-            </Command.Item>
-            <Command.Item
               onSelect={() => runCommand(() => navigate('/audit'))}
               className="command-item"
             >
@@ -122,25 +104,11 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps): Rea
               <span>Audit Logs</span>
             </Command.Item>
             <Command.Item
-              onSelect={() => runCommand(() => navigate('/quota'))}
-              className="command-item"
-            >
-              <Gauge className="command-item-icon" />
-              <span>Usage & Quota</span>
-            </Command.Item>
-            <Command.Item
               onSelect={() => runCommand(() => navigate('/security'))}
               className="command-item"
             >
               <Shield className="command-item-icon" />
               <span>Security</span>
-            </Command.Item>
-            <Command.Item
-              onSelect={() => runCommand(() => navigate('/sso'))}
-              className="command-item"
-            >
-              <KeyRound className="command-item-icon" />
-              <span>SSO</span>
             </Command.Item>
             <Command.Item
               onSelect={() => runCommand(() => navigate('/settings'))}

@@ -39,7 +39,6 @@ export interface RawErrorResponse {
 
 export interface RawProjectApiResponse {
   id: string
-  organizationId?: string
   name: string
   slug: string
   systemSchema: string
@@ -69,7 +68,6 @@ export interface RawRateLimitSettingsApiModel {
 export interface RawCreateProjectApiRequest {
   name: string
   slug?: string
-  organizationId?: string
   settings?: RawProjectSettingsApiModel
 }
 

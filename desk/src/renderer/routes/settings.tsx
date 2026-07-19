@@ -68,7 +68,7 @@ export function SettingsPage(): ReactElement {
               <h2 className="font-semibold">Security</h2>
             </div>
             <div className="space-y-4 text-sm text-muted-foreground">
-              <p>SSO configuration and security policies will be available in Phase 4 (Security).</p>
+              <p>Security policies will be available in Phase 4 (Security).</p>
             </div>
           </section>
         </div>
