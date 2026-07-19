@@ -42,7 +42,7 @@ MorphDB: [Developer] → [Logical Schema] → [Physical DB]
 ### Docker (Recommended)
 
 ```bash
-docker pull ghcr.io/iyulab/morphdb:0.5.1
+docker pull ghcr.io/iyulab/morphdb:0.6.0
 ```
 
 One number covers everything: a release publishes the git tag `vX.Y.Z`, the image `X.Y.Z`, and the
@@ -56,7 +56,7 @@ Run with PostgreSQL using docker-compose:
 # docker-compose.yml
 services:
   morphdb:
-    image: ghcr.io/iyulab/morphdb:0.5.1
+    image: ghcr.io/iyulab/morphdb:0.6.0
     ports:
       - "8080:8080"
     environment:
@@ -186,9 +186,9 @@ MorphDB/
 │   ├── MorphDB.Npgsql/     # Database provider implementation
 │   ├── MorphDB.Service/    # ASP.NET Core API service
 │   └── MorphDB.Client/     # .NET client SDK
-├── sdk/
-│   ├── typescript/         # TypeScript SDK
-│   └── python/             # Python SDK
+├── sdk/                    # reference clients, not published -- see each README
+│   ├── typescript/         # TypeScript
+│   └── python/             # Python
 ├── desk/                   # Electron desktop app
 └── tests/
 ```

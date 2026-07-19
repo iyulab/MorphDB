@@ -4,13 +4,18 @@ Official Python client SDK for MorphDB - a PostgreSQL-based dynamic schema datab
 
 ## Installation
 
+**This SDK is not published.** It is a reference implementation that lives in the MorphDB
+repository; install it from a checkout:
+
 ```bash
-pip install morphdb
-# or
-poetry add morphdb
-# or
-uv add morphdb
+pip install ./sdk/python        # from a clone of iyulab/MorphDB
 ```
+
+> `pip install morphdb` installs **a different project** — the name on PyPI belongs to an unrelated
+> package (`github.com/Savcab/morphdb`). Do not use it expecting this client. Publishing this SDK
+> would require a different distribution name.
+
+Only the .NET client (`MorphDB.Client` on NuGet) is published and exercised against a live server.
 
 ## Quick Start
 

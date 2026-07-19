@@ -4,13 +4,14 @@ Official TypeScript client SDK for MorphDB - a PostgreSQL-based dynamic schema d
 
 ## Installation
 
+**This SDK is not published.** It is a reference implementation that lives in the MorphDB
+repository; `@morphdb/client` is not registered on npm. Install it from a checkout:
+
 ```bash
-npm install @morphdb/client
-# or
-yarn add @morphdb/client
-# or
-pnpm add @morphdb/client
+npm install ./sdk/typescript    # from a clone of iyulab/MorphDB
 ```
+
+Only the .NET client (`MorphDB.Client` on NuGet) is published and exercised against a live server.
 
 ## Quick Start
 
