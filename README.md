@@ -42,8 +42,13 @@ MorphDB: [Developer] → [Logical Schema] → [Physical DB]
 ### Docker (Recommended)
 
 ```bash
-docker pull ghcr.io/iyulab/morphdb:latest
+docker pull ghcr.io/iyulab/morphdb:0.5.1
 ```
+
+One number covers everything: a release publishes the git tag `vX.Y.Z`, the image `X.Y.Z`, and the
+NuGet packages `X.Y.Z` together, so a client and a server that share a version are a compatible pair.
+Pin that number rather than `latest` — this is a 0.x line and a minor release may break you. The
+newest one is the newest [tag](https://github.com/iyulab/MorphDB/tags).
 
 Run with PostgreSQL using docker-compose:
 
@@ -51,7 +56,7 @@ Run with PostgreSQL using docker-compose:
 # docker-compose.yml
 services:
   morphdb:
-    image: ghcr.io/iyulab/morphdb:latest
+    image: ghcr.io/iyulab/morphdb:0.5.1
     ports:
       - "8080:8080"
     environment:
@@ -87,8 +92,38 @@ docker compose up -d
 # Health:   http://localhost:8080/health
 ```
 
-Available tags: `latest`, `0.2`, `0.2.0`
-Platforms: `linux/amd64`, `linux/arm64`
+Platforms: `linux/amd64`, `linux/arm64`.
+Tags: every release publishes `X.Y.Z` and `X.Y`, plus `latest`.
+
+### First request: create a project
+
+Every schema and data endpoint is tenant-scoped, so a bare request is answered with `InvalidTenant`.
+A project is that tenant — create one first, then send its id as `X-Tenant-Id` on everything else.
+
+```bash
+# 1. Create a project. The response carries the id you will scope requests with.
+PROJECT=$(curl -sS -X POST http://localhost:8080/api/projects \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"my-app"}' | jq -r .id)
+
+# 2. Create a table inside it.
+curl -sS -X POST http://localhost:8080/api/schema/tables \
+  -H "X-Tenant-Id: $PROJECT" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"customers","columns":[{"name":"email","type":"text","nullable":false}]}'
+
+# 3. Write a row.
+curl -sS -X POST http://localhost:8080/api/data/customers \
+  -H "X-Tenant-Id: $PROJECT" \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"ada@example.com"}'
+```
+
+The .NET client takes the same id once, at construction:
+
+```csharp
+var client = new MorphDBClient("http://localhost:8080", new MorphDBClientOptions { TenantId = projectId });
+```
 
 ### From Source
 

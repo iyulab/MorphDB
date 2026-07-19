@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
+using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
 using MorphDB.Npgsql.Infrastructure;
 
@@ -204,6 +205,7 @@ public static class DdlBuilder
 
         if (!string.IsNullOrWhiteSpace(index.WhereClause))
         {
+            ValidateInlineExpression(index.WhereClause, "Index predicate");
             sb.Append(CultureInfo.InvariantCulture, $" WHERE {index.WhereClause}");
         }
 
@@ -653,14 +655,14 @@ public static class DdlBuilder
     /// </summary>
     public static string BuildGlobalSystemSchemaDdl()
     {
+        // No CREATE EXTENSION here on purpose. gen_random_uuid() is built into PostgreSQL 13+,
+        // so the control plane needs no extensions at all — which is what lets morphdb boot on a
+        // managed PostgreSQL where extension creation is gated behind a server-parameter allow-list.
         return """
-            CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-            CREATE EXTENSION IF NOT EXISTS "pgcrypto";
-
             CREATE SCHEMA IF NOT EXISTS morphdb;
 
             CREATE TABLE IF NOT EXISTS morphdb._morph_tables (
-                table_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                table_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 tenant_id UUID NOT NULL,
                 logical_name VARCHAR(255) NOT NULL,
                 physical_name VARCHAR(63) NOT NULL UNIQUE,
@@ -673,7 +675,7 @@ public static class DdlBuilder
             );
 
             CREATE TABLE IF NOT EXISTS morphdb._morph_columns (
-                column_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                column_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 table_id UUID NOT NULL REFERENCES morphdb._morph_tables(table_id) ON DELETE CASCADE,
                 logical_name VARCHAR(255) NOT NULL,
                 physical_name VARCHAR(63) NOT NULL,
@@ -698,7 +700,7 @@ public static class DdlBuilder
             );
 
             CREATE TABLE IF NOT EXISTS morphdb._morph_relations (
-                relation_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                relation_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 tenant_id UUID NOT NULL,
                 logical_name VARCHAR(255) NOT NULL,
                 source_table_id UUID NOT NULL REFERENCES morphdb._morph_tables(table_id),
@@ -714,7 +716,7 @@ public static class DdlBuilder
             );
 
             CREATE TABLE IF NOT EXISTS morphdb._morph_indexes (
-                index_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                index_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 table_id UUID NOT NULL REFERENCES morphdb._morph_tables(table_id) ON DELETE CASCADE,
                 logical_name VARCHAR(255) NOT NULL,
                 physical_name VARCHAR(63) NOT NULL UNIQUE,
@@ -728,7 +730,7 @@ public static class DdlBuilder
             );
 
             CREATE TABLE IF NOT EXISTS morphdb._morph_changelog (
-                change_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                change_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 table_id UUID NOT NULL,
                 operation VARCHAR(50) NOT NULL,
                 schema_version INTEGER NOT NULL,
@@ -738,7 +740,7 @@ public static class DdlBuilder
             );
 
             CREATE TABLE IF NOT EXISTS morphdb._morph_api_keys (
-                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 tenant_id UUID NOT NULL,
                 key_type INTEGER NOT NULL DEFAULT 0,
                 key_hash VARCHAR(255) NOT NULL,
@@ -753,7 +755,7 @@ public static class DdlBuilder
             );
 
             CREATE TABLE IF NOT EXISTS morphdb._morph_webhooks (
-                webhook_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                webhook_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 tenant_id UUID NOT NULL,
                 table_id UUID NOT NULL REFERENCES morphdb._morph_tables(table_id) ON DELETE CASCADE,
                 logical_name VARCHAR(255) NOT NULL,
@@ -769,7 +771,7 @@ public static class DdlBuilder
             );
 
             CREATE TABLE IF NOT EXISTS morphdb._morph_webhook_deliveries (
-                delivery_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                delivery_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 webhook_id UUID NOT NULL REFERENCES morphdb._morph_webhooks(webhook_id) ON DELETE CASCADE,
                 record_id UUID,
                 event VARCHAR(20) NOT NULL,
@@ -785,7 +787,7 @@ public static class DdlBuilder
             );
 
             CREATE TABLE IF NOT EXISTS morphdb._morph_webhook_dlq (
-                dlq_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                dlq_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 delivery_id UUID NOT NULL,
                 webhook_id UUID NOT NULL REFERENCES morphdb._morph_webhooks(webhook_id) ON DELETE CASCADE,
                 tenant_id UUID NOT NULL,
@@ -804,7 +806,7 @@ public static class DdlBuilder
             );
 
             CREATE TABLE IF NOT EXISTS morphdb._morph_import_jobs (
-                job_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                job_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 tenant_id UUID NOT NULL,
                 table_id UUID NOT NULL REFERENCES morphdb._morph_tables(table_id) ON DELETE CASCADE,
                 table_name VARCHAR(255) NOT NULL,
@@ -822,7 +824,7 @@ public static class DdlBuilder
             );
 
             CREATE TABLE IF NOT EXISTS morphdb._morph_export_jobs (
-                job_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                job_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 tenant_id UUID NOT NULL,
                 table_id UUID NOT NULL REFERENCES morphdb._morph_tables(table_id) ON DELETE CASCADE,
                 table_name VARCHAR(255) NOT NULL,
@@ -853,7 +855,7 @@ public static class DdlBuilder
             );
 
             CREATE TABLE IF NOT EXISTS morphdb._morph_organizations (
-                org_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                org_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 name VARCHAR(100) NOT NULL,
                 slug VARCHAR(100) NOT NULL UNIQUE,
                 owner_id UUID,
@@ -864,7 +866,7 @@ public static class DdlBuilder
             );
 
             CREATE TABLE IF NOT EXISTS morphdb._morph_projects (
-                project_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                project_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 org_id UUID REFERENCES morphdb._morph_organizations(org_id) ON DELETE CASCADE,
                 name VARCHAR(100) NOT NULL,
                 slug VARCHAR(100) NOT NULL UNIQUE,
@@ -990,10 +992,92 @@ public static class DdlBuilder
 
         if (col.CheckExpression is not null)
         {
+            ValidateInlineExpression(col.CheckExpression, "Check");
             sb.Append(CultureInfo.InvariantCulture, $" CHECK ({col.CheckExpression})");
         }
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Rejects an expression that would not stay inside the clause it is written into.
+    /// </summary>
+    /// <remarks>
+    /// Check constraints and index predicates are free-form predicates, so neither can be matched
+    /// against a fixed set the way a function default can. A check is emitted as <c>CHECK (expr)</c>,
+    /// though, and escaping that form requires a closing parenthesis with no opener of its own —
+    /// which is exactly what unbalanced counting detects. Quoted text is skipped so that parentheses
+    /// inside a string literal or a quoted identifier do not count. Statement separators and comment
+    /// openers are refused outright: neither belongs in a predicate, both could truncate the
+    /// statement, and an index predicate sits at the end of its statement where a separator is all
+    /// an escape would need.
+    /// Anything this cannot account for is refused rather than passed through — the expression
+    /// reaches DDL verbatim and is executed by a role that a tenant must never borrow.
+    /// </remarks>
+    private static void ValidateInlineExpression(string expression, string clause)
+    {
+        var depth = 0;
+
+        for (var i = 0; i < expression.Length; i++)
+        {
+            var c = expression[i];
+
+            if (c is '\'' or '"')
+            {
+                // Skip to the closing quote. A doubled quote is an escape, so the scan simply
+                // continues past it and looks for the next one.
+                var quote = c;
+                var end = expression.IndexOf(quote, i + 1);
+                if (end < 0)
+                {
+                    throw new SchemaException(
+                        "INVALID_EXPRESSION",
+                        $"{clause} expression '{expression}' has an unterminated quote.");
+                }
+
+                i = end;
+                continue;
+            }
+
+            switch (c)
+            {
+                case '(':
+                    depth++;
+                    break;
+
+                case ')':
+                    depth--;
+                    if (depth < 0)
+                    {
+                        throw new SchemaException(
+                            "INVALID_EXPRESSION",
+                            $"{clause} expression '{expression}' closes a parenthesis it never opened.");
+                    }
+
+                    break;
+
+                case ';':
+                    throw new SchemaException(
+                        "INVALID_EXPRESSION",
+                        $"{clause} expression '{expression}' must not contain a statement separator.");
+
+                case '-' when i + 1 < expression.Length && expression[i + 1] == '-':
+                case '/' when i + 1 < expression.Length && expression[i + 1] == '*':
+                    throw new SchemaException(
+                        "INVALID_EXPRESSION",
+                        $"{clause} expression '{expression}' must not contain a comment.");
+
+                default:
+                    break;
+            }
+        }
+
+        if (depth != 0)
+        {
+            throw new SchemaException(
+                "INVALID_EXPRESSION",
+                $"{clause} expression '{expression}' leaves {depth} parenthesis/parentheses unclosed.");
+        }
     }
 
     /// <summary>
@@ -1076,6 +1160,23 @@ public sealed record ColumnDefinition
     }
 
     /// <summary>
+    /// The function defaults a column is allowed to declare.
+    /// </summary>
+    /// <remarks>
+    /// A function default has to reach the DDL unquoted, so it cannot be an open-ended escape hatch:
+    /// the value arrives from the API and is concatenated into CREATE TABLE. Recognising a fixed set
+    /// keeps that path closed while still supporting the defaults the API actually advertises.
+    /// uuid_generate_v4() is deliberately absent — it needs the uuid-ossp extension, which managed
+    /// PostgreSQL does not grant, and gen_random_uuid() has been built in since PostgreSQL 13.
+    /// </remarks>
+    private static readonly Dictionary<string, string> AllowedFunctionDefaults =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["gen_random_uuid()"] = "gen_random_uuid()",
+            ["now()"] = "now()"
+        };
+
+    /// <summary>
     /// Formats a default value as a valid PostgreSQL expression.
     /// </summary>
     private static string? FormatDefaultExpression(string? value, MorphDataType dataType)
@@ -1083,9 +1184,19 @@ public sealed record ColumnDefinition
         if (string.IsNullOrEmpty(value))
             return null;
 
-        // Already a SQL expression (function call like now(), uuid_generate_v4())
-        if (value.Contains('(') && value.Contains(')'))
-            return value;
+        // A value carrying parentheses is a function call, i.e. it would have to be emitted unquoted.
+        // Only recognised calls may take that path; everything else is quoted as a literal below.
+        if (value.Contains('(', StringComparison.Ordinal) || value.Contains(')', StringComparison.Ordinal))
+        {
+            if (AllowedFunctionDefaults.TryGetValue(value.Trim(), out var canonical))
+            {
+                return canonical;
+            }
+
+            throw new SchemaException(
+                "INVALID_DEFAULT",
+                $"Default '{value}' is not a supported function default. Supported: {string.Join(", ", AllowedFunctionDefaults.Values)}. A literal default must not contain parentheses.");
+        }
 
         // Numeric types - return as-is
         if (dataType is MorphDataType.Integer or MorphDataType.BigInteger or MorphDataType.Decimal)

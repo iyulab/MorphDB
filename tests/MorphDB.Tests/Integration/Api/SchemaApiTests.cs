@@ -26,6 +26,38 @@ public class SchemaApiTests
 
     #region Table Operations
 
+    [Theory]
+    // Both payloads escaped their clause into arbitrary DDL before the DdlBuilder guards existed,
+    // executed by a role privileged enough to reach outside the tenant's own schemas. The reply has
+    // to be a refusal the caller can act on, not a 500 — and certainly not a created table.
+    [InlineData("1=1), extra TEXT DEFAULT ('injected'", null)]
+    [InlineData(null, "'x'), extra TEXT DEFAULT ('y")]
+    public async Task CreateTable_WithDdlEscapingColumnClause_ShouldReturnBadRequest(string? check, string? @default)
+    {
+        // Arrange
+        var request = new CreateTableApiRequest
+        {
+            Name = $"api_test_{Guid.NewGuid():N}"[..30],
+            Columns =
+            [
+                new CreateColumnApiRequest
+                {
+                    Name = "age",
+                    Type = "integer",
+                    Nullable = true,
+                    Check = check,
+                    Default = @default
+                }
+            ]
+        };
+
+        // Act
+        var response = await _client.PostAsJsonAsync("/api/schema/tables", request);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
     [Fact]
     public async Task CreateTable_WithValidRequest_ShouldReturnCreated()
     {

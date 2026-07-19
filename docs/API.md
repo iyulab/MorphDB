@@ -396,9 +396,22 @@ All fields except `version` are optional. Only provided fields are changed.
 | `type` | New data type (safe type widening only: integer→biginteger→decimal, *→text) |
 | `nullable` | Whether the column allows null (virtual constraint) |
 | `unique` | Whether the column has a unique constraint (physical DDL) |
-| `check` | Check expression (virtual constraint) |
-| `default` | Default value expression |
+| `check` | Check expression (virtual constraint) — see [Expression fields](#expression-fields) |
+| `default` | Default value — see [Expression fields](#expression-fields) |
 | `version` | Expected schema version for optimistic concurrency |
+
+### Expression fields
+
+`default`, `check` and an index `where` are written into DDL, so what they may contain is bounded.
+A value outside these bounds is answered with `400` and an error code, not applied.
+
+| Field | Accepted | Rejected (`400`) |
+|-------|----------|------------------|
+| `default` | A literal (`0`, `pending`, `O'Brien` — quoted for you), or one of the functions `gen_random_uuid()`, `now()` | Any other value containing parentheses → `INVALID_DEFAULT`. Notably `uuid_generate_v4()`: it needs the `uuid-ossp` extension, which managed PostgreSQL does not grant. Use `gen_random_uuid()`. |
+| `check`, index `where` | Any predicate that stays within itself — `age >= 0 AND age <= 150`, `status = 'a)b'`, `name ~ '^[a-z]+$'` | Unbalanced parentheses or quotes, a statement separator, or a comment → `INVALID_EXPRESSION` |
+
+MorphDB requires no PostgreSQL extension. This is what lets it run on Azure Database for PostgreSQL,
+Cloud SQL and RDS, where `CREATE EXTENSION` is gated behind a server-parameter allow-list.
 
 ---
 

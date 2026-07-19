@@ -1,16 +1,16 @@
 -- MorphDB Initial Database Setup
 -- This script runs when the PostgreSQL container is first created
 
--- Enable required extensions
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+-- No extensions are required: gen_random_uuid() is built into PostgreSQL 13+.
+-- Keeping this file extension-free is what lets morphdb run on a managed PostgreSQL
+-- where CREATE EXTENSION is gated behind a server-parameter allow-list.
 
 -- Create morphdb schema for system tables
 CREATE SCHEMA IF NOT EXISTS morphdb;
 
 -- System table: _morph_tables
 CREATE TABLE IF NOT EXISTS morphdb._morph_tables (
-    table_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    table_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL,
     logical_name VARCHAR(255) NOT NULL,
     physical_name VARCHAR(63) NOT NULL UNIQUE,
@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS morphdb._morph_tables (
 
 -- System table: _morph_columns
 CREATE TABLE IF NOT EXISTS morphdb._morph_columns (
-    column_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    column_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     table_id UUID NOT NULL REFERENCES morphdb._morph_tables(table_id) ON DELETE CASCADE,
     logical_name VARCHAR(255) NOT NULL,
     physical_name VARCHAR(63) NOT NULL,
@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS morphdb._morph_columns (
 
 -- System table: _morph_relations
 CREATE TABLE IF NOT EXISTS morphdb._morph_relations (
-    relation_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    relation_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL,
     logical_name VARCHAR(255) NOT NULL,
     source_table_id UUID NOT NULL REFERENCES morphdb._morph_tables(table_id),
@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS morphdb._morph_relations (
 
 -- System table: _morph_indexes
 CREATE TABLE IF NOT EXISTS morphdb._morph_indexes (
-    index_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    index_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     table_id UUID NOT NULL REFERENCES morphdb._morph_tables(table_id) ON DELETE CASCADE,
     logical_name VARCHAR(255) NOT NULL,
     physical_name VARCHAR(63) NOT NULL UNIQUE,
@@ -83,7 +83,7 @@ CREATE TABLE IF NOT EXISTS morphdb._morph_indexes (
 
 -- System table: _morph_changelog
 CREATE TABLE IF NOT EXISTS morphdb._morph_changelog (
-    change_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    change_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     table_id UUID NOT NULL,
     operation VARCHAR(50) NOT NULL,
     schema_version INTEGER NOT NULL,
@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS morphdb._morph_changelog (
 
 -- System table: _morph_api_keys
 CREATE TABLE IF NOT EXISTS morphdb._morph_api_keys (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL,
     key_type INTEGER NOT NULL DEFAULT 0,
     key_hash VARCHAR(255) NOT NULL,
@@ -110,7 +110,7 @@ CREATE TABLE IF NOT EXISTS morphdb._morph_api_keys (
 
 -- System table: _morph_webhooks
 CREATE TABLE IF NOT EXISTS morphdb._morph_webhooks (
-    webhook_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    webhook_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL,
     table_id UUID NOT NULL REFERENCES morphdb._morph_tables(table_id) ON DELETE CASCADE,
     logical_name VARCHAR(255) NOT NULL,
@@ -127,7 +127,7 @@ CREATE TABLE IF NOT EXISTS morphdb._morph_webhooks (
 
 -- System table: _morph_webhook_deliveries
 CREATE TABLE IF NOT EXISTS morphdb._morph_webhook_deliveries (
-    delivery_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    delivery_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     webhook_id UUID NOT NULL REFERENCES morphdb._morph_webhooks(webhook_id) ON DELETE CASCADE,
     record_id UUID,
     event VARCHAR(20) NOT NULL,
@@ -144,7 +144,7 @@ CREATE TABLE IF NOT EXISTS morphdb._morph_webhook_deliveries (
 
 -- System table: _morph_webhook_dlq (Dead Letter Queue)
 CREATE TABLE IF NOT EXISTS morphdb._morph_webhook_dlq (
-    dlq_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    dlq_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     delivery_id UUID NOT NULL,
     webhook_id UUID NOT NULL REFERENCES morphdb._morph_webhooks(webhook_id) ON DELETE CASCADE,
     tenant_id UUID NOT NULL,
@@ -170,7 +170,7 @@ CREATE INDEX IF NOT EXISTS idx_morph_webhook_dlq_dlq_at ON morphdb._morph_webhoo
 
 -- System table: _morph_import_jobs
 CREATE TABLE IF NOT EXISTS morphdb._morph_import_jobs (
-    job_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    job_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL,
     table_id UUID NOT NULL REFERENCES morphdb._morph_tables(table_id) ON DELETE CASCADE,
     table_name VARCHAR(255) NOT NULL,
@@ -189,7 +189,7 @@ CREATE TABLE IF NOT EXISTS morphdb._morph_import_jobs (
 
 -- System table: _morph_export_jobs
 CREATE TABLE IF NOT EXISTS morphdb._morph_export_jobs (
-    job_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    job_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL,
     table_id UUID NOT NULL REFERENCES morphdb._morph_tables(table_id) ON DELETE CASCADE,
     table_name VARCHAR(255) NOT NULL,
@@ -227,7 +227,7 @@ CREATE TABLE IF NOT EXISTS morphdb._morph_export_data (
 
 -- System table: _morph_organizations (for future hierarchical multi-tenancy)
 CREATE TABLE IF NOT EXISTS morphdb._morph_organizations (
-    org_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    org_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(100) NOT NULL,
     slug VARCHAR(100) NOT NULL UNIQUE,
     owner_id UUID,
@@ -239,7 +239,7 @@ CREATE TABLE IF NOT EXISTS morphdb._morph_organizations (
 
 -- System table: _morph_projects (central project registry)
 CREATE TABLE IF NOT EXISTS morphdb._morph_projects (
-    project_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    project_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     org_id UUID REFERENCES morphdb._morph_organizations(org_id) ON DELETE CASCADE,
     name VARCHAR(100) NOT NULL,
     slug VARCHAR(100) NOT NULL UNIQUE,

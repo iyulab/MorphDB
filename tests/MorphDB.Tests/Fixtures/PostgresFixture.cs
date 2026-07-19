@@ -41,16 +41,15 @@ public sealed class PostgresFixture : IAsyncLifetime
     }
 
     private static string GetInitSql() => """
-        -- Enable required extensions
-        CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-        CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+        -- No extensions: gen_random_uuid() is built into PostgreSQL 13+.
+        -- See ExtensionFreeBootstrapTests for the guard that keeps it that way.
 
         -- Create morphdb schema for system tables
         CREATE SCHEMA IF NOT EXISTS morphdb;
 
         -- System table: _morph_tables
         CREATE TABLE IF NOT EXISTS morphdb._morph_tables (
-            table_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            table_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             tenant_id UUID NOT NULL,
             logical_name VARCHAR(255) NOT NULL,
             physical_name VARCHAR(63) NOT NULL UNIQUE,
@@ -64,7 +63,7 @@ public sealed class PostgresFixture : IAsyncLifetime
 
         -- System table: _morph_columns
         CREATE TABLE IF NOT EXISTS morphdb._morph_columns (
-            column_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            column_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             table_id UUID NOT NULL REFERENCES morphdb._morph_tables(table_id) ON DELETE CASCADE,
             logical_name VARCHAR(255) NOT NULL,
             physical_name VARCHAR(63) NOT NULL,
@@ -91,7 +90,7 @@ public sealed class PostgresFixture : IAsyncLifetime
 
         -- System table: _morph_relations
         CREATE TABLE IF NOT EXISTS morphdb._morph_relations (
-            relation_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            relation_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             tenant_id UUID NOT NULL,
             logical_name VARCHAR(255) NOT NULL,
             source_table_id UUID NOT NULL REFERENCES morphdb._morph_tables(table_id),
@@ -108,7 +107,7 @@ public sealed class PostgresFixture : IAsyncLifetime
 
         -- System table: _morph_indexes
         CREATE TABLE IF NOT EXISTS morphdb._morph_indexes (
-            index_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            index_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             table_id UUID NOT NULL REFERENCES morphdb._morph_tables(table_id) ON DELETE CASCADE,
             logical_name VARCHAR(255) NOT NULL,
             physical_name VARCHAR(63) NOT NULL UNIQUE,
@@ -123,7 +122,7 @@ public sealed class PostgresFixture : IAsyncLifetime
 
         -- System table: _morph_changelog
         CREATE TABLE IF NOT EXISTS morphdb._morph_changelog (
-            change_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            change_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             table_id UUID NOT NULL,
             operation VARCHAR(50) NOT NULL,
             schema_version INTEGER NOT NULL,
@@ -134,7 +133,7 @@ public sealed class PostgresFixture : IAsyncLifetime
 
         -- System table: _morph_webhooks
         CREATE TABLE IF NOT EXISTS morphdb._morph_webhooks (
-            webhook_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            webhook_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             tenant_id UUID NOT NULL,
             table_id UUID NOT NULL REFERENCES morphdb._morph_tables(table_id) ON DELETE CASCADE,
             logical_name VARCHAR(255) NOT NULL,
@@ -151,7 +150,7 @@ public sealed class PostgresFixture : IAsyncLifetime
 
         -- System table: _morph_webhook_deliveries
         CREATE TABLE IF NOT EXISTS morphdb._morph_webhook_deliveries (
-            delivery_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            delivery_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             webhook_id UUID NOT NULL REFERENCES morphdb._morph_webhooks(webhook_id) ON DELETE CASCADE,
             record_id UUID,
             event VARCHAR(20) NOT NULL,
@@ -179,7 +178,7 @@ public sealed class PostgresFixture : IAsyncLifetime
 
         -- System table: _morph_import_jobs
         CREATE TABLE IF NOT EXISTS morphdb._morph_import_jobs (
-            job_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            job_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             tenant_id UUID NOT NULL,
             table_id UUID NOT NULL REFERENCES morphdb._morph_tables(table_id) ON DELETE CASCADE,
             table_name VARCHAR(255) NOT NULL,
@@ -198,7 +197,7 @@ public sealed class PostgresFixture : IAsyncLifetime
 
         -- System table: _morph_export_jobs
         CREATE TABLE IF NOT EXISTS morphdb._morph_export_jobs (
-            job_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            job_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             tenant_id UUID NOT NULL,
             table_id UUID NOT NULL REFERENCES morphdb._morph_tables(table_id) ON DELETE CASCADE,
             table_name VARCHAR(255) NOT NULL,
@@ -362,7 +361,7 @@ public sealed class PostgresFixture : IAsyncLifetime
 
         -- System table: _morph_api_keys (Phase 11: Security)
         CREATE TABLE IF NOT EXISTS morphdb._morph_api_keys (
-            key_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            key_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             tenant_id UUID NOT NULL,
             key_type INTEGER NOT NULL DEFAULT 0,
             key_hash VARCHAR(255) NOT NULL UNIQUE,
@@ -386,7 +385,7 @@ public sealed class PostgresFixture : IAsyncLifetime
 
         -- System table: _morph_views (Phase 10: Views)
         CREATE TABLE IF NOT EXISTS morphdb._morph_views (
-            view_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            view_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             tenant_id UUID NOT NULL,
             logical_name VARCHAR(255) NOT NULL,
             physical_name VARCHAR(63) NOT NULL UNIQUE,
@@ -405,7 +404,7 @@ public sealed class PostgresFixture : IAsyncLifetime
 
         -- System table: _morph_view_columns (Phase 10: Views)
         CREATE TABLE IF NOT EXISTS morphdb._morph_view_columns (
-            column_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            column_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             view_id UUID NOT NULL REFERENCES morphdb._morph_views(view_id) ON DELETE CASCADE,
             logical_name VARCHAR(255) NOT NULL,
             data_type VARCHAR(50) NOT NULL,

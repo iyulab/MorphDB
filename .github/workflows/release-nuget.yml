@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: read
+      contents: write   # needed to push the release tag
       packages: write
 
     steps:
@@ -50,3 +50,19 @@ jobs:
 
       - name: Push to GitHub Packages
         run: dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.GITHUB_TOKEN }} --source https://nuget.pkg.github.com/iyulab/index.json --skip-duplicate
+
+      # Without this the repository has no record of what was released: packages and images carried
+      # version numbers while the newest git tag stayed at v0.2.1, so anyone reading the repo to pick
+      # a version to pin found one that was several minor releases old. Only this workflow tags —
+      # release-docker.yml runs on the same trigger and would race for the same name.
+      - name: Tag the released version
+        run: |
+          TAG="v${{ steps.version.outputs.version }}"
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "$TAG already exists, leaving it alone."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"

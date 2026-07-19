@@ -287,9 +287,8 @@ public sealed class ApiTestFixture : IAsyncLifetime
         var systemTablesDdl = MorphDB.Npgsql.Ddl.DdlBuilder.BuildSystemTablesDdl(systemSchema);
         await connection.ExecuteAsync(systemTablesDdl);
 
-        // Enable uuid-ossp extension in data schema
-        await connection.ExecuteAsync(
-            $"CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\" WITH SCHEMA \"{dataSchema}\"");
+        // No extension is enabled in the data schema, mirroring PostgresSchemaLayerService:
+        // gen_random_uuid() is built in, and no column default may reference uuid_generate_v4().
     }
 
     public Task DisposeAsync()

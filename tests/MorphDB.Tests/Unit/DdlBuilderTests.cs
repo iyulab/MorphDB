@@ -1,3 +1,4 @@
+using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
 using MorphDB.Npgsql.Ddl;
 
@@ -530,6 +531,155 @@ public class DdlBuilderTests
 
         // Assert
         sql.Should().Be("ALTER TABLE \"tbl_abc\" DROP CONSTRAINT IF EXISTS \"uq_tbl_abc_col_def\"");
+    }
+
+    #endregion
+
+    #region Default value safety
+
+    private static ColumnMetadata ColumnWithDefault(string defaultValue) => new()
+    {
+        LogicalName = "col",
+        PhysicalName = "col",
+        DataType = MorphDataType.Text,
+        NativeType = "TEXT",
+        DefaultValue = defaultValue
+    };
+
+    [Theory]
+    [InlineData("gen_random_uuid()", "gen_random_uuid()")]
+    [InlineData("NOW()", "now()")]
+    [InlineData("  now()  ", "now()")]
+    public void FromMetadata_ShouldEmitSupportedFunctionDefaultsUnquoted(string declared, string expected)
+    {
+        // Act
+        var definition = ColumnDefinition.FromMetadata(ColumnWithDefault(declared));
+
+        // Assert
+        definition.DefaultExpression.Should().Be(expected);
+    }
+
+    [Theory]
+    // Closing the DEFAULT expression escapes into arbitrary DDL, executed by a role privileged
+    // enough to create extensions — a tenant user must never reach it.
+    [InlineData("'x'), extra TEXT DEFAULT ('y")]
+    [InlineData("(SELECT current_setting('is_superuser'))")]
+    // Needs the uuid-ossp extension, which managed PostgreSQL does not grant.
+    [InlineData("uuid_generate_v4()")]
+    public void FromMetadata_ShouldRejectUnsupportedFunctionDefaults(string declared)
+    {
+        // Act
+        var act = () => ColumnDefinition.FromMetadata(ColumnWithDefault(declared));
+
+        // Assert
+        act.Should().Throw<SchemaException>()
+            .Which.ErrorCode.Should().Be("INVALID_DEFAULT");
+    }
+
+    [Fact]
+    public void FromMetadata_ShouldQuoteLiteralDefaults()
+    {
+        // Act
+        var definition = ColumnDefinition.FromMetadata(ColumnWithDefault("O'Brien"));
+
+        // Assert — quoting, not rejection: a literal apostrophe is ordinary data.
+        definition.DefaultExpression.Should().Be("'O''Brien'");
+    }
+
+    #endregion
+
+    #region Check expression safety
+
+    private static List<ColumnDefinition> ColumnWithCheck(string check) =>
+    [
+        new()
+        {
+            PhysicalName = "age",
+            NativeType = "INTEGER",
+            CheckExpression = check
+        }
+    ];
+
+    [Theory]
+    [InlineData("age >= 0 AND age <= 150")]
+    [InlineData("(age > 1 OR age < 200)")]
+    [InlineData("\"c_age\" >= 0")]
+    [InlineData("status = 'a)b'")]
+    [InlineData("name ~ '^[a-z]+$'")]
+    public void BuildCreateTable_ShouldAcceptOrdinaryCheckExpressions(string check)
+    {
+        // Act
+        var sql = DdlBuilder.BuildCreateTable("t_people", ColumnWithCheck(check));
+
+        // Assert
+        sql.Should().Contain($"CHECK ({check})");
+    }
+
+    [Theory]
+    // Verified against a real PostgreSQL before this guard existed: this payload created a second
+    // column named "extra" on the table, i.e. it escaped CHECK (...) into arbitrary DDL.
+    [InlineData("1=1), extra TEXT DEFAULT ('injected'")]
+    [InlineData("age > 0; DROP TABLE t_people")]
+    [InlineData("age > 0 -- ")]
+    [InlineData("age > 'unterminated")]
+    [InlineData("(age > 0")]
+    public void BuildCreateTable_ShouldRejectEscapingCheckExpressions(string check)
+    {
+        // Act
+        var act = () => DdlBuilder.BuildCreateTable("t_people", ColumnWithCheck(check));
+
+        // Assert
+        act.Should().Throw<SchemaException>()
+            .Which.ErrorCode.Should().Be("INVALID_EXPRESSION");
+    }
+
+    [Fact]
+    public void BuildCreateIndex_ShouldRejectEscapingPredicate()
+    {
+        // Arrange — an index predicate sits at the end of its statement, so a separator is enough.
+        var index = new IndexDefinition
+        {
+            PhysicalName = "idx_users_email",
+            TablePhysicalName = "t_users",
+            Columns =
+            [
+                new IndexColumnInfo
+                {
+                    ColumnId = Guid.NewGuid(),
+                    LogicalName = "email",
+                    PhysicalName = "email",
+                    Direction = SortDirection.Ascending,
+                    NullsPosition = NullsPosition.Last
+                }
+            ],
+            IndexType = IndexType.BTree,
+            WhereClause = "1=1; DROP TABLE t_users"
+        };
+
+        // Act
+        var act = () => DdlBuilder.BuildCreateIndex(index);
+
+        // Assert
+        act.Should().Throw<SchemaException>()
+            .Which.ErrorCode.Should().Be("INVALID_EXPRESSION");
+    }
+
+    #endregion
+
+    #region Extension independence
+
+    [Fact]
+    public void BuildGlobalSystemSchemaDdl_ShouldNotRequireAnyExtension()
+    {
+        // Act
+        var sql = DdlBuilder.BuildGlobalSystemSchemaDdl();
+
+        // Assert — managed PostgreSQL gates CREATE EXTENSION behind a server-parameter allow-list,
+        // so a bootstrap that creates one cannot start there. ExtensionFreeBootstrapTests proves
+        // this against a real database; this guard fails fast even where Docker is unavailable.
+        sql.Should().NotContain("CREATE EXTENSION");
+        sql.Should().NotContain("uuid_generate_v4", "that function needs uuid-ossp; gen_random_uuid() is built in since PostgreSQL 13");
+        sql.Should().Contain("gen_random_uuid()");
     }
 
     #endregion
