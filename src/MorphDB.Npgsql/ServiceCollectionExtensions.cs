@@ -10,12 +10,10 @@ using MorphDB.Core.Encryption;
 using MorphDB.Core.Pipeline;
 using MorphDB.Core.Security;
 using MorphDB.Npgsql.Audit;
-using MorphDB.Npgsql.Backup;
 using MorphDB.Npgsql.Caching;
 using MorphDB.Npgsql.Diagnostics;
 using MorphDB.Npgsql.Encryption;
 using MorphDB.Npgsql.Infrastructure;
-using MorphDB.Npgsql.Organization;
 using MorphDB.Npgsql.Pipeline;
 using MorphDB.Npgsql.Pipeline.Transformers;
 using MorphDB.Npgsql.Pipeline.Validators;
@@ -167,16 +165,6 @@ public static partial class ServiceCollectionExtensions
         services.Configure<PiiMaskingOptions>(opt => { });
         services.AddSingleton<IPiiMaskingService, PiiMaskingService>();
         services.AddSingleton<IAuditService, PostgresAuditService>();
-
-        // Register organization repositories (Phase 21: Organization & RBAC)
-        services.AddSingleton<IOrganizationRepository, OrganizationRepository>();
-        services.AddSingleton<IMembershipRepository, MembershipRepository>();
-
-        // Register SSO repository (Phase 22: OIDC SSO)
-        services.AddSingleton<ISsoConfigurationRepository, SsoConfigurationRepository>();
-
-        // Register backup repository (Phase 23: Backup & PITR)
-        services.AddSingleton<IBackupRepository, BackupRepository>();
 
         // Register query diagnostics (Phase 24: Production Hardening)
         services.Configure<QueryDiagnosticsOptions>(opt =>

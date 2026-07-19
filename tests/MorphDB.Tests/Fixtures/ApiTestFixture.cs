@@ -17,9 +17,7 @@ using MorphDB.Core.Audit;
 using MorphDB.Core.Models;
 using MorphDB.Core.Security;
 using MorphDB.Npgsql.Audit;
-using MorphDB.Npgsql.Backup;
 using MorphDB.Npgsql.Infrastructure;
-using MorphDB.Npgsql.Organization;
 using MorphDB.Npgsql.Repositories;
 using MorphDB.Npgsql.Schema;
 using MorphDB.Npgsql.Security;
@@ -150,21 +148,6 @@ public sealed class ApiTestFixture : IAsyncLifetime
                     services.AddSingleton<IPiiMaskingService, PiiMaskingService>();
                     services.RemoveAll<IAuditService>();
                     services.AddSingleton<IAuditService, PostgresAuditService>();
-
-                    // Organization repositories
-                    services.RemoveAll<IOrganizationRepository>();
-                    services.AddSingleton<IOrganizationRepository, OrganizationRepository>();
-
-                    services.RemoveAll<IMembershipRepository>();
-                    services.AddSingleton<IMembershipRepository, MembershipRepository>();
-
-                    // SSO repository
-                    services.RemoveAll<ISsoConfigurationRepository>();
-                    services.AddSingleton<ISsoConfigurationRepository, SsoConfigurationRepository>();
-
-                    // Backup repository
-                    services.RemoveAll<IBackupRepository>();
-                    services.AddSingleton<IBackupRepository, BackupRepository>();
 
                     // Remove background services that poll specific system tables
                     // These services start before the test fixture can initialize the schema

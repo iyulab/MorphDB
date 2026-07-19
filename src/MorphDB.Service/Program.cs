@@ -70,30 +70,7 @@ try
     builder.Services.AddAuthentication(MorphDBAuthenticationExtensions.SchemeName)
         .AddMorphDB();
 
-    builder.Services.AddAuthorization(options =>
-    {
-        // Admin policy - requires admin role claim or API key with admin scope
-        options.AddPolicy("Admin", policy =>
-        {
-            policy.RequireAuthenticatedUser();
-            policy.RequireAssertion(context =>
-            {
-                // Check for admin role claim
-                if (context.User.HasClaim(c => c.Type == "role" && c.Value == "admin"))
-                    return true;
-
-                // Check for admin scope in API key
-                if (context.User.HasClaim(c => c.Type == "scope" && c.Value.Contains("admin")))
-                    return true;
-
-                // Check for system claim (internal services)
-                if (context.User.HasClaim(c => c.Type == "system" && c.Value == "true"))
-                    return true;
-
-                return false;
-            });
-        });
-    });
+    builder.Services.AddAuthorization();
 
     // Add CORS for development (allows Electron dev server and other local clients)
     builder.Services.AddCors(options =>
@@ -198,24 +175,9 @@ try
         options.BatchSize = 5;
     });
 
-    // Add rate limiting and quota services
+    // Add rate limiting
     builder.Services.Configure<RateLimitConfig>(builder.Configuration.GetSection("RateLimiting"));
     builder.Services.AddSingleton<IRateLimiter, MemoryRateLimiter>();
-    builder.Services.AddSingleton<IQuotaService, MemoryQuotaService>();
-
-    // Add organization and permission services (Phase 21: Organization & RBAC)
-    builder.Services.AddScoped<IOrganizationService, OrganizationService>();
-    builder.Services.AddSingleton<IPermissionService, PermissionService>();
-
-    // Add SSO services (Phase 22: OIDC SSO)
-    builder.Services.AddHttpClient("OidcDiscovery");
-    builder.Services.AddHttpClient("OidcToken");
-    builder.Services.AddSingleton<ISsoConfigurationService, SsoConfigurationService>();
-    builder.Services.AddSingleton<ISsoAuthenticationService, SsoAuthenticationService>();
-
-    // Add backup services (Phase 23: Backup & PITR)
-    builder.Services.Configure<BackupOptions>(builder.Configuration.GetSection("Backup"));
-    builder.Services.AddSingleton<IBackupService, BackupService>();
 
     // Add graceful shutdown with request draining (Phase 24: Production Hardening)
     builder.Services.Configure<GracefulShutdownOptions>(builder.Configuration.GetSection("GracefulShutdown"));
@@ -285,7 +247,6 @@ try
     }
 
     app.UseHttpsRedirection();
-    app.UseStaticFiles(); // Serve static files from wwwroot (Admin Dashboard)
     app.UseWebSockets(); // Required for GraphQL subscriptions
     app.UseAuthentication();
     app.UseAuthorization();
@@ -322,9 +283,6 @@ try
 
         Log.Information("Development bootstrap endpoint enabled: POST /api/dev/bootstrap");
     }
-
-    // Admin Dashboard (static files served from wwwroot/admin)
-    Log.Information("Admin Dashboard available at: /admin/index.html");
 
     // Health check endpoints
     app.MapHealthChecks("/health", new HealthCheckOptions
