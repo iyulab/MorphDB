@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace MorphDB.Client.Models;
 
 /// <summary>
@@ -59,6 +61,7 @@ public sealed class Filter
     /// <summary>
     /// Creates a new filter with the specified parameters.
     /// </summary>
+    [SetsRequiredMembers]
     public Filter(string column, FilterOperator op, object? value)
     {
         Column = column;
@@ -135,6 +138,7 @@ public sealed class OrderBy
     /// <summary>
     /// Creates a new order by specification with the specified parameters.
     /// </summary>
+    [SetsRequiredMembers]
     public OrderBy(string column, bool ascending = true)
     {
         Column = column;

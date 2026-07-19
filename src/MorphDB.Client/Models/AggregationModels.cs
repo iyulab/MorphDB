@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace MorphDB.Client.Models;
 
 /// <summary>
@@ -193,6 +195,7 @@ public sealed class AggregationFilter
     /// <summary>
     /// Creates a new filter with the specified parameters.
     /// </summary>
+    [SetsRequiredMembers]
     public AggregationFilter(string column, FilterOperator op, object? value)
     {
         Column = column;
@@ -229,6 +232,7 @@ public sealed class HavingCondition
     /// <summary>
     /// Creates a new having condition with the specified parameters.
     /// </summary>
+    [SetsRequiredMembers]
     public HavingCondition(string alias, FilterOperator op, object value)
     {
         Alias = alias;
@@ -260,6 +264,7 @@ public sealed class AggregationOrderBy
     /// <summary>
     /// Creates a new order by specification with the specified parameters.
     /// </summary>
+    [SetsRequiredMembers]
     public AggregationOrderBy(string column, bool descending = false)
     {
         Column = column;
