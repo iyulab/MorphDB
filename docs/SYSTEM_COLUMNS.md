@@ -1,8 +1,4 @@
-# MorphDB System Columns 설계
-
-> **Status**: Phase 18.6 - Accepted
-> **Author**: Project Team
-> **Created**: 2025-12-29
+# MorphDB System Columns
 
 ## 개요
 

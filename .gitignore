@@ -84,6 +84,7 @@ coverage/
 local-docs/
 research-docs/
 claudedocs/
+docs/plans/
 nul
 CLAUDE.md
 dist/
