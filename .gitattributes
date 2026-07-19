@@ -1,0 +1,24 @@
+# Keep line endings identical everywhere, working tree included.
+#
+# Without this, a Windows checkout with core.autocrlf=true has CRLF in the working tree while
+# .editorconfig asks for LF, so `dotnet format --verify-no-changes` reports an ENDOFLINE error on
+# almost every line of the repository. That noise is not merely annoying: it buries the real
+# diagnostics, so a developer cannot use the formatter locally and only learns about an import
+# ordering or whitespace problem when CI fails. CI runs on Linux, where the checkout is already LF,
+# which is why the two disagreed.
+#
+# The committed content is already LF, so this changes no history -- only what lands on disk.
+* text=auto eol=lf
+
+# Binary files must not be touched.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.dll binary
+*.exe binary
+*.snk binary
