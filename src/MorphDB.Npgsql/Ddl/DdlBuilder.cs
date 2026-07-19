@@ -854,20 +854,8 @@ public static class DdlBuilder
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
 
-            CREATE TABLE IF NOT EXISTS morphdb._morph_organizations (
-                org_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                name VARCHAR(100) NOT NULL,
-                slug VARCHAR(100) NOT NULL UNIQUE,
-                owner_id UUID,
-                settings JSONB,
-                is_active BOOLEAN NOT NULL DEFAULT true,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            );
-
             CREATE TABLE IF NOT EXISTS morphdb._morph_projects (
                 project_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                org_id UUID REFERENCES morphdb._morph_organizations(org_id) ON DELETE CASCADE,
                 name VARCHAR(100) NOT NULL,
                 slug VARCHAR(100) NOT NULL UNIQUE,
                 system_schema VARCHAR(63) NOT NULL UNIQUE,
@@ -900,10 +888,8 @@ public static class DdlBuilder
             CREATE INDEX IF NOT EXISTS idx_morph_export_jobs_tenant ON morphdb._morph_export_jobs(tenant_id);
             CREATE INDEX IF NOT EXISTS idx_morph_export_jobs_status ON morphdb._morph_export_jobs(status) WHERE status IN ('pending', 'processing');
             CREATE INDEX IF NOT EXISTS idx_morph_export_jobs_expires ON morphdb._morph_export_jobs(expires_at) WHERE expires_at IS NOT NULL;
-            CREATE INDEX IF NOT EXISTS idx_morph_projects_org ON morphdb._morph_projects(org_id);
             CREATE INDEX IF NOT EXISTS idx_morph_projects_status ON morphdb._morph_projects(status);
             CREATE INDEX IF NOT EXISTS idx_morph_projects_slug ON morphdb._morph_projects(slug);
-            CREATE INDEX IF NOT EXISTS idx_morph_organizations_slug ON morphdb._morph_organizations(slug);
 
             -- Functions
             CREATE OR REPLACE FUNCTION morphdb.notify_schema_change()

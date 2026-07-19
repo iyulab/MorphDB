@@ -14,11 +14,6 @@ public sealed class Project
     public Guid ProjectId { get; init; }
 
     /// <summary>
-    /// Optional organization ID for hierarchical multi-tenancy.
-    /// </summary>
-    public Guid? OrganizationId { get; init; }
-
-    /// <summary>
     /// Human-readable project name.
     /// </summary>
     public required string Name { get; init; }

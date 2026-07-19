@@ -1389,11 +1389,6 @@ public sealed record CreateProjectApiRequest
     public string? Slug { get; init; }
 
     /// <summary>
-    /// Optional organization ID for hierarchical multi-tenancy.
-    /// </summary>
-    public Guid? OrganizationId { get; init; }
-
-    /// <summary>
     /// Optional project settings.
     /// </summary>
     public ProjectSettingsApiModel? Settings { get; init; }
@@ -1491,7 +1486,6 @@ public sealed record RateLimitSettingsApiModel
 public sealed record ProjectApiResponse
 {
     public Guid Id { get; init; }
-    public Guid? OrganizationId { get; init; }
     public required string Name { get; init; }
     public required string Slug { get; init; }
     public required string SystemSchema { get; init; }
@@ -1504,7 +1498,6 @@ public sealed record ProjectApiResponse
     public static ProjectApiResponse FromModel(Project project) => new()
     {
         Id = project.ProjectId,
-        OrganizationId = project.OrganizationId,
         Name = project.Name,
         Slug = project.Slug,
         SystemSchema = project.SystemSchema,
@@ -1605,11 +1598,6 @@ public sealed record SchemaHealthIssueApiResponse
 /// </summary>
 public sealed record ProjectQueryParameters
 {
-    /// <summary>
-    /// Filter by organization ID.
-    /// </summary>
-    public Guid? OrganizationId { get; init; }
-
     /// <summary>
     /// Filter by status.
     /// </summary>

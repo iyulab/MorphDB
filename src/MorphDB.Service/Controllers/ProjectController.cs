@@ -17,8 +17,8 @@ internal static partial class ProjectControllerLogs
     [LoggerMessage(LogLevel.Information, "Project created: {ProjectId} ({Slug})")]
     public static partial void ProjectCreated(ILogger logger, Guid projectId, string slug);
 
-    [LoggerMessage(LogLevel.Information, "Listing projects (org={OrganizationId}, status={Status})")]
-    public static partial void ListingProjects(ILogger logger, Guid? organizationId, string? status);
+    [LoggerMessage(LogLevel.Information, "Listing projects (status={Status})")]
+    public static partial void ListingProjects(ILogger logger, string? status);
 
     [LoggerMessage(LogLevel.Information, "Getting project: {ProjectId}")]
     public static partial void GettingProject(ILogger logger, Guid projectId);
@@ -94,7 +94,6 @@ public sealed class ProjectController : ControllerBase
             {
                 Name = request.Name,
                 Slug = request.Slug,
-                OrganizationId = request.OrganizationId,
                 Settings = request.Settings?.ToModel()
             };
 
@@ -142,7 +141,7 @@ public sealed class ProjectController : ControllerBase
         [FromQuery] ProjectQueryParameters parameters,
         CancellationToken cancellationToken)
     {
-        ProjectControllerLogs.ListingProjects(_logger, parameters.OrganizationId, parameters.Status);
+        ProjectControllerLogs.ListingProjects(_logger, parameters.Status);
 
         var pageSize = Math.Clamp(parameters.PageSize, 1, 100);
         var page = Math.Max(1, parameters.Page);
@@ -156,7 +155,6 @@ public sealed class ProjectController : ControllerBase
         }
 
         var projects = await _projectService.ListProjectsAsync(
-            parameters.OrganizationId,
             status,
             offset,
             pageSize,

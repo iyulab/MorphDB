@@ -41,11 +41,11 @@ public sealed partial class ProjectRepository : IProjectRepository
 
         const string sql = """
             INSERT INTO morphdb._morph_projects (
-                project_id, org_id, name, slug, system_schema, data_schema,
+                project_id, name, slug, system_schema, data_schema,
                 settings, status, created_at, updated_at
             )
             VALUES (
-                @ProjectId, @OrganizationId, @Name, @Slug, @SystemSchema, @DataSchema,
+                @ProjectId, @Name, @Slug, @SystemSchema, @DataSchema,
                 @Settings::jsonb, @Status, NOW(), NOW()
             )
             RETURNING *
@@ -56,7 +56,6 @@ public sealed partial class ProjectRepository : IProjectRepository
         var entity = await connection.QuerySingleAsync<ProjectEntity>(sql, new
         {
             ProjectId = projectId,
-            request.OrganizationId,
             request.Name,
             Slug = slug,
             schemaNames.SystemSchema,
@@ -112,7 +111,6 @@ public sealed partial class ProjectRepository : IProjectRepository
 
     /// <inheritdoc/>
     public async Task<IReadOnlyList<Project>> ListAsync(
-        Guid? organizationId = null,
         ProjectStatus? status = null,
         int offset = 0,
         int limit = 100,
@@ -127,12 +125,6 @@ public sealed partial class ProjectRepository : IProjectRepository
         parameters.Add("DeletedStatus", (int)ProjectStatus.Deleted);
         parameters.Add("Offset", offset);
         parameters.Add("Limit", limit);
-
-        if (organizationId.HasValue)
-        {
-            sql += " AND org_id = @OrganizationId";
-            parameters.Add("OrganizationId", organizationId.Value);
-        }
 
         if (status.HasValue)
         {
@@ -239,7 +231,6 @@ public sealed partial class ProjectRepository : IProjectRepository
 
     /// <inheritdoc/>
     public async Task<int> CountAsync(
-        Guid? organizationId = null,
         ProjectStatus? status = null,
         CancellationToken cancellationToken = default)
     {
@@ -247,12 +238,6 @@ public sealed partial class ProjectRepository : IProjectRepository
 
         var parameters = new DynamicParameters();
         parameters.Add("DeletedStatus", (int)ProjectStatus.Deleted);
-
-        if (organizationId.HasValue)
-        {
-            sql += " AND org_id = @OrganizationId";
-            parameters.Add("OrganizationId", organizationId.Value);
-        }
 
         if (status.HasValue)
         {
@@ -301,7 +286,6 @@ public sealed partial class ProjectRepository : IProjectRepository
         return new Project
         {
             ProjectId = entity.ProjectId,
-            OrganizationId = entity.OrgId,
             Name = entity.Name,
             Slug = entity.Slug,
             SystemSchema = entity.SystemSchema,
@@ -323,7 +307,6 @@ public sealed partial class ProjectRepository : IProjectRepository
     private sealed class ProjectEntity
     {
         public Guid ProjectId { get; init; }
-        public Guid? OrgId { get; init; }
         public string Name { get; init; } = default!;
         public string Slug { get; init; } = default!;
         public string SystemSchema { get; init; } = default!;

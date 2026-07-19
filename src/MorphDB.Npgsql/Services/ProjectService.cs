@@ -88,13 +88,12 @@ public sealed partial class ProjectService : IProjectService
 
     /// <inheritdoc/>
     public async Task<IReadOnlyList<Project>> ListProjectsAsync(
-        Guid? organizationId = null,
         ProjectStatus? status = null,
         int offset = 0,
         int limit = 100,
         CancellationToken cancellationToken = default)
     {
-        return await _projectRepository.ListAsync(organizationId, status, offset, limit, cancellationToken);
+        return await _projectRepository.ListAsync(status, offset, limit, cancellationToken);
     }
 
     /// <inheritdoc/>

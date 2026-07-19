@@ -30,10 +30,9 @@ public interface IProjectRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Lists all projects, optionally filtered by organization.
+    /// Lists all projects, optionally filtered by status.
     /// </summary>
     Task<IReadOnlyList<Project>> ListAsync(
-        Guid? organizationId = null,
         ProjectStatus? status = null,
         int offset = 0,
         int limit = 100,
@@ -72,7 +71,6 @@ public interface IProjectRepository
     /// Gets total count of projects, optionally filtered.
     /// </summary>
     Task<int> CountAsync(
-        Guid? organizationId = null,
         ProjectStatus? status = null,
         CancellationToken cancellationToken = default);
 }
@@ -86,11 +84,6 @@ public sealed record CreateProjectRequest
     /// Optional pre-defined project ID. If null, a new GUID will be generated.
     /// </summary>
     public Guid? ProjectId { get; init; }
-
-    /// <summary>
-    /// Optional organization ID for hierarchical multi-tenancy.
-    /// </summary>
-    public Guid? OrganizationId { get; init; }
 
     /// <summary>
     /// Human-readable project name.

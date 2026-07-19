@@ -34,7 +34,6 @@ public interface IProjectService
     /// Lists all projects with optional filters.
     /// </summary>
     Task<IReadOnlyList<Project>> ListProjectsAsync(
-        Guid? organizationId = null,
         ProjectStatus? status = null,
         int offset = 0,
         int limit = 100,

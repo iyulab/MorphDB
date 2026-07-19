@@ -225,22 +225,9 @@ CREATE TABLE IF NOT EXISTS morphdb._morph_export_data (
 -- Phase 17: Schema-based Layer Separation - Global Control Plane Tables
 -- ============================================================================
 
--- System table: _morph_organizations (for future hierarchical multi-tenancy)
-CREATE TABLE IF NOT EXISTS morphdb._morph_organizations (
-    org_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name VARCHAR(100) NOT NULL,
-    slug VARCHAR(100) NOT NULL UNIQUE,
-    owner_id UUID,
-    settings JSONB,
-    is_active BOOLEAN NOT NULL DEFAULT true,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
 -- System table: _morph_projects (central project registry)
 CREATE TABLE IF NOT EXISTS morphdb._morph_projects (
     project_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    org_id UUID REFERENCES morphdb._morph_organizations(org_id) ON DELETE CASCADE,
     name VARCHAR(100) NOT NULL,
     slug VARCHAR(100) NOT NULL UNIQUE,
     system_schema VARCHAR(63) NOT NULL UNIQUE,
@@ -252,10 +239,8 @@ CREATE TABLE IF NOT EXISTS morphdb._morph_projects (
 );
 
 -- Create indexes for projects
-CREATE INDEX IF NOT EXISTS idx_morph_projects_org ON morphdb._morph_projects(org_id);
 CREATE INDEX IF NOT EXISTS idx_morph_projects_status ON morphdb._morph_projects(status);
 CREATE INDEX IF NOT EXISTS idx_morph_projects_slug ON morphdb._morph_projects(slug);
-CREATE INDEX IF NOT EXISTS idx_morph_organizations_slug ON morphdb._morph_organizations(slug);
 
 -- ============================================================================
 -- Legacy Tables (for backward compatibility with tenant-based approach)
