@@ -1,5 +1,7 @@
+using System.Net.Sockets;
 using Dapper;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Audit;
@@ -28,7 +30,7 @@ namespace MorphDB.Npgsql;
 /// <summary>
 /// Extension methods for configuring MorphDB.Npgsql services.
 /// </summary>
-public static class ServiceCollectionExtensions
+public static partial class ServiceCollectionExtensions
 {
     /// <summary>
     /// Adds MorphDB PostgreSQL services to the service collection.
@@ -202,13 +204,66 @@ public static class ServiceCollectionExtensions
     /// Call this after building the service provider, typically in application startup.
     /// Safe to call repeatedly — uses IF NOT EXISTS internally.
     /// </summary>
+    /// <remarks>
+    /// Waits for the database to accept connections rather than failing on the first refusal. Under an
+    /// orchestrator the database routinely takes a few seconds longer to accept connections than this
+    /// process takes to start, and treating that as fatal exits the container — which then never
+    /// recovers, even though the database comes up moments later. Only connection-level failures are
+    /// retried; a schema error is a real fault and surfaces immediately.
+    /// </remarks>
     public static async Task EnsureMorphDbSchemaAsync(
         this IServiceProvider services,
         CancellationToken cancellationToken = default)
     {
         var schemaLayerService = services.GetRequiredService<ISchemaLayerService>();
-        await schemaLayerService.EnsureGlobalSchemaAsync(cancellationToken);
+        var logger = services.GetService<ILoggerFactory>()?.CreateLogger("MorphDB.Startup");
+
+        var deadline = DateTimeOffset.UtcNow + SchemaBootstrapTimeout;
+        var delay = TimeSpan.FromSeconds(1);
+
+        while (true)
+        {
+            try
+            {
+                await schemaLayerService.EnsureGlobalSchemaAsync(cancellationToken);
+                return;
+            }
+            catch (Exception ex) when (IsDatabaseUnreachable(ex) && DateTimeOffset.UtcNow + delay < deadline)
+            {
+                if (logger is not null)
+                {
+                    LogDatabaseNotReachable(logger, ex.Message, delay);
+                }
+
+                await Task.Delay(delay, cancellationToken);
+                delay = TimeSpan.FromTicks(Math.Min(delay.Ticks * 2, MaxSchemaBootstrapDelay.Ticks));
+            }
+        }
     }
+
+    [LoggerMessage(LogLevel.Warning, "Database not reachable yet ({Reason}); retrying schema bootstrap in {Delay}.")]
+    private static partial void LogDatabaseNotReachable(ILogger logger, string reason, TimeSpan delay);
+
+    /// <summary>How long startup waits for the database to accept connections before giving up.</summary>
+    private static readonly TimeSpan SchemaBootstrapTimeout = TimeSpan.FromSeconds(60);
+
+    /// <summary>Caps the exponential backoff so late retries stay responsive.</summary>
+    private static readonly TimeSpan MaxSchemaBootstrapDelay = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// True when the failure is the database not being reachable yet, as opposed to a fault in the
+    /// schema itself. Npgsql reports a refused or unresolvable endpoint as a transient
+    /// <see cref="NpgsqlException"/> wrapping a socket error; a <see cref="PostgresException"/> means
+    /// the server answered and rejected something, which retrying cannot fix.
+    /// </summary>
+    private static bool IsDatabaseUnreachable(Exception exception) => exception switch
+    {
+        PostgresException => false,
+        NpgsqlException { IsTransient: true } => true,
+        NpgsqlException => exception.InnerException is SocketException or TimeoutException,
+        SocketException => true,
+        _ => false,
+    };
 
     /// <summary>
     /// Registers Write Pipeline components for Virtual Constraint enforcement.

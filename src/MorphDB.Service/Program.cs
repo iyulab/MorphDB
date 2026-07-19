@@ -222,11 +222,20 @@ try
     builder.Services.AddSingleton<GracefulShutdownService>();
     builder.Services.AddHostedService(sp => sp.GetRequiredService<GracefulShutdownService>());
 
-    // Health checks with dependencies
+    // Health checks with dependencies.
+    // Redis is optional — the schema cache only registers when a connection string is configured
+    // (see AddMorphDbNpgsql), so probing a default localhost endpoint would report the service
+    // unhealthy for a dependency it is not using, and every probe would block on the connect timeout.
+    // It is also a cache: when it is configured but down, reads fall back to the database, so it is
+    // not part of readiness.
     var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
-    builder.Services.AddHealthChecks()
-        .AddNpgSql(connectionString, name: "postgresql", tags: ["db", "ready"])
-        .AddRedis(redisConnectionString ?? "localhost:6379", name: "redis", tags: ["cache", "ready"]);
+    var healthChecks = builder.Services.AddHealthChecks()
+        .AddNpgSql(connectionString, name: "postgresql", tags: ["db", "ready"]);
+
+    if (!string.IsNullOrWhiteSpace(redisConnectionString))
+    {
+        healthChecks.AddRedis(redisConnectionString, name: "redis", tags: ["cache"]);
+    }
 
     // OpenTelemetry configuration
     var serviceName = "MorphDB.Service";
