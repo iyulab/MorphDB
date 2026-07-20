@@ -105,17 +105,8 @@ export interface ProjectApiResponse {
 export interface ProjectSettingsResponse {
   defaultLocale?: string
   timezone?: string
-  maxTables?: number
-  maxStorageBytes?: number
   enableAuditLog?: boolean
-  rateLimits?: RateLimitSettingsResponse
   metadata?: Record<string, string>
-}
-
-export interface RateLimitSettingsResponse {
-  requestsPerMinute?: number
-  requestsPerHour?: number
-  maxConcurrentConnections?: number
 }
 
 export interface ProjectStatsResponse {
@@ -390,10 +381,7 @@ export function toProjectApiResponse(raw: RawProjectApiResponse): ProjectApiResp
     settings: raw.settings ? {
       defaultLocale: raw.settings.defaultLocale,
       timezone: raw.settings.timezone,
-      maxTables: raw.settings.maxTables,
-      maxStorageBytes: raw.settings.maxStorageBytes,
       enableAuditLog: raw.settings.enableAuditLog,
-      rateLimits: raw.settings.rateLimits,
       metadata: raw.settings.metadata
     } : undefined,
     createdAt: raw.createdAt,

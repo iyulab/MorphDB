@@ -22,7 +22,6 @@ export function ProjectDialog({
     name: '',
     slug: '',
     enableAuditLog: false,
-    maxTables: 100,
     timezone: '',
     defaultLocale: ''
   })
@@ -36,7 +35,6 @@ export function ProjectDialog({
           name: project.name,
           slug: project.slug,
           enableAuditLog: project.settings?.enableAuditLog ?? false,
-          maxTables: project.settings?.maxTables ?? 100,
           timezone: project.settings?.timezone ?? '',
           defaultLocale: project.settings?.defaultLocale ?? ''
         })
@@ -45,7 +43,6 @@ export function ProjectDialog({
           name: '',
           slug: '',
           enableAuditLog: false,
-          maxTables: 100,
           timezone: '',
           defaultLocale: ''
         })
@@ -88,7 +85,6 @@ export function ProjectDialog({
     try {
       const settings: ProjectSettings = {
         enableAuditLog: formData.enableAuditLog,
-        maxTables: formData.maxTables,
         timezone: formData.timezone || undefined,
         defaultLocale: formData.defaultLocale || undefined
       }
@@ -180,19 +176,6 @@ export function ProjectDialog({
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs text-muted-foreground mb-1">
-                  Max Tables
-                </label>
-                <input
-                  type="number"
-                  value={formData.maxTables}
-                  onChange={(e) => setFormData(prev => ({ ...prev, maxTables: parseInt(e.target.value) || 100 }))}
-                  min={1}
-                  max={1000}
-                  className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-muted-foreground mb-1">
                   Timezone
                 </label>
                 <input
@@ -203,19 +186,18 @@ export function ProjectDialog({
                   className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
-            </div>
-
-            <div>
-              <label className="block text-xs text-muted-foreground mb-1">
-                Default Locale
-              </label>
-              <input
-                type="text"
-                value={formData.defaultLocale}
-                onChange={(e) => setFormData(prev => ({ ...prev, defaultLocale: e.target.value }))}
-                placeholder="en-US"
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              />
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1">
+                  Default Locale
+                </label>
+                <input
+                  type="text"
+                  value={formData.defaultLocale}
+                  onChange={(e) => setFormData(prev => ({ ...prev, defaultLocale: e.target.value }))}
+                  placeholder="en-US"
+                  className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
             </div>
           </div>
 

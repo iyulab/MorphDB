@@ -77,45 +77,9 @@ public sealed class ProjectSettings
     public bool EnableAuditLog { get; init; } = true;
 
     /// <summary>
-    /// Maximum number of tables allowed in this project.
-    /// </summary>
-    public int? MaxTables { get; init; }
-
-    /// <summary>
-    /// Maximum storage size in bytes for this project.
-    /// </summary>
-    public long? MaxStorageBytes { get; init; }
-
-    /// <summary>
-    /// Rate limiting configuration.
-    /// </summary>
-    public RateLimitSettings? RateLimits { get; init; }
-
-    /// <summary>
     /// Custom metadata/tags for the project.
     /// </summary>
     public Dictionary<string, string>? Metadata { get; init; }
-}
-
-/// <summary>
-/// Rate limiting settings for a project.
-/// </summary>
-public sealed class RateLimitSettings
-{
-    /// <summary>
-    /// Maximum requests per minute.
-    /// </summary>
-    public int? RequestsPerMinute { get; init; }
-
-    /// <summary>
-    /// Maximum requests per hour.
-    /// </summary>
-    public int? RequestsPerHour { get; init; }
-
-    /// <summary>
-    /// Maximum concurrent connections.
-    /// </summary>
-    public int? MaxConcurrentConnections { get; init; }
 }
 
 /// <summary>

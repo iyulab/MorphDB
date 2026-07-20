@@ -178,9 +178,6 @@ export function ProjectCard({
                 Audit On
               </span>
             )}
-            {project.settings.maxTables && (
-              <span>Max {project.settings.maxTables} tables</span>
-            )}
           </div>
         </div>
       )}

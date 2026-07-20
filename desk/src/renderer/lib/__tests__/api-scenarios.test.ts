@@ -715,13 +715,8 @@ describe('API Scenario: Project Management', () => {
       dataSchema: 'morphdb_data',
       status: 'Active',
       settings: {
-        maxTables: 100,
-        maxStorageBytes: 10737418240, // 10GB
         enableAuditLog: true,
-        rateLimits: {
-          requestsPerMinute: 1000,
-          requestsPerHour: 50000,
-        },
+        timezone: 'Asia/Seoul',
       },
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -733,8 +728,8 @@ describe('API Scenario: Project Management', () => {
       name: 'E-Commerce Platform',
       slug: 'ecommerce',
       settings: {
-        maxTables: 100,
         enableAuditLog: true,
+        timezone: 'Asia/Seoul',
       },
     })
 

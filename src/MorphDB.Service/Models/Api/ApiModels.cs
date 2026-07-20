@@ -1418,9 +1418,6 @@ public sealed record ProjectSettingsApiModel
     public string? DefaultLocale { get; init; }
     public string? Timezone { get; init; }
     public bool EnableAuditLog { get; init; } = true;
-    public int? MaxTables { get; init; }
-    public long? MaxStorageBytes { get; init; }
-    public RateLimitSettingsApiModel? RateLimits { get; init; }
     public Dictionary<string, string>? Metadata { get; init; }
 
     public static ProjectSettingsApiModel? FromModel(ProjectSettings? settings)
@@ -1432,9 +1429,6 @@ public sealed record ProjectSettingsApiModel
             DefaultLocale = settings.DefaultLocale,
             Timezone = settings.Timezone,
             EnableAuditLog = settings.EnableAuditLog,
-            MaxTables = settings.MaxTables,
-            MaxStorageBytes = settings.MaxStorageBytes,
-            RateLimits = RateLimitSettingsApiModel.FromModel(settings.RateLimits),
             Metadata = settings.Metadata
         };
     }
@@ -1444,39 +1438,7 @@ public sealed record ProjectSettingsApiModel
         DefaultLocale = DefaultLocale,
         Timezone = Timezone,
         EnableAuditLog = EnableAuditLog,
-        MaxTables = MaxTables,
-        MaxStorageBytes = MaxStorageBytes,
-        RateLimits = RateLimits?.ToModel(),
         Metadata = Metadata
-    };
-}
-
-/// <summary>
-/// Rate limit settings API model.
-/// </summary>
-public sealed record RateLimitSettingsApiModel
-{
-    public int? RequestsPerMinute { get; init; }
-    public int? RequestsPerHour { get; init; }
-    public int? MaxConcurrentConnections { get; init; }
-
-    public static RateLimitSettingsApiModel? FromModel(RateLimitSettings? settings)
-    {
-        if (settings is null)
-            return null;
-        return new RateLimitSettingsApiModel
-        {
-            RequestsPerMinute = settings.RequestsPerMinute,
-            RequestsPerHour = settings.RequestsPerHour,
-            MaxConcurrentConnections = settings.MaxConcurrentConnections
-        };
-    }
-
-    public RateLimitSettings ToModel() => new()
-    {
-        RequestsPerMinute = RequestsPerMinute,
-        RequestsPerHour = RequestsPerHour,
-        MaxConcurrentConnections = MaxConcurrentConnections
     };
 }
 

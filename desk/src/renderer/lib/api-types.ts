@@ -52,17 +52,8 @@ export interface RawProjectApiResponse {
 export interface RawProjectSettingsApiModel {
   defaultLocale?: string
   timezone?: string
-  maxTables?: number
-  maxStorageBytes?: number
   enableAuditLog?: boolean
-  rateLimits?: RawRateLimitSettingsApiModel
   metadata?: Record<string, string>
-}
-
-export interface RawRateLimitSettingsApiModel {
-  requestsPerMinute?: number
-  requestsPerHour?: number
-  maxConcurrentConnections?: number
 }
 
 export interface RawCreateProjectApiRequest {

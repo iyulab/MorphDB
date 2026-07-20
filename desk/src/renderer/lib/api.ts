@@ -107,14 +107,7 @@ export type ProjectStatus = 'Active' | 'Suspended' | 'Archived'
 export type ProjectSettings = {
   defaultLocale?: string
   timezone?: string
-  maxTables?: number
-  maxStorageBytes?: number
   enableAuditLog?: boolean
-  rateLimits?: {
-    requestsPerMinute?: number
-    requestsPerHour?: number
-    maxConcurrentConnections?: number
-  }
   metadata?: Record<string, string>
 }
 
