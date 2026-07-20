@@ -9,7 +9,7 @@ namespace MorphDB.Npgsql.Ddl;
 
 /// <summary>
 /// Builds DDL statements for PostgreSQL dynamic tables.
-/// Supports schema-qualified names for multi-tenant isolation.
+/// Supports schema-qualified names, which is how one project's tables stay out of another's.
 /// </summary>
 public static class DdlBuilder
 {
@@ -598,7 +598,7 @@ public static class DdlBuilder
         sb.Append(CultureInfo.InvariantCulture, $"""
             CREATE TABLE {QuoteIdentifier(systemSchema)}."_views" (
                 "view_id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                "tenant_id" UUID NOT NULL,
+                "project_id" UUID NOT NULL,
                 "logical_name" VARCHAR(255) NOT NULL,
                 "physical_name" VARCHAR(63) NOT NULL,
                 "definition" JSONB NOT NULL,
@@ -642,7 +642,7 @@ public static class DdlBuilder
             CREATE INDEX "idx__audit_logs_timestamp" ON {QuoteIdentifier(systemSchema)}."_audit_logs"("timestamp" DESC);
             CREATE INDEX "idx__audit_logs_category" ON {QuoteIdentifier(systemSchema)}."_audit_logs"("category", "timestamp" DESC);
             CREATE INDEX "idx__audit_logs_actor" ON {QuoteIdentifier(systemSchema)}."_audit_logs"("actor_id", "timestamp" DESC);
-            CREATE UNIQUE INDEX "idx__views_logical_name_active" ON {QuoteIdentifier(systemSchema)}."_views"("tenant_id", "logical_name") WHERE is_active = true;
+            CREATE UNIQUE INDEX "idx__views_logical_name_active" ON {QuoteIdentifier(systemSchema)}."_views"("project_id", "logical_name") WHERE is_active = true;
             CREATE INDEX "idx__view_columns_view_id" ON {QuoteIdentifier(systemSchema)}."_view_columns"("view_id");
             """);
 
@@ -663,7 +663,7 @@ public static class DdlBuilder
 
             CREATE TABLE IF NOT EXISTS morphdb._morph_tables (
                 table_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                tenant_id UUID NOT NULL,
+                project_id UUID NOT NULL,
                 logical_name VARCHAR(255) NOT NULL,
                 physical_name VARCHAR(63) NOT NULL UNIQUE,
                 schema_version INTEGER NOT NULL DEFAULT 1,
@@ -671,7 +671,7 @@ public static class DdlBuilder
                 is_active BOOLEAN NOT NULL DEFAULT true,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                UNIQUE (tenant_id, logical_name)
+                UNIQUE (project_id, logical_name)
             );
 
             CREATE TABLE IF NOT EXISTS morphdb._morph_columns (
@@ -701,7 +701,7 @@ public static class DdlBuilder
 
             CREATE TABLE IF NOT EXISTS morphdb._morph_relations (
                 relation_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                tenant_id UUID NOT NULL,
+                project_id UUID NOT NULL,
                 logical_name VARCHAR(255) NOT NULL,
                 source_table_id UUID NOT NULL REFERENCES morphdb._morph_tables(table_id),
                 source_column_id UUID NOT NULL REFERENCES morphdb._morph_columns(column_id),
@@ -741,7 +741,7 @@ public static class DdlBuilder
 
             CREATE TABLE IF NOT EXISTS morphdb._morph_api_keys (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                tenant_id UUID NOT NULL,
+                project_id UUID NOT NULL,
                 key_type INTEGER NOT NULL DEFAULT 0,
                 key_hash VARCHAR(255) NOT NULL,
                 key_prefix VARCHAR(50) NOT NULL,
@@ -756,7 +756,7 @@ public static class DdlBuilder
 
             CREATE TABLE IF NOT EXISTS morphdb._morph_webhooks (
                 webhook_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                tenant_id UUID NOT NULL,
+                project_id UUID NOT NULL,
                 table_id UUID NOT NULL REFERENCES morphdb._morph_tables(table_id) ON DELETE CASCADE,
                 logical_name VARCHAR(255) NOT NULL,
                 url VARCHAR(2048) NOT NULL,
@@ -767,7 +767,7 @@ public static class DdlBuilder
                 is_active BOOLEAN NOT NULL DEFAULT true,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                UNIQUE (tenant_id, logical_name)
+                UNIQUE (project_id, logical_name)
             );
 
             CREATE TABLE IF NOT EXISTS morphdb._morph_webhook_deliveries (
@@ -790,7 +790,7 @@ public static class DdlBuilder
                 dlq_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 delivery_id UUID NOT NULL,
                 webhook_id UUID NOT NULL REFERENCES morphdb._morph_webhooks(webhook_id) ON DELETE CASCADE,
-                tenant_id UUID NOT NULL,
+                project_id UUID NOT NULL,
                 record_id UUID,
                 event VARCHAR(20) NOT NULL,
                 payload JSONB NOT NULL,
@@ -807,7 +807,7 @@ public static class DdlBuilder
 
             CREATE TABLE IF NOT EXISTS morphdb._morph_import_jobs (
                 job_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                tenant_id UUID NOT NULL,
+                project_id UUID NOT NULL,
                 table_id UUID NOT NULL REFERENCES morphdb._morph_tables(table_id) ON DELETE CASCADE,
                 table_name VARCHAR(255) NOT NULL,
                 format VARCHAR(20) NOT NULL,
@@ -825,7 +825,7 @@ public static class DdlBuilder
 
             CREATE TABLE IF NOT EXISTS morphdb._morph_export_jobs (
                 job_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                tenant_id UUID NOT NULL,
+                project_id UUID NOT NULL,
                 table_id UUID NOT NULL REFERENCES morphdb._morph_tables(table_id) ON DELETE CASCADE,
                 table_name VARCHAR(255) NOT NULL,
                 format VARCHAR(20) NOT NULL,
@@ -868,7 +868,7 @@ public static class DdlBuilder
 
             CREATE TABLE IF NOT EXISTS morphdb._morph_security_policies (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                tenant_id UUID NOT NULL,
+                project_id UUID NOT NULL,
                 table_id UUID NOT NULL REFERENCES morphdb._morph_tables(table_id) ON DELETE CASCADE,
                 name VARCHAR(255) NOT NULL,
                 description TEXT,
@@ -878,12 +878,12 @@ public static class DdlBuilder
                 ordinal_position INTEGER NOT NULL DEFAULT 0,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                UNIQUE (tenant_id, table_id, name)
+                UNIQUE (project_id, table_id, name)
             );
 
             CREATE TABLE IF NOT EXISTS morphdb._morph_views (
                 view_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                tenant_id UUID NOT NULL,
+                project_id UUID NOT NULL,
                 logical_name VARCHAR(255) NOT NULL,
                 physical_name VARCHAR(63) NOT NULL UNIQUE,
                 definition JSONB NOT NULL,
@@ -896,7 +896,7 @@ public static class DdlBuilder
                 is_active BOOLEAN NOT NULL DEFAULT true,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                UNIQUE (tenant_id, logical_name)
+                UNIQUE (project_id, logical_name)
             );
 
             CREATE TABLE IF NOT EXISTS morphdb._morph_view_columns (
@@ -910,31 +910,31 @@ public static class DdlBuilder
             );
 
             -- Indexes (IF NOT EXISTS)
-            CREATE INDEX IF NOT EXISTS idx_morph_tables_tenant ON morphdb._morph_tables(tenant_id);
+            CREATE INDEX IF NOT EXISTS idx_morph_tables_project ON morphdb._morph_tables(project_id);
             CREATE INDEX IF NOT EXISTS idx_morph_columns_table ON morphdb._morph_columns(table_id);
             CREATE INDEX IF NOT EXISTS idx_morph_relations_source ON morphdb._morph_relations(source_table_id);
             CREATE INDEX IF NOT EXISTS idx_morph_relations_target ON morphdb._morph_relations(target_table_id);
             CREATE INDEX IF NOT EXISTS idx_morph_changelog_table ON morphdb._morph_changelog(table_id);
-            CREATE INDEX IF NOT EXISTS idx_morph_api_keys_tenant ON morphdb._morph_api_keys(tenant_id);
+            CREATE INDEX IF NOT EXISTS idx_morph_api_keys_project ON morphdb._morph_api_keys(project_id);
             CREATE INDEX IF NOT EXISTS idx_morph_api_keys_prefix ON morphdb._morph_api_keys(key_prefix);
-            CREATE INDEX IF NOT EXISTS idx_morph_webhooks_tenant ON morphdb._morph_webhooks(tenant_id);
+            CREATE INDEX IF NOT EXISTS idx_morph_webhooks_project ON morphdb._morph_webhooks(project_id);
             CREATE INDEX IF NOT EXISTS idx_morph_webhooks_table ON morphdb._morph_webhooks(table_id);
             CREATE INDEX IF NOT EXISTS idx_morph_webhook_deliveries_webhook ON morphdb._morph_webhook_deliveries(webhook_id);
             CREATE INDEX IF NOT EXISTS idx_morph_webhook_deliveries_status ON morphdb._morph_webhook_deliveries(status) WHERE status IN ('pending', 'retrying');
             CREATE INDEX IF NOT EXISTS idx_morph_webhook_deliveries_next_retry ON morphdb._morph_webhook_deliveries(next_retry_at) WHERE next_retry_at IS NOT NULL;
             CREATE INDEX IF NOT EXISTS idx_morph_webhook_dlq_webhook_id ON morphdb._morph_webhook_dlq(webhook_id);
-            CREATE INDEX IF NOT EXISTS idx_morph_webhook_dlq_tenant_id ON morphdb._morph_webhook_dlq(tenant_id);
+            CREATE INDEX IF NOT EXISTS idx_morph_webhook_dlq_project_id ON morphdb._morph_webhook_dlq(project_id);
             CREATE INDEX IF NOT EXISTS idx_morph_webhook_dlq_status ON morphdb._morph_webhook_dlq(status);
             CREATE INDEX IF NOT EXISTS idx_morph_webhook_dlq_dlq_at ON morphdb._morph_webhook_dlq(dlq_at);
-            CREATE INDEX IF NOT EXISTS idx_morph_import_jobs_tenant ON morphdb._morph_import_jobs(tenant_id);
+            CREATE INDEX IF NOT EXISTS idx_morph_import_jobs_project ON morphdb._morph_import_jobs(project_id);
             CREATE INDEX IF NOT EXISTS idx_morph_import_jobs_status ON morphdb._morph_import_jobs(status) WHERE status IN ('pending', 'processing');
-            CREATE INDEX IF NOT EXISTS idx_morph_export_jobs_tenant ON morphdb._morph_export_jobs(tenant_id);
+            CREATE INDEX IF NOT EXISTS idx_morph_export_jobs_project ON morphdb._morph_export_jobs(project_id);
             CREATE INDEX IF NOT EXISTS idx_morph_export_jobs_status ON morphdb._morph_export_jobs(status) WHERE status IN ('pending', 'processing');
             CREATE INDEX IF NOT EXISTS idx_morph_export_jobs_expires ON morphdb._morph_export_jobs(expires_at) WHERE expires_at IS NOT NULL;
             CREATE INDEX IF NOT EXISTS idx_morph_projects_status ON morphdb._morph_projects(status);
             CREATE INDEX IF NOT EXISTS idx_morph_projects_slug ON morphdb._morph_projects(slug);
-            CREATE INDEX IF NOT EXISTS idx_security_policies_tenant_table ON morphdb._morph_security_policies(tenant_id, table_id) WHERE is_active = true;
-            CREATE INDEX IF NOT EXISTS idx_morph_views_tenant ON morphdb._morph_views(tenant_id);
+            CREATE INDEX IF NOT EXISTS idx_security_policies_project_table ON morphdb._morph_security_policies(project_id, table_id) WHERE is_active = true;
+            CREATE INDEX IF NOT EXISTS idx_morph_views_project ON morphdb._morph_views(project_id);
             CREATE INDEX IF NOT EXISTS idx_morph_view_columns_view ON morphdb._morph_view_columns(view_id);
 
             -- Functions
@@ -1044,7 +1044,7 @@ public static class DdlBuilder
     /// statement, and an index predicate sits at the end of its statement where a separator is all
     /// an escape would need.
     /// Anything this cannot account for is refused rather than passed through — the expression
-    /// reaches DDL verbatim and is executed by a role that a tenant must never borrow.
+    /// reaches DDL verbatim and is executed by a role that a project must never borrow.
     /// </remarks>
     private static void ValidateInlineExpression(string expression, string clause)
     {

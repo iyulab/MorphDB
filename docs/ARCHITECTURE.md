@@ -49,7 +49,7 @@ MorphDB is an abstraction layer over PostgreSQL that enables runtime schema chan
 │  ├── _morph_indexes    Index definitions                    │
 │  └── _morph_changelog  DDL change history                   │
 │                                                             │
-│  tenant_{id} schema (User Data)                             │
+│  project_{id} schema (User Data)                             │
 │  └── tbl_* (hash-based table names)                         │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -125,7 +125,7 @@ PostgresDataService
 
 ## Multi-Tenancy
 
-Each tenant has isolated data in a separate PostgreSQL schema:
+Each project has isolated data in a separate PostgreSQL schema:
 
 ```
 morphdb (shared)
@@ -133,12 +133,12 @@ morphdb (shared)
 ├── _morph_columns
 └── ...
 
-tenant_abc123 (tenant-specific)
+project_abc123 (project-specific)
 ├── tbl_a7f3b2c1 (customers)
 ├── tbl_b8c4d5e6 (orders)
 └── ...
 
-tenant_xyz789 (tenant-specific)
+project_xyz789 (project-specific)
 ├── tbl_a7f3b2c1 (products)
 └── ...
 ```
@@ -146,11 +146,11 @@ tenant_xyz789 (tenant-specific)
 ## Authentication
 
 ```
-API Key Header → ApiKeyAuthenticationHandler → Claims (TenantId) → Controllers
+API Key Header → ApiKeyAuthenticationHandler → Claims (ProjectId) → Controllers
 ```
 
 - **API Key**: Stored in `X-API-Key` header
-- **Tenant Resolution**: Extracted from API key claims via `ITenantContextAccessor`
+- **Project Resolution**: Extracted from API key claims via `IProjectContextAccessor`
 
 ## Virtual Constraint Architecture
 

@@ -9,9 +9,9 @@ namespace MorphDB.Core.Pipeline;
 public interface IWriteContext
 {
     /// <summary>
-    /// The tenant ID for this operation.
+    /// The project ID for this operation.
     /// </summary>
-    Guid TenantId { get; }
+    Guid ProjectId { get; }
 
     /// <summary>
     /// The table metadata.
@@ -85,7 +85,7 @@ public enum WriteOperationType
 /// </summary>
 public sealed class WriteContext : IWriteContext
 {
-    public Guid TenantId { get; init; }
+    public Guid ProjectId { get; init; }
     public required TableMetadata Table { get; init; }
     public WriteOperationType OperationType { get; init; }
     public Guid? RecordId { get; init; }

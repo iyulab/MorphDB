@@ -11,14 +11,14 @@ public interface IRollupResolver
     /// <summary>
     /// Resolves rollup values for a set of records.
     /// </summary>
-    /// <param name="tenantId">The tenant ID.</param>
+    /// <param name="projectId">The project ID.</param>
     /// <param name="sourceTable">The source table metadata.</param>
     /// <param name="records">Records containing the primary key values.</param>
     /// <param name="rollupColumns">Rollup column configurations to resolve.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Records enriched with resolved rollup values.</returns>
     Task<IReadOnlyList<IDictionary<string, object?>>> ResolveRollupValuesAsync(
-        Guid tenantId,
+        Guid projectId,
         TableMetadata sourceTable,
         IReadOnlyList<IDictionary<string, object?>> records,
         IReadOnlyList<RollupColumnInfo> rollupColumns,
@@ -27,13 +27,13 @@ public interface IRollupResolver
     /// <summary>
     /// Builds SQL subquery for rollup columns to include in a query.
     /// </summary>
-    /// <param name="tenantId">The tenant ID.</param>
+    /// <param name="projectId">The project ID.</param>
     /// <param name="sourceTable">The source table metadata.</param>
     /// <param name="rollupColumns">Rollup columns to resolve.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>SQL fragments for rollup subqueries.</returns>
     Task<RollupQueryExpansion> BuildRollupExpansionAsync(
-        Guid tenantId,
+        Guid projectId,
         TableMetadata sourceTable,
         IReadOnlyList<RollupColumnInfo> rollupColumns,
         CancellationToken cancellationToken = default);
@@ -41,13 +41,13 @@ public interface IRollupResolver
     /// <summary>
     /// Validates a rollup column configuration.
     /// </summary>
-    /// <param name="tenantId">The tenant ID.</param>
+    /// <param name="projectId">The project ID.</param>
     /// <param name="sourceTable">The source table containing the rollup column.</param>
     /// <param name="config">The rollup configuration to validate.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Validation result with any errors.</returns>
     Task<RollupValidationResult> ValidateRollupConfigAsync(
-        Guid tenantId,
+        Guid projectId,
         TableMetadata sourceTable,
         RollupColumnConfig config,
         CancellationToken cancellationToken = default);

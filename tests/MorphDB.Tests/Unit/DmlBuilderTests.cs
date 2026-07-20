@@ -202,15 +202,15 @@ public class DmlBuilderTests
     public void BuildUpsert_WithCompositeKey_ShouldGenerateValidSql()
     {
         // Arrange
-        var columns = new[] { "tenant_id", "user_id", "role" };
+        var columns = new[] { "project_id", "user_id", "role" };
         var parameters = new[] { "@p0", "@p1", "@p2" };
-        var keyColumns = new[] { "tenant_id", "user_id" };
+        var keyColumns = new[] { "project_id", "user_id" };
 
         // Act
-        var sql = DmlBuilder.BuildUpsert("t_tenant_users", columns, parameters, keyColumns);
+        var sql = DmlBuilder.BuildUpsert("t_project_users", columns, parameters, keyColumns);
 
         // Assert
-        sql.Should().Contain("ON CONFLICT (\"tenant_id\", \"user_id\")");
+        sql.Should().Contain("ON CONFLICT (\"project_id\", \"user_id\")");
         sql.Should().Contain("\"role\" = EXCLUDED.\"role\"");
     }
 

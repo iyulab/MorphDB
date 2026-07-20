@@ -6,24 +6,24 @@ using MorphDB.Core.Abstractions;
 namespace MorphDB.Service.OData;
 
 /// <summary>
-/// Provides and caches EDM models per tenant.
+/// Provides and caches EDM models per project.
 /// </summary>
 public interface IEdmModelProvider
 {
     /// <summary>
-    /// Gets the EDM model for the specified tenant.
+    /// Gets the EDM model for the specified project.
     /// </summary>
-    Task<IEdmModel> GetModelAsync(Guid tenantId, CancellationToken cancellationToken = default);
+    Task<IEdmModel> GetModelAsync(Guid projectId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Gets the EDM model with entity set to table name mapping for the specified tenant.
+    /// Gets the EDM model with entity set to table name mapping for the specified project.
     /// </summary>
-    Task<EdmModelBuildResult> GetModelWithMappingAsync(Guid tenantId, CancellationToken cancellationToken = default);
+    Task<EdmModelBuildResult> GetModelWithMappingAsync(Guid projectId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Invalidates the cached model for the specified tenant.
+    /// Invalidates the cached model for the specified project.
     /// </summary>
-    void InvalidateModel(Guid tenantId);
+    void InvalidateModel(Guid projectId);
 
     /// <summary>
     /// Invalidates all cached models.
@@ -49,15 +49,15 @@ public sealed class CachingEdmModelProvider : IEdmModelProvider
         _cacheExpiration = cacheExpiration ?? TimeSpan.FromMinutes(5);
     }
 
-    public async Task<IEdmModel> GetModelAsync(Guid tenantId, CancellationToken cancellationToken = default)
+    public async Task<IEdmModel> GetModelAsync(Guid projectId, CancellationToken cancellationToken = default)
     {
-        var result = await GetModelWithMappingAsync(tenantId, cancellationToken);
+        var result = await GetModelWithMappingAsync(projectId, cancellationToken);
         return result.Model;
     }
 
-    public async Task<EdmModelBuildResult> GetModelWithMappingAsync(Guid tenantId, CancellationToken cancellationToken = default)
+    public async Task<EdmModelBuildResult> GetModelWithMappingAsync(Guid projectId, CancellationToken cancellationToken = default)
     {
-        if (_cache.TryGetValue(tenantId, out var cached) && !cached.IsExpired)
+        if (_cache.TryGetValue(projectId, out var cached) && !cached.IsExpired)
         {
             return cached.Result;
         }
@@ -65,17 +65,17 @@ public sealed class CachingEdmModelProvider : IEdmModelProvider
         // Create a scope to resolve scoped dependencies
         await using var scope = _scopeFactory.CreateAsyncScope();
         var schemaManager = scope.ServiceProvider.GetRequiredService<ISchemaManager>();
-        var tables = await schemaManager.ListTablesAsync(tenantId, cancellationToken);
+        var tables = await schemaManager.ListTablesAsync(projectId, cancellationToken);
 
         var result = DynamicEdmModelBuilder.BuildModelWithMapping(tables);
-        _cache[tenantId] = new CachedModel(result, DateTimeOffset.UtcNow.Add(_cacheExpiration));
+        _cache[projectId] = new CachedModel(result, DateTimeOffset.UtcNow.Add(_cacheExpiration));
 
         return result;
     }
 
-    public void InvalidateModel(Guid tenantId)
+    public void InvalidateModel(Guid projectId)
     {
-        _cache.TryRemove(tenantId, out _);
+        _cache.TryRemove(projectId, out _);
     }
 
     public void InvalidateAll()

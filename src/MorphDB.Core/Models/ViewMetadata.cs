@@ -10,7 +10,7 @@ namespace MorphDB.Core.Models;
 public sealed record ViewMetadata
 {
     public Guid ViewId { get; init; }
-    public Guid TenantId { get; init; }
+    public Guid ProjectId { get; init; }
 
     /// <summary>
     /// User-facing name for the view.

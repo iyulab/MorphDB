@@ -293,7 +293,7 @@ if (-not $SkipApi) {
             Write-Host "  API Key : " -NoNewline; Write-Host $bootstrapResponse.apiKey -ForegroundColor Cyan
             Write-Host ""
             Write-Host "  Use this API Key in the MorphDB Desk connection dialog." -ForegroundColor Gray
-            Write-Host "  (Tenant ID is automatically detected from the API Key)" -ForegroundColor Gray
+            Write-Host "  (Project ID is automatically detected from the API Key)" -ForegroundColor Gray
             Write-Host ""
 
             # Save to a file for convenience
@@ -303,7 +303,7 @@ if (-not $SkipApi) {
 # Generated: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
 # WARNING: Do not commit this file!
 
-TENANT_ID=$($bootstrapResponse.tenantId)
+PROJECT_ID=$($bootstrapResponse.projectId)
 API_KEY=$($bootstrapResponse.apiKey)
 API_URL=http://localhost:5400
 "@ | Out-File -FilePath $credFile -Encoding UTF8

@@ -58,7 +58,7 @@ public class DdlBuilderTests
         {
             new()
             {
-                PhysicalName = "tenant_id",
+                PhysicalName = "project_id",
                 NativeType = "UUID",
                 IsNullable = false,
                 IsPrimaryKey = true
@@ -80,10 +80,10 @@ public class DdlBuilderTests
         };
 
         // Act
-        var sql = DdlBuilder.BuildCreateTable("t_tenant_users", columns);
+        var sql = DdlBuilder.BuildCreateTable("t_project_users", columns);
 
         // Assert
-        sql.Should().Contain("PRIMARY KEY (\"tenant_id\", \"user_id\")");
+        sql.Should().Contain("PRIMARY KEY (\"project_id\", \"user_id\")");
     }
 
     [Fact]
@@ -517,10 +517,10 @@ public class DdlBuilderTests
     public void BuildAlterColumnType_WithSchema_ShouldQualifyTableName()
     {
         // Act
-        var sql = DdlBuilder.BuildAlterColumnType("tbl_abc", "col_def", "text", "tenant_schema");
+        var sql = DdlBuilder.BuildAlterColumnType("tbl_abc", "col_def", "text", "project_schema");
 
         // Assert
-        sql.Should().Be("ALTER TABLE \"tenant_schema\".\"tbl_abc\" ALTER COLUMN \"col_def\" TYPE text USING \"col_def\"::text");
+        sql.Should().Be("ALTER TABLE \"project_schema\".\"tbl_abc\" ALTER COLUMN \"col_def\" TYPE text USING \"col_def\"::text");
     }
 
     [Fact]
@@ -564,7 +564,7 @@ public class DdlBuilderTests
 
     [Theory]
     // Closing the DEFAULT expression escapes into arbitrary DDL, executed by a role privileged
-    // enough to create extensions — a tenant user must never reach it.
+    // enough to create extensions — a project user must never reach it.
     [InlineData("'x'), extra TEXT DEFAULT ('y")]
     [InlineData("(SELECT current_setting('is_superuser'))")]
     // Needs the uuid-ossp extension, which managed PostgreSQL does not grant.

@@ -22,7 +22,7 @@ class HttpClient:
     def __init__(
         self,
         base_url: str,
-        tenant_id: str,
+        project_id: str,
         api_key: str | None = None,
         jwt_token: str | None = None,
         timeout: float = 30.0,
@@ -30,7 +30,7 @@ class HttpClient:
         retry_delay: float = 1.0,
     ) -> None:
         self.base_url = base_url.rstrip("/")
-        self.tenant_id = tenant_id
+        self.project_id = project_id
         self.api_key = api_key
         self.jwt_token = jwt_token
         self.timeout = timeout
@@ -42,7 +42,7 @@ class HttpClient:
         """Get request headers."""
         headers = {
             "Content-Type": "application/json",
-            "X-Tenant-Id": self.tenant_id,
+            "X-Project-Id": self.project_id,
         }
         if self.api_key:
             headers["X-API-Key"] = self.api_key
@@ -66,9 +66,9 @@ class HttpClient:
             await self._client.aclose()
             self._client = None
 
-    def set_tenant_id(self, tenant_id: str) -> None:
-        """Update tenant ID."""
-        self.tenant_id = tenant_id
+    def set_project_id(self, project_id: str) -> None:
+        """Update project ID."""
+        self.project_id = project_id
 
     def set_api_key(self, api_key: str) -> None:
         """Update API key."""

@@ -313,7 +313,7 @@ public class NamingConventionTests
     [Theory]
     [InlineData("created_at", "createdAt")]      // DB → JSON
     [InlineData("updated_at", "updatedAt")]      // DB → JSON
-    [InlineData("tenant_id", "tenantId")]        // DB → JSON
+    [InlineData("project_id", "projectId")]        // DB → JSON
     [InlineData("is_active", "isActive")]        // DB → JSON
     [InlineData("first_name", "firstName")]      // DB → JSON
     [InlineData("last_login_at", "lastLoginAt")] // DB → JSON
@@ -326,7 +326,7 @@ public class NamingConventionTests
     [Theory]
     [InlineData("CreatedAt", "created_at")]      // C# → DB
     [InlineData("UpdatedAt", "updated_at")]      // C# → DB
-    [InlineData("TenantId", "tenant_id")]        // C# → DB
+    [InlineData("ProjectId", "project_id")]        // C# → DB
     [InlineData("IsActive", "is_active")]        // C# → DB
     [InlineData("FirstName", "first_name")]      // C# → DB
     public void CSharpToDatabase_ShouldConvertCorrectly(string csharpProperty, string dbColumn)

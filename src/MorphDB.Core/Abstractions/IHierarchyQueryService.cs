@@ -53,7 +53,7 @@ public interface IHierarchyQueryService
     /// Detects all cycles in the hierarchy and returns the affected records.
     /// </summary>
     Task<CycleDetectionResult> DetectCyclesAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         string parentColumn,
         CancellationToken cancellationToken = default);
@@ -65,9 +65,9 @@ public interface IHierarchyQueryService
 public sealed record HierarchyQueryRequest
 {
     /// <summary>
-    /// Tenant ID for isolation.
+    /// Project ID for isolation.
     /// </summary>
-    public Guid TenantId { get; init; }
+    public Guid ProjectId { get; init; }
 
     /// <summary>
     /// The table containing hierarchical data.
@@ -158,7 +158,7 @@ public sealed record HierarchyRecord
 /// </summary>
 public sealed record CycleCheckRequest
 {
-    public Guid TenantId { get; init; }
+    public Guid ProjectId { get; init; }
     public required string TableName { get; init; }
     public required string ParentColumn { get; init; }
 

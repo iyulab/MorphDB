@@ -67,7 +67,7 @@ public sealed class JwtService : IJwtService
     }
 
     public string GenerateToken(
-        Guid tenantId,
+        Guid projectId,
         string userId,
         string? email = null,
         string? role = null,
@@ -79,7 +79,7 @@ public sealed class JwtService : IJwtService
             new(JwtRegisteredClaimNames.Sub, userId),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             new(JwtRegisteredClaimNames.Iat, DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture), ClaimValueTypes.Integer64),
-            new("tenant_id", tenantId.ToString())
+            new("project_id", projectId.ToString())
         };
 
         if (!string.IsNullOrEmpty(email))

@@ -325,7 +325,7 @@ public class CheckValidatorTests
         var table = new TableMetadata
         {
             TableId = column.TableId,
-            TenantId = Guid.NewGuid(),
+            ProjectId = Guid.NewGuid(),
             LogicalName = "test_table",
             PhysicalName = "t_test",
             Columns = [column],
@@ -334,7 +334,7 @@ public class CheckValidatorTests
 
         return new WriteContext
         {
-            TenantId = table.TenantId,
+            ProjectId = table.ProjectId,
             Table = table,
             OperationType = WriteOperationType.Insert,
             Data = new Dictionary<string, object?> { [columnName] = value },
@@ -360,7 +360,7 @@ public class CheckValidatorTests
         var table = new TableMetadata
         {
             TableId = column.TableId,
-            TenantId = Guid.NewGuid(),
+            ProjectId = Guid.NewGuid(),
             LogicalName = "test_table",
             PhysicalName = "t_test",
             Columns = [column],
@@ -369,7 +369,7 @@ public class CheckValidatorTests
 
         return new WriteContext
         {
-            TenantId = table.TenantId,
+            ProjectId = table.ProjectId,
             Table = table,
             OperationType = WriteOperationType.Insert,
             Data = new Dictionary<string, object?> { [columnName] = value },
@@ -384,7 +384,7 @@ public class CheckValidatorTests
         Dictionary<string, object?> allData)
     {
         var tableId = Guid.NewGuid();
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
 
         var columns = allData.Keys.Select((name, index) => new ColumnMetadata
         {
@@ -402,7 +402,7 @@ public class CheckValidatorTests
         var table = new TableMetadata
         {
             TableId = tableId,
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "test_table",
             PhysicalName = "t_test",
             Columns = columns,
@@ -411,7 +411,7 @@ public class CheckValidatorTests
 
         return new WriteContext
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             Table = table,
             OperationType = WriteOperationType.Insert,
             Data = allData,

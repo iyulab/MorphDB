@@ -12,11 +12,11 @@ namespace MorphDB.Service.Controllers;
 
 internal static partial class SchemaControllerLogs
 {
-    [LoggerMessage(LogLevel.Information, "Created table {TableName} for tenant {TenantId}")]
-    public static partial void TableCreated(ILogger logger, string tableName, Guid tenantId);
+    [LoggerMessage(LogLevel.Information, "Created table {TableName} for project {ProjectId}")]
+    public static partial void TableCreated(ILogger logger, string tableName, Guid projectId);
 
-    [LoggerMessage(LogLevel.Information, "Deleted table {TableName} for tenant {TenantId}")]
-    public static partial void TableDeleted(ILogger logger, string tableName, Guid tenantId);
+    [LoggerMessage(LogLevel.Information, "Deleted table {TableName} for project {ProjectId}")]
+    public static partial void TableDeleted(ILogger logger, string tableName, Guid projectId);
 
     [LoggerMessage(LogLevel.Information, "Added column {ColumnName} to table {TableName}")]
     public static partial void ColumnAdded(ILogger logger, string columnName, string tableName);
@@ -41,7 +41,7 @@ public sealed class SchemaController : ControllerBase
     private readonly ILogger<SchemaController> _logger;
     private readonly ChangeNotificationSetup _changeNotificationSetup;
     private readonly IEdmModelProvider _edmModelProvider;
-    private readonly ITenantContextAccessor _tenantContext;
+    private readonly IProjectContextAccessor _projectContext;
 
     public SchemaController(
         ISchemaManager schemaManager,
@@ -49,24 +49,24 @@ public sealed class SchemaController : ControllerBase
         ILogger<SchemaController> logger,
         ChangeNotificationSetup changeNotificationSetup,
         IEdmModelProvider edmModelProvider,
-        ITenantContextAccessor tenantContext)
+        IProjectContextAccessor projectContext)
     {
         _schemaManager = schemaManager;
         _changeLogger = changeLogger;
         _logger = logger;
         _changeNotificationSetup = changeNotificationSetup;
         _edmModelProvider = edmModelProvider;
-        _tenantContext = tenantContext;
+        _projectContext = projectContext;
     }
 
-    private Guid GetTenantId()
+    private Guid GetProjectId()
     {
-        var tenantId = _tenantContext.TenantIdOrNull;
-        if (!tenantId.HasValue || tenantId.Value == Guid.Empty)
+        var projectId = _projectContext.ProjectIdOrNull;
+        if (!projectId.HasValue || projectId.Value == Guid.Empty)
         {
             throw new UnauthorizedAccessException("Valid API key is required");
         }
-        return tenantId.Value;
+        return projectId.Value;
     }
 
     #region Tables
@@ -84,10 +84,10 @@ public sealed class SchemaController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
+            var projectId = GetProjectId();
             var createRequest = new CreateTableRequest
             {
-                TenantId = tenantId,
+                ProjectId = projectId,
                 LogicalName = request.Name,
                 Columns = request.Columns.Select(c => new CreateColumnRequest
                 {
@@ -109,12 +109,12 @@ public sealed class SchemaController : ControllerBase
             var response = TableApiResponse.FromMetadata(table);
 
             // Create notification trigger for realtime updates (using schema-qualified table name)
-            await _changeNotificationSetup.CreateTriggerAsync(tenantId, table.PhysicalName, cancellationToken);
+            await _changeNotificationSetup.CreateTriggerAsync(projectId, table.PhysicalName, cancellationToken);
 
             // Invalidate cached EDM model so OData picks up the new table
-            _edmModelProvider.InvalidateModel(tenantId);
+            _edmModelProvider.InvalidateModel(projectId);
 
-            SchemaControllerLogs.TableCreated(_logger, table.LogicalName, tenantId);
+            SchemaControllerLogs.TableCreated(_logger, table.LogicalName, projectId);
 
             return CreatedAtAction(nameof(GetTable), new { name = table.LogicalName }, response);
         }
@@ -145,15 +145,15 @@ public sealed class SchemaController : ControllerBase
     }
 
     /// <summary>
-    /// Lists all tables for a tenant.
+    /// Lists all tables for a project.
     /// </summary>
     [HttpGet("tables")]
     [ProducesResponseType(typeof(IReadOnlyList<TableApiResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> ListTables(CancellationToken cancellationToken)
     {
-        var tenantId = GetTenantId();
-        var tables = await _schemaManager.ListTablesAsync(tenantId, cancellationToken);
+        var projectId = GetProjectId();
+        var tables = await _schemaManager.ListTablesAsync(projectId, cancellationToken);
         var response = tables.Select(TableApiResponse.FromMetadata).ToList();
 
         return Ok(response);
@@ -169,8 +169,8 @@ public sealed class SchemaController : ControllerBase
         string name,
         CancellationToken cancellationToken)
     {
-        var tenantId = GetTenantId();
-        var table = await _schemaManager.GetTableAsync(tenantId, name, cancellationToken);
+        var projectId = GetProjectId();
+        var table = await _schemaManager.GetTableAsync(projectId, name, cancellationToken);
 
         if (table is null)
         {
@@ -198,8 +198,8 @@ public sealed class SchemaController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
-            var table = await _schemaManager.GetTableAsync(tenantId, name, cancellationToken);
+            var projectId = GetProjectId();
+            var table = await _schemaManager.GetTableAsync(projectId, name, cancellationToken);
             if (table is null)
             {
                 return NotFound(new ErrorResponse
@@ -219,7 +219,7 @@ public sealed class SchemaController : ControllerBase
             var updatedTable = await _schemaManager.UpdateTableAsync(updateRequest, cancellationToken);
 
             // Invalidate cached EDM model so OData picks up schema changes
-            _edmModelProvider.InvalidateModel(tenantId);
+            _edmModelProvider.InvalidateModel(projectId);
 
             return Ok(TableApiResponse.FromMetadata(updatedTable));
         }
@@ -253,8 +253,8 @@ public sealed class SchemaController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
-            var table = await _schemaManager.GetTableAsync(tenantId, name, cancellationToken);
+            var projectId = GetProjectId();
+            var table = await _schemaManager.GetTableAsync(projectId, name, cancellationToken);
             if (table is null)
             {
                 return NotFound(new ErrorResponse
@@ -267,9 +267,9 @@ public sealed class SchemaController : ControllerBase
             await _schemaManager.DeleteTableAsync(table.TableId, cancellationToken);
 
             // Invalidate cached EDM model so OData picks up schema changes
-            _edmModelProvider.InvalidateModel(tenantId);
+            _edmModelProvider.InvalidateModel(projectId);
 
-            SchemaControllerLogs.TableDeleted(_logger, name, tenantId);
+            SchemaControllerLogs.TableDeleted(_logger, name, projectId);
 
             return NoContent();
         }
@@ -301,8 +301,8 @@ public sealed class SchemaController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
-            var table = await _schemaManager.GetTableAsync(tenantId, tableName, cancellationToken);
+            var projectId = GetProjectId();
+            var table = await _schemaManager.GetTableAsync(projectId, tableName, cancellationToken);
             if (table is null)
             {
                 return NotFound(new ErrorResponse
@@ -332,7 +332,7 @@ public sealed class SchemaController : ControllerBase
             var response = ColumnApiResponse.FromMetadata(column);
 
             // Invalidate cached EDM model so OData picks up schema changes
-            _edmModelProvider.InvalidateModel(tenantId);
+            _edmModelProvider.InvalidateModel(projectId);
 
             SchemaControllerLogs.ColumnAdded(_logger, column.LogicalName, tableName);
 
@@ -392,7 +392,7 @@ public sealed class SchemaController : ControllerBase
 
             var column = await _schemaManager.UpdateColumnAsync(updateRequest, cancellationToken);
 
-            // Invalidate all cached EDM models (column operations don't have tenant context)
+            // Invalidate all cached EDM models (column operations don't have project context)
             _edmModelProvider.InvalidateAll();
 
             return Ok(ColumnApiResponse.FromMetadata(column));
@@ -435,7 +435,7 @@ public sealed class SchemaController : ControllerBase
         {
             await _schemaManager.DeleteColumnAsync(id, cancellationToken);
 
-            // Invalidate all cached EDM models (column operations don't have tenant context)
+            // Invalidate all cached EDM models (column operations don't have project context)
             _edmModelProvider.InvalidateAll();
 
             return NoContent();
@@ -468,8 +468,8 @@ public sealed class SchemaController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
-            var table = await _schemaManager.GetTableAsync(tenantId, tableName, cancellationToken);
+            var projectId = GetProjectId();
+            var table = await _schemaManager.GetTableAsync(projectId, tableName, cancellationToken);
             if (table is null)
             {
                 return NotFound(new ErrorResponse
@@ -509,7 +509,7 @@ public sealed class SchemaController : ControllerBase
             var response = IndexApiResponse.FromMetadata(index);
 
             // Invalidate cached EDM model so OData picks up schema changes
-            _edmModelProvider.InvalidateModel(tenantId);
+            _edmModelProvider.InvalidateModel(projectId);
 
             SchemaControllerLogs.IndexCreated(_logger, index.LogicalName, tableName);
 
@@ -537,7 +537,7 @@ public sealed class SchemaController : ControllerBase
         {
             await _schemaManager.DeleteIndexAsync(id, cancellationToken);
 
-            // Invalidate all cached EDM models (index operations don't have tenant context)
+            // Invalidate all cached EDM models (index operations don't have project context)
             _edmModelProvider.InvalidateAll();
 
             return NoContent();
@@ -568,9 +568,9 @@ public sealed class SchemaController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
+            var projectId = GetProjectId();
             // Resolve table and column names to IDs
-            var sourceTable = await _schemaManager.GetTableAsync(tenantId, request.SourceTable, cancellationToken);
+            var sourceTable = await _schemaManager.GetTableAsync(projectId, request.SourceTable, cancellationToken);
             if (sourceTable is null)
             {
                 return BadRequest(new ErrorResponse
@@ -580,7 +580,7 @@ public sealed class SchemaController : ControllerBase
                 });
             }
 
-            var targetTable = await _schemaManager.GetTableAsync(tenantId, request.TargetTable, cancellationToken);
+            var targetTable = await _schemaManager.GetTableAsync(projectId, request.TargetTable, cancellationToken);
             if (targetTable is null)
             {
                 return BadRequest(new ErrorResponse
@@ -612,7 +612,7 @@ public sealed class SchemaController : ControllerBase
 
             var createRequest = new CreateRelationRequest
             {
-                TenantId = tenantId,
+                ProjectId = projectId,
                 LogicalName = request.Name,
                 SourceTableId = sourceTable.TableId,
                 SourceColumnId = sourceColumn.ColumnId,
@@ -626,7 +626,7 @@ public sealed class SchemaController : ControllerBase
             var response = RelationApiResponse.FromMetadata(relation);
 
             // Invalidate cached EDM model so OData picks up schema changes
-            _edmModelProvider.InvalidateModel(tenantId);
+            _edmModelProvider.InvalidateModel(projectId);
 
             SchemaControllerLogs.RelationCreated(_logger, relation.LogicalName);
 
@@ -654,7 +654,7 @@ public sealed class SchemaController : ControllerBase
         {
             await _schemaManager.DeleteRelationAsync(id, cancellationToken);
 
-            // Invalidate all cached EDM models (relation operations don't have tenant context)
+            // Invalidate all cached EDM models (relation operations don't have project context)
             _edmModelProvider.InvalidateAll();
 
             return NoContent();
@@ -772,10 +772,10 @@ public sealed class SchemaController : ControllerBase
     {
         try
         {
-            var tenantId = _tenantContext.TenantIdOrNull
-                ?? throw new UnauthorizedAccessException("Tenant context required");
+            var projectId = _projectContext.ProjectIdOrNull
+                ?? throw new UnauthorizedAccessException("Project context required");
 
-            var table = await _schemaManager.GetTableAsync(tenantId, name, cancellationToken)
+            var table = await _schemaManager.GetTableAsync(projectId, name, cancellationToken)
                 ?? throw new NotFoundException("Table", name);
 
             var history = await _changeLogger.GetHistoryAsync(

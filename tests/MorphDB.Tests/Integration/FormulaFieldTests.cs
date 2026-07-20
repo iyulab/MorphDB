@@ -42,13 +42,13 @@ public class FormulaFieldTests
     public async Task CreateTableAsync_WithFormulaColumn_ShouldCreateVirtualColumn()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
         var uniqueSuffix = Guid.NewGuid().ToString("N")[..8];
 
         // Create table with formula column
         var table = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "formula_products_" + uniqueSuffix,
             Columns =
             [
@@ -106,13 +106,13 @@ public class FormulaFieldTests
     public async Task CreateTableAsync_WithFormulaColumn_ShouldPersistFormulaConfig()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
         var uniqueSuffix = Guid.NewGuid().ToString("N")[..8];
 
         // Create table with formula
         var table = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "formula_persist_" + uniqueSuffix,
             Columns =
             [
@@ -159,13 +159,13 @@ public class FormulaFieldTests
     public async Task AddColumnAsync_WithFormulaConfig_ShouldAddVirtualColumn()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
         var uniqueSuffix = Guid.NewGuid().ToString("N")[..8];
 
         // Create table without formula initially
         var table = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "addformula_" + uniqueSuffix,
             Columns =
             [
@@ -216,13 +216,13 @@ public class FormulaFieldTests
     public async Task CreateTableAsync_WithMultipleFormulaColumns_ShouldCreateAllVirtuals()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
         var uniqueSuffix = Guid.NewGuid().ToString("N")[..8];
 
         // Create table with multiple formula columns
         var table = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "multiformula_" + uniqueSuffix,
             Columns =
             [
@@ -306,13 +306,13 @@ public class FormulaFieldTests
     public async Task CreateTableAsync_FormulaColumn_ShouldNotCreatePhysicalColumn()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
         var uniqueSuffix = Guid.NewGuid().ToString("N")[..8];
 
         // Create table with formula
         var table = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "physical_formula_" + uniqueSuffix,
             Columns =
             [
@@ -373,13 +373,13 @@ public class FormulaFieldTests
     public async Task CreateTableAsync_WithConditionalFormula_ShouldStoreCorrectly()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
         var uniqueSuffix = Guid.NewGuid().ToString("N")[..8];
 
         // Create table with conditional formula
         var table = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "conditional_formula_" + uniqueSuffix,
             Columns =
             [
@@ -414,13 +414,13 @@ public class FormulaFieldTests
     public async Task CreateTableAsync_WithDateFormula_ShouldStoreCorrectly()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
         var uniqueSuffix = Guid.NewGuid().ToString("N")[..8];
 
         // Create table with date formula
         var table = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "date_formula_" + uniqueSuffix,
             Columns =
             [
@@ -456,13 +456,13 @@ public class FormulaFieldTests
     public async Task CreateTableAsync_MixedDerivedColumns_ShouldHandleAllTypes()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
         var uniqueSuffix = Guid.NewGuid().ToString("N")[..8];
 
         // Create parent table with lookup, rollup, and formula columns
         var table = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "mixed_derived_" + uniqueSuffix,
             Columns =
             [

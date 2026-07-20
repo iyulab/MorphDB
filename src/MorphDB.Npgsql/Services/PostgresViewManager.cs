@@ -50,14 +50,14 @@ public sealed class PostgresViewManager : IViewManager
 
         // Check if view already exists
         var existing = await _viewRepository.GetViewByNameAsync(
-            request.TenantId, request.Name, cancellationToken);
+            request.ProjectId, request.Name, cancellationToken);
         if (existing != null)
         {
             throw new DuplicateNameException("View", request.Name);
         }
 
         var viewId = Guid.NewGuid();
-        var physicalName = _nameHasher.GenerateViewName(request.TenantId, request.Name);
+        var physicalName = _nameHasher.GenerateViewName(request.ProjectId, request.Name);
 
         // Acquire advisory lock for DDL
         await using var lockHandle = await _lockManager.AcquireDdlLockAsync(
@@ -66,7 +66,7 @@ public sealed class PostgresViewManager : IViewManager
             cancellationToken);
 
         // Build the SELECT statement from view definition
-        var queryBuilder = new ViewQueryBuilder(_metadataRepository, request.TenantId);
+        var queryBuilder = new ViewQueryBuilder(_metadataRepository, request.ProjectId);
         var selectStatement = await queryBuilder.BuildSelectStatementAsync(request.Definition, cancellationToken);
 
         // Create the view in PostgreSQL
@@ -103,7 +103,7 @@ public sealed class PostgresViewManager : IViewManager
         var viewMetadata = new ViewMetadata
         {
             ViewId = viewId,
-            TenantId = request.TenantId,
+            ProjectId = request.ProjectId,
             LogicalName = request.Name,
             PhysicalName = physicalName,
             Definition = request.Definition,
@@ -132,11 +132,11 @@ public sealed class PostgresViewManager : IViewManager
     }
 
     public async Task<ViewMetadata?> GetViewAsync(
-        Guid tenantId,
+        Guid projectId,
         string logicalName,
         CancellationToken cancellationToken = default)
     {
-        return await _viewRepository.GetViewByNameAsync(tenantId, logicalName, cancellationToken);
+        return await _viewRepository.GetViewByNameAsync(projectId, logicalName, cancellationToken);
     }
 
     public async Task<ViewMetadata?> GetViewByIdAsync(
@@ -147,10 +147,10 @@ public sealed class PostgresViewManager : IViewManager
     }
 
     public async Task<IReadOnlyList<ViewMetadata>> ListViewsAsync(
-        Guid tenantId,
+        Guid projectId,
         CancellationToken cancellationToken = default)
     {
-        return await _viewRepository.ListViewsAsync(tenantId, cancellationToken);
+        return await _viewRepository.ListViewsAsync(projectId, cancellationToken);
     }
 
     public async Task<ViewMetadata> UpdateViewAsync(
@@ -172,7 +172,7 @@ public sealed class PostgresViewManager : IViewManager
         // If definition changed, recreate the view
         if (request.Definition != null)
         {
-            var queryBuilder = new ViewQueryBuilder(_metadataRepository, view.TenantId);
+            var queryBuilder = new ViewQueryBuilder(_metadataRepository, view.ProjectId);
             var selectStatement = await queryBuilder.BuildSelectStatementAsync(request.Definition, cancellationToken);
 
             await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
@@ -297,7 +297,7 @@ public sealed class PostgresViewManager : IViewManager
 
         // Check base table
         var baseTable = await _metadataRepository.GetTableByNameAsync(
-            view.TenantId, view.Definition.BaseTable, cancellationToken: cancellationToken);
+            view.ProjectId, view.Definition.BaseTable, cancellationToken: cancellationToken);
         if (baseTable == null)
         {
             return true; // Base table not found, consider stale
@@ -312,7 +312,7 @@ public sealed class PostgresViewManager : IViewManager
         foreach (var join in view.Definition.Joins)
         {
             var joinedTable = await _metadataRepository.GetTableByNameAsync(
-                view.TenantId, join.Table, cancellationToken: cancellationToken);
+                view.ProjectId, join.Table, cancellationToken: cancellationToken);
 
             if (joinedTable == null)
             {
@@ -335,7 +335,7 @@ public sealed class PostgresViewManager : IViewManager
         ViewQueryRequest request,
         CancellationToken cancellationToken = default)
     {
-        var view = await _viewRepository.GetViewByNameAsync(request.TenantId, request.ViewName, cancellationToken);
+        var view = await _viewRepository.GetViewByNameAsync(request.ProjectId, request.ViewName, cancellationToken);
         if (view == null)
         {
             throw new NotFoundException("View", request.ViewName);
@@ -384,7 +384,7 @@ public sealed class PostgresViewManager : IViewManager
         sb.Append(" FROM ");
         sb.Append(DdlBuilder.QuoteIdentifier(view.PhysicalName));
 
-        // WHERE (tenant isolation built into view)
+        // WHERE (project isolation built into view)
         if (request.Filters != null && request.Filters.Count > 0)
         {
             sb.Append(" WHERE ");

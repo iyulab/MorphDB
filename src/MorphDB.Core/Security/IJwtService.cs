@@ -91,7 +91,7 @@ public interface IJwtService
     /// <summary>
     /// Generates a JWT token for the given claims.
     /// </summary>
-    /// <param name="tenantId">The tenant ID.</param>
+    /// <param name="projectId">The project ID.</param>
     /// <param name="userId">The user ID (sub claim).</param>
     /// <param name="email">Optional email claim.</param>
     /// <param name="role">Optional role claim.</param>
@@ -99,7 +99,7 @@ public interface IJwtService
     /// <param name="expiresIn">Token expiration time (default: 1 hour).</param>
     /// <returns>The generated JWT token.</returns>
     string GenerateToken(
-        Guid tenantId,
+        Guid projectId,
         string userId,
         string? email = null,
         string? role = null,

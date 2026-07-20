@@ -64,10 +64,10 @@ export class MorphDBClient {
   }
 
   /**
-   * Sets the tenant ID for all requests
+   * Sets the project ID for all requests
    */
-  setTenantId(tenantId: string): void {
-    this.http.setTenantId(tenantId);
+  setProjectId(projectId: string): void {
+    this.http.setProjectId(projectId);
   }
 
   /**

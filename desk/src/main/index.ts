@@ -326,7 +326,7 @@ ipcMain.handle('connection:test', async (_event, url: string, apiKey: string) =>
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
 
-    // Tenant ID is automatically resolved from API key on the server side
+    // Project ID is automatically resolved from API key on the server side
     const response = await fetch(`${url}/health`, {
       method: 'GET',
       headers: {

@@ -40,8 +40,8 @@ public class AuditApiTests : IAsyncLifetime
         }
         else
         {
-            // Fallback to tenant ID if project creation fails
-            _projectId = _fixture.Api.TenantId;
+            // Fallback to project ID if project creation fails
+            _projectId = _fixture.Api.ProjectId;
         }
     }
 

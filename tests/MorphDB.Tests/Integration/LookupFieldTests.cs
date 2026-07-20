@@ -42,13 +42,13 @@ public class LookupFieldTests
     public async Task CreateTableAsync_WithLookupColumn_ShouldCreateVirtualColumn()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
         var uniqueSuffix = Guid.NewGuid().ToString("N")[..8];
 
         // Create parent table (customers)
         var customersTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "lookup_customers_" + uniqueSuffix,
             Columns =
             [
@@ -70,7 +70,7 @@ public class LookupFieldTests
         // Create child table (orders) with lookup field
         var request = new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "lookup_orders_" + uniqueSuffix,
             Columns =
             [
@@ -123,13 +123,13 @@ public class LookupFieldTests
     public async Task CreateTableAsync_WithLookupColumn_ShouldPersistLookupConfig()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
         var uniqueSuffix = Guid.NewGuid().ToString("N")[..8];
 
         // Create parent table
         var parentTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "lookup_parent_" + uniqueSuffix,
             Columns =
             [
@@ -145,7 +145,7 @@ public class LookupFieldTests
         // Create child table with lookup
         var childTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "lookup_child_" + uniqueSuffix,
             Columns =
             [
@@ -189,13 +189,13 @@ public class LookupFieldTests
     public async Task AddColumnAsync_WithLookupConfig_ShouldAddVirtualColumn()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
         var uniqueSuffix = Guid.NewGuid().ToString("N")[..8];
 
         // Create parent table
         var parentTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "addcol_parent_" + uniqueSuffix,
             Columns =
             [
@@ -211,7 +211,7 @@ public class LookupFieldTests
         // Create child table without lookup initially
         var childTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "addcol_child_" + uniqueSuffix,
             Columns =
             [
@@ -260,13 +260,13 @@ public class LookupFieldTests
     public async Task CreateTableAsync_WithMultipleLookupColumns_ShouldCreateAllVirtuals()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
         var uniqueSuffix = Guid.NewGuid().ToString("N")[..8];
 
         // Create customers table
         var customersTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "multi_customers_" + uniqueSuffix,
             Columns =
             [
@@ -288,7 +288,7 @@ public class LookupFieldTests
         // Create products table
         var productsTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "multi_products_" + uniqueSuffix,
             Columns =
             [
@@ -310,7 +310,7 @@ public class LookupFieldTests
         // Create orders table with multiple lookups
         var ordersTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "multi_orders_" + uniqueSuffix,
             Columns =
             [
@@ -403,13 +403,13 @@ public class LookupFieldTests
     public async Task CreateTableAsync_LookupColumn_ShouldNotCreatePhysicalColumn()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
         var uniqueSuffix = Guid.NewGuid().ToString("N")[..8];
 
         // Create parent table
         var parentTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "physical_parent_" + uniqueSuffix,
             Columns =
             [
@@ -425,7 +425,7 @@ public class LookupFieldTests
         // Create child table with lookup
         var childTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "physical_child_" + uniqueSuffix,
             Columns =
             [

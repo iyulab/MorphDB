@@ -89,7 +89,7 @@ try
     // Add API services
     builder.Services.AddControllers(options =>
     {
-        options.Filters.Add<MorphDB.Service.Filters.TenantExceptionFilter>();
+        options.Filters.Add<MorphDB.Service.Filters.ProjectExceptionFilter>();
     });
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen(options =>
@@ -122,11 +122,11 @@ try
             BearerFormat = "JWT"
         });
 
-        // Add Tenant ID header
-        options.AddSecurityDefinition("TenantId", new OpenApiSecurityScheme
+        // Add Project ID header
+        options.AddSecurityDefinition("ProjectId", new OpenApiSecurityScheme
         {
-            Description = "Tenant ID header for multi-tenant operations.",
-            Name = "X-Tenant-Id",
+            Description = "The project a request is scoped to. A schema namespace, not a trust boundary.",
+            Name = "X-Project-Id",
             In = ParameterLocation.Header,
             Type = SecuritySchemeType.ApiKey
         });
@@ -135,13 +135,13 @@ try
         {
             [new OpenApiSecuritySchemeReference("ApiKey", document)] = [],
             [new OpenApiSecuritySchemeReference("Bearer", document)] = [],
-            [new OpenApiSecuritySchemeReference("TenantId", document)] = []
+            [new OpenApiSecuritySchemeReference("ProjectId", document)] = []
         });
     });
 
-    // Add HTTP context accessor for tenant context
+    // Add HTTP context accessor for project context
     builder.Services.AddHttpContextAccessor();
-    builder.Services.AddScoped<ITenantContextAccessor, HttpTenantContextAccessor>();
+    builder.Services.AddScoped<IProjectContextAccessor, HttpProjectContextAccessor>();
     builder.Services.AddScoped<ISubscriptionEventSender, HotChocolateSubscriptionEventSender>();
 
     // Add OData services for dynamic EDM model generation
@@ -264,9 +264,9 @@ try
     {
         app.MapPost("/api/dev/bootstrap", async (MorphDB.Core.Security.IApiKeyService apiKeyService) =>
         {
-            var tenantId = Guid.NewGuid();
+            var projectId = Guid.NewGuid();
             var (key, rawKey) = await apiKeyService.CreateKeyAsync(
-                tenantId,
+                projectId,
                 MorphDB.Core.Security.ApiKeyType.Service,
                 "Development Key",
                 "Auto-generated development API key");
@@ -274,7 +274,7 @@ try
             return Results.Ok(new
             {
                 message = "Development API key created successfully",
-                tenantId = tenantId.ToString(),
+                projectId = projectId.ToString(),
                 apiKey = rawKey,
                 keyId = key.Id,
                 warning = "This endpoint is only available in Development mode"

@@ -28,18 +28,18 @@ public sealed class WritePipeline : IWritePipeline
     }
 
     public async Task<WriteResult> InsertAsync(
-        Guid tenantId,
+        Guid projectId,
         TableMetadata table,
         IDictionary<string, object?> data,
         WriteOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        var context = CreateContext(tenantId, table, data, WriteOperationType.Insert, options, cancellationToken);
+        var context = CreateContext(projectId, table, data, WriteOperationType.Insert, options, cancellationToken);
         return await ExecutePipelineAsync(context);
     }
 
     public async Task<WriteResult> UpdateAsync(
-        Guid tenantId,
+        Guid projectId,
         TableMetadata table,
         Guid recordId,
         IDictionary<string, object?> data,
@@ -47,19 +47,19 @@ public sealed class WritePipeline : IWritePipeline
         WriteOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        var context = CreateContext(tenantId, table, data, WriteOperationType.Update, options, cancellationToken, recordId, existingData);
+        var context = CreateContext(projectId, table, data, WriteOperationType.Update, options, cancellationToken, recordId, existingData);
         return await ExecutePipelineAsync(context);
     }
 
     public async Task<WriteResult> DeleteAsync(
-        Guid tenantId,
+        Guid projectId,
         TableMetadata table,
         Guid recordId,
         IDictionary<string, object?>? existingData = null,
         WriteOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        var context = CreateContext(tenantId, table, new Dictionary<string, object?>(), WriteOperationType.Delete, options, cancellationToken, recordId, existingData);
+        var context = CreateContext(projectId, table, new Dictionary<string, object?>(), WriteOperationType.Delete, options, cancellationToken, recordId, existingData);
 
         // For delete, we only run transformers (soft delete) and skip validators
         foreach (var transformer in _transformers)
@@ -81,14 +81,14 @@ public sealed class WritePipeline : IWritePipeline
     }
 
     public async Task<WriteResult> ValidateAsync(
-        Guid tenantId,
+        Guid projectId,
         TableMetadata table,
         IDictionary<string, object?> data,
         WriteOperationType operationType,
         WriteOptions? options = null,
         CancellationToken cancellationToken = default)
     {
-        var context = CreateContext(tenantId, table, data, operationType, options, cancellationToken);
+        var context = CreateContext(projectId, table, data, operationType, options, cancellationToken);
 
         // Run transformers first (to apply defaults, etc.)
         foreach (var transformer in _transformers)
@@ -122,7 +122,7 @@ public sealed class WritePipeline : IWritePipeline
     }
 
     public async Task<IReadOnlyList<WriteResult>> ValidateBatchAsync(
-        Guid tenantId,
+        Guid projectId,
         TableMetadata table,
         IReadOnlyList<IDictionary<string, object?>> records,
         WriteOptions? options = null,
@@ -134,7 +134,7 @@ public sealed class WritePipeline : IWritePipeline
         {
             if (cancellationToken.IsCancellationRequested)
                 break;
-            var result = await ValidateAsync(tenantId, table, record, WriteOperationType.Insert, options, cancellationToken);
+            var result = await ValidateAsync(projectId, table, record, WriteOperationType.Insert, options, cancellationToken);
             results.Add(result);
         }
 
@@ -180,7 +180,7 @@ public sealed class WritePipeline : IWritePipeline
     }
 
     private WriteContext CreateContext(
-        Guid tenantId,
+        Guid projectId,
         TableMetadata table,
         IDictionary<string, object?> data,
         WriteOperationType operationType,
@@ -191,7 +191,7 @@ public sealed class WritePipeline : IWritePipeline
     {
         return new WriteContext
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             Table = table,
             OperationType = operationType,
             RecordId = recordId,

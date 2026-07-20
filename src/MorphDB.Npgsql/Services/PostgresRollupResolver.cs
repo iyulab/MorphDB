@@ -19,7 +19,7 @@ public sealed class PostgresRollupResolver : IRollupResolver
     }
 
     public async Task<IReadOnlyList<IDictionary<string, object?>>> ResolveRollupValuesAsync(
-        Guid tenantId,
+        Guid projectId,
         TableMetadata sourceTable,
         IReadOnlyList<IDictionary<string, object?>> records,
         IReadOnlyList<RollupColumnInfo> rollupColumns,
@@ -35,7 +35,7 @@ public sealed class PostgresRollupResolver : IRollupResolver
     }
 
     public async Task<RollupQueryExpansion> BuildRollupExpansionAsync(
-        Guid tenantId,
+        Guid projectId,
         TableMetadata sourceTable,
         IReadOnlyList<RollupColumnInfo> rollupColumns,
         CancellationToken cancellationToken = default)
@@ -60,7 +60,7 @@ public sealed class PostgresRollupResolver : IRollupResolver
         foreach (var rollup in rollupColumns)
         {
             var validation = await ValidateRollupConfigAsync(
-                tenantId, sourceTable, rollup.Config, cancellationToken);
+                projectId, sourceTable, rollup.Config, cancellationToken);
 
             if (!validation.IsValid)
                 continue;
@@ -103,7 +103,7 @@ public sealed class PostgresRollupResolver : IRollupResolver
     }
 
     public async Task<RollupValidationResult> ValidateRollupConfigAsync(
-        Guid tenantId,
+        Guid projectId,
         TableMetadata sourceTable,
         RollupColumnConfig config,
         CancellationToken cancellationToken = default)
@@ -112,7 +112,7 @@ public sealed class PostgresRollupResolver : IRollupResolver
 
         // Get target table
         var targetTable = await _metadataRepository.GetTableByNameAsync(
-            tenantId, config.TargetTable, includeColumns: true, cancellationToken);
+            projectId, config.TargetTable, includeColumns: true, cancellationToken);
 
         if (targetTable == null)
         {

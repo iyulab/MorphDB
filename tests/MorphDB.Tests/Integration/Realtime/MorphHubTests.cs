@@ -33,7 +33,7 @@ public class MorphHubTests : IAsyncLifetime
         _hubConnection = new HubConnectionBuilder()
             .WithUrl(hubUrl, options =>
             {
-                options.Headers.Add("X-Tenant-Id", _fixture.Api.TenantId.ToString());
+                options.Headers.Add("X-Project-Id", _fixture.Api.ProjectId.ToString());
                 // Use the test server's handler to route SignalR requests through the test server
                 options.HttpMessageHandlerFactory = _ => _fixture.Api.CreateHandler();
             })

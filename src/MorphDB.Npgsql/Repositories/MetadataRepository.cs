@@ -25,10 +25,10 @@ public sealed class MetadataRepository : IMetadataRepository
     {
         const string sql = """
             INSERT INTO morphdb._morph_tables
-                (table_id, tenant_id, logical_name, physical_name, schema_version, descriptor)
+                (table_id, project_id, logical_name, physical_name, schema_version, descriptor)
             VALUES
-                (@TableId, @TenantId, @LogicalName, @PhysicalName, @SchemaVersion, @Descriptor::jsonb)
-            RETURNING table_id, tenant_id, logical_name, physical_name, schema_version,
+                (@TableId, @ProjectId, @LogicalName, @PhysicalName, @SchemaVersion, @Descriptor::jsonb)
+            RETURNING table_id, project_id, logical_name, physical_name, schema_version,
                       descriptor, is_active, created_at, updated_at
             """;
 
@@ -36,7 +36,7 @@ public sealed class MetadataRepository : IMetadataRepository
         var result = await connection.QuerySingleAsync<TableRow>(sql, new
         {
             table.TableId,
-            table.TenantId,
+            table.ProjectId,
             table.LogicalName,
             table.PhysicalName,
             table.SchemaVersion,
@@ -52,7 +52,7 @@ public sealed class MetadataRepository : IMetadataRepository
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-            SELECT table_id, tenant_id, logical_name, physical_name, schema_version,
+            SELECT table_id, project_id, logical_name, physical_name, schema_version,
                    descriptor, is_active, created_at, updated_at
             FROM morphdb._morph_tables
             WHERE table_id = @TableId AND is_active = true
@@ -78,21 +78,21 @@ public sealed class MetadataRepository : IMetadataRepository
     }
 
     public async Task<TableMetadata?> GetTableByNameAsync(
-        Guid tenantId,
+        Guid projectId,
         string logicalName,
         bool includeColumns = false,
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-            SELECT table_id, tenant_id, logical_name, physical_name, schema_version,
+            SELECT table_id, project_id, logical_name, physical_name, schema_version,
                    descriptor, is_active, created_at, updated_at
             FROM morphdb._morph_tables
-            WHERE tenant_id = @TenantId AND logical_name = @LogicalName AND is_active = true
+            WHERE project_id = @ProjectId AND logical_name = @LogicalName AND is_active = true
             """;
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         var row = await connection.QuerySingleOrDefaultAsync<TableRow>(
-            sql, new { TenantId = tenantId, LogicalName = logicalName });
+            sql, new { ProjectId = projectId, LogicalName = logicalName });
 
         if (row is null)
             return null;
@@ -111,20 +111,20 @@ public sealed class MetadataRepository : IMetadataRepository
     }
 
     public async Task<IReadOnlyList<TableMetadata>> ListTablesAsync(
-        Guid tenantId,
+        Guid projectId,
         bool includeColumns = false,
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-            SELECT table_id, tenant_id, logical_name, physical_name, schema_version,
+            SELECT table_id, project_id, logical_name, physical_name, schema_version,
                    descriptor, is_active, created_at, updated_at
             FROM morphdb._morph_tables
-            WHERE tenant_id = @TenantId AND is_active = true
+            WHERE project_id = @ProjectId AND is_active = true
             ORDER BY created_at
             """;
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-        var rows = await connection.QueryAsync<TableRow>(sql, new { TenantId = tenantId });
+        var rows = await connection.QueryAsync<TableRow>(sql, new { ProjectId = projectId });
 
         var tables = rows.Select(MapToTableMetadata).ToList();
 
@@ -442,17 +442,17 @@ public sealed class MetadataRepository : IMetadataRepository
     {
         const string sql = """
             INSERT INTO morphdb._morph_relations
-                (relation_id, tenant_id, logical_name, source_table_id, source_column_id, target_table_id, target_column_id, relation_type, on_delete, on_update, descriptor)
+                (relation_id, project_id, logical_name, source_table_id, source_column_id, target_table_id, target_column_id, relation_type, on_delete, on_update, descriptor)
             VALUES
-                (@RelationId, @TenantId, @LogicalName, @SourceTableId, @SourceColumnId, @TargetTableId, @TargetColumnId, @RelationType, @OnDelete, @OnUpdate, @Descriptor::jsonb)
-            RETURNING relation_id, tenant_id, logical_name, source_table_id, source_column_id, target_table_id, target_column_id, relation_type, on_delete, on_update, descriptor, is_active, created_at
+                (@RelationId, @ProjectId, @LogicalName, @SourceTableId, @SourceColumnId, @TargetTableId, @TargetColumnId, @RelationType, @OnDelete, @OnUpdate, @Descriptor::jsonb)
+            RETURNING relation_id, project_id, logical_name, source_table_id, source_column_id, target_table_id, target_column_id, relation_type, on_delete, on_update, descriptor, is_active, created_at
             """;
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         var result = await connection.QuerySingleAsync<RelationRow>(sql, new
         {
             relation.RelationId,
-            relation.TenantId,
+            relation.ProjectId,
             relation.LogicalName,
             relation.SourceTableId,
             relation.SourceColumnId,
@@ -472,7 +472,7 @@ public sealed class MetadataRepository : IMetadataRepository
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-            SELECT relation_id, tenant_id, logical_name, source_table_id, source_column_id, target_table_id, target_column_id, relation_type, on_delete, on_update, descriptor, is_active, created_at
+            SELECT relation_id, project_id, logical_name, source_table_id, source_column_id, target_table_id, target_column_id, relation_type, on_delete, on_update, descriptor, is_active, created_at
             FROM morphdb._morph_relations
             WHERE relation_id = @RelationId AND is_active = true
             """;
@@ -488,7 +488,7 @@ public sealed class MetadataRepository : IMetadataRepository
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-            SELECT relation_id, tenant_id, logical_name, source_table_id, source_column_id, target_table_id, target_column_id, relation_type, on_delete, on_update, descriptor, is_active, created_at
+            SELECT relation_id, project_id, logical_name, source_table_id, source_column_id, target_table_id, target_column_id, relation_type, on_delete, on_update, descriptor, is_active, created_at
             FROM morphdb._morph_relations
             WHERE (source_table_id = @TableId OR target_table_id = @TableId) AND is_active = true
             ORDER BY created_at
@@ -553,7 +553,7 @@ public sealed class MetadataRepository : IMetadataRepository
     private static TableMetadata WithColumns(TableMetadata table, IReadOnlyList<ColumnMetadata> columns) => new()
     {
         TableId = table.TableId,
-        TenantId = table.TenantId,
+        ProjectId = table.ProjectId,
         LogicalName = table.LogicalName,
         PhysicalName = table.PhysicalName,
         SchemaVersion = table.SchemaVersion,
@@ -580,7 +580,7 @@ public sealed class MetadataRepository : IMetadataRepository
         IReadOnlyList<RelationMetadata> relations) => new()
         {
             TableId = table.TableId,
-            TenantId = table.TenantId,
+            ProjectId = table.ProjectId,
             LogicalName = table.LogicalName,
             PhysicalName = table.PhysicalName,
             SchemaVersion = table.SchemaVersion,
@@ -689,7 +689,7 @@ public sealed class MetadataRepository : IMetadataRepository
         return new TableMetadata
         {
             TableId = row.table_id,
-            TenantId = row.tenant_id,
+            ProjectId = row.project_id,
             LogicalName = row.logical_name,
             PhysicalName = row.physical_name,
             SchemaVersion = row.schema_version,
@@ -780,7 +780,7 @@ public sealed class MetadataRepository : IMetadataRepository
     private static RelationMetadata MapToRelationMetadata(RelationRow row) => new()
     {
         RelationId = row.relation_id,
-        TenantId = row.tenant_id,
+        ProjectId = row.project_id,
         LogicalName = row.logical_name,
         SourceTableId = row.source_table_id,
         SourceColumnId = row.source_column_id,
@@ -856,7 +856,7 @@ public sealed class MetadataRepository : IMetadataRepository
     private sealed class TableRow
     {
         public Guid table_id { get; set; }
-        public Guid tenant_id { get; set; }
+        public Guid project_id { get; set; }
         public string logical_name { get; set; } = "";
         public string physical_name { get; set; } = "";
         public int schema_version { get; set; }
@@ -917,7 +917,7 @@ public sealed class MetadataRepository : IMetadataRepository
     private sealed class RelationRow
     {
         public Guid relation_id { get; set; }
-        public Guid tenant_id { get; set; }
+        public Guid project_id { get; set; }
         public string logical_name { get; set; } = "";
         public Guid source_table_id { get; set; }
         public Guid source_column_id { get; set; }

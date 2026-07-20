@@ -51,17 +51,17 @@ public class DataServiceTests
 
     /// <summary>
     /// Creates a test table with user-defined columns.
-    /// Note: System columns (id, tenant_id, created_at, updated_at) are auto-added by SchemaManager.
+    /// Note: System columns (id, project_id, created_at, updated_at) are auto-added by SchemaManager.
     /// </summary>
-    private async Task<TableMetadata> CreateTestTableAsync(Guid tenantId, string logicalName)
+    private async Task<TableMetadata> CreateTestTableAsync(Guid projectId, string logicalName)
     {
         return await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = logicalName,
             Columns =
             [
-                // Only user-defined columns - system columns (id, tenant_id, created_at, updated_at) are auto-added
+                // Only user-defined columns - system columns (id, project_id, created_at, updated_at) are auto-added
                 new CreateColumnRequest
                 {
                     LogicalName = "email",
@@ -96,8 +96,8 @@ public class DataServiceTests
     public async Task InsertAsync_ShouldInsertAndReturnRecord()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
-        var table = await CreateTestTableAsync(tenantId, "insert_test_" + Guid.NewGuid().ToString("N")[..8]);
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "insert_test_" + Guid.NewGuid().ToString("N")[..8]);
         var id = Guid.NewGuid();
 
         var data = new Dictionary<string, object?>
@@ -110,7 +110,7 @@ public class DataServiceTests
         };
 
         // Act
-        var result = await _dataService.InsertAsync(tenantId, table.LogicalName, data);
+        var result = await _dataService.InsertAsync(projectId, table.LogicalName, data);
 
         // Assert
         result.Should().NotBeNull();
@@ -125,8 +125,8 @@ public class DataServiceTests
     public async Task InsertAsync_WithNullValues_ShouldInsertSuccessfully()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
-        var table = await CreateTestTableAsync(tenantId, "insert_null_" + Guid.NewGuid().ToString("N")[..8]);
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "insert_null_" + Guid.NewGuid().ToString("N")[..8]);
         var id = Guid.NewGuid();
 
         var data = new Dictionary<string, object?>
@@ -139,7 +139,7 @@ public class DataServiceTests
         };
 
         // Act
-        var result = await _dataService.InsertAsync(tenantId, table.LogicalName, data);
+        var result = await _dataService.InsertAsync(projectId, table.LogicalName, data);
 
         // Assert
         result["_id"].Should().Be(id);
@@ -151,8 +151,8 @@ public class DataServiceTests
     public async Task InsertAsync_WithInvalidColumn_ShouldThrow()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
-        var table = await CreateTestTableAsync(tenantId, "insert_invalid_" + Guid.NewGuid().ToString("N")[..8]);
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "insert_invalid_" + Guid.NewGuid().ToString("N")[..8]);
 
         var data = new Dictionary<string, object?>
         {
@@ -163,7 +163,7 @@ public class DataServiceTests
         };
 
         // Act & Assert
-        var act = () => _dataService.InsertAsync(tenantId, table.LogicalName, data);
+        var act = () => _dataService.InsertAsync(projectId, table.LogicalName, data);
         await act.Should().ThrowAsync<ValidationException>();
     }
 
@@ -175,11 +175,11 @@ public class DataServiceTests
     public async Task GetByIdAsync_ShouldReturnRecord()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
-        var table = await CreateTestTableAsync(tenantId, "getbyid_test_" + Guid.NewGuid().ToString("N")[..8]);
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "getbyid_test_" + Guid.NewGuid().ToString("N")[..8]);
         var id = Guid.NewGuid();
 
-        await _dataService.InsertAsync(tenantId, table.LogicalName, new Dictionary<string, object?>
+        await _dataService.InsertAsync(projectId, table.LogicalName, new Dictionary<string, object?>
         {
             ["_id"] = id,
             ["email"] = "find@example.com",
@@ -188,7 +188,7 @@ public class DataServiceTests
         });
 
         // Act
-        var result = await _dataService.GetByIdAsync(tenantId, table.LogicalName, id);
+        var result = await _dataService.GetByIdAsync(projectId, table.LogicalName, id);
 
         // Assert
         result.Should().NotBeNull();
@@ -201,12 +201,12 @@ public class DataServiceTests
     public async Task GetByIdAsync_WithNonExistentId_ShouldReturnNull()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
-        var table = await CreateTestTableAsync(tenantId, "getbyid_none_" + Guid.NewGuid().ToString("N")[..8]);
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "getbyid_none_" + Guid.NewGuid().ToString("N")[..8]);
         var nonExistentId = Guid.NewGuid();
 
         // Act
-        var result = await _dataService.GetByIdAsync(tenantId, table.LogicalName, nonExistentId);
+        var result = await _dataService.GetByIdAsync(projectId, table.LogicalName, nonExistentId);
 
         // Assert
         result.Should().BeNull();
@@ -216,10 +216,10 @@ public class DataServiceTests
     public async Task GetByIdAsync_WithNonExistentTable_ShouldThrow()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
 
         // Act & Assert
-        var act = () => _dataService.GetByIdAsync(tenantId, "nonexistent_table", Guid.NewGuid());
+        var act = () => _dataService.GetByIdAsync(projectId, "nonexistent_table", Guid.NewGuid());
         await act.Should().ThrowAsync<NotFoundException>();
     }
 
@@ -231,11 +231,11 @@ public class DataServiceTests
     public async Task UpdateAsync_ShouldUpdateAndReturnRecord()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
-        var table = await CreateTestTableAsync(tenantId, "update_test_" + Guid.NewGuid().ToString("N")[..8]);
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "update_test_" + Guid.NewGuid().ToString("N")[..8]);
         var id = Guid.NewGuid();
 
-        await _dataService.InsertAsync(tenantId, table.LogicalName, new Dictionary<string, object?>
+        await _dataService.InsertAsync(projectId, table.LogicalName, new Dictionary<string, object?>
         {
             ["_id"] = id,
             ["email"] = "old@example.com",
@@ -244,7 +244,7 @@ public class DataServiceTests
         });
 
         // Act
-        var result = await _dataService.UpdateAsync(tenantId, table.LogicalName, id, new Dictionary<string, object?>
+        var result = await _dataService.UpdateAsync(projectId, table.LogicalName, id, new Dictionary<string, object?>
         {
             ["email"] = "new@example.com",
             ["name"] = "New Name"
@@ -262,12 +262,12 @@ public class DataServiceTests
     public async Task UpdateAsync_WithNonExistentId_ShouldThrow()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
-        var table = await CreateTestTableAsync(tenantId, "update_none_" + Guid.NewGuid().ToString("N")[..8]);
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "update_none_" + Guid.NewGuid().ToString("N")[..8]);
         var nonExistentId = Guid.NewGuid();
 
         // Act & Assert
-        var act = () => _dataService.UpdateAsync(tenantId, table.LogicalName, nonExistentId, new Dictionary<string, object?>
+        var act = () => _dataService.UpdateAsync(projectId, table.LogicalName, nonExistentId, new Dictionary<string, object?>
         {
             ["email"] = "new@example.com"
         });
@@ -282,11 +282,11 @@ public class DataServiceTests
     public async Task DeleteAsync_ShouldDeleteAndReturnTrue()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
-        var table = await CreateTestTableAsync(tenantId, "delete_test_" + Guid.NewGuid().ToString("N")[..8]);
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "delete_test_" + Guid.NewGuid().ToString("N")[..8]);
         var id = Guid.NewGuid();
 
-        await _dataService.InsertAsync(tenantId, table.LogicalName, new Dictionary<string, object?>
+        await _dataService.InsertAsync(projectId, table.LogicalName, new Dictionary<string, object?>
         {
             ["_id"] = id,
             ["email"] = "delete@example.com",
@@ -294,13 +294,13 @@ public class DataServiceTests
         });
 
         // Act
-        var result = await _dataService.DeleteAsync(tenantId, table.LogicalName, id);
+        var result = await _dataService.DeleteAsync(projectId, table.LogicalName, id);
 
         // Assert
         result.Should().BeTrue();
 
         // Verify deletion
-        var getResult = await _dataService.GetByIdAsync(tenantId, table.LogicalName, id);
+        var getResult = await _dataService.GetByIdAsync(projectId, table.LogicalName, id);
         getResult.Should().BeNull();
     }
 
@@ -308,11 +308,11 @@ public class DataServiceTests
     public async Task DeleteAsync_WithNonExistentId_ShouldReturnFalse()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
-        var table = await CreateTestTableAsync(tenantId, "delete_none_" + Guid.NewGuid().ToString("N")[..8]);
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "delete_none_" + Guid.NewGuid().ToString("N")[..8]);
 
         // Act
-        var result = await _dataService.DeleteAsync(tenantId, table.LogicalName, Guid.NewGuid());
+        var result = await _dataService.DeleteAsync(projectId, table.LogicalName, Guid.NewGuid());
 
         // Assert
         result.Should().BeFalse();
@@ -326,8 +326,8 @@ public class DataServiceTests
     public async Task InsertBatchAsync_ShouldInsertMultipleRecords()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
-        var table = await CreateTestTableAsync(tenantId, "batch_insert_" + Guid.NewGuid().ToString("N")[..8]);
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "batch_insert_" + Guid.NewGuid().ToString("N")[..8]);
 
         var records = new List<IDictionary<string, object?>>
         {
@@ -355,7 +355,7 @@ public class DataServiceTests
         };
 
         // Act
-        var results = await _dataService.InsertBatchAsync(tenantId, table.LogicalName, records);
+        var results = await _dataService.InsertBatchAsync(projectId, table.LogicalName, records);
 
         // Assert
         results.Should().HaveCount(3);
@@ -368,11 +368,11 @@ public class DataServiceTests
     public async Task InsertBatchAsync_WithEmptyList_ShouldReturnEmpty()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
-        var table = await CreateTestTableAsync(tenantId, "batch_empty_" + Guid.NewGuid().ToString("N")[..8]);
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "batch_empty_" + Guid.NewGuid().ToString("N")[..8]);
 
         // Act
-        var results = await _dataService.InsertBatchAsync(tenantId, table.LogicalName, []);
+        var results = await _dataService.InsertBatchAsync(projectId, table.LogicalName, []);
 
         // Assert
         results.Should().BeEmpty();
@@ -386,8 +386,8 @@ public class DataServiceTests
     public async Task UpsertAsync_ShouldInsertNewRecord()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
-        var table = await CreateTestTableAsync(tenantId, "upsert_insert_" + Guid.NewGuid().ToString("N")[..8]);
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "upsert_insert_" + Guid.NewGuid().ToString("N")[..8]);
         var id = Guid.NewGuid();
 
         var data = new Dictionary<string, object?>
@@ -399,7 +399,7 @@ public class DataServiceTests
         };
 
         // Act
-        var result = await _dataService.UpsertAsync(tenantId, table.LogicalName, data, ["_id"]);
+        var result = await _dataService.UpsertAsync(projectId, table.LogicalName, data, ["_id"]);
 
         // Assert
         result.Should().NotBeNull();
@@ -411,12 +411,12 @@ public class DataServiceTests
     public async Task UpsertAsync_ShouldUpdateExistingRecord()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
-        var table = await CreateTestTableAsync(tenantId, "upsert_update_" + Guid.NewGuid().ToString("N")[..8]);
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "upsert_update_" + Guid.NewGuid().ToString("N")[..8]);
         var id = Guid.NewGuid();
 
         // Insert first
-        await _dataService.InsertAsync(tenantId, table.LogicalName, new Dictionary<string, object?>
+        await _dataService.InsertAsync(projectId, table.LogicalName, new Dictionary<string, object?>
         {
             ["_id"] = id,
             ["email"] = "old@example.com",
@@ -434,7 +434,7 @@ public class DataServiceTests
         };
 
         // Act
-        var result = await _dataService.UpsertAsync(tenantId, table.LogicalName, data, ["_id"]);
+        var result = await _dataService.UpsertAsync(projectId, table.LogicalName, data, ["_id"]);
 
         // Assert
         result.Should().NotBeNull();
@@ -448,8 +448,8 @@ public class DataServiceTests
     public async Task UpsertAsync_WithInvalidKeyColumn_ShouldThrow()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
-        var table = await CreateTestTableAsync(tenantId, "upsert_invalid_" + Guid.NewGuid().ToString("N")[..8]);
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "upsert_invalid_" + Guid.NewGuid().ToString("N")[..8]);
 
         var data = new Dictionary<string, object?>
         {
@@ -459,7 +459,7 @@ public class DataServiceTests
         };
 
         // Act & Assert
-        var act = () => _dataService.UpsertAsync(tenantId, table.LogicalName, data, ["nonexistent_key"]);
+        var act = () => _dataService.UpsertAsync(projectId, table.LogicalName, data, ["nonexistent_key"]);
         await act.Should().ThrowAsync<ValidationException>();
     }
 

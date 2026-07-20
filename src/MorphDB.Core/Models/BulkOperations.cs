@@ -8,7 +8,7 @@ namespace MorphDB.Core.Models;
 public sealed class BulkImportJob
 {
     public Guid JobId { get; init; }
-    public Guid TenantId { get; init; }
+    public Guid ProjectId { get; init; }
     public Guid TableId { get; init; }
     public required string TableName { get; init; }
     public required ImportFormat Format { get; init; }
@@ -30,7 +30,7 @@ public sealed class BulkImportJob
 public sealed class BulkExportJob
 {
     public Guid JobId { get; init; }
-    public Guid TenantId { get; init; }
+    public Guid ProjectId { get; init; }
     public Guid TableId { get; init; }
     public required string TableName { get; init; }
     public required ExportFormat Format { get; init; }

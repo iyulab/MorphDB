@@ -16,9 +16,9 @@ export const MORPHDB_TEST_URL = process.env.MORPHDB_TEST_URL || 'http://localhos
 /**
  * Creates a MorphDB client for integration testing
  */
-export function createTestClient(tenantId?: string): MorphDBClient {
+export function createTestClient(projectId?: string): MorphDBClient {
   return new MorphDBClient(MORPHDB_TEST_URL, {
-    tenantId: tenantId || randomUUID(),
+    projectId: projectId || randomUUID(),
     timeout: 30000,
   });
 }

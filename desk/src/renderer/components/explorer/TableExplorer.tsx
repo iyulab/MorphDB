@@ -126,10 +126,10 @@ export function TableExplorer(): ReactElement {
       const client = new MorphDBClient({
         url: activeConnection.url,
         apiKey,
-        tenantId: activeConnection.tenantId
+        projectId: activeConnection.projectId
       })
 
-      return client.listTables(activeConnection.tenantId)
+      return client.listTables(activeConnection.projectId)
     },
     enabled: !!activeConnection && activeConnection.status === 'connected'
   })
@@ -149,7 +149,7 @@ export function TableExplorer(): ReactElement {
     return new MorphDBClient({
       url: activeConnection.url,
       apiKey,
-      tenantId: activeConnection.tenantId
+      projectId: activeConnection.projectId
     })
   }
 
@@ -167,7 +167,7 @@ export function TableExplorer(): ReactElement {
           unique: col.unique,
           indexed: col.indexed
         }))
-      }, activeConnection?.tenantId)
+      }, activeConnection?.projectId)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tables', activeConnection?.id] })
@@ -179,7 +179,7 @@ export function TableExplorer(): ReactElement {
     mutationFn: async (tableName: string) => {
       const client = await createClient()
       if (!client) throw new Error('No active connection')
-      return client.deleteTable(tableName, activeConnection?.tenantId)
+      return client.deleteTable(tableName, activeConnection?.projectId)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tables', activeConnection?.id] })
@@ -191,7 +191,7 @@ export function TableExplorer(): ReactElement {
     mutationFn: async ({ oldName, newName }: { oldName: string; newName: string }) => {
       const client = await createClient()
       if (!client) throw new Error('No active connection')
-      return client.renameTable(oldName, newName, activeConnection?.tenantId)
+      return client.renameTable(oldName, newName, activeConnection?.projectId)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tables', activeConnection?.id] })
@@ -210,7 +210,7 @@ export function TableExplorer(): ReactElement {
         unique: data.unique,
         indexed: data.indexed,
         default: data.defaultValue || undefined
-      }, activeConnection?.tenantId)
+      }, activeConnection?.projectId)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tables', activeConnection?.id] })
@@ -226,7 +226,7 @@ export function TableExplorer(): ReactElement {
         name: data.name !== columnName ? data.name : undefined,
         default: data.defaultValue || undefined,
         version
-      }, activeConnection?.tenantId)
+      }, activeConnection?.projectId)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tables', activeConnection?.id] })
@@ -238,7 +238,7 @@ export function TableExplorer(): ReactElement {
     mutationFn: async ({ tableName, columnName }: { tableName: string; columnName: string }) => {
       const client = await createClient()
       if (!client) throw new Error('No active connection')
-      return client.deleteColumn(tableName, columnName, activeConnection?.tenantId)
+      return client.deleteColumn(tableName, columnName, activeConnection?.projectId)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tables', activeConnection?.id] })
@@ -255,7 +255,7 @@ export function TableExplorer(): ReactElement {
         columns: data.columns,
         type: data.type,
         unique: data.unique
-      }, activeConnection?.tenantId)
+      }, activeConnection?.projectId)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tables', activeConnection?.id] })
@@ -267,7 +267,7 @@ export function TableExplorer(): ReactElement {
     mutationFn: async (indexId: string) => {
       const client = await createClient()
       if (!client) throw new Error('No active connection')
-      return client.deleteIndex(indexId, activeConnection?.tenantId)
+      return client.deleteIndex(indexId, activeConnection?.projectId)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tables', activeConnection?.id] })
@@ -287,7 +287,7 @@ export function TableExplorer(): ReactElement {
         targetColumn: data.targetColumn,
         type: data.type,
         onDelete: data.onDelete
-      }, activeConnection?.tenantId)
+      }, activeConnection?.projectId)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tables', activeConnection?.id] })
@@ -299,7 +299,7 @@ export function TableExplorer(): ReactElement {
     mutationFn: async (relationId: string) => {
       const client = await createClient()
       if (!client) throw new Error('No active connection')
-      return client.deleteRelation(relationId, activeConnection?.tenantId)
+      return client.deleteRelation(relationId, activeConnection?.projectId)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tables', activeConnection?.id] })

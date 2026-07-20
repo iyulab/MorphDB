@@ -23,10 +23,10 @@ public interface IWebhookManager
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Lists webhooks for a tenant.
+    /// Lists webhooks for a project.
     /// </summary>
     Task<IReadOnlyList<WebhookMetadata>> ListWebhooksAsync(
-        Guid tenantId,
+        Guid projectId,
         string? tableName = null,
         CancellationToken cancellationToken = default);
 
@@ -48,7 +48,7 @@ public interface IWebhookManager
     /// Gets webhooks subscribed to specific table and event.
     /// </summary>
     Task<IReadOnlyList<WebhookMetadata>> GetSubscribedWebhooksAsync(
-        Guid tenantId,
+        Guid projectId,
         Guid tableId,
         WebhookEvent webhookEvent,
         CancellationToken cancellationToken = default);
@@ -117,10 +117,10 @@ public interface IWebhookManager
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Gets DLQ statistics for a tenant.
+    /// Gets DLQ statistics for a project.
     /// </summary>
     Task<DlqStatistics> GetDlqStatisticsAsync(
-        Guid tenantId,
+        Guid projectId,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -152,7 +152,7 @@ public interface IWebhookManager
 
 public sealed record CreateWebhookRequest
 {
-    public Guid TenantId { get; init; }
+    public Guid ProjectId { get; init; }
     public Guid TableId { get; init; }
     public required string LogicalName { get; init; }
     public required string Url { get; init; }

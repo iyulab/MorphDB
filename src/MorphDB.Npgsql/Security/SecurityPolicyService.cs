@@ -18,7 +18,7 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
     }
 
     public async Task<SecurityPolicy> CreatePolicyAsync(
-        Guid tenantId,
+        Guid projectId,
         CreatePolicyRequest request,
         CancellationToken cancellationToken = default)
     {
@@ -28,9 +28,9 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
         var tableId = await connection.QueryFirstOrDefaultAsync<Guid?>(
             """
             SELECT table_id FROM morphdb._morph_tables
-            WHERE tenant_id = @TenantId AND name = @TableName
+            WHERE project_id = @ProjectId AND name = @TableName
             """,
-            new { TenantId = tenantId, request.TableName });
+            new { ProjectId = projectId, request.TableName });
 
         if (!tableId.HasValue)
         {
@@ -41,15 +41,15 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
         var maxOrdinal = await connection.QueryFirstOrDefaultAsync<int?>(
             """
             SELECT MAX(ordinal_position) FROM morphdb._morph_security_policies
-            WHERE tenant_id = @TenantId AND table_id = @TableId
+            WHERE project_id = @ProjectId AND table_id = @TableId
             """,
-            new { TenantId = tenantId, TableId = tableId.Value });
+            new { ProjectId = projectId, TableId = tableId.Value });
 
         var now = DateTimeOffset.UtcNow;
         var policy = new SecurityPolicy
         {
             Id = Guid.NewGuid(),
-            TenantId = tenantId,
+            ProjectId = projectId,
             TableId = tableId.Value,
             Name = request.Name,
             Description = request.Description,
@@ -64,13 +64,13 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
         await connection.ExecuteAsync(
             """
             INSERT INTO morphdb._morph_security_policies
-            (id, tenant_id, table_id, name, description, policy_type, expression, is_active, ordinal_position, created_at, updated_at)
-            VALUES (@Id, @TenantId, @TableId, @Name, @Description, @PolicyType, @Expression, @IsActive, @OrdinalPosition, @CreatedAt, @UpdatedAt)
+            (id, project_id, table_id, name, description, policy_type, expression, is_active, ordinal_position, created_at, updated_at)
+            VALUES (@Id, @ProjectId, @TableId, @Name, @Description, @PolicyType, @Expression, @IsActive, @OrdinalPosition, @CreatedAt, @UpdatedAt)
             """,
             new
             {
                 policy.Id,
-                policy.TenantId,
+                policy.ProjectId,
                 policy.TableId,
                 policy.Name,
                 policy.Description,
@@ -86,66 +86,66 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
     }
 
     public async Task<IReadOnlyList<SecurityPolicy>> GetPoliciesAsync(
-        Guid tenantId,
+        Guid projectId,
         Guid tableId,
         CancellationToken cancellationToken = default)
     {
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         var records = await connection.QueryAsync<PolicyRecord>(
             """
-            SELECT id, tenant_id, table_id, name, description, policy_type, expression, is_active, ordinal_position, created_at, updated_at
+            SELECT id, project_id, table_id, name, description, policy_type, expression, is_active, ordinal_position, created_at, updated_at
             FROM morphdb._morph_security_policies
-            WHERE tenant_id = @TenantId AND table_id = @TableId
+            WHERE project_id = @ProjectId AND table_id = @TableId
             ORDER BY ordinal_position
             """,
-            new { TenantId = tenantId, TableId = tableId });
+            new { ProjectId = projectId, TableId = tableId });
 
         return records.Select(MapToPolicy).ToList();
     }
 
     public async Task<IReadOnlyList<SecurityPolicy>> GetPoliciesByTableNameAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         CancellationToken cancellationToken = default)
     {
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         var records = await connection.QueryAsync<PolicyRecord>(
             """
-            SELECT p.id, p.tenant_id, p.table_id, p.name, p.description, p.policy_type, p.expression, p.is_active, p.ordinal_position, p.created_at, p.updated_at
+            SELECT p.id, p.project_id, p.table_id, p.name, p.description, p.policy_type, p.expression, p.is_active, p.ordinal_position, p.created_at, p.updated_at
             FROM morphdb._morph_security_policies p
-            INNER JOIN morphdb._morph_tables t ON t.table_id = p.table_id AND t.tenant_id = p.tenant_id
-            WHERE p.tenant_id = @TenantId AND t.name = @TableName
+            INNER JOIN morphdb._morph_tables t ON t.table_id = p.table_id AND t.project_id = p.project_id
+            WHERE p.project_id = @ProjectId AND t.name = @TableName
             ORDER BY p.ordinal_position
             """,
-            new { TenantId = tenantId, TableName = tableName });
+            new { ProjectId = projectId, TableName = tableName });
 
         return records.Select(MapToPolicy).ToList();
     }
 
     public async Task<SecurityPolicy?> GetPolicyAsync(
-        Guid tenantId,
+        Guid projectId,
         Guid policyId,
         CancellationToken cancellationToken = default)
     {
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         var record = await connection.QueryFirstOrDefaultAsync<PolicyRecord>(
             """
-            SELECT id, tenant_id, table_id, name, description, policy_type, expression, is_active, ordinal_position, created_at, updated_at
+            SELECT id, project_id, table_id, name, description, policy_type, expression, is_active, ordinal_position, created_at, updated_at
             FROM morphdb._morph_security_policies
-            WHERE tenant_id = @TenantId AND id = @PolicyId
+            WHERE project_id = @ProjectId AND id = @PolicyId
             """,
-            new { TenantId = tenantId, PolicyId = policyId });
+            new { ProjectId = projectId, PolicyId = policyId });
 
         return record == null ? null : MapToPolicy(record);
     }
 
     public async Task<SecurityPolicy> UpdatePolicyAsync(
-        Guid tenantId,
+        Guid projectId,
         Guid policyId,
         UpdatePolicyRequest request,
         CancellationToken cancellationToken = default)
     {
-        var existing = await GetPolicyAsync(tenantId, policyId, cancellationToken);
+        var existing = await GetPolicyAsync(projectId, policyId, cancellationToken);
         if (existing == null)
         {
             throw new InvalidOperationException($"Policy '{policyId}' not found");
@@ -162,11 +162,11 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
             """
             UPDATE morphdb._morph_security_policies
             SET name = @Name, expression = @Expression, is_active = @IsActive, description = @Description, updated_at = @UpdatedAt
-            WHERE tenant_id = @TenantId AND id = @PolicyId
+            WHERE project_id = @ProjectId AND id = @PolicyId
             """,
             new
             {
-                TenantId = tenantId,
+                ProjectId = projectId,
                 PolicyId = policyId,
                 Name = name,
                 Expression = expression,
@@ -178,7 +178,7 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
         return new SecurityPolicy
         {
             Id = existing.Id,
-            TenantId = existing.TenantId,
+            ProjectId = existing.ProjectId,
             TableId = existing.TableId,
             Name = name,
             Description = description,
@@ -192,7 +192,7 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
     }
 
     public async Task DeletePolicyAsync(
-        Guid tenantId,
+        Guid projectId,
         Guid policyId,
         CancellationToken cancellationToken = default)
     {
@@ -200,13 +200,13 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
         await connection.ExecuteAsync(
             """
             DELETE FROM morphdb._morph_security_policies
-            WHERE tenant_id = @TenantId AND id = @PolicyId
+            WHERE project_id = @ProjectId AND id = @PolicyId
             """,
-            new { TenantId = tenantId, PolicyId = policyId });
+            new { ProjectId = projectId, PolicyId = policyId });
     }
 
     public async Task<string?> EvaluatePoliciesAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         PolicyType policyType,
         SecurityContext context,
@@ -217,7 +217,7 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
             return null; // Service key bypasses RLS
         }
 
-        var policies = await GetPoliciesByTableNameAsync(tenantId, tableName, cancellationToken);
+        var policies = await GetPoliciesByTableNameAsync(projectId, tableName, cancellationToken);
         var applicablePolicies = policies
             .Where(p => p.IsActive && (p.PolicyType == policyType || p.PolicyType == PolicyType.All))
             .ToList();
@@ -252,7 +252,7 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
                 "user_id" => context.UserId != null ? $"'{EscapeSqlString(context.UserId)}'" : "NULL",
                 "email" => context.Email != null ? $"'{EscapeSqlString(context.Email)}'" : "NULL",
                 "role" => context.Role != null ? $"'{EscapeSqlString(context.Role)}'" : "NULL",
-                "tenant_id" => $"'{context.TenantId}'",
+                "project_id" => $"'{context.ProjectId}'",
                 "is_authenticated" => context.IsAuthenticated ? "true" : "false",
                 _ when placeholder.StartsWith("claims.", StringComparison.Ordinal) => GetClaimValue(placeholder[7..], context),
                 _ => match.Value // Keep original if not recognized
@@ -281,7 +281,7 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
         return new SecurityPolicy
         {
             Id = record.Id,
-            TenantId = record.TenantId,
+            ProjectId = record.ProjectId,
             TableId = record.TableId,
             Name = record.Name,
             Description = record.Description,
@@ -296,7 +296,7 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
 
     private sealed record PolicyRecord(
         Guid Id,
-        Guid TenantId,
+        Guid ProjectId,
         Guid TableId,
         string Name,
         string? Description,

@@ -12,9 +12,9 @@ public sealed class Sha256NameHasher : INameHasher
     private const int MaxPostgresIdentifierLength = 63;
     private const int HashLength = 12; // Truncated hash for readability
 
-    public string GenerateTableName(Guid tenantId, string logicalName)
+    public string GenerateTableName(Guid projectId, string logicalName)
     {
-        var input = $"{tenantId}:table:{logicalName}";
+        var input = $"{projectId}:table:{logicalName}";
         var hash = ComputeHash(input);
         return $"tbl_{hash}";
     }
@@ -33,9 +33,9 @@ public sealed class Sha256NameHasher : INameHasher
         return $"idx_{hash}";
     }
 
-    public string GenerateViewName(Guid tenantId, string logicalName)
+    public string GenerateViewName(Guid projectId, string logicalName)
     {
-        var input = $"{tenantId}:view:{logicalName}";
+        var input = $"{projectId}:view:{logicalName}";
         var hash = ComputeHash(input);
         return $"view_{hash}";
     }

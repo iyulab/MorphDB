@@ -5,7 +5,7 @@ export interface Connection {
   name: string
   url: string
   apiKey: string // Stored securely in main process, not persisted in renderer
-  tenantId?: string
+  projectId?: string
   createdAt: string
   lastUsedAt?: string
   status: ConnectionStatus

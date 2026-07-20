@@ -23,7 +23,7 @@ class MorphDBClient:
     Example:
         async with MorphDBClient(
             base_url="http://localhost:5000",
-            tenant_id="your-tenant-id",
+            project_id="your-project-id",
             api_key="your-api-key",
         ) as client:
             # Create a table
@@ -50,7 +50,7 @@ class MorphDBClient:
     def __init__(
         self,
         base_url: str,
-        tenant_id: str,
+        project_id: str,
         api_key: str | None = None,
         jwt_token: str | None = None,
         timeout: float = 30.0,
@@ -62,7 +62,7 @@ class MorphDBClient:
 
         Args:
             base_url: The base URL of the MorphDB API server.
-            tenant_id: The tenant ID for multi-tenant isolation.
+            project_id: The project ID for multi-project isolation.
             api_key: Optional API key for authentication.
             jwt_token: Optional JWT token for authentication.
             timeout: Request timeout in seconds (default: 30).
@@ -71,7 +71,7 @@ class MorphDBClient:
         """
         self._http = HttpClient(
             base_url=base_url,
-            tenant_id=tenant_id,
+            project_id=project_id,
             api_key=api_key,
             jwt_token=jwt_token,
             timeout=timeout,
@@ -81,7 +81,7 @@ class MorphDBClient:
 
         self._realtime = RealtimeClient(
             base_url=base_url,
-            tenant_id=tenant_id,
+            project_id=project_id,
             api_key=api_key,
             jwt_token=jwt_token,
         )
@@ -123,9 +123,9 @@ class MorphDBClient:
         """Get the realtime client for subscriptions."""
         return self._realtime
 
-    def set_tenant_id(self, tenant_id: str) -> None:
-        """Update the tenant ID."""
-        self._http.set_tenant_id(tenant_id)
+    def set_project_id(self, project_id: str) -> None:
+        """Update the project ID."""
+        self._http.set_project_id(project_id)
 
     def set_api_key(self, api_key: str) -> None:
         """Update the API key."""

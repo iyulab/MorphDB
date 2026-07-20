@@ -15,20 +15,20 @@ public class SchemaApiTests
 {
     private readonly ApiIntegrationFixture _fixture;
     private readonly HttpClient _client;
-    private readonly Guid _tenantId;
+    private readonly Guid _projectId;
 
     public SchemaApiTests(ApiIntegrationFixture fixture)
     {
         _fixture = fixture;
         _client = fixture.Api.Client;
-        _tenantId = fixture.Api.TenantId;
+        _projectId = fixture.Api.ProjectId;
     }
 
     #region Table Operations
 
     [Theory]
     // Both payloads escaped their clause into arbitrary DDL before the DdlBuilder guards existed,
-    // executed by a role privileged enough to reach outside the tenant's own schemas. The reply has
+    // executed by a role privileged enough to reach outside the project's own schemas. The reply has
     // to be a refusal the caller can act on, not a 500 — and certainly not a created table.
     [InlineData("1=1), extra TEXT DEFAULT ('injected'", null)]
     [InlineData(null, "'x'), extra TEXT DEFAULT ('y")]
@@ -254,15 +254,15 @@ public class SchemaApiTests
 
     #endregion
 
-    #region Tenant Isolation
+    #region Project Isolation
 
     [Fact]
-    public async Task CreateTable_DifferentTenants_ShouldBeIsolated()
+    public async Task CreateTable_DifferentProjects_ShouldBeIsolated()
     {
         // Arrange
         var tableName = "shared_name";
-        var tenant1Client = _fixture.Api.CreateClientWithTenant(Guid.NewGuid());
-        var tenant2Client = _fixture.Api.CreateClientWithTenant(Guid.NewGuid());
+        var project1Client = _fixture.Api.CreateClientWithProject(Guid.NewGuid());
+        var project2Client = _fixture.Api.CreateClientWithProject(Guid.NewGuid());
 
         var request = new CreateTableApiRequest
         {
@@ -271,19 +271,19 @@ public class SchemaApiTests
         };
 
         // Act
-        var response1 = await tenant1Client.PostAsJsonAsync("/api/schema/tables", request);
-        var response2 = await tenant2Client.PostAsJsonAsync("/api/schema/tables", request);
+        var response1 = await project1Client.PostAsJsonAsync("/api/schema/tables", request);
+        var response2 = await project2Client.PostAsJsonAsync("/api/schema/tables", request);
 
-        // Assert - Both should succeed as they're in different tenants
+        // Assert - Both should succeed as they're in different projects
         response1.StatusCode.Should().Be(HttpStatusCode.Created);
         response2.StatusCode.Should().Be(HttpStatusCode.Created);
     }
 
     [Fact]
-    public async Task Request_WithoutTenantHeader_ShouldReturnBadRequest()
+    public async Task Request_WithoutProjectHeader_ShouldReturnBadRequest()
     {
-        // Arrange - Create a client without tenant header
-        var client = _fixture.Api.CreateClientWithTenant(Guid.Empty);
+        // Arrange - Create a client without project header
+        var client = _fixture.Api.CreateClientWithProject(Guid.Empty);
 
         // Act
         var response = await client.GetAsync("/api/schema/tables");

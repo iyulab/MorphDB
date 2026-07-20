@@ -19,16 +19,16 @@ namespace MorphDB.Service.GraphQL;
 public sealed class DynamicQuery
 {
     /// <summary>
-    /// Lists all tables for the current tenant.
+    /// Lists all tables for the current project.
     /// </summary>
-    [GraphQLDescription("Lists all tables for the current tenant")]
+    [GraphQLDescription("Lists all tables for the current project")]
     public async Task<IReadOnlyList<TableGraphType>> GetTables(
         [Service] ISchemaManager schemaManager,
-        [Service] ITenantContextAccessor tenantAccessor,
+        [Service] IProjectContextAccessor projectAccessor,
         CancellationToken cancellationToken)
     {
-        var tenantId = tenantAccessor.TenantId;
-        var tables = await schemaManager.ListTablesAsync(tenantId, cancellationToken);
+        var projectId = projectAccessor.ProjectId;
+        var tables = await schemaManager.ListTablesAsync(projectId, cancellationToken);
 
         return tables.Select(t => new TableGraphType
         {
@@ -54,11 +54,11 @@ public sealed class DynamicQuery
     public async Task<TableGraphType?> GetTable(
         string name,
         [Service] ISchemaManager schemaManager,
-        [Service] ITenantContextAccessor tenantAccessor,
+        [Service] IProjectContextAccessor projectAccessor,
         CancellationToken cancellationToken)
     {
-        var tenantId = tenantAccessor.TenantId;
-        var table = await schemaManager.GetTableAsync(tenantId, name, cancellationToken);
+        var projectId = projectAccessor.ProjectId;
+        var table = await schemaManager.GetTableAsync(projectId, name, cancellationToken);
 
         if (table is null)
             return null;
@@ -107,11 +107,11 @@ public sealed class DynamicQuery
         string? filter,
         string? orderBy,
         [Service] IMorphDataService dataService,
-        [Service] ITenantContextAccessor tenantAccessor,
+        [Service] IProjectContextAccessor projectAccessor,
         CancellationToken cancellationToken)
     {
-        var tenantId = tenantAccessor.TenantId;
-        var query = dataService.Query(tenantId).From(table).SelectAll();
+        var projectId = projectAccessor.ProjectId;
+        var query = dataService.Query(projectId).From(table).SelectAll();
 
         // Apply filters
         if (!string.IsNullOrEmpty(filter))
@@ -178,11 +178,11 @@ public sealed class DynamicQuery
         string table,
         Guid id,
         [Service] IMorphDataService dataService,
-        [Service] ITenantContextAccessor tenantAccessor,
+        [Service] IProjectContextAccessor projectAccessor,
         CancellationToken cancellationToken)
     {
-        var tenantId = tenantAccessor.TenantId;
-        var record = await dataService.GetByIdAsync(tenantId, table, id, cancellationToken);
+        var projectId = projectAccessor.ProjectId;
+        var record = await dataService.GetByIdAsync(projectId, table, id, cancellationToken);
 
         if (record is null)
             return null;
@@ -232,10 +232,10 @@ public sealed class DynamicQuery
         int? limit,
         int? offset,
         [Service] IAggregationService aggregationService,
-        [Service] ITenantContextAccessor tenantAccessor,
+        [Service] IProjectContextAccessor projectAccessor,
         CancellationToken cancellationToken)
     {
-        var tenantId = tenantAccessor.TenantId;
+        var projectId = projectAccessor.ProjectId;
 
         var request = new AggregationRequest
         {
@@ -268,7 +268,7 @@ public sealed class DynamicQuery
             Offset = offset
         };
 
-        var result = await aggregationService.AggregateAsync(tenantId, table, request, cancellationToken);
+        var result = await aggregationService.AggregateAsync(projectId, table, request, cancellationToken);
 
         return new AggregateResult
         {

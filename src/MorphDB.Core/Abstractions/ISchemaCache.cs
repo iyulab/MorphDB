@@ -3,15 +3,15 @@ using MorphDB.Core.Models;
 namespace MorphDB.Core.Abstractions;
 
 /// <summary>
-/// Provides caching for schema metadata with tenant isolation.
+/// Provides caching for schema metadata with project isolation.
 /// </summary>
 public interface ISchemaCache
 {
     /// <summary>
-    /// Gets cached table metadata by tenant and logical name.
+    /// Gets cached table metadata by project and logical name.
     /// </summary>
     Task<TableMetadata?> GetTableAsync(
-        Guid tenantId,
+        Guid projectId,
         string logicalName,
         CancellationToken cancellationToken = default);
 
@@ -23,10 +23,10 @@ public interface ISchemaCache
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Gets cached list of tables for a tenant.
+    /// Gets cached list of tables for a project.
     /// </summary>
     Task<IReadOnlyList<TableMetadata>?> GetTablesAsync(
-        Guid tenantId,
+        Guid projectId,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -40,7 +40,7 @@ public interface ISchemaCache
     /// Sets list of tables in cache.
     /// </summary>
     Task SetTablesAsync(
-        Guid tenantId,
+        Guid projectId,
         IReadOnlyList<TableMetadata> tables,
         CancellationToken cancellationToken = default);
 
@@ -52,18 +52,18 @@ public interface ISchemaCache
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Invalidates cached table by tenant and logical name.
+    /// Invalidates cached table by project and logical name.
     /// </summary>
     Task InvalidateTableAsync(
-        Guid tenantId,
+        Guid projectId,
         string logicalName,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Invalidates all cached tables for a tenant.
+    /// Invalidates all cached tables for a project.
     /// </summary>
-    Task InvalidateTenantTablesAsync(
-        Guid tenantId,
+    Task InvalidateProjectTablesAsync(
+        Guid projectId,
         CancellationToken cancellationToken = default);
 
     /// <summary>

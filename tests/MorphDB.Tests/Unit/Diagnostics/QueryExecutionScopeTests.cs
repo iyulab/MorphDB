@@ -33,11 +33,11 @@ public sealed class QueryExecutionScopeTests
     [Fact]
     public void Dispose_RecordsQueryExecution()
     {
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
 
         using (var scope = new QueryExecutionScope(
             _diagnostics,
-            tenantId,
+            projectId,
             "test_table",
             QueryOperationType.Select,
             "Unit Test"))
@@ -52,11 +52,11 @@ public sealed class QueryExecutionScopeTests
     [Fact]
     public void Dispose_CalculatesDuration()
     {
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
 
         using (var scope = new QueryExecutionScope(
             _diagnostics,
-            tenantId,
+            projectId,
             "test_table",
             QueryOperationType.Select,
             "Unit Test"))
@@ -71,11 +71,11 @@ public sealed class QueryExecutionScopeTests
     [Fact]
     public void SetRowCount_ReflectedInStatistics()
     {
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
 
         using (var scope = new QueryExecutionScope(
             _diagnostics,
-            tenantId,
+            projectId,
             "test_table",
             QueryOperationType.Insert,
             "Unit Test"))
@@ -91,11 +91,11 @@ public sealed class QueryExecutionScopeTests
     [Fact]
     public void SetError_RecordsAsFailedQuery()
     {
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
 
         using (var scope = new QueryExecutionScope(
             _diagnostics,
-            tenantId,
+            projectId,
             "test_table",
             QueryOperationType.Update,
             "Unit Test"))
@@ -110,11 +110,11 @@ public sealed class QueryExecutionScopeTests
     [Fact]
     public void SlowQuery_MarkedCorrectly()
     {
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
 
         using (var scope = new QueryExecutionScope(
             _diagnostics,
-            tenantId,
+            projectId,
             "test_table",
             QueryOperationType.Select,
             "Unit Test"))
@@ -130,11 +130,11 @@ public sealed class QueryExecutionScopeTests
     [Fact]
     public void FastQuery_NotMarkedAsSlow()
     {
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
 
         using (var scope = new QueryExecutionScope(
             _diagnostics,
-            tenantId,
+            projectId,
             "test_table",
             QueryOperationType.Select,
             "Unit Test"))
@@ -149,11 +149,11 @@ public sealed class QueryExecutionScopeTests
     [Fact]
     public void Source_RecordedCorrectly()
     {
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
 
         using (var scope = new QueryExecutionScope(
             _diagnostics,
-            tenantId,
+            projectId,
             "test_table",
             QueryOperationType.Select,
             "API/Data/Query"))
@@ -167,13 +167,13 @@ public sealed class QueryExecutionScopeTests
     }
 
     [Fact]
-    public void TenantId_RecordedCorrectly()
+    public void ProjectId_RecordedCorrectly()
     {
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
 
         using (var scope = new QueryExecutionScope(
             _diagnostics,
-            tenantId,
+            projectId,
             "test_table",
             QueryOperationType.Select,
             "Unit Test"))
@@ -183,17 +183,17 @@ public sealed class QueryExecutionScopeTests
 
         var slowQueries = _diagnostics.GetRecentSlowQueries(10);
         Assert.Single(slowQueries);
-        Assert.Equal(tenantId, slowQueries[0].TenantId);
+        Assert.Equal(projectId, slowQueries[0].ProjectId);
     }
 
     [Fact]
     public void TableName_RecordedCorrectly()
     {
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
 
         using (var scope = new QueryExecutionScope(
             _diagnostics,
-            tenantId,
+            projectId,
             "customers",
             QueryOperationType.Delete,
             "Unit Test"))
@@ -209,11 +209,11 @@ public sealed class QueryExecutionScopeTests
     [Fact]
     public void OperationType_RecordedCorrectly()
     {
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
 
         using (var scope = new QueryExecutionScope(
             _diagnostics,
-            tenantId,
+            projectId,
             "test_table",
             QueryOperationType.Upsert,
             "Unit Test"))
@@ -228,19 +228,19 @@ public sealed class QueryExecutionScopeTests
     [Fact]
     public void MultipleScopes_AllRecorded()
     {
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
 
-        using (var scope1 = new QueryExecutionScope(_diagnostics, tenantId, "table1", QueryOperationType.Select, "Test"))
+        using (var scope1 = new QueryExecutionScope(_diagnostics, projectId, "table1", QueryOperationType.Select, "Test"))
         {
             scope1.SetRowCount(10);
         }
 
-        using (var scope2 = new QueryExecutionScope(_diagnostics, tenantId, "table2", QueryOperationType.Insert, "Test"))
+        using (var scope2 = new QueryExecutionScope(_diagnostics, projectId, "table2", QueryOperationType.Insert, "Test"))
         {
             scope2.SetRowCount(1);
         }
 
-        using (var scope3 = new QueryExecutionScope(_diagnostics, tenantId, "table3", QueryOperationType.Update, "Test"))
+        using (var scope3 = new QueryExecutionScope(_diagnostics, projectId, "table3", QueryOperationType.Update, "Test"))
         {
             scope3.SetRowCount(5);
         }

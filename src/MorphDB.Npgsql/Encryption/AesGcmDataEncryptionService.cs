@@ -51,7 +51,7 @@ public sealed partial class AesGcmDataEncryptionService : IDataEncryptionService
     public bool IsEnabled => _options.Enabled && !string.IsNullOrEmpty(_options.MasterKey);
 
     /// <inheritdoc />
-    public string Encrypt(Guid tenantId, string tableName, string columnName, string plaintext)
+    public string Encrypt(Guid projectId, string tableName, string columnName, string plaintext)
     {
         if (!IsEnabled)
             return plaintext;
@@ -60,13 +60,13 @@ public sealed partial class AesGcmDataEncryptionService : IDataEncryptionService
             return plaintext;
 
         var plaintextBytes = Encoding.UTF8.GetBytes(plaintext);
-        var encryptedBytes = EncryptBytes(tenantId, tableName, columnName, plaintextBytes);
+        var encryptedBytes = EncryptBytes(projectId, tableName, columnName, plaintextBytes);
 
         return EncryptedPrefix + Convert.ToBase64String(encryptedBytes);
     }
 
     /// <inheritdoc />
-    public string Decrypt(Guid tenantId, string tableName, string columnName, string ciphertext)
+    public string Decrypt(Guid projectId, string tableName, string columnName, string ciphertext)
     {
         if (!IsEnabled)
             return ciphertext;
@@ -83,19 +83,19 @@ public sealed partial class AesGcmDataEncryptionService : IDataEncryptionService
 
         var base64Part = ciphertext[EncryptedPrefix.Length..];
         var encryptedBytes = Convert.FromBase64String(base64Part);
-        var decryptedBytes = DecryptBytes(tenantId, tableName, columnName, encryptedBytes);
+        var decryptedBytes = DecryptBytes(projectId, tableName, columnName, encryptedBytes);
 
         return Encoding.UTF8.GetString(decryptedBytes);
     }
 
     /// <inheritdoc />
-    public byte[] EncryptBytes(Guid tenantId, string tableName, string columnName, byte[] plaintext)
+    public byte[] EncryptBytes(Guid projectId, string tableName, string columnName, byte[] plaintext)
     {
         if (!IsEnabled)
             return plaintext;
 
         // Derive the encryption key for this table/column
-        var key = _keyDerivation.DeriveTableKey(tenantId, tableName);
+        var key = _keyDerivation.DeriveTableKey(projectId, tableName);
 
         try
         {
@@ -133,7 +133,7 @@ public sealed partial class AesGcmDataEncryptionService : IDataEncryptionService
     }
 
     /// <inheritdoc />
-    public byte[] DecryptBytes(Guid tenantId, string tableName, string columnName, byte[] ciphertext)
+    public byte[] DecryptBytes(Guid projectId, string tableName, string columnName, byte[] ciphertext)
     {
         if (!IsEnabled)
             return ciphertext;
@@ -157,7 +157,7 @@ public sealed partial class AesGcmDataEncryptionService : IDataEncryptionService
 
         // Derive the decryption key
         // Note: For key rotation, we might need to look up the old key based on keyVersion
-        var key = _keyDerivation.DeriveTableKey(tenantId, tableName);
+        var key = _keyDerivation.DeriveTableKey(projectId, tableName);
 
         try
         {
@@ -185,7 +185,7 @@ public sealed partial class AesGcmDataEncryptionService : IDataEncryptionService
 
     /// <inheritdoc />
     public IDictionary<string, object?> EncryptRow(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         IDictionary<string, object?> data,
         IReadOnlySet<string> encryptedColumns)
@@ -205,7 +205,7 @@ public sealed partial class AesGcmDataEncryptionService : IDataEncryptionService
 
             // Convert value to string for encryption
             var stringValue = ConvertToString(value);
-            result[key] = Encrypt(tenantId, tableName, key, stringValue);
+            result[key] = Encrypt(projectId, tableName, key, stringValue);
         }
 
         return result;
@@ -213,7 +213,7 @@ public sealed partial class AesGcmDataEncryptionService : IDataEncryptionService
 
     /// <inheritdoc />
     public IDictionary<string, object?> DecryptRow(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         IDictionary<string, object?> data,
         IReadOnlySet<string> encryptedColumns)
@@ -233,7 +233,7 @@ public sealed partial class AesGcmDataEncryptionService : IDataEncryptionService
 
             if (value is string stringValue && stringValue.StartsWith(EncryptedPrefix, StringComparison.Ordinal))
             {
-                result[key] = Decrypt(tenantId, tableName, key, stringValue);
+                result[key] = Decrypt(projectId, tableName, key, stringValue);
             }
             else
             {

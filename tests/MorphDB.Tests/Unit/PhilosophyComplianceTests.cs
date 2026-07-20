@@ -133,11 +133,11 @@ public class PhilosophyComplianceTests
     {
         // Arrange
         var hasher = new Sha256NameHasher();
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
         var tableId = Guid.NewGuid();
 
         // Act
-        var tablePhysical = hasher.GenerateTableName(tenantId, "customers");
+        var tablePhysical = hasher.GenerateTableName(projectId, "customers");
         var columnPhysical = hasher.GenerateColumnName(tableId, "email");
         var indexPhysical = hasher.GenerateIndexName(tableId, "idx_email");
         var constraintPhysical = hasher.GenerateConstraintName("fk", tableId, "orders_customer");
@@ -149,7 +149,7 @@ public class PhilosophyComplianceTests
         constraintPhysical.Should().StartWith("fk_");
 
         // Physical names should be consistent (deterministic)
-        var tablePhysical2 = hasher.GenerateTableName(tenantId, "customers");
+        var tablePhysical2 = hasher.GenerateTableName(projectId, "customers");
         tablePhysical.Should().Be(tablePhysical2);
     }
 
@@ -204,7 +204,7 @@ public class PhilosophyComplianceTests
     [InlineData("_created_by")]
     [InlineData("_updated_by")]
     [InlineData("_owner_id")]
-    [InlineData("_tenant_id")]
+    [InlineData("_project_id")]
     public void SystemColumns_ShouldUseUnderscorePrefix(string columnName)
     {
         // System columns are user-facing (logical names with underscore prefix)
@@ -247,7 +247,7 @@ public class PhilosophyComplianceTests
         return new TableMetadata
         {
             TableId = Guid.NewGuid(),
-            TenantId = Guid.NewGuid(),
+            ProjectId = Guid.NewGuid(),
             LogicalName = "customers",
             PhysicalName = "tbl_a7f3b2c1",
             SchemaVersion = 1,

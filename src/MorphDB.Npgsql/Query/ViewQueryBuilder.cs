@@ -15,13 +15,13 @@ namespace MorphDB.Npgsql.Query;
 public sealed class ViewQueryBuilder
 {
     private readonly IMetadataRepository _metadataRepository;
-    private readonly Guid _tenantId;
+    private readonly Guid _projectId;
     private readonly Dictionary<string, TableMetadata> _tableCache = new();
 
-    public ViewQueryBuilder(IMetadataRepository metadataRepository, Guid tenantId)
+    public ViewQueryBuilder(IMetadataRepository metadataRepository, Guid projectId)
     {
         _metadataRepository = metadataRepository;
-        _tenantId = tenantId;
+        _projectId = projectId;
     }
 
     /// <summary>
@@ -106,17 +106,17 @@ public sealed class ViewQueryBuilder
             sb.Append(string.Join("", filterConditions.Select((c, i) => i == 0 ? c : c)));
         }
 
-        // Add tenant isolation
-        var tenantCondition = $"base_table.\"tenant_id\" = '{_tenantId}'";
+        // Add project isolation
+        var projectCondition = $"base_table.\"project_id\" = '{_projectId}'";
         if (definition.Filters.Count > 0)
         {
             sb.Append(" AND ");
-            sb.Append(tenantCondition);
+            sb.Append(projectCondition);
         }
         else
         {
             sb.Append("\nWHERE ");
-            sb.Append(tenantCondition);
+            sb.Append(projectCondition);
         }
 
         // Build GROUP BY clause
@@ -312,7 +312,7 @@ public sealed class ViewQueryBuilder
             return cached;
         }
 
-        var metadata = await _metadataRepository.GetTableByNameAsync(_tenantId, tableName, includeColumns: true, cancellationToken);
+        var metadata = await _metadataRepository.GetTableByNameAsync(_projectId, tableName, includeColumns: true, cancellationToken);
         if (metadata != null)
         {
             _tableCache[tableName] = metadata;

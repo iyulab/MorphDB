@@ -9,7 +9,7 @@ public interface INameHasher
     /// Generates a physical table name from a logical name.
     /// Format: tbl_{hash}
     /// </summary>
-    string GenerateTableName(Guid tenantId, string logicalName);
+    string GenerateTableName(Guid projectId, string logicalName);
 
     /// <summary>
     /// Generates a physical column name from a logical name.
@@ -27,7 +27,7 @@ public interface INameHasher
     /// Generates a physical view name.
     /// Format: view_{hash}
     /// </summary>
-    string GenerateViewName(Guid tenantId, string logicalName);
+    string GenerateViewName(Guid projectId, string logicalName);
 
     /// <summary>
     /// Generates a physical constraint name.

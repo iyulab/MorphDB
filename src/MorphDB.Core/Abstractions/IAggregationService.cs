@@ -9,13 +9,13 @@ public interface IAggregationService
     /// <summary>
     /// Executes an aggregation query on a table.
     /// </summary>
-    /// <param name="tenantId">The tenant ID.</param>
+    /// <param name="projectId">The project ID.</param>
     /// <param name="tableName">The logical table name.</param>
     /// <param name="request">The aggregation request with functions and grouping.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Aggregation results with grouped data.</returns>
     Task<AggregationResult> AggregateAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         AggregationRequest request,
         CancellationToken cancellationToken = default);

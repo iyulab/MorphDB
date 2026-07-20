@@ -10,7 +10,7 @@ var options = new MorphDBClientOptions
 {
     BaseUrl = "http://localhost:8080",
     ApiKey = "your-api-key",       // Replace with actual API key
-    TenantId = Guid.NewGuid()      // Replace with actual tenant ID
+    ProjectId = Guid.NewGuid()      // Replace with actual project ID
 };
 
 using var client = new MorphDBClient(options);

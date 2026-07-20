@@ -22,18 +22,18 @@ public interface IViewMetadataRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Gets view metadata by logical name within a tenant.
+    /// Gets view metadata by logical name within a project.
     /// </summary>
     Task<ViewMetadata?> GetViewByNameAsync(
-        Guid tenantId,
+        Guid projectId,
         string logicalName,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Lists all views for a tenant.
+    /// Lists all views for a project.
     /// </summary>
     Task<IReadOnlyList<ViewMetadata>> ListViewsAsync(
-        Guid tenantId,
+        Guid projectId,
         CancellationToken cancellationToken = default);
 
     /// <summary>

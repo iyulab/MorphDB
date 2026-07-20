@@ -19,7 +19,7 @@ public interface IViewManager
     /// Gets view metadata by logical name.
     /// </summary>
     Task<ViewMetadata?> GetViewAsync(
-        Guid tenantId,
+        Guid projectId,
         string logicalName,
         CancellationToken cancellationToken = default);
 
@@ -31,10 +31,10 @@ public interface IViewManager
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Lists all views for a tenant.
+    /// Lists all views for a project.
     /// </summary>
     Task<IReadOnlyList<ViewMetadata>> ListViewsAsync(
-        Guid tenantId,
+        Guid projectId,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -79,7 +79,7 @@ public interface IViewManager
 /// </summary>
 public sealed class CreateViewRequest
 {
-    public Guid TenantId { get; init; }
+    public Guid ProjectId { get; init; }
     public required string Name { get; init; }
     public required ViewDefinition Definition { get; init; }
     public bool IsMaterialized { get; init; }
@@ -106,7 +106,7 @@ public sealed class UpdateViewRequest
 /// </summary>
 public sealed class ViewQueryRequest
 {
-    public Guid TenantId { get; init; }
+    public Guid ProjectId { get; init; }
     public required string ViewName { get; init; }
     public IReadOnlyList<string>? Columns { get; init; }
     public IReadOnlyList<ViewFilterSpec>? Filters { get; init; }
@@ -142,7 +142,7 @@ public interface IComputedColumnManager
     /// Validates a computed column expression.
     /// </summary>
     Task<ComputedColumnValidationResult> ValidateExpressionAsync(
-        Guid tenantId,
+        Guid projectId,
         Guid tableId,
         string expression,
         CancellationToken cancellationToken = default);
@@ -151,7 +151,7 @@ public interface IComputedColumnManager
     /// Gets the computed value for a column in a specific record.
     /// </summary>
     Task<object?> GetComputedValueAsync(
-        Guid tenantId,
+        Guid projectId,
         Guid tableId,
         string columnName,
         IDictionary<string, object?> rowData,
@@ -163,7 +163,7 @@ public interface IComputedColumnManager
 /// </summary>
 public sealed class AddComputedColumnRequest
 {
-    public Guid TenantId { get; init; }
+    public Guid ProjectId { get; init; }
     public Guid TableId { get; init; }
     public required string Name { get; init; }
     public required string Expression { get; init; }

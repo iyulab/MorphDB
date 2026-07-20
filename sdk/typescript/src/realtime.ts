@@ -54,7 +54,7 @@ export class RealtimeClient {
           operation: changeOp,
           recordId: data?.id ?? '',
           data,
-          tenantId: this.options.tenantId ?? '',
+          projectId: this.options.projectId ?? '',
           timestamp: new Date().toISOString(),
         };
 
@@ -127,8 +127,8 @@ export class RealtimeClient {
   private getHeaders(): Record<string, string> {
     const headers: Record<string, string> = {};
 
-    if (this.options.tenantId) {
-      headers['X-Tenant-Id'] = this.options.tenantId;
+    if (this.options.projectId) {
+      headers['X-Project-Id'] = this.options.projectId;
     }
 
     if (this.options.apiKey) {

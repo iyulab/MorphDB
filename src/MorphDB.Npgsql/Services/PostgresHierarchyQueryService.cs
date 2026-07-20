@@ -29,7 +29,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         HierarchyQueryRequest request,
         CancellationToken cancellationToken = default)
     {
-        var table = await GetTableMetadataAsync(request.TenantId, request.TableName, cancellationToken);
+        var table = await GetTableMetadataAsync(request.ProjectId, request.TableName, cancellationToken);
         var maxDepth = request.MaxDepth ?? DefaultMaxDepth;
 
         // Build recursive CTE for ancestors
@@ -53,7 +53,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         HierarchyQueryRequest request,
         CancellationToken cancellationToken = default)
     {
-        var table = await GetTableMetadataAsync(request.TenantId, request.TableName, cancellationToken);
+        var table = await GetTableMetadataAsync(request.ProjectId, request.TableName, cancellationToken);
         var maxDepth = request.MaxDepth ?? DefaultMaxDepth;
 
         // Build recursive CTE for descendants
@@ -77,7 +77,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         HierarchyQueryRequest request,
         CancellationToken cancellationToken = default)
     {
-        var table = await GetTableMetadataAsync(request.TenantId, request.TableName, cancellationToken);
+        var table = await GetTableMetadataAsync(request.ProjectId, request.TableName, cancellationToken);
         var maxDepth = request.MaxDepth ?? DefaultMaxDepth;
 
         // Path to root is ancestors in reverse order (from root to record)
@@ -101,7 +101,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         HierarchyQueryRequest request,
         CancellationToken cancellationToken = default)
     {
-        var table = await GetTableMetadataAsync(request.TenantId, request.TableName, cancellationToken);
+        var table = await GetTableMetadataAsync(request.ProjectId, request.TableName, cancellationToken);
 
         // Get siblings (same parent, exclude self unless requested)
         var sql = BuildSiblingsSql(table.PhysicalName, request.ParentColumn, request.Columns, request.IncludeSelf);
@@ -138,7 +138,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         CycleCheckRequest request,
         CancellationToken cancellationToken = default)
     {
-        var table = await GetTableMetadataAsync(request.TenantId, request.TableName, cancellationToken);
+        var table = await GetTableMetadataAsync(request.ProjectId, request.TableName, cancellationToken);
 
         // Check if the new parent is a descendant of the record
         // If so, setting it as parent would create a cycle
@@ -155,12 +155,12 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
     }
 
     public async Task<CycleDetectionResult> DetectCyclesAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         string parentColumn,
         CancellationToken cancellationToken = default)
     {
-        var table = await GetTableMetadataAsync(tenantId, tableName, cancellationToken);
+        var table = await GetTableMetadataAsync(projectId, tableName, cancellationToken);
 
         // Use PostgreSQL 14+ CYCLE detection feature
         var sql = BuildCycleDetectionCte(table.PhysicalName, parentColumn);
@@ -354,11 +354,11 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
     #region Helpers
 
     private async Task<Core.Models.TableMetadata> GetTableMetadataAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         CancellationToken cancellationToken)
     {
-        var table = await _metadataRepository.GetTableByNameAsync(tenantId, tableName, cancellationToken: cancellationToken);
+        var table = await _metadataRepository.GetTableByNameAsync(projectId, tableName, cancellationToken: cancellationToken);
         if (table == null)
         {
             throw new KeyNotFoundException($"Table '{tableName}' not found");

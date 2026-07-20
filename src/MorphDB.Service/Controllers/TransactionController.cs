@@ -19,15 +19,15 @@ public sealed class TransactionController : ControllerBase
         _transactionService = transactionService;
     }
 
-    private Guid GetTenantId()
+    private Guid GetProjectId()
     {
-        if (Request.Headers.TryGetValue("X-Tenant-Id", out var tenantIdHeader) &&
-            Guid.TryParse(tenantIdHeader.FirstOrDefault(), out var tenantId))
+        if (Request.Headers.TryGetValue("X-Project-Id", out var projectIdHeader) &&
+            Guid.TryParse(projectIdHeader.FirstOrDefault(), out var projectId))
         {
-            return tenantId;
+            return projectId;
         }
 
-        throw new InvalidOperationException("X-Tenant-Id header is required");
+        throw new InvalidOperationException("X-Project-Id header is required");
     }
 
     /// <summary>
@@ -48,7 +48,7 @@ public sealed class TransactionController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
+            var projectId = GetProjectId();
 
             if (request.Operations.Count == 0)
             {
@@ -61,16 +61,16 @@ public sealed class TransactionController : ControllerBase
             }
 
             var coreRequest = MapToTransactionRequest(request);
-            var result = await _transactionService.ExecuteAsync(tenantId, coreRequest, cancellationToken);
+            var result = await _transactionService.ExecuteAsync(projectId, coreRequest, cancellationToken);
 
             var response = MapToTransactionResponse(result);
             if (!result.Success)
                 return BadRequest(response);
             return Ok(response);
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
+        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_TENANT" });
+            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (Exception ex)
         {
@@ -96,9 +96,9 @@ public sealed class TransactionController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
+            var projectId = GetProjectId();
 
-            var result = await _transactionService.FinalizeAsync(tenantId, table, id, cancellationToken);
+            var result = await _transactionService.FinalizeAsync(projectId, table, id, cancellationToken);
 
             if (!result.Success && result.Errors.Any(e => e.Error == "not_found"))
             {
@@ -118,9 +118,9 @@ public sealed class TransactionController : ControllerBase
                 ErrorCount = result.Success ? 0 : 1
             });
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
+        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_TENANT" });
+            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (Exception ex)
         {
@@ -141,7 +141,7 @@ public sealed class TransactionController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
+            var projectId = GetProjectId();
 
             if (request.RecordIds is null || request.RecordIds.Count == 0)
             {
@@ -154,7 +154,7 @@ public sealed class TransactionController : ControllerBase
             }
 
             var results = await _transactionService.FinalizeBatchAsync(
-                tenantId, table, request.RecordIds, cancellationToken);
+                projectId, table, request.RecordIds, cancellationToken);
 
             var validCount = results.Count(r => r.Success);
             var errorCount = results.Count(r => !r.Success);
@@ -166,9 +166,9 @@ public sealed class TransactionController : ControllerBase
                 ErrorCount = errorCount
             });
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
+        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_TENANT" });
+            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (Exception ex)
         {

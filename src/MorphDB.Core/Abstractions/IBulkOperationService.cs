@@ -13,7 +13,7 @@ public interface IBulkOperationService
     /// Starts a streaming import from CSV.
     /// </summary>
     Task<BulkImportJob> StartCsvImportAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         Stream dataStream,
         CsvImportOptions? options = null,
@@ -23,7 +23,7 @@ public interface IBulkOperationService
     /// Starts a streaming import from JSON array.
     /// </summary>
     Task<BulkImportJob> StartJsonImportAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         Stream dataStream,
         JsonImportOptions? options = null,
@@ -33,7 +33,7 @@ public interface IBulkOperationService
     /// Starts a streaming import from NDJSON (newline-delimited JSON).
     /// </summary>
     Task<BulkImportJob> StartNdjsonImportAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         Stream dataStream,
         JsonImportOptions? options = null,
@@ -54,7 +54,7 @@ public interface IBulkOperationService
     /// Starts a CSV export.
     /// </summary>
     Task<BulkExportJob> StartCsvExportAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         CsvExportOptions? options = null,
         CancellationToken cancellationToken = default);
@@ -63,7 +63,7 @@ public interface IBulkOperationService
     /// Starts a JSON export.
     /// </summary>
     Task<BulkExportJob> StartJsonExportAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         JsonExportOptions? options = null,
         CancellationToken cancellationToken = default);
@@ -72,7 +72,7 @@ public interface IBulkOperationService
     /// Starts an XLSX export.
     /// </summary>
     Task<BulkExportJob> StartXlsxExportAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         XlsxExportOptions? options = null,
         CancellationToken cancellationToken = default);
@@ -100,19 +100,19 @@ public interface IBulkOperationService
     Task<BulkExportJob?> GetExportJobAsync(Guid jobId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Lists import jobs for a tenant.
+    /// Lists import jobs for a project.
     /// </summary>
     Task<IReadOnlyList<BulkImportJob>> ListImportJobsAsync(
-        Guid tenantId,
+        Guid projectId,
         int limit = 50,
         int offset = 0,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Lists export jobs for a tenant.
+    /// Lists export jobs for a project.
     /// </summary>
     Task<IReadOnlyList<BulkExportJob>> ListExportJobsAsync(
-        Guid tenantId,
+        Guid projectId,
         int limit = 50,
         int offset = 0,
         CancellationToken cancellationToken = default);

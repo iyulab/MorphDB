@@ -9,7 +9,7 @@ namespace MorphDB.Core.Models;
 public sealed class RelationMetadata
 {
     public Guid RelationId { get; init; }
-    public Guid TenantId { get; init; }
+    public Guid ProjectId { get; init; }
 
     /// <summary>
     /// The table containing the foreign key.

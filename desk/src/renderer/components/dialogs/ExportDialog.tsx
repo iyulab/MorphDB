@@ -66,7 +66,7 @@ export function ExportDialog({
     return new MorphDBClient({
       url: activeConnection.url,
       apiKey,
-      tenantId: activeConnection.tenantId
+      projectId: activeConnection.projectId
     })
   }
 

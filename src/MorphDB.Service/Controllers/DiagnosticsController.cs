@@ -84,7 +84,7 @@ public partial class DiagnosticsController : ControllerBase
             Entries = entries.Select(e => new SlowQueryEntry
             {
                 ExecutionId = e.ExecutionId,
-                TenantId = e.TenantId,
+                ProjectId = e.ProjectId,
                 TableName = e.TableName,
                 OperationType = e.OperationType.ToString(),
                 DurationMs = e.DurationMs,
@@ -217,7 +217,7 @@ public sealed class SlowQueriesResponse
 public sealed class SlowQueryEntry
 {
     public Guid ExecutionId { get; init; }
-    public Guid? TenantId { get; init; }
+    public Guid? ProjectId { get; init; }
     public string? TableName { get; init; }
     public required string OperationType { get; init; }
     public long DurationMs { get; init; }

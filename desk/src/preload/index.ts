@@ -69,7 +69,7 @@ const api = {
       ipcRenderer.invoke('credentials:has', connectionId)
   },
 
-  // Connection testing (tenant ID is automatically resolved from API key)
+  // Connection testing (project ID is automatically resolved from API key)
   testConnection: (url: string, apiKey: string): Promise<ConnectionTestResult> =>
     ipcRenderer.invoke('connection:test', url, apiKey),
 

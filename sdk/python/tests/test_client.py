@@ -16,24 +16,24 @@ class TestMorphDBClient:
     """Test cases for MorphDBClient."""
 
     @pytest.fixture
-    def client(self, base_url: str, tenant_id: str, api_key: str) -> MorphDBClient:
+    def client(self, base_url: str, project_id: str, api_key: str) -> MorphDBClient:
         """Create a MorphDBClient."""
         return MorphDBClient(
             base_url=base_url,
-            tenant_id=tenant_id,
+            project_id=project_id,
             api_key=api_key,
         )
 
     def test_client_initialization(
         self,
         base_url: str,
-        tenant_id: str,
+        project_id: str,
         api_key: str,
     ) -> None:
         """Test client initialization."""
         client = MorphDBClient(
             base_url=base_url,
-            tenant_id=tenant_id,
+            project_id=project_id,
             api_key=api_key,
         )
 
@@ -47,14 +47,14 @@ class TestMorphDBClient:
     def test_client_initialization_with_jwt(
         self,
         base_url: str,
-        tenant_id: str,
+        project_id: str,
     ) -> None:
         """Test client initialization with JWT token."""
         jwt_token = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
 
         client = MorphDBClient(
             base_url=base_url,
-            tenant_id=tenant_id,
+            project_id=project_id,
             jwt_token=jwt_token,
         )
 
@@ -64,13 +64,13 @@ class TestMorphDBClient:
     def test_client_initialization_with_custom_options(
         self,
         base_url: str,
-        tenant_id: str,
+        project_id: str,
         api_key: str,
     ) -> None:
         """Test client initialization with custom options."""
         client = MorphDBClient(
             base_url=base_url,
-            tenant_id=tenant_id,
+            project_id=project_id,
             api_key=api_key,
             timeout=60.0,
             retry_count=5,
@@ -81,13 +81,13 @@ class TestMorphDBClient:
         assert client._http.retry_count == 5
         assert client._http.retry_delay == 2.0
 
-    def test_set_tenant_id(self, client: MorphDBClient) -> None:
-        """Test setting tenant ID."""
-        new_tenant_id = "new-tenant-id"
+    def test_set_project_id(self, client: MorphDBClient) -> None:
+        """Test setting project ID."""
+        new_project_id = "new-project-id"
 
-        client.set_tenant_id(new_tenant_id)
+        client.set_project_id(new_project_id)
 
-        assert client._http.tenant_id == new_tenant_id
+        assert client._http.project_id == new_project_id
 
     def test_set_api_key(self, client: MorphDBClient) -> None:
         """Test setting API key."""
@@ -131,14 +131,14 @@ class TestMorphDBClient:
     async def test_async_context_manager(
         self,
         base_url: str,
-        tenant_id: str,
+        project_id: str,
         api_key: str,
     ) -> None:
         """Test async context manager."""
         with patch.object(MorphDBClient, "close", new_callable=AsyncMock) as mock_close:
             async with MorphDBClient(
                 base_url=base_url,
-                tenant_id=tenant_id,
+                project_id=project_id,
                 api_key=api_key,
             ) as client:
                 assert client is not None
@@ -148,13 +148,13 @@ class TestMorphDBClient:
 
     def test_base_url_trailing_slash_removed(
         self,
-        tenant_id: str,
+        project_id: str,
         api_key: str,
     ) -> None:
         """Test that trailing slash is removed from base URL."""
         client = MorphDBClient(
             base_url="http://localhost:5000/",
-            tenant_id=tenant_id,
+            project_id=project_id,
             api_key=api_key,
         )
 
@@ -165,11 +165,11 @@ class TestMorphDBClientProperties:
     """Test MorphDBClient property accessors."""
 
     @pytest.fixture
-    def client(self, base_url: str, tenant_id: str, api_key: str) -> MorphDBClient:
+    def client(self, base_url: str, project_id: str, api_key: str) -> MorphDBClient:
         """Create a MorphDBClient."""
         return MorphDBClient(
             base_url=base_url,
-            tenant_id=tenant_id,
+            project_id=project_id,
             api_key=api_key,
         )
 

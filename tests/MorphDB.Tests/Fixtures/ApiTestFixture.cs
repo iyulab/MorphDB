@@ -41,11 +41,11 @@ public sealed class ApiTestFixture : IAsyncLifetime
     }
 
     public HttpClient Client { get; private set; } = null!;
-    public Guid TenantId { get; } = Guid.NewGuid();
+    public Guid ProjectId { get; } = Guid.NewGuid();
 
     public async Task InitializeAsync()
     {
-        // Pre-provision the test tenant's project schema directly in the database.
+        // Pre-provision the test project's project schema directly in the database.
         // This avoids the chicken-and-egg problem where the audit middleware tries
         // to log to a project's _audit_logs table before the project is created.
         await ProvisionTestProjectAsync();
@@ -175,15 +175,15 @@ public sealed class ApiTestFixture : IAsyncLifetime
             });
 
         Client = _factory.CreateClient();
-        Client.DefaultRequestHeaders.Add("X-Tenant-Id", TenantId.ToString());
+        Client.DefaultRequestHeaders.Add("X-Project-Id", ProjectId.ToString());
 
         await Task.CompletedTask;
     }
 
-    public HttpClient CreateClientWithTenant(Guid tenantId)
+    public HttpClient CreateClientWithProject(Guid projectId)
     {
         var client = _factory!.CreateClient();
-        client.DefaultRequestHeaders.Add("X-Tenant-Id", tenantId.ToString());
+        client.DefaultRequestHeaders.Add("X-Project-Id", projectId.ToString());
         return client;
     }
 
@@ -193,18 +193,18 @@ public sealed class ApiTestFixture : IAsyncLifetime
     public HttpClient CreateAuthenticatedClient()
     {
         var client = _factory!.CreateClient();
-        client.DefaultRequestHeaders.Add("X-Tenant-Id", TenantId.ToString());
+        client.DefaultRequestHeaders.Add("X-Project-Id", ProjectId.ToString());
         client.DefaultRequestHeaders.Add("X-Test-Auth", "true");
         return client;
     }
 
     /// <summary>
-    /// Creates an authenticated HttpClient with a specific tenant ID.
+    /// Creates an authenticated HttpClient with a specific project ID.
     /// </summary>
-    public HttpClient CreateAuthenticatedClientWithTenant(Guid tenantId)
+    public HttpClient CreateAuthenticatedClientWithProject(Guid projectId)
     {
         var client = _factory!.CreateClient();
-        client.DefaultRequestHeaders.Add("X-Tenant-Id", tenantId.ToString());
+        client.DefaultRequestHeaders.Add("X-Project-Id", projectId.ToString());
         client.DefaultRequestHeaders.Add("X-Test-Auth", "true");
         return client;
     }
@@ -224,7 +224,7 @@ public sealed class ApiTestFixture : IAsyncLifetime
     public Uri BaseAddress => _factory!.Server.BaseAddress;
 
     /// <summary>
-    /// Pre-provisions a project for the test tenant.
+    /// Pre-provisions a project for the test project.
     /// This creates the project entry, system/data schemas, and all system tables
     /// before the web application starts, avoiding the chicken-and-egg problem
     /// where audit middleware tries to log before tables exist.
@@ -232,7 +232,7 @@ public sealed class ApiTestFixture : IAsyncLifetime
     private async Task ProvisionTestProjectAsync()
     {
         // Use the same schema naming convention as PostgresSchemaNameResolver
-        var shortId = TenantId.ToString("N")[..8];
+        var shortId = ProjectId.ToString("N")[..8];
         var systemSchema = $"p_{shortId}_sys";
         var dataSchema = $"p_{shortId}_dat";
         var slug = $"test-project-{shortId}";
@@ -251,7 +251,7 @@ public sealed class ApiTestFixture : IAsyncLifetime
             """,
             new
             {
-                ProjectId = TenantId,
+                ProjectId = ProjectId,
                 Name = $"Test Project {shortId}",
                 Slug = slug,
                 SystemSchema = systemSchema,
@@ -338,9 +338,9 @@ public sealed class TestAuthHandler : AuthenticationHandler<AuthenticationScheme
             return Task.FromResult(AuthenticateResult.NoResult());
         }
 
-        // Get tenant ID from header for context
-        var tenantId = Guid.TryParse(Request.Headers["X-Tenant-Id"].FirstOrDefault(), out var parsedTenantId)
-            ? parsedTenantId
+        // Get project ID from header for context
+        var projectId = Guid.TryParse(Request.Headers["X-Project-Id"].FirstOrDefault(), out var parsedProjectId)
+            ? parsedProjectId
             : Guid.Empty;
 
         var claims = new List<Claim>
@@ -348,7 +348,7 @@ public sealed class TestAuthHandler : AuthenticationHandler<AuthenticationScheme
             new("sub", TestUserId),
             new("email", TestUserEmail),
             new(ClaimTypes.Name, "Test User"),
-            new("tenant_id", tenantId.ToString()),
+            new("project_id", projectId.ToString()),
             new(ClaimTypes.Role, "admin")
         };
 

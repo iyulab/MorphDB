@@ -48,9 +48,9 @@ public sealed record QueryExecutionEntry
     public required Guid ExecutionId { get; init; }
 
     /// <summary>
-    /// The tenant context for this query.
+    /// The project context for this query.
     /// </summary>
-    public Guid? TenantId { get; init; }
+    public Guid? ProjectId { get; init; }
 
     /// <summary>
     /// The logical table name being queried.

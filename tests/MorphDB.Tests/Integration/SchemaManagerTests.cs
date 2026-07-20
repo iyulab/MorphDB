@@ -10,7 +10,7 @@ namespace MorphDB.Tests.Integration;
 
 /// <summary>
 /// Integration tests for PostgresSchemaManager.
-/// Note: SchemaManager automatically adds system columns (_id, tenant_id, _created_at, _updated_at, _version).
+/// Note: SchemaManager automatically adds system columns (_id, project_id, _created_at, _updated_at, _version).
 /// Tests should only include user-defined columns in CreateTableRequest.
 /// </summary>
 [Collection("PostgreSQL")]
@@ -44,10 +44,10 @@ public class SchemaManagerTests
     public async Task CreateTableAsync_ShouldCreateTableAndMetadata()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
         var request = new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "customers_" + Guid.NewGuid().ToString("N")[..8],
             Columns =
             [
@@ -79,7 +79,7 @@ public class SchemaManagerTests
         // 5 system columns + 2 user columns = 7 total
         result.Columns.Should().HaveCount(7);
         result.Columns.Should().Contain(c => c.LogicalName == "_id" && c.IsPrimaryKey);
-        result.Columns.Should().Contain(c => c.LogicalName == "tenant_id");
+        result.Columns.Should().Contain(c => c.LogicalName == "project_id");
         result.Columns.Should().Contain(c => c.LogicalName == "_created_at");
         result.Columns.Should().Contain(c => c.LogicalName == "_updated_at");
         result.Columns.Should().Contain(c => c.LogicalName == "_version");
@@ -97,11 +97,11 @@ public class SchemaManagerTests
     public async Task CreateTableAsync_WithDuplicateName_ShouldThrow()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
         var tableName = "duplicate_table_" + Guid.NewGuid().ToString("N")[..8];
         var request = new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = tableName,
             Columns =
             [
@@ -124,10 +124,10 @@ public class SchemaManagerTests
     public async Task AddColumnAsync_ShouldAddColumnToExistingTable()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
         var createTableRequest = new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "products_" + Guid.NewGuid().ToString("N")[..8],
             Columns =
             [
@@ -171,10 +171,10 @@ public class SchemaManagerTests
     public async Task CreateIndexAsync_ShouldCreateIndex()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
         var createTableRequest = new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "orders_" + Guid.NewGuid().ToString("N")[..8],
             Columns =
             [
@@ -223,12 +223,12 @@ public class SchemaManagerTests
     public async Task CreateRelationAsync_ShouldCreateForeignKey()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
 
         // Create parent table (customers)
         var customersTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "rel_customers_" + Guid.NewGuid().ToString("N")[..8],
             Columns =
             [
@@ -244,7 +244,7 @@ public class SchemaManagerTests
         // Create child table (orders)
         var ordersTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "rel_orders_" + Guid.NewGuid().ToString("N")[..8],
             Columns =
             [
@@ -262,7 +262,7 @@ public class SchemaManagerTests
 
         var createRelationRequest = new CreateRelationRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "fk_orders_customer",
             SourceTableId = ordersTable.TableId,
             SourceColumnId = sourceColumn.ColumnId,
@@ -290,10 +290,10 @@ public class SchemaManagerTests
     public async Task GetTableByIdAsync_ShouldReturnTableWithColumns()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
         var createTableRequest = new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "get_test_table_" + Guid.NewGuid().ToString("N")[..8],
             Columns =
             [
@@ -323,11 +323,11 @@ public class SchemaManagerTests
     public async Task GetTableAsync_ShouldReturnTableByName()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
         var logicalName = "get_by_name_table_" + Guid.NewGuid().ToString("N")[..8];
         var createTableRequest = new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = logicalName,
             Columns =
             [
@@ -342,7 +342,7 @@ public class SchemaManagerTests
         await _schemaManager.CreateTableAsync(createTableRequest);
 
         // Act
-        var result = await _schemaManager.GetTableAsync(tenantId, logicalName);
+        var result = await _schemaManager.GetTableAsync(projectId, logicalName);
 
         // Assert
         result.Should().NotBeNull();
@@ -353,10 +353,10 @@ public class SchemaManagerTests
     public async Task CreateTableAsync_WithUnderscorePrefix_ShouldSucceed()
     {
         // Arrange - Underscore-prefixed table names should be allowed (e.g. for embedding scenarios)
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
         var request = new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "_archive_" + Guid.NewGuid().ToString("N")[..8],
             Columns =
             [
@@ -382,10 +382,10 @@ public class SchemaManagerTests
     public async Task CreateTableAsync_WithMorphPrefix_ShouldThrow()
     {
         // Arrange - _morph_ prefix is reserved for system tables
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
         var request = new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "_morph_system_" + Guid.NewGuid().ToString("N")[..8],
             Columns =
             [
@@ -404,15 +404,15 @@ public class SchemaManagerTests
     }
 
     [Fact]
-    public async Task ListTablesAsync_ShouldReturnAllTablesForTenant()
+    public async Task ListTablesAsync_ShouldReturnAllTablesForProject()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
         var uniqueSuffix = Guid.NewGuid().ToString("N")[..8];
 
         await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "list_table_1_" + uniqueSuffix,
             Columns =
             [
@@ -426,7 +426,7 @@ public class SchemaManagerTests
 
         await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "list_table_2_" + uniqueSuffix,
             Columns =
             [
@@ -439,7 +439,7 @@ public class SchemaManagerTests
         });
 
         // Act
-        var tables = await _schemaManager.ListTablesAsync(tenantId);
+        var tables = await _schemaManager.ListTablesAsync(projectId);
 
         // Assert
         tables.Should().HaveCountGreaterThanOrEqualTo(2);

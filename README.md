@@ -97,8 +97,8 @@ Tags: every release publishes `X.Y.Z` and `X.Y`, plus `latest`.
 
 ### First request: create a project
 
-Every schema and data endpoint is tenant-scoped, so a bare request is answered with `InvalidTenant`.
-A project is that tenant — create one first, then send its id as `X-Tenant-Id` on everything else.
+Every schema and data endpoint is project-scoped, so a bare request is answered with `InvalidProject`.
+A project is that project — create one first, then send its id as `X-Project-Id` on everything else.
 
 ```bash
 # 1. Create a project. The response carries the id you will scope requests with.
@@ -108,13 +108,13 @@ PROJECT=$(curl -sS -X POST http://localhost:8080/api/projects \
 
 # 2. Create a table inside it.
 curl -sS -X POST http://localhost:8080/api/schema/tables \
-  -H "X-Tenant-Id: $PROJECT" \
+  -H "X-Project-Id: $PROJECT" \
   -H 'Content-Type: application/json' \
   -d '{"name":"customers","columns":[{"name":"email","type":"text","nullable":false}]}'
 
 # 3. Write a row.
 curl -sS -X POST http://localhost:8080/api/data/customers \
-  -H "X-Tenant-Id: $PROJECT" \
+  -H "X-Project-Id: $PROJECT" \
   -H 'Content-Type: application/json' \
   -d '{"email":"ada@example.com"}'
 ```
@@ -122,7 +122,7 @@ curl -sS -X POST http://localhost:8080/api/data/customers \
 The .NET client takes the same id once, at construction:
 
 ```csharp
-var client = new MorphDBClient("http://localhost:8080", new MorphDBClientOptions { TenantId = projectId });
+var client = new MorphDBClient("http://localhost:8080", new MorphDBClientOptions { ProjectId = projectId });
 ```
 
 ### From Source
@@ -150,7 +150,7 @@ MorphDB maps logical names to hash-based physical names, enabling schema changes
 
 ```csharp
 // Create table at runtime
-await schemaManager.CreateTableAsync(tenantId, new CreateTableRequest
+await schemaManager.CreateTableAsync(projectId, new CreateTableRequest
 {
     LogicalName = "customers",
     Columns = new[]
@@ -161,7 +161,7 @@ await schemaManager.CreateTableAsync(tenantId, new CreateTableRequest
 });
 
 // Insert data using logical names
-await dataService.InsertAsync(tenantId, "customers", new Dictionary<string, object?>
+await dataService.InsertAsync(projectId, "customers", new Dictionary<string, object?>
 {
     ["name"] = "John Doe",
     ["email"] = "john@example.com"
@@ -198,8 +198,8 @@ MorphDB/
 - **Spreadsheet-style databases** - Runtime schema + relational power
 - **Low-code/No-code platforms** - API-first data layer
 - **Dynamic form builders** - Schema-on-the-fly
-- **CRM/ERP with custom fields** - Tenant-isolated customization
-- **Multi-tenant SaaS backends** - Secure data isolation
+- **CRM/ERP with custom fields** - Project-isolated customization
+- **Multi-project SaaS backends** - Secure data isolation
 
 ## License
 

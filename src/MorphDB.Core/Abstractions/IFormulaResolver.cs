@@ -12,13 +12,13 @@ public interface IFormulaResolver
     /// <summary>
     /// Builds SQL expressions for formula columns to include in a query SELECT.
     /// </summary>
-    /// <param name="tenantId">The tenant ID.</param>
+    /// <param name="projectId">The project ID.</param>
     /// <param name="sourceTable">The source table metadata.</param>
     /// <param name="formulaColumns">Formula columns to resolve.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>SQL expressions for formula columns.</returns>
     Task<FormulaQueryExpansion> BuildFormulaExpansionAsync(
-        Guid tenantId,
+        Guid projectId,
         TableMetadata sourceTable,
         IReadOnlyList<FormulaColumnInfo> formulaColumns,
         CancellationToken cancellationToken = default);
@@ -33,13 +33,13 @@ public interface IFormulaResolver
     /// <summary>
     /// Validates a formula column configuration.
     /// </summary>
-    /// <param name="tenantId">The tenant ID.</param>
+    /// <param name="projectId">The project ID.</param>
     /// <param name="sourceTable">The source table containing the formula column.</param>
     /// <param name="config">The formula configuration to validate.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Validation result with any errors.</returns>
     Task<FormulaValidationResult> ValidateFormulaConfigAsync(
-        Guid tenantId,
+        Guid projectId,
         TableMetadata sourceTable,
         FormulaColumnConfig config,
         CancellationToken cancellationToken = default);

@@ -14,24 +14,24 @@ namespace MorphDB.Service.Controllers;
 public sealed class HierarchyController : ControllerBase
 {
     private readonly IHierarchyQueryService _hierarchyService;
-    private readonly ITenantContextAccessor _tenantContext;
+    private readonly IProjectContextAccessor _projectContext;
 
     public HierarchyController(
         IHierarchyQueryService hierarchyService,
-        ITenantContextAccessor tenantContext)
+        IProjectContextAccessor projectContext)
     {
         _hierarchyService = hierarchyService;
-        _tenantContext = tenantContext;
+        _projectContext = projectContext;
     }
 
-    private Guid GetTenantId()
+    private Guid GetProjectId()
     {
-        var tenantId = _tenantContext.TenantIdOrNull;
-        if (!tenantId.HasValue || tenantId.Value == Guid.Empty)
+        var projectId = _projectContext.ProjectIdOrNull;
+        if (!projectId.HasValue || projectId.Value == Guid.Empty)
         {
             throw new UnauthorizedAccessException("Valid API key is required");
         }
-        return tenantId.Value;
+        return projectId.Value;
     }
 
     /// <summary>
@@ -50,10 +50,10 @@ public sealed class HierarchyController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
+            var projectId = GetProjectId();
             var request = new HierarchyQueryRequest
             {
-                TenantId = tenantId,
+                ProjectId = projectId,
                 TableName = table,
                 ParentColumn = parentColumn,
                 RecordId = id,
@@ -92,10 +92,10 @@ public sealed class HierarchyController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
+            var projectId = GetProjectId();
             var request = new HierarchyQueryRequest
             {
-                TenantId = tenantId,
+                ProjectId = projectId,
                 TableName = table,
                 ParentColumn = parentColumn,
                 RecordId = id,
@@ -133,10 +133,10 @@ public sealed class HierarchyController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
+            var projectId = GetProjectId();
             var request = new HierarchyQueryRequest
             {
-                TenantId = tenantId,
+                ProjectId = projectId,
                 TableName = table,
                 ParentColumn = parentColumn,
                 RecordId = id,
@@ -173,10 +173,10 @@ public sealed class HierarchyController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
+            var projectId = GetProjectId();
             var request = new HierarchyQueryRequest
             {
-                TenantId = tenantId,
+                ProjectId = projectId,
                 TableName = table,
                 ParentColumn = parentColumn,
                 RecordId = id,
@@ -213,10 +213,10 @@ public sealed class HierarchyController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
+            var projectId = GetProjectId();
             var request = new HierarchyQueryRequest
             {
-                TenantId = tenantId,
+                ProjectId = projectId,
                 TableName = table,
                 ParentColumn = parentColumn,
                 RecordId = id,
@@ -252,10 +252,10 @@ public sealed class HierarchyController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
+            var projectId = GetProjectId();
             var checkRequest = new CycleCheckRequest
             {
-                TenantId = tenantId,
+                ProjectId = projectId,
                 TableName = table,
                 ParentColumn = request.ParentColumn ?? "_parent_id",
                 RecordId = request.RecordId,
@@ -289,9 +289,9 @@ public sealed class HierarchyController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
+            var projectId = GetProjectId();
             var result = await _hierarchyService.DetectCyclesAsync(
-                tenantId, table, parentColumn, cancellationToken);
+                projectId, table, parentColumn, cancellationToken);
 
             return Ok(new CycleDetectionApiResponse
             {

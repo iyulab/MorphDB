@@ -33,14 +33,14 @@ public sealed class RedisSchemaCache : ISchemaCache
     }
 
     public async Task<TableMetadata?> GetTableAsync(
-        Guid tenantId,
+        Guid projectId,
         string logicalName,
         CancellationToken cancellationToken = default)
     {
         if (!_options.Enabled)
             return null;
 
-        var key = BuildTableKey(tenantId, logicalName);
+        var key = BuildTableKey(projectId, logicalName);
         return await GetAsync<TableMetadata>(key, cancellationToken);
     }
 
@@ -56,13 +56,13 @@ public sealed class RedisSchemaCache : ISchemaCache
     }
 
     public async Task<IReadOnlyList<TableMetadata>?> GetTablesAsync(
-        Guid tenantId,
+        Guid projectId,
         CancellationToken cancellationToken = default)
     {
         if (!_options.Enabled)
             return null;
 
-        var key = BuildTenantTablesKey(tenantId);
+        var key = BuildProjectTablesKey(projectId);
         return await GetAsync<List<TableMetadata>>(key, cancellationToken);
     }
 
@@ -78,8 +78,8 @@ public sealed class RedisSchemaCache : ISchemaCache
             AbsoluteExpirationRelativeToNow = _options.TableCacheDuration
         };
 
-        // Cache by tenant + logical name
-        var nameKey = BuildTableKey(table.TenantId, table.LogicalName);
+        // Cache by project + logical name
+        var nameKey = BuildTableKey(table.ProjectId, table.LogicalName);
         await SetAsync(nameKey, table, cacheOptions, cancellationToken);
 
         // Cache by ID
@@ -90,7 +90,7 @@ public sealed class RedisSchemaCache : ISchemaCache
     }
 
     public async Task SetTablesAsync(
-        Guid tenantId,
+        Guid projectId,
         IReadOnlyList<TableMetadata> tables,
         CancellationToken cancellationToken = default)
     {
@@ -102,7 +102,7 @@ public sealed class RedisSchemaCache : ISchemaCache
             AbsoluteExpirationRelativeToNow = _options.TableListCacheDuration
         };
 
-        var key = BuildTenantTablesKey(tenantId);
+        var key = BuildProjectTablesKey(projectId);
         await SetAsync(key, tables.ToList(), cacheOptions, cancellationToken);
 
         // Also cache individual tables
@@ -111,7 +111,7 @@ public sealed class RedisSchemaCache : ISchemaCache
             await SetTableAsync(table, cancellationToken);
         }
 
-        SchemaCacheLogs.TableListCached(_logger, tenantId, tables.Count);
+        SchemaCacheLogs.TableListCached(_logger, projectId, tables.Count);
     }
 
     public async Task InvalidateTableAsync(
@@ -128,33 +128,33 @@ public sealed class RedisSchemaCache : ISchemaCache
     }
 
     public async Task InvalidateTableAsync(
-        Guid tenantId,
+        Guid projectId,
         string logicalName,
         CancellationToken cancellationToken = default)
     {
         if (!_options.Enabled)
             return;
 
-        var nameKey = BuildTableKey(tenantId, logicalName);
+        var nameKey = BuildTableKey(projectId, logicalName);
         await _cache.RemoveAsync(nameKey, cancellationToken);
 
-        // Also invalidate tenant table list
-        await InvalidateTenantTablesAsync(tenantId, cancellationToken);
+        // Also invalidate project table list
+        await InvalidateProjectTablesAsync(projectId, cancellationToken);
 
-        SchemaCacheLogs.TableNameInvalidated(_logger, tenantId, logicalName);
+        SchemaCacheLogs.TableNameInvalidated(_logger, projectId, logicalName);
     }
 
-    public async Task InvalidateTenantTablesAsync(
-        Guid tenantId,
+    public async Task InvalidateProjectTablesAsync(
+        Guid projectId,
         CancellationToken cancellationToken = default)
     {
         if (!_options.Enabled)
             return;
 
-        var key = BuildTenantTablesKey(tenantId);
+        var key = BuildProjectTablesKey(projectId);
         await _cache.RemoveAsync(key, cancellationToken);
 
-        SchemaCacheLogs.TenantTablesInvalidated(_logger, tenantId);
+        SchemaCacheLogs.ProjectTablesInvalidated(_logger, projectId);
     }
 
     public async Task InvalidateAllAsync(CancellationToken cancellationToken = default)
@@ -166,14 +166,14 @@ public sealed class RedisSchemaCache : ISchemaCache
         await Task.CompletedTask;
     }
 
-    private string BuildTableKey(Guid tenantId, string logicalName) =>
-        $"{_options.KeyPrefix}:table:{tenantId}:{logicalName.ToLowerInvariant()}";
+    private string BuildTableKey(Guid projectId, string logicalName) =>
+        $"{_options.KeyPrefix}:table:{projectId}:{logicalName.ToLowerInvariant()}";
 
     private string BuildTableIdKey(Guid tableId) =>
         $"{_options.KeyPrefix}:table:id:{tableId}";
 
-    private string BuildTenantTablesKey(Guid tenantId) =>
-        $"{_options.KeyPrefix}:tables:{tenantId}";
+    private string BuildProjectTablesKey(Guid projectId) =>
+        $"{_options.KeyPrefix}:tables:{projectId}";
 
     private async Task<T?> GetAsync<T>(string key, CancellationToken cancellationToken) where T : class
     {
@@ -215,17 +215,17 @@ internal static partial class SchemaCacheLogs
     [LoggerMessage(LogLevel.Debug, "Cached table '{TableName}' ({TableId})")]
     public static partial void TableCached(ILogger logger, string tableName, Guid tableId);
 
-    [LoggerMessage(LogLevel.Debug, "Cached {Count} tables for tenant {TenantId}")]
-    public static partial void TableListCached(ILogger logger, Guid tenantId, int count);
+    [LoggerMessage(LogLevel.Debug, "Cached {Count} tables for project {ProjectId}")]
+    public static partial void TableListCached(ILogger logger, Guid projectId, int count);
 
     [LoggerMessage(LogLevel.Debug, "Invalidated table cache for {TableId}")]
     public static partial void TableInvalidated(ILogger logger, Guid tableId);
 
-    [LoggerMessage(LogLevel.Debug, "Invalidated table cache for {TenantId}/{LogicalName}")]
-    public static partial void TableNameInvalidated(ILogger logger, Guid tenantId, string logicalName);
+    [LoggerMessage(LogLevel.Debug, "Invalidated table cache for {ProjectId}/{LogicalName}")]
+    public static partial void TableNameInvalidated(ILogger logger, Guid projectId, string logicalName);
 
-    [LoggerMessage(LogLevel.Debug, "Invalidated all tables for tenant {TenantId}")]
-    public static partial void TenantTablesInvalidated(ILogger logger, Guid tenantId);
+    [LoggerMessage(LogLevel.Debug, "Invalidated all tables for project {ProjectId}")]
+    public static partial void ProjectTablesInvalidated(ILogger logger, Guid projectId);
 
     [LoggerMessage(LogLevel.Warning, "InvalidateAll requested but not fully supported with Redis")]
     public static partial void InvalidateAllRequested(ILogger logger);

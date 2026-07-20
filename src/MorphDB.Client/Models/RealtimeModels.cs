@@ -31,9 +31,9 @@ public sealed class ChangeNotification
     public IDictionary<string, object?>? OldData { get; init; }
 
     /// <summary>
-    /// Tenant ID.
+    /// Project ID.
     /// </summary>
-    public Guid TenantId { get; init; }
+    public Guid ProjectId { get; init; }
 
     /// <summary>
     /// Timestamp of the change.

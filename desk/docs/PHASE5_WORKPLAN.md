@@ -10,7 +10,7 @@
 
 ### MorphDB Core Philosophy
 - Runtime-flexible database with schema abstraction
-- Multi-tenant architecture
+- Multi-project architecture
 - Production-ready, enterprise-grade
 
 ### Desk Philosophy

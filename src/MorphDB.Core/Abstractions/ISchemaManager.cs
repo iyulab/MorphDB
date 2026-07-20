@@ -18,7 +18,7 @@ public interface ISchemaManager
     /// Gets table metadata by logical name.
     /// </summary>
     Task<TableMetadata?> GetTableAsync(
-        Guid tenantId,
+        Guid projectId,
         string logicalName,
         CancellationToken cancellationToken = default);
 
@@ -30,10 +30,10 @@ public interface ISchemaManager
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Lists all tables for a tenant.
+    /// Lists all tables for a project.
     /// </summary>
     Task<IReadOnlyList<TableMetadata>> ListTablesAsync(
-        Guid tenantId,
+        Guid projectId,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -160,7 +160,7 @@ public sealed record BatchDdlResult
 
 public sealed record CreateTableRequest
 {
-    public Guid TenantId { get; init; }
+    public Guid ProjectId { get; init; }
     public required string LogicalName { get; init; }
     public IReadOnlyList<CreateColumnRequest> Columns { get; init; } = [];
 
@@ -333,7 +333,7 @@ public sealed record CreateIndexRequest
 
 public sealed record CreateRelationRequest
 {
-    public Guid TenantId { get; init; }
+    public Guid ProjectId { get; init; }
     public required string LogicalName { get; init; }
     public Guid SourceTableId { get; init; }
     public Guid SourceColumnId { get; init; }

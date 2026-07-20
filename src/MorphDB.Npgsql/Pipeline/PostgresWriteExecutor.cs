@@ -75,7 +75,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
 
         using var scope = new QueryExecutionScope(
             _queryDiagnostics,
-            context.TenantId,
+            context.ProjectId,
             table.LogicalName,
             QueryOperationType.Delete,
             "WritePipeline");
@@ -114,18 +114,18 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
         var table = context.Table;
         using var scope = new QueryExecutionScope(
             _queryDiagnostics,
-            context.TenantId,
+            context.ProjectId,
             table.LogicalName,
             QueryOperationType.Insert,
             "WritePipeline");
 
         try
         {
-            // Ensure tenant_id is set
-            var dataWithTenant = EnsureTenantId(context.Data, context.TenantId);
+            // Ensure project_id is set
+            var dataWithProject = EnsureProjectId(context.Data, context.ProjectId);
 
             // Encrypt data before storing
-            var encryptedData = EncryptRowData(context.TenantId, table.LogicalName, dataWithTenant, table.Columns);
+            var encryptedData = EncryptRowData(context.ProjectId, table.LogicalName, dataWithProject, table.Columns);
 
             // Map logical names to physical and prepare parameters
             var (columns, parameters, values) = PrepareInsertParameters(encryptedData, table.Columns);
@@ -139,7 +139,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             var mapped = MapToLogicalDictionary(result, table.Columns);
 
             // Return decrypted data to the caller
-            var decrypted = DecryptRowData(context.TenantId, table.LogicalName, mapped, table.Columns);
+            var decrypted = DecryptRowData(context.ProjectId, table.LogicalName, mapped, table.Columns);
             scope.SetRowCount(1);
             return WriteResult.Ok(decrypted);
         }
@@ -167,7 +167,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
 
         using var scope = new QueryExecutionScope(
             _queryDiagnostics,
-            context.TenantId,
+            context.ProjectId,
             table.LogicalName,
             QueryOperationType.Update,
             "WritePipeline");
@@ -175,7 +175,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
         try
         {
             // Encrypt data before storing
-            var encryptedData = EncryptRowData(context.TenantId, table.LogicalName, context.Data, table.Columns);
+            var encryptedData = EncryptRowData(context.ProjectId, table.LogicalName, context.Data, table.Columns);
 
             // Handle version increment specially
             var (setColumns, values) = PrepareUpdateParameters(encryptedData, table.Columns);
@@ -199,7 +199,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             }
 
             var mapped = MapToLogicalDictionary(result, table.Columns);
-            var decrypted = DecryptRowData(context.TenantId, table.LogicalName, mapped, table.Columns);
+            var decrypted = DecryptRowData(context.ProjectId, table.LogicalName, mapped, table.Columns);
             scope.SetRowCount(1);
             return WriteResult.Ok(decrypted);
         }
@@ -218,18 +218,18 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
 
         using var scope = new QueryExecutionScope(
             _queryDiagnostics,
-            context.TenantId,
+            context.ProjectId,
             table.LogicalName,
             QueryOperationType.Upsert,
             "WritePipeline");
 
         try
         {
-            // Ensure tenant_id is set
-            var dataWithTenant = EnsureTenantId(context.Data, context.TenantId);
+            // Ensure project_id is set
+            var dataWithProject = EnsureProjectId(context.Data, context.ProjectId);
 
             // Encrypt data before storing
-            var encryptedData = EncryptRowData(context.TenantId, table.LogicalName, dataWithTenant, table.Columns);
+            var encryptedData = EncryptRowData(context.ProjectId, table.LogicalName, dataWithProject, table.Columns);
 
             // Prepare insert parameters
             var (columns, parameters, values) = PrepareInsertParameters(encryptedData, table.Columns);
@@ -241,7 +241,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
                 new CommandDefinition(sql, values, transaction: conn.Transaction, cancellationToken: context.CancellationToken));
 
             var mapped = MapToLogicalDictionary(result, table.Columns);
-            var decrypted = DecryptRowData(context.TenantId, table.LogicalName, mapped, table.Columns);
+            var decrypted = DecryptRowData(context.ProjectId, table.LogicalName, mapped, table.Columns);
             scope.SetRowCount(1);
             return WriteResult.Ok(decrypted);
         }
@@ -269,7 +269,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
 
         using var scope = new QueryExecutionScope(
             _queryDiagnostics,
-            context.TenantId,
+            context.ProjectId,
             table.LogicalName,
             QueryOperationType.Delete,
             "WritePipeline.SoftDelete");
@@ -337,22 +337,22 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
         return pkColumn;
     }
 
-    private static IDictionary<string, object?> EnsureTenantId(IDictionary<string, object?> data, Guid tenantId)
+    private static IDictionary<string, object?> EnsureProjectId(IDictionary<string, object?> data, Guid projectId)
     {
-        const string TenantIdColumn = "tenant_id";
+        const string ProjectIdColumn = "project_id";
 
-        if (data.TryGetValue(TenantIdColumn, out var existingValue))
+        if (data.TryGetValue(ProjectIdColumn, out var existingValue))
         {
-            if (existingValue is Guid existingGuid && existingGuid != tenantId)
+            if (existingValue is Guid existingGuid && existingGuid != projectId)
             {
-                throw new InvalidOperationException($"Provided tenant_id '{existingGuid}' does not match expected '{tenantId}'");
+                throw new InvalidOperationException($"Provided project_id '{existingGuid}' does not match expected '{projectId}'");
             }
             return data;
         }
 
         var result = new Dictionary<string, object?>(data)
         {
-            [TenantIdColumn] = tenantId
+            [ProjectIdColumn] = projectId
         };
         return result;
     }
@@ -478,7 +478,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
     }
 
     private IDictionary<string, object?> EncryptRowData(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         IDictionary<string, object?> data,
         IReadOnlyList<ColumnMetadata> columns)
@@ -491,11 +491,11 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
         if (encryptedColumnNames.Count == 0)
             return data;
 
-        return _encryptionService.EncryptRow(tenantId, tableName, data, encryptedColumnNames);
+        return _encryptionService.EncryptRow(projectId, tableName, data, encryptedColumnNames);
     }
 
     private IDictionary<string, object?> DecryptRowData(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         IDictionary<string, object?> data,
         IReadOnlyList<ColumnMetadata> columns)
@@ -508,7 +508,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
         if (encryptedColumnNames.Count == 0)
             return data;
 
-        return _encryptionService.DecryptRow(tenantId, tableName, data, encryptedColumnNames);
+        return _encryptionService.DecryptRow(projectId, tableName, data, encryptedColumnNames);
     }
 
     private HashSet<string> GetEncryptedColumnNames(IReadOnlyList<ColumnMetadata> columns)

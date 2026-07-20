@@ -147,12 +147,12 @@ public class CircularReferenceException : SchemaException
 }
 
 /// <summary>
-/// Thrown when tenant isolation is violated.
+/// Thrown when project isolation is violated.
 /// </summary>
-public class TenantIsolationException : MorphDbException
+public class ProjectIsolationException : MorphDbException
 {
-    public TenantIsolationException()
-        : base("TENANT_ISOLATION_VIOLATION", "Access denied: tenant isolation violation.")
+    public ProjectIsolationException()
+        : base("PROJECT_ISOLATION_VIOLATION", "Access denied: project isolation violation.")
     {
     }
 }

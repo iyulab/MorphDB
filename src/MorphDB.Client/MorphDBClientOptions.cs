@@ -6,9 +6,10 @@ namespace MorphDB.Client;
 public sealed class MorphDBClientOptions
 {
     /// <summary>
-    /// Tenant ID for multi-tenant operations.
+    /// The project every request from this client is scoped to. A project is a schema namespace,
+    /// not a trust boundary -- see the security note in the README.
     /// </summary>
-    public Guid TenantId { get; set; }
+    public Guid ProjectId { get; set; }
 
     /// <summary>
     /// API key for authentication.

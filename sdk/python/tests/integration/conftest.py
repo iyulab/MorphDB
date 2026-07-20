@@ -28,17 +28,17 @@ def base_url() -> str:
 
 
 @pytest.fixture(scope="function")
-def tenant_id() -> str:
-    """Return a unique tenant ID for test isolation."""
+def project_id() -> str:
+    """Return a unique project ID for test isolation."""
     return str(uuid4())
 
 
 @pytest_asyncio.fixture
-async def client(base_url: str, tenant_id: str) -> AsyncGenerator[MorphDBClient, None]:
+async def client(base_url: str, project_id: str) -> AsyncGenerator[MorphDBClient, None]:
     """Create a MorphDBClient connected to the test server."""
     async with MorphDBClient(
         base_url=base_url,
-        tenant_id=tenant_id,
+        project_id=project_id,
         timeout=30.0,
     ) as client:
         yield client

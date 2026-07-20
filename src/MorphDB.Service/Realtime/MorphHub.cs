@@ -23,10 +23,10 @@ public sealed partial class MorphHub : Hub<IMorphHubClient>
     /// </summary>
     public override async Task OnConnectedAsync()
     {
-        var tenantId = GetTenantId();
-        LogClientConnected(_logger, Context.ConnectionId, tenantId);
+        var projectId = GetProjectId();
+        LogClientConnected(_logger, Context.ConnectionId, projectId);
 
-        await Groups.AddToGroupAsync(Context.ConnectionId, $"tenant:{tenantId}");
+        await Groups.AddToGroupAsync(Context.ConnectionId, $"project:{projectId}");
         await base.OnConnectedAsync();
     }
 
@@ -35,8 +35,8 @@ public sealed partial class MorphHub : Hub<IMorphHubClient>
     /// </summary>
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        var tenantId = GetTenantId();
-        LogClientDisconnected(_logger, Context.ConnectionId, tenantId, exception);
+        var projectId = GetProjectId();
+        LogClientDisconnected(_logger, Context.ConnectionId, projectId, exception);
 
         // Remove all subscriptions for this connection
         _subscriptionManager.RemoveConnection(Context.ConnectionId);
@@ -51,13 +51,13 @@ public sealed partial class MorphHub : Hub<IMorphHubClient>
     /// <param name="options">Optional subscription options for filtering.</param>
     public async Task Subscribe(string tableName, SubscriptionOptions? options = null)
     {
-        var tenantId = GetTenantId();
-        var groupName = GetTableGroupName(tenantId, tableName);
+        var projectId = GetProjectId();
+        var groupName = GetTableGroupName(projectId, tableName);
 
-        _subscriptionManager.AddSubscription(Context.ConnectionId, tenantId, tableName, options);
+        _subscriptionManager.AddSubscription(Context.ConnectionId, projectId, tableName, options);
         await Groups.AddToGroupAsync(Context.ConnectionId, groupName);
 
-        LogSubscribed(_logger, Context.ConnectionId, tableName, tenantId);
+        LogSubscribed(_logger, Context.ConnectionId, tableName, projectId);
 
         await Clients.Caller.Subscribed(tableName);
     }
@@ -68,13 +68,13 @@ public sealed partial class MorphHub : Hub<IMorphHubClient>
     /// <param name="tableName">The logical table name to unsubscribe from.</param>
     public async Task Unsubscribe(string tableName)
     {
-        var tenantId = GetTenantId();
-        var groupName = GetTableGroupName(tenantId, tableName);
+        var projectId = GetProjectId();
+        var groupName = GetTableGroupName(projectId, tableName);
 
         _subscriptionManager.RemoveSubscription(Context.ConnectionId, tableName);
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, groupName);
 
-        LogUnsubscribed(_logger, Context.ConnectionId, tableName, tenantId);
+        LogUnsubscribed(_logger, Context.ConnectionId, tableName, projectId);
 
         await Clients.Caller.Unsubscribed(tableName);
     }
@@ -112,36 +112,36 @@ public sealed partial class MorphHub : Hub<IMorphHubClient>
         return Task.FromResult(subscriptions);
     }
 
-    private Guid GetTenantId()
+    private Guid GetProjectId()
     {
         var httpContext = Context.GetHttpContext();
-        var tenantIdHeader = httpContext?.Request.Headers["X-Tenant-Id"].FirstOrDefault();
+        var projectIdHeader = httpContext?.Request.Headers["X-Project-Id"].FirstOrDefault();
 
-        if (Guid.TryParse(tenantIdHeader, out var tenantId))
+        if (Guid.TryParse(projectIdHeader, out var projectId))
         {
-            return tenantId;
+            return projectId;
         }
 
-        // Default tenant for development
+        // Default project for development
         return Guid.Empty;
     }
 
-    internal static string GetTableGroupName(Guid tenantId, string tableName)
+    internal static string GetTableGroupName(Guid projectId, string tableName)
     {
-        return $"table:{tenantId}:{tableName}";
+        return $"table:{projectId}:{tableName}";
     }
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Client {ConnectionId} connected for tenant {TenantId}")]
-    private static partial void LogClientConnected(ILogger logger, string connectionId, Guid tenantId);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Client {ConnectionId} connected for project {ProjectId}")]
+    private static partial void LogClientConnected(ILogger logger, string connectionId, Guid projectId);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Client {ConnectionId} disconnected from tenant {TenantId}")]
-    private static partial void LogClientDisconnected(ILogger logger, string connectionId, Guid tenantId, Exception? exception);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Client {ConnectionId} disconnected from project {ProjectId}")]
+    private static partial void LogClientDisconnected(ILogger logger, string connectionId, Guid projectId, Exception? exception);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Client {ConnectionId} subscribed to table {TableName} for tenant {TenantId}")]
-    private static partial void LogSubscribed(ILogger logger, string connectionId, string tableName, Guid tenantId);
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Client {ConnectionId} subscribed to table {TableName} for project {ProjectId}")]
+    private static partial void LogSubscribed(ILogger logger, string connectionId, string tableName, Guid projectId);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Client {ConnectionId} unsubscribed from table {TableName} for tenant {TenantId}")]
-    private static partial void LogUnsubscribed(ILogger logger, string connectionId, string tableName, Guid tenantId);
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Client {ConnectionId} unsubscribed from table {TableName} for project {ProjectId}")]
+    private static partial void LogUnsubscribed(ILogger logger, string connectionId, string tableName, Guid projectId);
 }
 
 /// <summary>
@@ -239,9 +239,9 @@ public sealed class SubscriptionManager
 {
     private readonly ConcurrentDictionary<string, ConnectionSubscriptions> _connections = new();
 
-    public void AddSubscription(string connectionId, Guid tenantId, string tableName, SubscriptionOptions? options)
+    public void AddSubscription(string connectionId, Guid projectId, string tableName, SubscriptionOptions? options)
     {
-        var subscriptions = _connections.GetOrAdd(connectionId, _ => new ConnectionSubscriptions(tenantId));
+        var subscriptions = _connections.GetOrAdd(connectionId, _ => new ConnectionSubscriptions(projectId));
         subscriptions.Tables[tableName] = options ?? new SubscriptionOptions();
     }
 
@@ -277,11 +277,11 @@ public sealed class SubscriptionManager
         return null;
     }
 
-    public IEnumerable<(string ConnectionId, SubscriptionOptions Options)> GetSubscribersForTable(Guid tenantId, string tableName)
+    public IEnumerable<(string ConnectionId, SubscriptionOptions Options)> GetSubscribersForTable(Guid projectId, string tableName)
     {
         foreach (var (connectionId, subscriptions) in _connections)
         {
-            if (subscriptions.TenantId == tenantId &&
+            if (subscriptions.ProjectId == projectId &&
                 subscriptions.Tables.TryGetValue(tableName, out var options))
             {
                 yield return (connectionId, options);
@@ -291,12 +291,12 @@ public sealed class SubscriptionManager
 
     private sealed class ConnectionSubscriptions
     {
-        public Guid TenantId { get; }
+        public Guid ProjectId { get; }
         public ConcurrentDictionary<string, SubscriptionOptions> Tables { get; } = new();
 
-        public ConnectionSubscriptions(Guid tenantId)
+        public ConnectionSubscriptions(Guid projectId)
         {
-            TenantId = tenantId;
+            ProjectId = projectId;
         }
     }
 }

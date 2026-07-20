@@ -24,7 +24,7 @@ public sealed class MorphQueryBuilder : IMorphQueryBuilder
     private readonly ILookupResolver? _lookupResolver;
     private readonly IRollupResolver? _rollupResolver;
     private readonly IFormulaResolver? _formulaResolver;
-    private readonly Guid _tenantId;
+    private readonly Guid _projectId;
 
     /// <summary>
     /// Creates a new MorphQueryBuilder with security support.
@@ -34,7 +34,7 @@ public sealed class MorphQueryBuilder : IMorphQueryBuilder
         IMetadataRepository metadataRepository,
         ISecurityPolicyService securityPolicyService,
         ISecurityContextAccessor securityContextAccessor,
-        Guid tenantId,
+        Guid projectId,
         ILookupResolver? lookupResolver = null,
         IRollupResolver? rollupResolver = null,
         IFormulaResolver? formulaResolver = null)
@@ -46,7 +46,7 @@ public sealed class MorphQueryBuilder : IMorphQueryBuilder
         _lookupResolver = lookupResolver;
         _rollupResolver = rollupResolver;
         _formulaResolver = formulaResolver;
-        _tenantId = tenantId;
+        _projectId = projectId;
     }
 
     /// <inheritdoc />
@@ -60,7 +60,7 @@ public sealed class MorphQueryBuilder : IMorphQueryBuilder
             _lookupResolver,
             _rollupResolver,
             _formulaResolver,
-            _tenantId,
+            _projectId,
             tableName,
             null);
     }
@@ -76,7 +76,7 @@ public sealed class MorphQueryBuilder : IMorphQueryBuilder
             _lookupResolver,
             _rollupResolver,
             _formulaResolver,
-            _tenantId,
+            _projectId,
             tableName,
             tableAlias);
     }
@@ -99,7 +99,7 @@ internal sealed class MorphQuery : IMorphQuery
     private readonly ILookupResolver? _lookupResolver;
     private readonly IRollupResolver? _rollupResolver;
     private readonly IFormulaResolver? _formulaResolver;
-    private readonly Guid _tenantId;
+    private readonly Guid _projectId;
     private readonly string _tableName;
     private readonly string? _tableAlias;
     private readonly PostgresCompiler _compiler;
@@ -147,7 +147,7 @@ internal sealed class MorphQuery : IMorphQuery
         ILookupResolver? lookupResolver,
         IRollupResolver? rollupResolver,
         IFormulaResolver? formulaResolver,
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         string? tableAlias)
     {
@@ -158,7 +158,7 @@ internal sealed class MorphQuery : IMorphQuery
         _lookupResolver = lookupResolver;
         _rollupResolver = rollupResolver;
         _formulaResolver = formulaResolver;
-        _tenantId = tenantId;
+        _projectId = projectId;
         _tableName = tableName;
         _tableAlias = tableAlias;
         _compiler = new PostgresCompiler();
@@ -864,7 +864,7 @@ internal sealed class MorphQuery : IMorphQuery
             return;
 
         _lookupExpansion = await _lookupResolver.BuildLookupExpansionAsync(
-            _tenantId,
+            _projectId,
             table,
             lookupColumns,
             cancellationToken);
@@ -903,7 +903,7 @@ internal sealed class MorphQuery : IMorphQuery
             return;
 
         _rollupExpansion = await _rollupResolver.BuildRollupExpansionAsync(
-            _tenantId,
+            _projectId,
             table,
             rollupColumns,
             cancellationToken);
@@ -941,7 +941,7 @@ internal sealed class MorphQuery : IMorphQuery
             return;
 
         _formulaExpansion = await _formulaResolver.BuildFormulaExpansionAsync(
-            _tenantId,
+            _projectId,
             table,
             formulaColumns,
             cancellationToken);
@@ -1136,10 +1136,10 @@ internal sealed class MorphQuery : IMorphQuery
             return _tableMetadata;
 
         _tableMetadata = await _metadataRepository.GetTableByNameAsync(
-            _tenantId, _tableName, includeColumns: true, cancellationToken);
+            _projectId, _tableName, includeColumns: true, cancellationToken);
 
         if (_tableMetadata is null)
-            throw new InvalidOperationException($"Table '{_tableName}' not found for tenant '{_tenantId}'");
+            throw new InvalidOperationException($"Table '{_tableName}' not found for project '{_projectId}'");
 
         // Load RLS expression for SELECT operations
         await LoadRlsExpressionAsync(PolicyType.Select, cancellationToken);
@@ -1155,10 +1155,10 @@ internal sealed class MorphQuery : IMorphQuery
             return cached;
 
         var metadata = await _metadataRepository.GetTableByNameAsync(
-            _tenantId, tableName, includeColumns: true, cancellationToken);
+            _projectId, tableName, includeColumns: true, cancellationToken);
 
         if (metadata is null)
-            throw new InvalidOperationException($"Joined table '{tableName}' not found for tenant '{_tenantId}'");
+            throw new InvalidOperationException($"Joined table '{tableName}' not found for project '{_projectId}'");
 
         _joinedTableMetadata[tableName] = metadata;
         return metadata;
@@ -1177,7 +1177,7 @@ internal sealed class MorphQuery : IMorphQuery
         }
 
         _rlsExpression = await _securityPolicyService.EvaluatePoliciesAsync(
-            _tenantId,
+            _projectId,
             _tableName,
             policyType,
             securityContext,

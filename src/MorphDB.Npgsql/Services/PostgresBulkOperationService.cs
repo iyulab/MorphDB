@@ -40,7 +40,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
     #region Import Operations
 
     public async Task<BulkImportJob> StartCsvImportAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         Stream dataStream,
         CsvImportOptions? options = null,
@@ -48,7 +48,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
     {
         options ??= new CsvImportOptions();
 
-        var table = await _schemaManager.GetTableAsync(tenantId, tableName, cancellationToken)
+        var table = await _schemaManager.GetTableAsync(projectId, tableName, cancellationToken)
             ?? throw new ArgumentException($"Table '{tableName}' not found");
 
         var jobId = Guid.NewGuid();
@@ -58,7 +58,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         var job = new BulkImportJob
         {
             JobId = jobId,
-            TenantId = tenantId,
+            ProjectId = projectId,
             TableId = table.TableId,
             TableName = tableName,
             Format = ImportFormat.Csv,
@@ -76,7 +76,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
     }
 
     public async Task<BulkImportJob> StartJsonImportAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         Stream dataStream,
         JsonImportOptions? options = null,
@@ -84,7 +84,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
     {
         options ??= new JsonImportOptions();
 
-        var table = await _schemaManager.GetTableAsync(tenantId, tableName, cancellationToken)
+        var table = await _schemaManager.GetTableAsync(projectId, tableName, cancellationToken)
             ?? throw new ArgumentException($"Table '{tableName}' not found");
 
         var jobId = Guid.NewGuid();
@@ -94,7 +94,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         var job = new BulkImportJob
         {
             JobId = jobId,
-            TenantId = tenantId,
+            ProjectId = projectId,
             TableId = table.TableId,
             TableName = tableName,
             Format = ImportFormat.Json,
@@ -112,7 +112,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
     }
 
     public async Task<BulkImportJob> StartNdjsonImportAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         Stream dataStream,
         JsonImportOptions? options = null,
@@ -120,7 +120,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
     {
         options ??= new JsonImportOptions();
 
-        var table = await _schemaManager.GetTableAsync(tenantId, tableName, cancellationToken)
+        var table = await _schemaManager.GetTableAsync(projectId, tableName, cancellationToken)
             ?? throw new ArgumentException($"Table '{tableName}' not found");
 
         var jobId = Guid.NewGuid();
@@ -130,7 +130,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         var job = new BulkImportJob
         {
             JobId = jobId,
-            TenantId = tenantId,
+            ProjectId = projectId,
             TableId = table.TableId,
             TableName = tableName,
             Format = ImportFormat.Ndjson,
@@ -178,7 +178,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
             };
 
             // Get table metadata for pipeline usage
-            var table = await _schemaManager.GetTableAsync(job.TenantId, job.TableName, cancellationToken);
+            var table = await _schemaManager.GetTableAsync(job.ProjectId, job.TableName, cancellationToken);
 
             await foreach (var row in rows.WithCancellation(cancellationToken))
             {
@@ -216,26 +216,26 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
     #region Export Operations
 
     public async Task<BulkExportJob> StartCsvExportAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         CsvExportOptions? options = null,
         CancellationToken cancellationToken = default)
     {
         options ??= new CsvExportOptions();
 
-        var table = await _schemaManager.GetTableAsync(tenantId, tableName, cancellationToken)
+        var table = await _schemaManager.GetTableAsync(projectId, tableName, cancellationToken)
             ?? throw new ArgumentException($"Table '{tableName}' not found");
 
         var jobId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
 
         // Count total rows for progress tracking
-        var totalRows = await CountRowsAsync(tenantId, tableName, options.Filter, cancellationToken);
+        var totalRows = await CountRowsAsync(projectId, tableName, options.Filter, cancellationToken);
 
         var job = new BulkExportJob
         {
             JobId = jobId,
-            TenantId = tenantId,
+            ProjectId = projectId,
             TableId = table.TableId,
             TableName = tableName,
             Format = ExportFormat.Csv,
@@ -251,25 +251,25 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
     }
 
     public async Task<BulkExportJob> StartJsonExportAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         JsonExportOptions? options = null,
         CancellationToken cancellationToken = default)
     {
         options ??= new JsonExportOptions();
 
-        var table = await _schemaManager.GetTableAsync(tenantId, tableName, cancellationToken)
+        var table = await _schemaManager.GetTableAsync(projectId, tableName, cancellationToken)
             ?? throw new ArgumentException($"Table '{tableName}' not found");
 
         var jobId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
 
-        var totalRows = await CountRowsAsync(tenantId, tableName, options.Filter, cancellationToken);
+        var totalRows = await CountRowsAsync(projectId, tableName, options.Filter, cancellationToken);
 
         var job = new BulkExportJob
         {
             JobId = jobId,
-            TenantId = tenantId,
+            ProjectId = projectId,
             TableId = table.TableId,
             TableName = tableName,
             Format = ExportFormat.Json,
@@ -285,25 +285,25 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
     }
 
     public async Task<BulkExportJob> StartXlsxExportAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         XlsxExportOptions? options = null,
         CancellationToken cancellationToken = default)
     {
         options ??= new XlsxExportOptions();
 
-        var table = await _schemaManager.GetTableAsync(tenantId, tableName, cancellationToken)
+        var table = await _schemaManager.GetTableAsync(projectId, tableName, cancellationToken)
             ?? throw new ArgumentException($"Table '{tableName}' not found");
 
         var jobId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
 
-        var totalRows = await CountRowsAsync(tenantId, tableName, options.Filter, cancellationToken);
+        var totalRows = await CountRowsAsync(projectId, tableName, options.Filter, cancellationToken);
 
         var job = new BulkExportJob
         {
             JobId = jobId,
-            TenantId = tenantId,
+            ProjectId = projectId,
             TableId = table.TableId,
             TableName = tableName,
             Format = ExportFormat.Xlsx,
@@ -366,7 +366,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
     public async Task<BulkImportJob?> GetImportJobAsync(Guid jobId, CancellationToken cancellationToken = default)
     {
         const string sql = """
-            SELECT job_id, tenant_id, table_id, table_name, format, status,
+            SELECT job_id, project_id, table_id, table_name, format, status,
                    total_rows, processed_rows, success_count, error_count,
                    error_message, options, created_at, started_at, completed_at
             FROM morphdb._morph_import_jobs
@@ -382,7 +382,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
     public async Task<BulkExportJob?> GetExportJobAsync(Guid jobId, CancellationToken cancellationToken = default)
     {
         const string sql = """
-            SELECT job_id, tenant_id, table_id, table_name, format, status,
+            SELECT job_id, project_id, table_id, table_name, format, status,
                    total_rows, processed_rows, file_path, file_size,
                    error_message, options, created_at, started_at, completed_at, expires_at
             FROM morphdb._morph_export_jobs
@@ -396,45 +396,45 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
     }
 
     public async Task<IReadOnlyList<BulkImportJob>> ListImportJobsAsync(
-        Guid tenantId,
+        Guid projectId,
         int limit = 50,
         int offset = 0,
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-            SELECT job_id, tenant_id, table_id, table_name, format, status,
+            SELECT job_id, project_id, table_id, table_name, format, status,
                    total_rows, processed_rows, success_count, error_count,
                    error_message, options, created_at, started_at, completed_at
             FROM morphdb._morph_import_jobs
-            WHERE tenant_id = @TenantId
+            WHERE project_id = @ProjectId
             ORDER BY created_at DESC
             LIMIT @Limit OFFSET @Offset
             """;
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-        var rows = await connection.QueryAsync<ImportJobRow>(sql, new { TenantId = tenantId, Limit = limit, Offset = offset });
+        var rows = await connection.QueryAsync<ImportJobRow>(sql, new { ProjectId = projectId, Limit = limit, Offset = offset });
 
         return rows.Select(MapToImportJob).ToList();
     }
 
     public async Task<IReadOnlyList<BulkExportJob>> ListExportJobsAsync(
-        Guid tenantId,
+        Guid projectId,
         int limit = 50,
         int offset = 0,
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-            SELECT job_id, tenant_id, table_id, table_name, format, status,
+            SELECT job_id, project_id, table_id, table_name, format, status,
                    total_rows, processed_rows, file_path, file_size,
                    error_message, options, created_at, started_at, completed_at, expires_at
             FROM morphdb._morph_export_jobs
-            WHERE tenant_id = @TenantId
+            WHERE project_id = @ProjectId
             ORDER BY created_at DESC
             LIMIT @Limit OFFSET @Offset
             """;
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-        var rows = await connection.QueryAsync<ExportJobRow>(sql, new { TenantId = tenantId, Limit = limit, Offset = offset });
+        var rows = await connection.QueryAsync<ExportJobRow>(sql, new { ProjectId = projectId, Limit = limit, Offset = offset });
 
         return rows.Select(MapToExportJob).ToList();
     }
@@ -501,7 +501,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-            SELECT job_id, tenant_id, table_id, table_name, format, status,
+            SELECT job_id, project_id, table_id, table_name, format, status,
                    total_rows, processed_rows, success_count, error_count,
                    error_message, options, created_at, started_at, completed_at
             FROM morphdb._morph_import_jobs
@@ -521,7 +521,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-            SELECT job_id, tenant_id, table_id, table_name, format, status,
+            SELECT job_id, project_id, table_id, table_name, format, status,
                    total_rows, processed_rows, file_path, file_size,
                    error_message, options, created_at, started_at, completed_at, expires_at
             FROM morphdb._morph_export_jobs
@@ -598,7 +598,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
             if (_writePipeline is not null && table is not null)
             {
                 var writeResult = await _writePipeline.InsertAsync(
-                    job.TenantId,
+                    job.ProjectId,
                     table,
                     row,
                     WriteOptions.BulkImport,
@@ -621,7 +621,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
             {
                 // Fallback to direct data service
                 insertResult = await _dataService.InsertAsync(
-                    job.TenantId,
+                    job.ProjectId,
                     job.TableName,
                     row,
                     CancellationToken.None);
@@ -823,7 +823,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
     {
         await using var writer = new StreamWriter(outputStream, Encoding.UTF8, leaveOpen: true);
 
-        var table = await _schemaManager.GetTableAsync(job.TenantId, job.TableName, cancellationToken)
+        var table = await _schemaManager.GetTableAsync(job.ProjectId, job.TableName, cancellationToken)
             ?? throw new InvalidOperationException($"Table '{job.TableName}' not found");
 
         var columns = options.Columns?.ToList() ?? table.Columns.Select(c => c.LogicalName).ToList();
@@ -836,7 +836,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
 
         // Stream data
         var processedRows = 0L;
-        await foreach (var row in StreamTableDataAsync(job.TenantId, job.TableName, columns, options.Filter, options.OrderBy, cancellationToken))
+        await foreach (var row in StreamTableDataAsync(job.ProjectId, job.TableName, columns, options.Filter, options.OrderBy, cancellationToken))
         {
             var values = columns.Select(col => FormatCsvValue(row.TryGetValue(col, out var v) ? v : null, options.DateFormat));
             await writer.WriteLineAsync(string.Join(options.Delimiter, values.Select(EscapeCsvValue)));
@@ -862,7 +862,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         var jsonOptions = new JsonWriterOptions { Indented = options.Pretty };
         await using var writer = new Utf8JsonWriter(outputStream, jsonOptions);
 
-        var table = await _schemaManager.GetTableAsync(job.TenantId, job.TableName, cancellationToken)
+        var table = await _schemaManager.GetTableAsync(job.ProjectId, job.TableName, cancellationToken)
             ?? throw new InvalidOperationException($"Table '{job.TableName}' not found");
 
         var columns = options.Columns?.ToList() ?? table.Columns.Select(c => c.LogicalName).ToList();
@@ -870,7 +870,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         writer.WriteStartArray();
 
         var processedRows = 0L;
-        await foreach (var row in StreamTableDataAsync(job.TenantId, job.TableName, columns, options.Filter, options.OrderBy, cancellationToken))
+        await foreach (var row in StreamTableDataAsync(job.ProjectId, job.TableName, columns, options.Filter, options.OrderBy, cancellationToken))
         {
             writer.WriteStartObject();
             foreach (var col in columns)
@@ -906,7 +906,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
 
         await using var writer = new StreamWriter(outputStream, Encoding.UTF8, leaveOpen: true);
 
-        var table = await _schemaManager.GetTableAsync(job.TenantId, job.TableName, cancellationToken)
+        var table = await _schemaManager.GetTableAsync(job.ProjectId, job.TableName, cancellationToken)
             ?? throw new InvalidOperationException($"Table '{job.TableName}' not found");
 
         var columns = options.Columns?.ToList() ?? table.Columns.Select(c => c.LogicalName).ToList();
@@ -919,7 +919,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
 
         // Stream data as tab-separated for Excel compatibility
         var processedRows = 0L;
-        await foreach (var row in StreamTableDataAsync(job.TenantId, job.TableName, columns, options.Filter, options.OrderBy, cancellationToken))
+        await foreach (var row in StreamTableDataAsync(job.ProjectId, job.TableName, columns, options.Filter, options.OrderBy, cancellationToken))
         {
             var values = columns.Select(col => FormatCsvValue(row.TryGetValue(col, out var v) ? v : null, null));
             await writer.WriteLineAsync(string.Join('\t', values));
@@ -1004,12 +1004,12 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
     #region Private Helpers - Database
 
     private async Task<long> CountRowsAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         string? filter,
         CancellationToken cancellationToken)
     {
-        var table = await _schemaManager.GetTableAsync(tenantId, tableName, cancellationToken)
+        var table = await _schemaManager.GetTableAsync(projectId, tableName, cancellationToken)
             ?? throw new ArgumentException($"Table '{tableName}' not found");
 
         var sql = $"SELECT COUNT(*) FROM {table.PhysicalName}";
@@ -1020,14 +1020,14 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
     }
 
     private async IAsyncEnumerable<IDictionary<string, object?>> StreamTableDataAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         List<string> columns,
         string? filter,
         string? orderBy,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        var table = await _schemaManager.GetTableAsync(tenantId, tableName, cancellationToken)
+        var table = await _schemaManager.GetTableAsync(projectId, tableName, cancellationToken)
             ?? throw new ArgumentException($"Table '{tableName}' not found");
 
         var columnMap = table.Columns.ToDictionary(c => c.LogicalName, c => c.PhysicalName);
@@ -1092,11 +1092,11 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
     {
         const string sql = """
             INSERT INTO morphdb._morph_import_jobs (
-                job_id, tenant_id, table_id, table_name, format, status,
+                job_id, project_id, table_id, table_name, format, status,
                 total_rows, processed_rows, success_count, error_count,
                 error_message, options, created_at
             ) VALUES (
-                @JobId, @TenantId, @TableId, @TableName, @Format, @Status,
+                @JobId, @ProjectId, @TableId, @TableName, @Format, @Status,
                 @TotalRows, @ProcessedRows, @SuccessCount, @ErrorCount,
                 @ErrorMessage, @Options::jsonb, @CreatedAt
             )
@@ -1106,7 +1106,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         await connection.ExecuteAsync(sql, new
         {
             job.JobId,
-            job.TenantId,
+            job.ProjectId,
             job.TableId,
             job.TableName,
             Format = job.Format.ToString().ToLowerInvariant(),
@@ -1125,11 +1125,11 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
     {
         const string sql = """
             INSERT INTO morphdb._morph_export_jobs (
-                job_id, tenant_id, table_id, table_name, format, status,
+                job_id, project_id, table_id, table_name, format, status,
                 total_rows, processed_rows, file_path, file_size,
                 error_message, options, created_at, expires_at
             ) VALUES (
-                @JobId, @TenantId, @TableId, @TableName, @Format, @Status,
+                @JobId, @ProjectId, @TableId, @TableName, @Format, @Status,
                 @TotalRows, @ProcessedRows, @FilePath, @FileSize,
                 @ErrorMessage, @Options::jsonb, @CreatedAt, @ExpiresAt
             )
@@ -1139,7 +1139,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         await connection.ExecuteAsync(sql, new
         {
             job.JobId,
-            job.TenantId,
+            job.ProjectId,
             job.TableId,
             job.TableName,
             Format = job.Format.ToString().ToLowerInvariant(),
@@ -1271,7 +1271,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         return new BulkImportJob
         {
             JobId = row.job_id,
-            TenantId = row.tenant_id,
+            ProjectId = row.project_id,
             TableId = row.table_id,
             TableName = row.table_name,
             Format = Enum.Parse<ImportFormat>(row.format, ignoreCase: true),
@@ -1293,7 +1293,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         return new BulkExportJob
         {
             JobId = row.job_id,
-            TenantId = row.tenant_id,
+            ProjectId = row.project_id,
             TableId = row.table_id,
             TableName = row.table_name,
             Format = Enum.Parse<ExportFormat>(row.format, ignoreCase: true),
@@ -1318,7 +1318,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
     private sealed record ImportJobRow
     {
         public Guid job_id { get; init; }
-        public Guid tenant_id { get; init; }
+        public Guid project_id { get; init; }
         public Guid table_id { get; init; }
         public string table_name { get; init; } = null!;
         public string format { get; init; } = null!;
@@ -1337,7 +1337,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
     private sealed record ExportJobRow
     {
         public Guid job_id { get; init; }
-        public Guid tenant_id { get; init; }
+        public Guid project_id { get; init; }
         public Guid table_id { get; init; }
         public string table_name { get; init; } = null!;
         public string format { get; init; } = null!;

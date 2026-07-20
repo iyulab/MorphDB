@@ -29,28 +29,28 @@ public sealed class WebhookController : ControllerBase
     private readonly IWebhookManager _webhookManager;
     private readonly ISchemaManager _schemaManager;
     private readonly ILogger<WebhookController> _logger;
-    private readonly ITenantContextAccessor _tenantContext;
+    private readonly IProjectContextAccessor _projectContext;
 
     public WebhookController(
         IWebhookManager webhookManager,
         ISchemaManager schemaManager,
         ILogger<WebhookController> logger,
-        ITenantContextAccessor tenantContext)
+        IProjectContextAccessor projectContext)
     {
         _webhookManager = webhookManager;
         _schemaManager = schemaManager;
         _logger = logger;
-        _tenantContext = tenantContext;
+        _projectContext = projectContext;
     }
 
-    private Guid GetTenantId()
+    private Guid GetProjectId()
     {
-        var tenantId = _tenantContext.TenantIdOrNull;
-        if (!tenantId.HasValue || tenantId.Value == Guid.Empty)
+        var projectId = _projectContext.ProjectIdOrNull;
+        if (!projectId.HasValue || projectId.Value == Guid.Empty)
         {
             throw new UnauthorizedAccessException("Valid API key is required");
         }
-        return tenantId.Value;
+        return projectId.Value;
     }
 
     /// <summary>
@@ -64,10 +64,10 @@ public sealed class WebhookController : ControllerBase
         [FromBody] CreateWebhookApiRequest request,
         CancellationToken cancellationToken)
     {
-        var tenantId = GetTenantId();
+        var projectId = GetProjectId();
 
         // Validate table exists
-        var table = await _schemaManager.GetTableAsync(tenantId, request.Table, cancellationToken);
+        var table = await _schemaManager.GetTableAsync(projectId, request.Table, cancellationToken);
         if (table is null)
         {
             return NotFound(new ErrorResponse
@@ -81,7 +81,7 @@ public sealed class WebhookController : ControllerBase
 
         var createRequest = new CreateWebhookRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             TableId = table.TableId,
             LogicalName = request.Name,
             Url = request.Url,
@@ -110,9 +110,9 @@ public sealed class WebhookController : ControllerBase
         Guid webhookId,
         CancellationToken cancellationToken)
     {
-        var tenantId = GetTenantId();
+        var projectId = GetProjectId();
         var webhook = await _webhookManager.GetWebhookAsync(webhookId, cancellationToken);
-        if (webhook is null || webhook.TenantId != tenantId)
+        if (webhook is null || webhook.ProjectId != projectId)
         {
             return NotFound(new ErrorResponse
             {
@@ -125,7 +125,7 @@ public sealed class WebhookController : ControllerBase
     }
 
     /// <summary>
-    /// Lists webhooks for the tenant.
+    /// Lists webhooks for the project.
     /// </summary>
     [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<WebhookApiResponse>), StatusCodes.Status200OK)]
@@ -133,8 +133,8 @@ public sealed class WebhookController : ControllerBase
         [FromQuery] string? table = null,
         CancellationToken cancellationToken = default)
     {
-        var tenantId = GetTenantId();
-        var webhooks = await _webhookManager.ListWebhooksAsync(tenantId, table, cancellationToken);
+        var projectId = GetProjectId();
+        var webhooks = await _webhookManager.ListWebhooksAsync(projectId, table, cancellationToken);
         return Ok(webhooks.Select(w => MapToResponse(w, showSecret: false)));
     }
 
@@ -149,9 +149,9 @@ public sealed class WebhookController : ControllerBase
         [FromBody] UpdateWebhookApiRequest request,
         CancellationToken cancellationToken)
     {
-        var tenantId = GetTenantId();
+        var projectId = GetProjectId();
         var existing = await _webhookManager.GetWebhookAsync(webhookId, cancellationToken);
-        if (existing is null || existing.TenantId != tenantId)
+        if (existing is null || existing.ProjectId != projectId)
         {
             return NotFound(new ErrorResponse
             {
@@ -184,9 +184,9 @@ public sealed class WebhookController : ControllerBase
         Guid webhookId,
         CancellationToken cancellationToken)
     {
-        var tenantId = GetTenantId();
+        var projectId = GetProjectId();
         var existing = await _webhookManager.GetWebhookAsync(webhookId, cancellationToken);
-        if (existing is null || existing.TenantId != tenantId)
+        if (existing is null || existing.ProjectId != projectId)
         {
             return NotFound(new ErrorResponse
             {
@@ -212,9 +212,9 @@ public sealed class WebhookController : ControllerBase
         Guid webhookId,
         CancellationToken cancellationToken)
     {
-        var tenantId = GetTenantId();
+        var projectId = GetProjectId();
         var existing = await _webhookManager.GetWebhookAsync(webhookId, cancellationToken);
-        if (existing is null || existing.TenantId != tenantId)
+        if (existing is null || existing.ProjectId != projectId)
         {
             return NotFound(new ErrorResponse
             {
@@ -242,9 +242,9 @@ public sealed class WebhookController : ControllerBase
         [FromQuery] int offset = 0,
         CancellationToken cancellationToken = default)
     {
-        var tenantId = GetTenantId();
+        var projectId = GetProjectId();
         var existing = await _webhookManager.GetWebhookAsync(webhookId, cancellationToken);
-        if (existing is null || existing.TenantId != tenantId)
+        if (existing is null || existing.ProjectId != projectId)
         {
             return NotFound(new ErrorResponse
             {
@@ -325,15 +325,15 @@ public sealed class WebhookController : ControllerBase
     }
 
     /// <summary>
-    /// Gets DLQ statistics for a tenant.
+    /// Gets DLQ statistics for a project.
     /// </summary>
     [HttpGet("dlq/stats")]
     [ProducesResponseType(typeof(DlqStatisticsApiResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetDlqStatistics(
         CancellationToken cancellationToken = default)
     {
-        var tenantId = GetTenantId();
-        var stats = await _webhookManager.GetDlqStatisticsAsync(tenantId, cancellationToken);
+        var projectId = GetProjectId();
+        var stats = await _webhookManager.GetDlqStatisticsAsync(projectId, cancellationToken);
         return Ok(new DlqStatisticsApiResponse
         {
             TotalMessages = stats.TotalMessages,

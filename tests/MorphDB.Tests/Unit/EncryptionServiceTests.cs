@@ -12,8 +12,8 @@ namespace MorphDB.Tests.Unit;
 public class EncryptionServiceTests
 {
     private const string ValidMasterKey = "dGhpcyBpcyBhIDMyIGJ5dGUga2V5IGZvciB0ZXN0cyE="; // 32 bytes base64
-    private static readonly Guid TenantId = Guid.Parse("11111111-1111-1111-1111-111111111111");
-    private static readonly Guid TenantId2 = Guid.Parse("22222222-2222-2222-2222-222222222222");
+    private static readonly Guid ProjectId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+    private static readonly Guid ProjectId2 = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
     private IKeyDerivationService CreateKeyDerivationService(int keyVersion = 1)
     {
@@ -45,14 +45,14 @@ public class EncryptionServiceTests
     #region Key Derivation Tests
 
     [Fact]
-    public void DeriveTenantKey_SameTenant_ShouldReturnConsistentKey()
+    public void DeriveProjectKey_SameProject_ShouldReturnConsistentKey()
     {
         // Arrange
         var service = CreateKeyDerivationService();
 
         // Act
-        var key1 = service.DeriveTenantKey(TenantId);
-        var key2 = service.DeriveTenantKey(TenantId);
+        var key1 = service.DeriveProjectKey(ProjectId);
+        var key2 = service.DeriveProjectKey(ProjectId);
 
         // Assert
         key1.Should().BeEquivalentTo(key2);
@@ -60,14 +60,14 @@ public class EncryptionServiceTests
     }
 
     [Fact]
-    public void DeriveTenantKey_DifferentTenants_ShouldReturnDifferentKeys()
+    public void DeriveProjectKey_DifferentProjects_ShouldReturnDifferentKeys()
     {
         // Arrange
         var service = CreateKeyDerivationService();
 
         // Act
-        var key1 = service.DeriveTenantKey(TenantId);
-        var key2 = service.DeriveTenantKey(TenantId2);
+        var key1 = service.DeriveProjectKey(ProjectId);
+        var key2 = service.DeriveProjectKey(ProjectId2);
 
         // Assert
         key1.Should().NotBeEquivalentTo(key2);
@@ -80,8 +80,8 @@ public class EncryptionServiceTests
         var service = CreateKeyDerivationService();
 
         // Act
-        var key1 = service.DeriveTableKey(TenantId, "customers");
-        var key2 = service.DeriveTableKey(TenantId, "customers");
+        var key1 = service.DeriveTableKey(ProjectId, "customers");
+        var key2 = service.DeriveTableKey(ProjectId, "customers");
 
         // Assert
         key1.Should().BeEquivalentTo(key2);
@@ -95,22 +95,22 @@ public class EncryptionServiceTests
         var service = CreateKeyDerivationService();
 
         // Act
-        var key1 = service.DeriveTableKey(TenantId, "customers");
-        var key2 = service.DeriveTableKey(TenantId, "orders");
+        var key1 = service.DeriveTableKey(ProjectId, "customers");
+        var key2 = service.DeriveTableKey(ProjectId, "orders");
 
         // Assert
         key1.Should().NotBeEquivalentTo(key2);
     }
 
     [Fact]
-    public void DeriveTableKey_SameTableDifferentTenants_ShouldReturnDifferentKeys()
+    public void DeriveTableKey_SameTableDifferentProjects_ShouldReturnDifferentKeys()
     {
         // Arrange
         var service = CreateKeyDerivationService();
 
         // Act
-        var key1 = service.DeriveTableKey(TenantId, "customers");
-        var key2 = service.DeriveTableKey(TenantId2, "customers");
+        var key1 = service.DeriveTableKey(ProjectId, "customers");
+        var key2 = service.DeriveTableKey(ProjectId2, "customers");
 
         // Assert
         key1.Should().NotBeEquivalentTo(key2);
@@ -123,8 +123,8 @@ public class EncryptionServiceTests
         var service = CreateKeyDerivationService();
 
         // Act
-        var key1 = service.DeriveColumnKey(TenantId, "customers", "email");
-        var key2 = service.DeriveColumnKey(TenantId, "customers", "phone");
+        var key1 = service.DeriveColumnKey(ProjectId, "customers", "email");
+        var key2 = service.DeriveColumnKey(ProjectId, "customers", "phone");
 
         // Assert
         key1.Should().NotBeEquivalentTo(key2);
@@ -138,8 +138,8 @@ public class EncryptionServiceTests
         var serviceV2 = CreateKeyDerivationService(keyVersion: 2);
 
         // Act
-        var key1 = serviceV1.DeriveTableKey(TenantId, "customers");
-        var key2 = serviceV2.DeriveTableKey(TenantId, "customers");
+        var key1 = serviceV1.DeriveTableKey(ProjectId, "customers");
+        var key2 = serviceV2.DeriveTableKey(ProjectId, "customers");
 
         // Assert
         key1.Should().NotBeEquivalentTo(key2);
@@ -202,7 +202,7 @@ public class EncryptionServiceTests
         var plaintext = "Hello, World!";
 
         // Act
-        var encrypted = service.Encrypt(TenantId, "customers", "email", plaintext);
+        var encrypted = service.Encrypt(ProjectId, "customers", "email", plaintext);
 
         // Assert
         encrypted.Should().StartWith("$MORPH$v1$");
@@ -217,8 +217,8 @@ public class EncryptionServiceTests
         var plaintext = "Sensitive data here!";
 
         // Act
-        var encrypted = service.Encrypt(TenantId, "customers", "email", plaintext);
-        var decrypted = service.Decrypt(TenantId, "customers", "email", encrypted);
+        var encrypted = service.Encrypt(ProjectId, "customers", "email", plaintext);
+        var decrypted = service.Decrypt(ProjectId, "customers", "email", encrypted);
 
         // Assert
         decrypted.Should().Be(plaintext);
@@ -232,22 +232,22 @@ public class EncryptionServiceTests
         var plaintext = "Same text";
 
         // Act
-        var encrypted1 = service.Encrypt(TenantId, "customers", "email", plaintext);
-        var encrypted2 = service.Encrypt(TenantId, "customers", "email", plaintext);
+        var encrypted1 = service.Encrypt(ProjectId, "customers", "email", plaintext);
+        var encrypted2 = service.Encrypt(ProjectId, "customers", "email", plaintext);
 
         // Assert
         encrypted1.Should().NotBe(encrypted2); // Different nonces
     }
 
     [Fact]
-    public void Decrypt_WithWrongTenant_ShouldThrowException()
+    public void Decrypt_WithWrongProject_ShouldThrowException()
     {
         // Arrange
         var service = CreateEncryptionService();
-        var encrypted = service.Encrypt(TenantId, "customers", "email", "secret");
+        var encrypted = service.Encrypt(ProjectId, "customers", "email", "secret");
 
         // Act
-        var action = () => service.Decrypt(TenantId2, "customers", "email", encrypted);
+        var action = () => service.Decrypt(ProjectId2, "customers", "email", encrypted);
 
         // Assert
         action.Should().Throw<System.Security.Cryptography.CryptographicException>();
@@ -258,10 +258,10 @@ public class EncryptionServiceTests
     {
         // Arrange
         var service = CreateEncryptionService();
-        var encrypted = service.Encrypt(TenantId, "customers", "email", "secret");
+        var encrypted = service.Encrypt(ProjectId, "customers", "email", "secret");
 
         // Act
-        var action = () => service.Decrypt(TenantId, "orders", "email", encrypted);
+        var action = () => service.Decrypt(ProjectId, "orders", "email", encrypted);
 
         // Assert
         action.Should().Throw<System.Security.Cryptography.CryptographicException>();
@@ -275,7 +275,7 @@ public class EncryptionServiceTests
         var plaintext = "Not encrypted data";
 
         // Act
-        var result = service.Decrypt(TenantId, "customers", "email", plaintext);
+        var result = service.Decrypt(ProjectId, "customers", "email", plaintext);
 
         // Assert
         result.Should().Be(plaintext);
@@ -288,7 +288,7 @@ public class EncryptionServiceTests
         var service = CreateEncryptionService();
 
         // Act
-        var encrypted = service.Encrypt(TenantId, "customers", "email", "");
+        var encrypted = service.Encrypt(ProjectId, "customers", "email", "");
 
         // Assert
         encrypted.Should().BeEmpty();
@@ -301,7 +301,7 @@ public class EncryptionServiceTests
         var service = CreateEncryptionService();
 
         // Act
-        var encrypted = service.Encrypt(TenantId, "customers", "email", null!);
+        var encrypted = service.Encrypt(ProjectId, "customers", "email", null!);
 
         // Assert
         encrypted.Should().BeNull();
@@ -315,7 +315,7 @@ public class EncryptionServiceTests
         var plaintext = "Should not encrypt";
 
         // Act
-        var result = service.Encrypt(TenantId, "customers", "email", plaintext);
+        var result = service.Encrypt(ProjectId, "customers", "email", plaintext);
 
         // Assert
         result.Should().Be(plaintext);
@@ -370,7 +370,7 @@ public class EncryptionServiceTests
         var plaintext = System.Text.Encoding.UTF8.GetBytes("Test data");
 
         // Act
-        var encrypted = service.EncryptBytes(TenantId, "customers", "email", plaintext);
+        var encrypted = service.EncryptBytes(ProjectId, "customers", "email", plaintext);
 
         // Assert
         encrypted.Should().HaveCountGreaterThan(31); // 1 + 2 + 12 + 16 = 31 bytes header
@@ -385,8 +385,8 @@ public class EncryptionServiceTests
         var plaintext = new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05 };
 
         // Act
-        var encrypted = service.EncryptBytes(TenantId, "customers", "data", plaintext);
-        var decrypted = service.DecryptBytes(TenantId, "customers", "data", encrypted);
+        var encrypted = service.EncryptBytes(ProjectId, "customers", "data", plaintext);
+        var decrypted = service.DecryptBytes(ProjectId, "customers", "data", encrypted);
 
         // Assert
         decrypted.Should().BeEquivalentTo(plaintext);
@@ -397,13 +397,13 @@ public class EncryptionServiceTests
     {
         // Arrange
         var service = CreateEncryptionService();
-        var encrypted = service.EncryptBytes(TenantId, "customers", "email", new byte[] { 1, 2, 3 });
+        var encrypted = service.EncryptBytes(ProjectId, "customers", "email", new byte[] { 1, 2, 3 });
 
         // Tamper with ciphertext (last byte)
         encrypted[^1] ^= 0xFF;
 
         // Act
-        var action = () => service.DecryptBytes(TenantId, "customers", "email", encrypted);
+        var action = () => service.DecryptBytes(ProjectId, "customers", "email", encrypted);
 
         // Assert
         action.Should().Throw<System.Security.Cryptography.CryptographicException>()
@@ -418,7 +418,7 @@ public class EncryptionServiceTests
         var shortData = new byte[10]; // Less than 31 bytes header
 
         // Act
-        var action = () => service.DecryptBytes(TenantId, "customers", "email", shortData);
+        var action = () => service.DecryptBytes(ProjectId, "customers", "email", shortData);
 
         // Assert
         action.Should().Throw<System.Security.Cryptography.CryptographicException>()
@@ -430,13 +430,13 @@ public class EncryptionServiceTests
     {
         // Arrange
         var service = CreateEncryptionService();
-        var encrypted = service.EncryptBytes(TenantId, "customers", "email", new byte[] { 1, 2, 3 });
+        var encrypted = service.EncryptBytes(ProjectId, "customers", "email", new byte[] { 1, 2, 3 });
 
         // Change version byte to unsupported version
         encrypted[0] = 99;
 
         // Act
-        var action = () => service.DecryptBytes(TenantId, "customers", "email", encrypted);
+        var action = () => service.DecryptBytes(ProjectId, "customers", "email", encrypted);
 
         // Assert
         action.Should().Throw<System.Security.Cryptography.CryptographicException>()
@@ -462,7 +462,7 @@ public class EncryptionServiceTests
         var encryptedColumns = new HashSet<string> { "email", "phone" };
 
         // Act
-        var result = service.EncryptRow(TenantId, "customers", data, encryptedColumns);
+        var result = service.EncryptRow(ProjectId, "customers", data, encryptedColumns);
 
         // Assert
         result["_id"].Should().Be(data["_id"]); // Not encrypted
@@ -479,7 +479,7 @@ public class EncryptionServiceTests
         var service = CreateEncryptionService();
         var encryptedColumns = new HashSet<string> { "email" };
 
-        var encryptedEmail = service.Encrypt(TenantId, "customers", "email", "test@example.com");
+        var encryptedEmail = service.Encrypt(ProjectId, "customers", "email", "test@example.com");
         var data = new Dictionary<string, object?>
         {
             ["_id"] = Guid.NewGuid(),
@@ -488,7 +488,7 @@ public class EncryptionServiceTests
         };
 
         // Act
-        var result = service.DecryptRow(TenantId, "customers", data, encryptedColumns);
+        var result = service.DecryptRow(ProjectId, "customers", data, encryptedColumns);
 
         // Assert
         result["email"].Should().Be("test@example.com");
@@ -511,8 +511,8 @@ public class EncryptionServiceTests
         var encryptedColumns = new HashSet<string> { "email", "phone" };
 
         // Act
-        var encrypted = service.EncryptRow(TenantId, "users", originalData, encryptedColumns);
-        var decrypted = service.DecryptRow(TenantId, "users", encrypted, encryptedColumns);
+        var encrypted = service.EncryptRow(ProjectId, "users", originalData, encryptedColumns);
+        var decrypted = service.DecryptRow(ProjectId, "users", encrypted, encryptedColumns);
 
         // Assert
         decrypted["email"].Should().Be("secret@example.com");
@@ -534,7 +534,7 @@ public class EncryptionServiceTests
         var encryptedColumns = new HashSet<string> { "email", "phone" };
 
         // Act
-        var result = service.EncryptRow(TenantId, "customers", data, encryptedColumns);
+        var result = service.EncryptRow(ProjectId, "customers", data, encryptedColumns);
 
         // Assert
         result["email"].Should().BeNull();
@@ -553,7 +553,7 @@ public class EncryptionServiceTests
         var encryptedColumns = new HashSet<string> { "email" };
 
         // Act
-        var result = service.EncryptRow(TenantId, "customers", data, encryptedColumns);
+        var result = service.EncryptRow(ProjectId, "customers", data, encryptedColumns);
 
         // Assert
         result.Should().BeSameAs(data);
@@ -571,7 +571,7 @@ public class EncryptionServiceTests
         var encryptedColumns = new HashSet<string>();
 
         // Act
-        var result = service.EncryptRow(TenantId, "customers", data, encryptedColumns);
+        var result = service.EncryptRow(ProjectId, "customers", data, encryptedColumns);
 
         // Assert
         result.Should().BeSameAs(data);
@@ -594,8 +594,8 @@ public class EncryptionServiceTests
         var encryptedColumns = new HashSet<string> { "created_at" };
 
         // Act
-        var encrypted = service.EncryptRow(TenantId, "events", data, encryptedColumns);
-        var decrypted = service.DecryptRow(TenantId, "events", encrypted, encryptedColumns);
+        var encrypted = service.EncryptRow(ProjectId, "events", data, encryptedColumns);
+        var decrypted = service.DecryptRow(ProjectId, "events", encrypted, encryptedColumns);
 
         // Assert - DateTime is stored as ISO 8601 string
         var decryptedValue = (string)decrypted["created_at"]!;
@@ -615,8 +615,8 @@ public class EncryptionServiceTests
         var encryptedColumns = new HashSet<string> { "reference_id" };
 
         // Act
-        var encrypted = service.EncryptRow(TenantId, "refs", data, encryptedColumns);
-        var decrypted = service.DecryptRow(TenantId, "refs", encrypted, encryptedColumns);
+        var encrypted = service.EncryptRow(ProjectId, "refs", data, encryptedColumns);
+        var decrypted = service.DecryptRow(ProjectId, "refs", encrypted, encryptedColumns);
 
         // Assert
         var decryptedValue = (string)decrypted["reference_id"]!;
@@ -636,8 +636,8 @@ public class EncryptionServiceTests
         var encryptedColumns = new HashSet<string> { "binary_field" };
 
         // Act
-        var encrypted = service.EncryptRow(TenantId, "files", data, encryptedColumns);
-        var decrypted = service.DecryptRow(TenantId, "files", encrypted, encryptedColumns);
+        var encrypted = service.EncryptRow(ProjectId, "files", data, encryptedColumns);
+        var decrypted = service.DecryptRow(ProjectId, "files", encrypted, encryptedColumns);
 
         // Assert - byte[] is stored as base64
         var decryptedValue = (string)decrypted["binary_field"]!;
@@ -656,8 +656,8 @@ public class EncryptionServiceTests
         var largeText = new string('X', 100_000); // 100KB of text
 
         // Act
-        var encrypted = service.Encrypt(TenantId, "documents", "content", largeText);
-        var decrypted = service.Decrypt(TenantId, "documents", "content", encrypted);
+        var encrypted = service.Encrypt(ProjectId, "documents", "content", largeText);
+        var decrypted = service.Decrypt(ProjectId, "documents", "content", encrypted);
 
         // Assert
         decrypted.Should().Be(largeText);
@@ -671,8 +671,8 @@ public class EncryptionServiceTests
         var unicodeText = "Hello 你好 مرحبا שלום 🔐🎉";
 
         // Act
-        var encrypted = service.Encrypt(TenantId, "messages", "content", unicodeText);
-        var decrypted = service.Decrypt(TenantId, "messages", "content", encrypted);
+        var encrypted = service.Encrypt(ProjectId, "messages", "content", unicodeText);
+        var decrypted = service.Decrypt(ProjectId, "messages", "content", encrypted);
 
         // Assert
         decrypted.Should().Be(unicodeText);

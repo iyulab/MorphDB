@@ -31,13 +31,13 @@ public sealed class PostgresWebhookManager : IWebhookManager
         const string sql = """
             WITH inserted AS (
                 INSERT INTO morphdb._morph_webhooks (
-                    webhook_id, tenant_id, table_id, logical_name, url, secret, events, filter, headers, created_at, updated_at
+                    webhook_id, project_id, table_id, logical_name, url, secret, events, filter, headers, created_at, updated_at
                 ) VALUES (
-                    @WebhookId, @TenantId, @TableId, @LogicalName, @Url, @Secret, @Events, @Filter::jsonb, @Headers::jsonb, @CreatedAt, @UpdatedAt
+                    @WebhookId, @ProjectId, @TableId, @LogicalName, @Url, @Secret, @Events, @Filter::jsonb, @Headers::jsonb, @CreatedAt, @UpdatedAt
                 )
                 RETURNING *
             )
-            SELECT i.webhook_id, i.tenant_id, i.table_id, i.logical_name, i.url, i.secret, i.events,
+            SELECT i.webhook_id, i.project_id, i.table_id, i.logical_name, i.url, i.secret, i.events,
                    i.filter, i.headers, i.is_active, i.created_at, i.updated_at, t.logical_name as table_logical_name
             FROM inserted i
             JOIN morphdb._morph_tables t ON i.table_id = t.table_id
@@ -48,7 +48,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
         var result = await connection.QuerySingleAsync<WebhookRow>(sql, new
         {
             WebhookId = webhookId,
-            request.TenantId,
+            request.ProjectId,
             request.TableId,
             request.LogicalName,
             request.Url,
@@ -68,7 +68,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-            SELECT w.webhook_id, w.tenant_id, w.table_id, w.logical_name, w.url, w.secret, w.events,
+            SELECT w.webhook_id, w.project_id, w.table_id, w.logical_name, w.url, w.secret, w.events,
                    w.filter, w.headers, w.is_active, w.created_at, w.updated_at, t.logical_name as table_logical_name
             FROM morphdb._morph_webhooks w
             JOIN morphdb._morph_tables t ON w.table_id = t.table_id
@@ -82,16 +82,16 @@ public sealed class PostgresWebhookManager : IWebhookManager
     }
 
     public async Task<IReadOnlyList<WebhookMetadata>> ListWebhooksAsync(
-        Guid tenantId,
+        Guid projectId,
         string? tableName = null,
         CancellationToken cancellationToken = default)
     {
         var sql = """
-            SELECT w.webhook_id, w.tenant_id, w.table_id, w.logical_name, w.url, w.secret, w.events,
+            SELECT w.webhook_id, w.project_id, w.table_id, w.logical_name, w.url, w.secret, w.events,
                    w.filter, w.headers, w.is_active, w.created_at, w.updated_at, t.logical_name as table_logical_name
             FROM morphdb._morph_webhooks w
             JOIN morphdb._morph_tables t ON w.table_id = t.table_id
-            WHERE w.tenant_id = @TenantId
+            WHERE w.project_id = @ProjectId
             """;
 
         if (!string.IsNullOrEmpty(tableName))
@@ -102,7 +102,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
         sql += " ORDER BY w.created_at DESC";
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-        var results = await connection.QueryAsync<WebhookRow>(sql, new { TenantId = tenantId, TableName = tableName });
+        var results = await connection.QueryAsync<WebhookRow>(sql, new { ProjectId = projectId, TableName = tableName });
 
         return results.Select(MapToMetadata).ToList();
     }
@@ -152,7 +152,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
             UPDATE morphdb._morph_webhooks
             SET {string.Join(", ", updates)}
             WHERE webhook_id = @WebhookId
-            RETURNING webhook_id, tenant_id, table_id, logical_name, url, secret, events, filter, headers, is_active, created_at, updated_at
+            RETURNING webhook_id, project_id, table_id, logical_name, url, secret, events, filter, headers, is_active, created_at, updated_at
             """;
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
@@ -172,7 +172,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
     }
 
     public async Task<IReadOnlyList<WebhookMetadata>> GetSubscribedWebhooksAsync(
-        Guid tenantId,
+        Guid projectId,
         Guid tableId,
         WebhookEvent webhookEvent,
         CancellationToken cancellationToken = default)
@@ -180,18 +180,18 @@ public sealed class PostgresWebhookManager : IWebhookManager
         var eventName = webhookEvent.ToString().ToLowerInvariant();
 
         const string sql = """
-            SELECT w.webhook_id, w.tenant_id, w.table_id, w.logical_name, w.url, w.secret, w.events,
+            SELECT w.webhook_id, w.project_id, w.table_id, w.logical_name, w.url, w.secret, w.events,
                    w.filter, w.headers, w.is_active, w.created_at, w.updated_at, t.logical_name as table_logical_name
             FROM morphdb._morph_webhooks w
             JOIN morphdb._morph_tables t ON w.table_id = t.table_id
-            WHERE w.tenant_id = @TenantId
+            WHERE w.project_id = @ProjectId
               AND w.table_id = @TableId
               AND w.is_active = true
               AND @EventName = ANY(w.events)
             """;
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-        var results = await connection.QueryAsync<WebhookRow>(sql, new { TenantId = tenantId, TableId = tableId, EventName = eventName });
+        var results = await connection.QueryAsync<WebhookRow>(sql, new { ProjectId = projectId, TableId = tableId, EventName = eventName });
 
         return results.Select(MapToMetadata).ToList();
     }
@@ -332,7 +332,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
         return new WebhookMetadata
         {
             WebhookId = row.webhook_id,
-            TenantId = row.tenant_id,
+            ProjectId = row.project_id,
             TableId = row.table_id,
             LogicalName = row.logical_name,
             Url = row.url,
@@ -390,7 +390,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
         const string sql = """
             WITH delivery AS (
                 SELECT d.delivery_id, d.webhook_id, d.record_id, d.event, d.payload,
-                       d.attempt_count, d.http_status_code, d.error_message, w.tenant_id
+                       d.attempt_count, d.http_status_code, d.error_message, w.project_id
                 FROM morphdb._morph_webhook_deliveries d
                 JOIN morphdb._morph_webhooks w ON d.webhook_id = w.webhook_id
                 WHERE d.delivery_id = @DeliveryId
@@ -401,13 +401,13 @@ public sealed class PostgresWebhookManager : IWebhookManager
                 WHERE delivery_id = @DeliveryId
             )
             INSERT INTO morphdb._morph_webhook_dlq (
-                dlq_id, delivery_id, webhook_id, tenant_id, record_id, event, payload,
+                dlq_id, delivery_id, webhook_id, project_id, record_id, event, payload,
                 reason, attempt_count, last_http_status_code, last_error_message, status, dlq_at
             )
-            SELECT @DlqId, d.delivery_id, d.webhook_id, d.tenant_id, d.record_id, d.event, d.payload,
+            SELECT @DlqId, d.delivery_id, d.webhook_id, d.project_id, d.record_id, d.event, d.payload,
                    @Reason, d.attempt_count, d.http_status_code, d.error_message, 'pending_review', @DlqAt
             FROM delivery d
-            RETURNING dlq_id, delivery_id, webhook_id, tenant_id, record_id, event, payload,
+            RETURNING dlq_id, delivery_id, webhook_id, project_id, record_id, event, payload,
                       reason, attempt_count, last_http_status_code, last_error_message, status,
                       resolution_notes, dlq_at, resolved_at, resolved_by
             """;
@@ -429,7 +429,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-            SELECT dlq_id, delivery_id, webhook_id, tenant_id, record_id, event, payload,
+            SELECT dlq_id, delivery_id, webhook_id, project_id, record_id, event, payload,
                    reason, attempt_count, last_http_status_code, last_error_message, status,
                    resolution_notes, dlq_at, resolved_at, resolved_by
             FROM morphdb._morph_webhook_dlq
@@ -450,7 +450,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
         CancellationToken cancellationToken = default)
     {
         var sql = """
-            SELECT dlq_id, delivery_id, webhook_id, tenant_id, record_id, event, payload,
+            SELECT dlq_id, delivery_id, webhook_id, project_id, record_id, event, payload,
                    reason, attempt_count, last_http_status_code, last_error_message, status,
                    resolution_notes, dlq_at, resolved_at, resolved_by
             FROM morphdb._morph_webhook_dlq
@@ -482,7 +482,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
     }
 
     public async Task<DlqStatistics> GetDlqStatisticsAsync(
-        Guid tenantId,
+        Guid projectId,
         CancellationToken cancellationToken = default)
     {
         const string sql = """
@@ -493,20 +493,20 @@ public sealed class PostgresWebhookManager : IWebhookManager
                 COUNT(*) FILTER (WHERE status = 'archived') as archived_count,
                 MIN(dlq_at) FILTER (WHERE status = 'pending_review') as oldest_pending_at
             FROM morphdb._morph_webhook_dlq
-            WHERE tenant_id = @TenantId
+            WHERE project_id = @ProjectId
             """;
 
         const string byReasonSql = """
             SELECT reason, COUNT(*) as count
             FROM morphdb._morph_webhook_dlq
-            WHERE tenant_id = @TenantId AND status = 'pending_review'
+            WHERE project_id = @ProjectId AND status = 'pending_review'
             GROUP BY reason
             """;
 
         const string byWebhookSql = """
             SELECT webhook_id, COUNT(*) as count
             FROM morphdb._morph_webhook_dlq
-            WHERE tenant_id = @TenantId AND status = 'pending_review'
+            WHERE project_id = @ProjectId AND status = 'pending_review'
             GROUP BY webhook_id
             """;
 
@@ -514,10 +514,10 @@ public sealed class PostgresWebhookManager : IWebhookManager
 
         var stats = await connection.QuerySingleAsync<(int total_messages, int pending_review_count,
             int resolved_count, int archived_count, DateTimeOffset? oldest_pending_at)>(
-            sql, new { TenantId = tenantId });
+            sql, new { ProjectId = projectId });
 
-        var byReason = await connection.QueryAsync<(string reason, int count)>(byReasonSql, new { TenantId = tenantId });
-        var byWebhook = await connection.QueryAsync<(Guid webhook_id, int count)>(byWebhookSql, new { TenantId = tenantId });
+        var byReason = await connection.QueryAsync<(string reason, int count)>(byReasonSql, new { ProjectId = projectId });
+        var byWebhook = await connection.QueryAsync<(Guid webhook_id, int count)>(byWebhookSql, new { ProjectId = projectId });
 
         return new DlqStatistics
         {
@@ -628,7 +628,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
             DlqId = row.dlq_id,
             DeliveryId = row.delivery_id,
             WebhookId = row.webhook_id,
-            TenantId = row.tenant_id,
+            ProjectId = row.project_id,
             RecordId = row.record_id,
             Event = ParseEvent(row.@event),
             Payload = JsonDocument.Parse(row.payload),
@@ -651,7 +651,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
     private sealed record WebhookRow
     {
         public Guid webhook_id { get; init; }
-        public Guid tenant_id { get; init; }
+        public Guid project_id { get; init; }
         public Guid table_id { get; init; }
         public string logical_name { get; init; } = null!;
         public string url { get; init; } = null!;
@@ -687,7 +687,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
         public Guid dlq_id { get; init; }
         public Guid delivery_id { get; init; }
         public Guid webhook_id { get; init; }
-        public Guid tenant_id { get; init; }
+        public Guid project_id { get; init; }
         public Guid? record_id { get; init; }
         public string @event { get; init; } = null!;
         public string payload { get; init; } = null!;

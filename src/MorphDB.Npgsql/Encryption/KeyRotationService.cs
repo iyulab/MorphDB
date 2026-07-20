@@ -50,23 +50,23 @@ public sealed partial class KeyRotationService : IKeyRotationService
 
     /// <inheritdoc />
     public async Task<KeyRotationResult> RotateTableKeyAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         CancellationToken cancellationToken = default)
     {
         var stopwatch = Stopwatch.StartNew();
         var startedAt = DateTimeOffset.UtcNow;
-        var statusKey = $"{tenantId}:{tableName}";
+        var statusKey = $"{projectId}:{tableName}";
 
         try
         {
-            LogKeyRotationStarted(tableName, tenantId);
+            LogKeyRotationStarted(tableName, projectId);
 
             // Get table metadata
-            var table = await _metadataRepository.GetTableByNameAsync(tenantId, tableName, true, cancellationToken);
+            var table = await _metadataRepository.GetTableByNameAsync(projectId, tableName, true, cancellationToken);
             if (table is null)
             {
-                throw new InvalidOperationException($"Table '{tableName}' not found for tenant {tenantId}");
+                throw new InvalidOperationException($"Table '{tableName}' not found for project {projectId}");
             }
 
             // Get encrypted columns
@@ -107,9 +107,9 @@ public sealed partial class KeyRotationService : IKeyRotationService
             await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
 
             // Count total rows
-            var countSql = $"SELECT COUNT(*) FROM \"{table.PhysicalName}\" WHERE tenant_id = @tenantId";
+            var countSql = $"SELECT COUNT(*) FROM \"{table.PhysicalName}\" WHERE project_id = @projectId";
             await using var countCmd = new NpgsqlCommand(countSql, connection);
-            countCmd.Parameters.AddWithValue("tenantId", tenantId);
+            countCmd.Parameters.AddWithValue("projectId", projectId);
             var totalRows = (long)(await countCmd.ExecuteScalarAsync(cancellationToken))!;
 
             // Process in batches using cursor
@@ -117,11 +117,11 @@ public sealed partial class KeyRotationService : IKeyRotationService
             var selectSql = $@"
                 SELECT id, {columnList}
                 FROM ""{table.PhysicalName}""
-                WHERE tenant_id = @tenantId
+                WHERE project_id = @projectId
                 ORDER BY id";
 
             await using var selectCmd = new NpgsqlCommand(selectSql, connection);
-            selectCmd.Parameters.AddWithValue("tenantId", tenantId);
+            selectCmd.Parameters.AddWithValue("projectId", projectId);
 
             await using var reader = await selectCmd.ExecuteReaderAsync(cancellationToken);
 
@@ -140,8 +140,8 @@ public sealed partial class KeyRotationService : IKeyRotationService
                     if (value is not null && value.StartsWith(EncryptedPrefix, StringComparison.Ordinal))
                     {
                         // Decrypt with current key and re-encrypt
-                        var decrypted = _encryptionService.Decrypt(tenantId, tableName, column.LogicalName, value);
-                        var reEncrypted = _encryptionService.Encrypt(tenantId, tableName, column.LogicalName, decrypted);
+                        var decrypted = _encryptionService.Decrypt(projectId, tableName, column.LogicalName, value);
+                        var reEncrypted = _encryptionService.Encrypt(projectId, tableName, column.LogicalName, decrypted);
                         updatedValues[column.PhysicalName] = reEncrypted;
                     }
                 }
@@ -200,13 +200,13 @@ public sealed partial class KeyRotationService : IKeyRotationService
                 LastRotatedAt = DateTimeOffset.UtcNow
             };
 
-            LogKeyRotationCompleted(tableName, tenantId, rowsProcessed, stopwatch.Elapsed);
+            LogKeyRotationCompleted(tableName, projectId, rowsProcessed, stopwatch.Elapsed);
 
             return result;
         }
         catch (Exception ex)
         {
-            LogKeyRotationFailed(tableName, tenantId, ex);
+            LogKeyRotationFailed(tableName, projectId, ex);
 
             _rotationStatus[statusKey] = new KeyRotationStatus
             {
@@ -232,8 +232,8 @@ public sealed partial class KeyRotationService : IKeyRotationService
     }
 
     /// <inheritdoc />
-    public async Task<KeyRotationResult> RotateTenantKeysAsync(
-        Guid tenantId,
+    public async Task<KeyRotationResult> RotateProjectKeysAsync(
+        Guid projectId,
         CancellationToken cancellationToken = default)
     {
         var stopwatch = Stopwatch.StartNew();
@@ -244,11 +244,11 @@ public sealed partial class KeyRotationService : IKeyRotationService
 
         try
         {
-            var tables = await _metadataRepository.ListTablesAsync(tenantId, true, cancellationToken);
+            var tables = await _metadataRepository.ListTablesAsync(projectId, true, cancellationToken);
 
             foreach (var table in tables)
             {
-                var result = await RotateTableKeyAsync(tenantId, table.LogicalName, cancellationToken);
+                var result = await RotateTableKeyAsync(projectId, table.LogicalName, cancellationToken);
                 if (result.Success)
                 {
                     totalRowsProcessed += result.RowsProcessed;
@@ -261,7 +261,7 @@ public sealed partial class KeyRotationService : IKeyRotationService
                     return new KeyRotationResult
                     {
                         Success = false,
-                        TableName = $"tenant:{tenantId} (failed at {table.LogicalName})",
+                        TableName = $"project:{projectId} (failed at {table.LogicalName})",
                         PreviousKeyVersion = CurrentKeyVersion,
                         NewKeyVersion = CurrentKeyVersion,
                         RowsProcessed = totalRowsProcessed,
@@ -277,7 +277,7 @@ public sealed partial class KeyRotationService : IKeyRotationService
             return new KeyRotationResult
             {
                 Success = true,
-                TableName = $"tenant:{tenantId} ({tablesProcessed.Count} tables)",
+                TableName = $"project:{projectId} ({tablesProcessed.Count} tables)",
                 PreviousKeyVersion = CurrentKeyVersion,
                 NewKeyVersion = CurrentKeyVersion,
                 RowsProcessed = totalRowsProcessed,
@@ -292,7 +292,7 @@ public sealed partial class KeyRotationService : IKeyRotationService
             return new KeyRotationResult
             {
                 Success = false,
-                TableName = $"tenant:{tenantId}",
+                TableName = $"project:{projectId}",
                 PreviousKeyVersion = CurrentKeyVersion,
                 NewKeyVersion = CurrentKeyVersion,
                 RowsProcessed = totalRowsProcessed,
@@ -307,11 +307,11 @@ public sealed partial class KeyRotationService : IKeyRotationService
 
     /// <inheritdoc />
     public Task<KeyRotationStatus> GetRotationStatusAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         CancellationToken cancellationToken = default)
     {
-        var statusKey = $"{tenantId}:{tableName}";
+        var statusKey = $"{projectId}:{tableName}";
 
         if (_rotationStatus.TryGetValue(statusKey, out var status))
         {
@@ -328,14 +328,14 @@ public sealed partial class KeyRotationService : IKeyRotationService
 
     /// <inheritdoc />
     public async Task<KeyValidationResult> ValidateEncryptionAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         CancellationToken cancellationToken = default)
     {
-        var table = await _metadataRepository.GetTableByNameAsync(tenantId, tableName, true, cancellationToken);
+        var table = await _metadataRepository.GetTableByNameAsync(projectId, tableName, true, cancellationToken);
         if (table is null)
         {
-            throw new InvalidOperationException($"Table '{tableName}' not found for tenant {tenantId}");
+            throw new InvalidOperationException($"Table '{tableName}' not found for project {projectId}");
         }
 
         var encryptedColumns = table.Columns
@@ -366,9 +366,9 @@ public sealed partial class KeyRotationService : IKeyRotationService
 
         foreach (var column in encryptedColumns)
         {
-            var sql = $@"SELECT ""{column}"" FROM ""{table.PhysicalName}"" WHERE tenant_id = @tenantId AND ""{column}"" IS NOT NULL";
+            var sql = $@"SELECT ""{column}"" FROM ""{table.PhysicalName}"" WHERE project_id = @projectId AND ""{column}"" IS NOT NULL";
             await using var cmd = new NpgsqlCommand(sql, connection);
-            cmd.Parameters.AddWithValue("tenantId", tenantId);
+            cmd.Parameters.AddWithValue("projectId", projectId);
 
             await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
@@ -444,12 +444,12 @@ public sealed partial class KeyRotationService : IKeyRotationService
         }
     }
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Starting key rotation for table {TableName} (tenant: {TenantId})")]
-    private partial void LogKeyRotationStarted(string tableName, Guid tenantId);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Starting key rotation for table {TableName} (project: {ProjectId})")]
+    private partial void LogKeyRotationStarted(string tableName, Guid projectId);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Key rotation completed for table {TableName} (tenant: {TenantId}): {RowsProcessed} rows in {Duration}")]
-    private partial void LogKeyRotationCompleted(string tableName, Guid tenantId, long rowsProcessed, TimeSpan duration);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Key rotation completed for table {TableName} (project: {ProjectId}): {RowsProcessed} rows in {Duration}")]
+    private partial void LogKeyRotationCompleted(string tableName, Guid projectId, long rowsProcessed, TimeSpan duration);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Key rotation failed for table {TableName} (tenant: {TenantId})")]
-    private partial void LogKeyRotationFailed(string tableName, Guid tenantId, Exception ex);
+    [LoggerMessage(Level = LogLevel.Error, Message = "Key rotation failed for table {TableName} (project: {ProjectId})")]
+    private partial void LogKeyRotationFailed(string tableName, Guid projectId, Exception ex);
 }

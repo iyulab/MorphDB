@@ -17,7 +17,7 @@ public enum ApiKeyType
 }
 
 /// <summary>
-/// Represents an API key for tenant authentication.
+/// Represents an API key for project authentication.
 /// </summary>
 public sealed class ApiKey
 {
@@ -27,9 +27,9 @@ public sealed class ApiKey
     public Guid Id { get; set; }
 
     /// <summary>
-    /// Gets or sets the tenant ID this key belongs to.
+    /// Gets or sets the project ID this key belongs to.
     /// </summary>
-    public Guid TenantId { get; set; }
+    public Guid ProjectId { get; set; }
 
     /// <summary>
     /// Gets or sets the key type (anon or service).

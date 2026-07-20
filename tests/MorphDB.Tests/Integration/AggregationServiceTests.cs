@@ -56,11 +56,11 @@ public class AggregationServiceTests
             securityContextAccessor);
     }
 
-    private async Task<TableMetadata> CreateTestTableAsync(Guid tenantId, string logicalName)
+    private async Task<TableMetadata> CreateTestTableAsync(Guid projectId, string logicalName)
     {
         return await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = logicalName,
             Columns =
             [
@@ -92,7 +92,7 @@ public class AggregationServiceTests
         });
     }
 
-    private async Task InsertTestDataAsync(Guid tenantId, string tableName)
+    private async Task InsertTestDataAsync(Guid projectId, string tableName)
     {
         // Insert test records with different categories and amounts
         var testData = new[]
@@ -109,7 +109,7 @@ public class AggregationServiceTests
 
         foreach (var item in testData)
         {
-            await _dataService.InsertAsync(tenantId, tableName, new Dictionary<string, object?>
+            await _dataService.InsertAsync(projectId, tableName, new Dictionary<string, object?>
             {
                 ["_id"] = Guid.CreateVersion7(),
                 ["category"] = item.category,
@@ -126,9 +126,9 @@ public class AggregationServiceTests
     public async Task AggregateAsync_Count_ShouldReturnTotalCount()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
-        var table = await CreateTestTableAsync(tenantId, "agg_count_" + Guid.NewGuid().ToString("N")[..8]);
-        await InsertTestDataAsync(tenantId, table.LogicalName);
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "agg_count_" + Guid.NewGuid().ToString("N")[..8]);
+        await InsertTestDataAsync(projectId, table.LogicalName);
 
         var request = new AggregationRequest
         {
@@ -143,7 +143,7 @@ public class AggregationServiceTests
         };
 
         // Act
-        var result = await _aggregationService.AggregateAsync(tenantId, table.LogicalName, request);
+        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, request);
 
         // Assert
         Assert.Single(result.Data);
@@ -154,9 +154,9 @@ public class AggregationServiceTests
     public async Task AggregateAsync_CountWithGroupBy_ShouldReturnCountPerGroup()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
-        var table = await CreateTestTableAsync(tenantId, "agg_count_grp_" + Guid.NewGuid().ToString("N")[..8]);
-        await InsertTestDataAsync(tenantId, table.LogicalName);
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "agg_count_grp_" + Guid.NewGuid().ToString("N")[..8]);
+        await InsertTestDataAsync(projectId, table.LogicalName);
 
         var request = new AggregationRequest
         {
@@ -172,7 +172,7 @@ public class AggregationServiceTests
         };
 
         // Act
-        var result = await _aggregationService.AggregateAsync(tenantId, table.LogicalName, request);
+        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, request);
 
         // Assert
         Assert.Equal(3, result.Data.Count);
@@ -197,9 +197,9 @@ public class AggregationServiceTests
     public async Task AggregateAsync_Sum_ShouldReturnTotalSum()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
-        var table = await CreateTestTableAsync(tenantId, "agg_sum_" + Guid.NewGuid().ToString("N")[..8]);
-        await InsertTestDataAsync(tenantId, table.LogicalName);
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "agg_sum_" + Guid.NewGuid().ToString("N")[..8]);
+        await InsertTestDataAsync(projectId, table.LogicalName);
 
         var request = new AggregationRequest
         {
@@ -215,7 +215,7 @@ public class AggregationServiceTests
         };
 
         // Act
-        var result = await _aggregationService.AggregateAsync(tenantId, table.LogicalName, request);
+        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, request);
 
         // Assert
         Assert.Single(result.Data);
@@ -226,9 +226,9 @@ public class AggregationServiceTests
     public async Task AggregateAsync_SumWithGroupBy_ShouldReturnSumPerGroup()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
-        var table = await CreateTestTableAsync(tenantId, "agg_sum_grp_" + Guid.NewGuid().ToString("N")[..8]);
-        await InsertTestDataAsync(tenantId, table.LogicalName);
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "agg_sum_grp_" + Guid.NewGuid().ToString("N")[..8]);
+        await InsertTestDataAsync(projectId, table.LogicalName);
 
         var request = new AggregationRequest
         {
@@ -245,7 +245,7 @@ public class AggregationServiceTests
         };
 
         // Act
-        var result = await _aggregationService.AggregateAsync(tenantId, table.LogicalName, request);
+        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, request);
 
         // Assert
         Assert.Equal(3, result.Data.Count);
@@ -263,9 +263,9 @@ public class AggregationServiceTests
     public async Task AggregateAsync_Avg_ShouldReturnAverage()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
-        var table = await CreateTestTableAsync(tenantId, "agg_avg_" + Guid.NewGuid().ToString("N")[..8]);
-        await InsertTestDataAsync(tenantId, table.LogicalName);
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "agg_avg_" + Guid.NewGuid().ToString("N")[..8]);
+        await InsertTestDataAsync(projectId, table.LogicalName);
 
         var request = new AggregationRequest
         {
@@ -281,7 +281,7 @@ public class AggregationServiceTests
         };
 
         // Act
-        var result = await _aggregationService.AggregateAsync(tenantId, table.LogicalName, request);
+        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, request);
 
         // Assert
         Assert.Single(result.Data);
@@ -292,9 +292,9 @@ public class AggregationServiceTests
     public async Task AggregateAsync_MinMax_ShouldReturnMinAndMax()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
-        var table = await CreateTestTableAsync(tenantId, "agg_minmax_" + Guid.NewGuid().ToString("N")[..8]);
-        await InsertTestDataAsync(tenantId, table.LogicalName);
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "agg_minmax_" + Guid.NewGuid().ToString("N")[..8]);
+        await InsertTestDataAsync(projectId, table.LogicalName);
 
         var request = new AggregationRequest
         {
@@ -316,7 +316,7 @@ public class AggregationServiceTests
         };
 
         // Act
-        var result = await _aggregationService.AggregateAsync(tenantId, table.LogicalName, request);
+        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, request);
 
         // Assert
         Assert.Single(result.Data);
@@ -332,9 +332,9 @@ public class AggregationServiceTests
     public async Task AggregateAsync_WithFilter_ShouldApplyFilter()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
-        var table = await CreateTestTableAsync(tenantId, "agg_filter_" + Guid.NewGuid().ToString("N")[..8]);
-        await InsertTestDataAsync(tenantId, table.LogicalName);
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "agg_filter_" + Guid.NewGuid().ToString("N")[..8]);
+        await InsertTestDataAsync(projectId, table.LogicalName);
 
         var request = new AggregationRequest
         {
@@ -358,7 +358,7 @@ public class AggregationServiceTests
         };
 
         // Act
-        var result = await _aggregationService.AggregateAsync(tenantId, table.LogicalName, request);
+        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, request);
 
         // Assert
         Assert.Single(result.Data);
@@ -373,9 +373,9 @@ public class AggregationServiceTests
     public async Task AggregateAsync_WithHaving_ShouldFilterAggregatedResults()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
-        var table = await CreateTestTableAsync(tenantId, "agg_having_" + Guid.NewGuid().ToString("N")[..8]);
-        await InsertTestDataAsync(tenantId, table.LogicalName);
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "agg_having_" + Guid.NewGuid().ToString("N")[..8]);
+        await InsertTestDataAsync(projectId, table.LogicalName);
 
         var request = new AggregationRequest
         {
@@ -401,7 +401,7 @@ public class AggregationServiceTests
         };
 
         // Act
-        var result = await _aggregationService.AggregateAsync(tenantId, table.LogicalName, request);
+        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, request);
 
         // Assert
         Assert.Equal(2, result.Data.Count); // electronics (350) and clothing (230)
@@ -416,9 +416,9 @@ public class AggregationServiceTests
     public async Task AggregateAsync_WithOrderBy_ShouldOrderResults()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
-        var table = await CreateTestTableAsync(tenantId, "agg_order_" + Guid.NewGuid().ToString("N")[..8]);
-        await InsertTestDataAsync(tenantId, table.LogicalName);
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "agg_order_" + Guid.NewGuid().ToString("N")[..8]);
+        await InsertTestDataAsync(projectId, table.LogicalName);
 
         var request = new AggregationRequest
         {
@@ -443,7 +443,7 @@ public class AggregationServiceTests
         };
 
         // Act
-        var result = await _aggregationService.AggregateAsync(tenantId, table.LogicalName, request);
+        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, request);
 
         // Assert
         Assert.Equal(3, result.Data.Count);
@@ -461,9 +461,9 @@ public class AggregationServiceTests
     public async Task AggregateAsync_WithLimitOffset_ShouldPaginateResults()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
-        var table = await CreateTestTableAsync(tenantId, "agg_limit_" + Guid.NewGuid().ToString("N")[..8]);
-        await InsertTestDataAsync(tenantId, table.LogicalName);
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "agg_limit_" + Guid.NewGuid().ToString("N")[..8]);
+        await InsertTestDataAsync(projectId, table.LogicalName);
 
         var request = new AggregationRequest
         {
@@ -485,7 +485,7 @@ public class AggregationServiceTests
         };
 
         // Act
-        var result = await _aggregationService.AggregateAsync(tenantId, table.LogicalName, request);
+        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, request);
 
         // Assert
         Assert.Equal(2, result.Data.Count);
@@ -500,9 +500,9 @@ public class AggregationServiceTests
     public async Task AggregateAsync_MultipleAggregations_ShouldReturnAllResults()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
-        var table = await CreateTestTableAsync(tenantId, "agg_multi_" + Guid.NewGuid().ToString("N")[..8]);
-        await InsertTestDataAsync(tenantId, table.LogicalName);
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "agg_multi_" + Guid.NewGuid().ToString("N")[..8]);
+        await InsertTestDataAsync(projectId, table.LogicalName);
 
         var request = new AggregationRequest
         {
@@ -518,7 +518,7 @@ public class AggregationServiceTests
         };
 
         // Act
-        var result = await _aggregationService.AggregateAsync(tenantId, table.LogicalName, request);
+        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, request);
 
         // Assert
         Assert.Equal(3, result.Data.Count);

@@ -17,7 +17,7 @@ describe('HttpClient', () => {
     fetchMock = vi.fn();
     global.fetch = fetchMock;
     httpClient = new HttpClient('http://localhost:5000', {
-      tenantId: 'test-tenant',
+      projectId: 'test-project',
       apiKey: 'test-api-key',
     });
   });
@@ -138,7 +138,7 @@ describe('HttpClient', () => {
   });
 
   describe('headers', () => {
-    it('includes tenant ID header', async () => {
+    it('includes project ID header', async () => {
       fetchMock.mockResolvedValue({
         ok: true,
         text: () => Promise.resolve('{}'),
@@ -150,7 +150,7 @@ describe('HttpClient', () => {
         expect.any(String),
         expect.objectContaining({
           headers: expect.objectContaining({
-            'X-Tenant-Id': 'test-tenant',
+            'X-Project-Id': 'test-project',
           }),
         })
       );
@@ -276,8 +276,8 @@ describe('HttpClient', () => {
   });
 
   describe('configuration methods', () => {
-    it('setTenantId updates tenant ID', async () => {
-      httpClient.setTenantId('new-tenant');
+    it('setProjectId updates project ID', async () => {
+      httpClient.setProjectId('new-project');
 
       fetchMock.mockResolvedValue({
         ok: true,
@@ -290,7 +290,7 @@ describe('HttpClient', () => {
         expect.any(String),
         expect.objectContaining({
           headers: expect.objectContaining({
-            'X-Tenant-Id': 'new-tenant',
+            'X-Project-Id': 'new-project',
           }),
         })
       );

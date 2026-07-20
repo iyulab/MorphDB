@@ -45,12 +45,12 @@ class RealtimeClient:
     def __init__(
         self,
         base_url: str,
-        tenant_id: str,
+        project_id: str,
         api_key: str | None = None,
         jwt_token: str | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
-        self._tenant_id = tenant_id
+        self._project_id = project_id
         self._api_key = api_key
         self._jwt_token = jwt_token
         self._connection: Any | None = None
@@ -59,7 +59,7 @@ class RealtimeClient:
 
     def _build_hub_url(self) -> str:
         """Build the SignalR hub URL with authentication."""
-        url = f"{self._base_url}/hubs/data?tenantId={self._tenant_id}"
+        url = f"{self._base_url}/hubs/data?projectId={self._project_id}"
         if self._api_key:
             url += f"&apiKey={self._api_key}"
         return url

@@ -6,15 +6,15 @@ namespace MorphDB.Core.Abstractions;
 public interface IMorphDataService
 {
     /// <summary>
-    /// Gets a query builder for the specified tenant.
+    /// Gets a query builder for the specified project.
     /// </summary>
-    IMorphQueryBuilder Query(Guid tenantId);
+    IMorphQueryBuilder Query(Guid projectId);
 
     /// <summary>
     /// Gets a single record by ID.
     /// </summary>
     Task<IDictionary<string, object?>?> GetByIdAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         Guid id,
         CancellationToken cancellationToken = default);
@@ -23,7 +23,7 @@ public interface IMorphDataService
     /// Inserts a new record.
     /// </summary>
     Task<IDictionary<string, object?>> InsertAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         IDictionary<string, object?> data,
         CancellationToken cancellationToken = default);
@@ -32,7 +32,7 @@ public interface IMorphDataService
     /// Updates an existing record.
     /// </summary>
     Task<IDictionary<string, object?>> UpdateAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         Guid id,
         IDictionary<string, object?> data,
@@ -42,7 +42,7 @@ public interface IMorphDataService
     /// Deletes a record.
     /// </summary>
     Task<bool> DeleteAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         Guid id,
         CancellationToken cancellationToken = default);
@@ -51,7 +51,7 @@ public interface IMorphDataService
     /// Inserts multiple records in a batch.
     /// </summary>
     Task<IReadOnlyList<IDictionary<string, object?>>> InsertBatchAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         IReadOnlyList<IDictionary<string, object?>> records,
         CancellationToken cancellationToken = default);
@@ -60,7 +60,7 @@ public interface IMorphDataService
     /// Updates multiple records in a batch.
     /// </summary>
     Task<int> UpdateBatchAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         IDictionary<string, object?> data,
         IMorphQuery whereClause,
@@ -70,7 +70,7 @@ public interface IMorphDataService
     /// Deletes multiple records matching a condition.
     /// </summary>
     Task<int> DeleteBatchAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         IMorphQuery whereClause,
         CancellationToken cancellationToken = default);
@@ -79,7 +79,7 @@ public interface IMorphDataService
     /// Upserts a record (insert or update based on key).
     /// </summary>
     Task<IDictionary<string, object?>> UpsertAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         IDictionary<string, object?> data,
         string[] keyColumns,

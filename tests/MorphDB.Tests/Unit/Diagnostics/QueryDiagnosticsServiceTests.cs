@@ -237,7 +237,7 @@ public sealed class QueryDiagnosticsServiceTests
         return new QueryExecutionEntry
         {
             ExecutionId = Guid.NewGuid(),
-            TenantId = Guid.NewGuid(),
+            ProjectId = Guid.NewGuid(),
             TableName = "test_table",
             OperationType = operationType,
             QueryPattern = null,

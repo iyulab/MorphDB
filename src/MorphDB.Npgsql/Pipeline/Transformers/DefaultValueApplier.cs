@@ -78,7 +78,7 @@ public sealed class DefaultValueApplier : ITransformer
         return contextKey switch
         {
             "{{user_id}}" or "{{userid}}" => context.SecurityContext?.UserId,
-            "{{tenant_id}}" or "{{tenantid}}" => context.TenantId,
+            "{{project_id}}" or "{{projectid}}" => context.ProjectId,
             "{{user_email}}" or "{{email}}" => context.SecurityContext?.Email,
             "{{now}}" or "{{current_timestamp}}" => DateTimeOffset.UtcNow,
             "{{today}}" or "{{current_date}}" => DateTimeOffset.UtcNow.Date,

@@ -9,14 +9,14 @@ namespace MorphDB.Service.Controllers;
 
 internal static partial class ViewControllerLogs
 {
-    [LoggerMessage(LogLevel.Information, "Created view {ViewName} for tenant {TenantId}")]
-    public static partial void ViewCreated(ILogger logger, string viewName, Guid tenantId);
+    [LoggerMessage(LogLevel.Information, "Created view {ViewName} for project {ProjectId}")]
+    public static partial void ViewCreated(ILogger logger, string viewName, Guid projectId);
 
-    [LoggerMessage(LogLevel.Information, "Updated view {ViewName} for tenant {TenantId}")]
-    public static partial void ViewUpdated(ILogger logger, string viewName, Guid tenantId);
+    [LoggerMessage(LogLevel.Information, "Updated view {ViewName} for project {ProjectId}")]
+    public static partial void ViewUpdated(ILogger logger, string viewName, Guid projectId);
 
-    [LoggerMessage(LogLevel.Information, "Deleted view {ViewName} for tenant {TenantId}")]
-    public static partial void ViewDeleted(ILogger logger, string viewName, Guid tenantId);
+    [LoggerMessage(LogLevel.Information, "Deleted view {ViewName} for project {ProjectId}")]
+    public static partial void ViewDeleted(ILogger logger, string viewName, Guid projectId);
 
     [LoggerMessage(LogLevel.Information, "Refreshed materialized view {ViewName}")]
     public static partial void ViewRefreshed(ILogger logger, string viewName);
@@ -32,26 +32,26 @@ public sealed class ViewController : ControllerBase
 {
     private readonly IViewManager _viewManager;
     private readonly ILogger<ViewController> _logger;
-    private readonly ITenantContextAccessor _tenantContext;
+    private readonly IProjectContextAccessor _projectContext;
 
     public ViewController(
         IViewManager viewManager,
         ILogger<ViewController> logger,
-        ITenantContextAccessor tenantContext)
+        IProjectContextAccessor projectContext)
     {
         _viewManager = viewManager;
         _logger = logger;
-        _tenantContext = tenantContext;
+        _projectContext = projectContext;
     }
 
-    private Guid GetTenantId()
+    private Guid GetProjectId()
     {
-        var tenantId = _tenantContext.TenantIdOrNull;
-        if (!tenantId.HasValue || tenantId.Value == Guid.Empty)
+        var projectId = _projectContext.ProjectIdOrNull;
+        if (!projectId.HasValue || projectId.Value == Guid.Empty)
         {
             throw new UnauthorizedAccessException("Valid API key is required");
         }
-        return tenantId.Value;
+        return projectId.Value;
     }
 
     #region View CRUD
@@ -69,12 +69,12 @@ public sealed class ViewController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
-            var createRequest = MapToCreateViewRequest(tenantId, request);
+            var projectId = GetProjectId();
+            var createRequest = MapToCreateViewRequest(projectId, request);
             var view = await _viewManager.CreateViewAsync(createRequest, cancellationToken);
             var response = ViewApiResponse.FromMetadata(view);
 
-            ViewControllerLogs.ViewCreated(_logger, view.LogicalName, tenantId);
+            ViewControllerLogs.ViewCreated(_logger, view.LogicalName, projectId);
             return CreatedAtAction(nameof(GetView), new { name = view.LogicalName }, response);
         }
         catch (CoreExceptions.DuplicateNameException ex)
@@ -125,14 +125,14 @@ public sealed class ViewController : ControllerBase
     }
 
     /// <summary>
-    /// Lists all views for the tenant.
+    /// Lists all views for the project.
     /// </summary>
     [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<ViewApiResponse>), StatusCodes.Status200OK)]
     public async Task<IActionResult> ListViews(CancellationToken cancellationToken)
     {
-        var tenantId = GetTenantId();
-        var views = await _viewManager.ListViewsAsync(tenantId, cancellationToken);
+        var projectId = GetProjectId();
+        var views = await _viewManager.ListViewsAsync(projectId, cancellationToken);
         var response = views.Select(ViewApiResponse.FromMetadata).ToList();
         return Ok(response);
     }
@@ -145,8 +145,8 @@ public sealed class ViewController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetView(string name, CancellationToken cancellationToken)
     {
-        var tenantId = GetTenantId();
-        var view = await _viewManager.GetViewAsync(tenantId, name, cancellationToken);
+        var projectId = GetProjectId();
+        var view = await _viewManager.GetViewAsync(projectId, name, cancellationToken);
 
         if (view == null)
         {
@@ -175,8 +175,8 @@ public sealed class ViewController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
-            var existingView = await _viewManager.GetViewAsync(tenantId, name, cancellationToken);
+            var projectId = GetProjectId();
+            var existingView = await _viewManager.GetViewAsync(projectId, name, cancellationToken);
             if (existingView == null)
             {
                 return NotFound(new ErrorResponse
@@ -191,7 +191,7 @@ public sealed class ViewController : ControllerBase
             var updatedView = await _viewManager.UpdateViewAsync(updateRequest, cancellationToken);
             var response = ViewApiResponse.FromMetadata(updatedView);
 
-            ViewControllerLogs.ViewUpdated(_logger, updatedView.LogicalName, tenantId);
+            ViewControllerLogs.ViewUpdated(_logger, updatedView.LogicalName, projectId);
             return Ok(response);
         }
         catch (CoreExceptions.NotFoundException ex)
@@ -224,8 +224,8 @@ public sealed class ViewController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
-            var existingView = await _viewManager.GetViewAsync(tenantId, name, cancellationToken);
+            var projectId = GetProjectId();
+            var existingView = await _viewManager.GetViewAsync(projectId, name, cancellationToken);
             if (existingView == null)
             {
                 return NotFound(new ErrorResponse
@@ -238,7 +238,7 @@ public sealed class ViewController : ControllerBase
 
             await _viewManager.DeleteViewAsync(existingView.ViewId, cancellationToken);
 
-            ViewControllerLogs.ViewDeleted(_logger, name, tenantId);
+            ViewControllerLogs.ViewDeleted(_logger, name, projectId);
             return NoContent();
         }
         catch (CoreExceptions.NotFoundException ex)
@@ -270,8 +270,8 @@ public sealed class ViewController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
-            var existingView = await _viewManager.GetViewAsync(tenantId, name, cancellationToken);
+            var projectId = GetProjectId();
+            var existingView = await _viewManager.GetViewAsync(projectId, name, cancellationToken);
             if (existingView == null)
             {
                 return NotFound(new ErrorResponse
@@ -318,8 +318,8 @@ public sealed class ViewController : ControllerBase
         string name,
         CancellationToken cancellationToken)
     {
-        var tenantId = GetTenantId();
-        var existingView = await _viewManager.GetViewAsync(tenantId, name, cancellationToken);
+        var projectId = GetProjectId();
+        var existingView = await _viewManager.GetViewAsync(projectId, name, cancellationToken);
         if (existingView == null)
         {
             return NotFound(new ErrorResponse
@@ -361,11 +361,11 @@ public sealed class ViewController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
+            var projectId = GetProjectId();
 
             var queryRequest = new ViewQueryRequest
             {
-                TenantId = tenantId,
+                ProjectId = projectId,
                 ViewName = name,
                 Columns = ParseColumns(query.Select),
                 Filters = ParseFilters(query.Filter),
@@ -398,11 +398,11 @@ public sealed class ViewController : ControllerBase
 
     #region Mapping Helpers
 
-    private static CreateViewRequest MapToCreateViewRequest(Guid tenantId, CreateViewApiRequest request)
+    private static CreateViewRequest MapToCreateViewRequest(Guid projectId, CreateViewApiRequest request)
     {
         return new CreateViewRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             Name = request.Name,
             Definition = new ViewDefinition
             {

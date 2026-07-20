@@ -16,49 +16,49 @@ public interface IKeyRotationService
     IReadOnlyList<int> AvailableKeyVersions { get; }
 
     /// <summary>
-    /// Initiates a key rotation for a specific tenant and table.
+    /// Initiates a key rotation for a specific project and table.
     /// Re-encrypts all data with the new key version.
     /// </summary>
-    /// <param name="tenantId">The tenant ID.</param>
+    /// <param name="projectId">The project ID.</param>
     /// <param name="tableName">The table name to rotate keys for.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Key rotation result with statistics.</returns>
     Task<KeyRotationResult> RotateTableKeyAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Initiates a key rotation for all tables of a tenant.
+    /// Initiates a key rotation for all tables of a project.
     /// </summary>
-    /// <param name="tenantId">The tenant ID.</param>
+    /// <param name="projectId">The project ID.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Key rotation result with statistics.</returns>
-    Task<KeyRotationResult> RotateTenantKeysAsync(
-        Guid tenantId,
+    Task<KeyRotationResult> RotateProjectKeysAsync(
+        Guid projectId,
         CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets the current key rotation status for a table.
     /// </summary>
-    /// <param name="tenantId">The tenant ID.</param>
+    /// <param name="projectId">The project ID.</param>
     /// <param name="tableName">The table name.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Key rotation status.</returns>
     Task<KeyRotationStatus> GetRotationStatusAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Validates that all data in a table is encrypted with the current key version.
     /// </summary>
-    /// <param name="tenantId">The tenant ID.</param>
+    /// <param name="projectId">The project ID.</param>
     /// <param name="tableName">The table name.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Validation result.</returns>
     Task<KeyValidationResult> ValidateEncryptionAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         CancellationToken cancellationToken = default);
 }

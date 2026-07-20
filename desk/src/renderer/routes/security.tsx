@@ -48,7 +48,7 @@ export function SecurityPage(): ReactElement {
     return new MorphDBClient({
       url: activeConnection.url,
       apiKey,
-      tenantId: activeConnection.tenantId
+      projectId: activeConnection.projectId
     })
   }
 
@@ -955,11 +955,11 @@ function EncryptionTab({ createClient }: EncryptionTabProps): ReactElement {
     }
   })
 
-  const rotateTenantMutation = useMutation({
+  const rotateProjectMutation = useMutation({
     mutationFn: async () => {
       const client = await createClient()
       if (!client) throw new Error('No connection')
-      return client.rotateTenantKeys()
+      return client.rotateProjectKeys()
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['encryption-info'] })
@@ -1031,10 +1031,10 @@ function EncryptionTab({ createClient }: EncryptionTabProps): ReactElement {
           </div>
           <Button
             variant="outline"
-            onClick={() => rotateTenantMutation.mutate()}
-            disabled={rotateTenantMutation.isPending}
+            onClick={() => rotateProjectMutation.mutate()}
+            disabled={rotateProjectMutation.isPending}
           >
-            {rotateTenantMutation.isPending ? (
+            {rotateProjectMutation.isPending ? (
               <>
                 <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                 Rotating...

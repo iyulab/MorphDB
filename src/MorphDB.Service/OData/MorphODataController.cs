@@ -22,7 +22,7 @@ public sealed partial class MorphODataController : ControllerBase
     private readonly IMorphDataService _dataService;
     private readonly IWritePipeline _writePipeline;
     private readonly IMetadataRepository _metadataRepository;
-    private readonly ITenantContextAccessor _tenantAccessor;
+    private readonly IProjectContextAccessor _projectAccessor;
     private readonly ILogger<MorphODataController> _logger;
 
     public MorphODataController(
@@ -31,7 +31,7 @@ public sealed partial class MorphODataController : ControllerBase
         IMorphDataService dataService,
         IWritePipeline writePipeline,
         IMetadataRepository metadataRepository,
-        ITenantContextAccessor tenantAccessor,
+        IProjectContextAccessor projectAccessor,
         ILogger<MorphODataController> logger)
     {
         _modelProvider = modelProvider;
@@ -39,7 +39,7 @@ public sealed partial class MorphODataController : ControllerBase
         _dataService = dataService;
         _writePipeline = writePipeline;
         _metadataRepository = metadataRepository;
-        _tenantAccessor = tenantAccessor;
+        _projectAccessor = projectAccessor;
         _logger = logger;
     }
 
@@ -52,8 +52,8 @@ public sealed partial class MorphODataController : ControllerBase
     {
         try
         {
-            var tenantId = _tenantAccessor.TenantId;
-            var model = await _modelProvider.GetModelAsync(tenantId, cancellationToken);
+            var projectId = _projectAccessor.ProjectId;
+            var model = await _modelProvider.GetModelAsync(projectId, cancellationToken);
 
             // Serialize EDM model to CSDL XML
             using var stream = new MemoryStream();
@@ -93,8 +93,8 @@ public sealed partial class MorphODataController : ControllerBase
     {
         try
         {
-            var tenantId = _tenantAccessor.TenantId;
-            var modelResult = await _modelProvider.GetModelWithMappingAsync(tenantId, cancellationToken);
+            var projectId = _projectAccessor.ProjectId;
+            var modelResult = await _modelProvider.GetModelWithMappingAsync(projectId, cancellationToken);
 
             var options = new ODataQueryOptions
             {
@@ -108,7 +108,7 @@ public sealed partial class MorphODataController : ControllerBase
             };
 
             var result = await _queryHandler.ExecuteQueryAsync(
-                tenantId,
+                projectId,
                 entitySet,
                 modelResult.Model,
                 options,
@@ -153,8 +153,8 @@ public sealed partial class MorphODataController : ControllerBase
     {
         try
         {
-            var tenantId = _tenantAccessor.TenantId;
-            var modelResult = await _modelProvider.GetModelWithMappingAsync(tenantId, cancellationToken);
+            var projectId = _projectAccessor.ProjectId;
+            var modelResult = await _modelProvider.GetModelWithMappingAsync(projectId, cancellationToken);
 
             var options = new ODataQueryOptions
             {
@@ -163,7 +163,7 @@ public sealed partial class MorphODataController : ControllerBase
             };
 
             var entity = await _queryHandler.GetByIdAsync(
-                tenantId,
+                projectId,
                 entitySet,
                 key,
                 options,
@@ -205,12 +205,12 @@ public sealed partial class MorphODataController : ControllerBase
     {
         try
         {
-            var tenantId = _tenantAccessor.TenantId;
-            var modelResult = await _modelProvider.GetModelWithMappingAsync(tenantId, cancellationToken);
+            var projectId = _projectAccessor.ProjectId;
+            var modelResult = await _modelProvider.GetModelWithMappingAsync(projectId, cancellationToken);
             var tableName = ResolveTableName(entitySet, modelResult.EntitySetToTableNameMap);
 
             var tableMetadata = await _metadataRepository.GetTableByNameAsync(
-                tenantId, tableName, includeColumns: true, cancellationToken);
+                projectId, tableName, includeColumns: true, cancellationToken);
             if (tableMetadata is null)
             {
                 return NotFound(new { error = $"Table '{tableName}' not found." });
@@ -219,7 +219,7 @@ public sealed partial class MorphODataController : ControllerBase
             var data = JsonElementToDictionary(body);
 
             var writeResult = await _writePipeline.InsertAsync(
-                tenantId, tableMetadata, data, cancellationToken: cancellationToken);
+                projectId, tableMetadata, data, cancellationToken: cancellationToken);
 
             if (!writeResult.Success)
             {
@@ -255,22 +255,22 @@ public sealed partial class MorphODataController : ControllerBase
     {
         try
         {
-            var tenantId = _tenantAccessor.TenantId;
-            var modelResult = await _modelProvider.GetModelWithMappingAsync(tenantId, cancellationToken);
+            var projectId = _projectAccessor.ProjectId;
+            var modelResult = await _modelProvider.GetModelWithMappingAsync(projectId, cancellationToken);
             var tableName = ResolveTableName(entitySet, modelResult.EntitySetToTableNameMap);
 
             var tableMetadata = await _metadataRepository.GetTableByNameAsync(
-                tenantId, tableName, includeColumns: true, cancellationToken);
+                projectId, tableName, includeColumns: true, cancellationToken);
             if (tableMetadata is null)
             {
                 return NotFound(new { error = $"Table '{tableName}' not found." });
             }
 
-            var existing = await _dataService.GetByIdAsync(tenantId, tableName, key, cancellationToken);
+            var existing = await _dataService.GetByIdAsync(projectId, tableName, key, cancellationToken);
             var data = JsonElementToDictionary(body);
 
             var writeResult = await _writePipeline.UpdateAsync(
-                tenantId, tableMetadata, key, data, existing, cancellationToken: cancellationToken);
+                projectId, tableMetadata, key, data, existing, cancellationToken: cancellationToken);
 
             if (!writeResult.Success)
             {
@@ -303,19 +303,19 @@ public sealed partial class MorphODataController : ControllerBase
     {
         try
         {
-            var tenantId = _tenantAccessor.TenantId;
-            var modelResult = await _modelProvider.GetModelWithMappingAsync(tenantId, cancellationToken);
+            var projectId = _projectAccessor.ProjectId;
+            var modelResult = await _modelProvider.GetModelWithMappingAsync(projectId, cancellationToken);
             var tableName = ResolveTableName(entitySet, modelResult.EntitySetToTableNameMap);
 
             var tableMetadata = await _metadataRepository.GetTableByNameAsync(
-                tenantId, tableName, includeColumns: true, cancellationToken);
+                projectId, tableName, includeColumns: true, cancellationToken);
             if (tableMetadata is null)
             {
                 return NotFound(new { error = $"Table '{tableName}' not found." });
             }
 
             var writeResult = await _writePipeline.DeleteAsync(
-                tenantId, tableMetadata, key, cancellationToken: cancellationToken);
+                projectId, tableMetadata, key, cancellationToken: cancellationToken);
 
             if (!writeResult.Success)
             {
@@ -341,13 +341,13 @@ public sealed partial class MorphODataController : ControllerBase
     {
         try
         {
-            var tenantId = _tenantAccessor.TenantId;
-            var modelResult = await _modelProvider.GetModelWithMappingAsync(tenantId, cancellationToken);
+            var projectId = _projectAccessor.ProjectId;
+            var modelResult = await _modelProvider.GetModelWithMappingAsync(projectId, cancellationToken);
             var responses = new List<ODataBatchResponseItem>();
 
             foreach (var request in batchRequest.Requests)
             {
-                var response = await ExecuteBatchItemAsync(tenantId, request, modelResult.EntitySetToTableNameMap, cancellationToken);
+                var response = await ExecuteBatchItemAsync(projectId, request, modelResult.EntitySetToTableNameMap, cancellationToken);
                 responses.Add(response);
             }
 
@@ -360,7 +360,7 @@ public sealed partial class MorphODataController : ControllerBase
     }
 
     private async Task<ODataBatchResponseItem> ExecuteBatchItemAsync(
-        Guid tenantId,
+        Guid projectId,
         ODataBatchRequestItem request,
         IReadOnlyDictionary<string, string> entitySetToTableNameMap,
         CancellationToken cancellationToken)
@@ -371,7 +371,7 @@ public sealed partial class MorphODataController : ControllerBase
 
             // Resolve table metadata for write operations
             var tableMetadata = await _metadataRepository.GetTableByNameAsync(
-                tenantId, tableName, includeColumns: true, cancellationToken);
+                projectId, tableName, includeColumns: true, cancellationToken);
 
             switch (request.Method.ToUpperInvariant())
             {
@@ -383,7 +383,7 @@ public sealed partial class MorphODataController : ControllerBase
                     var insertData = request.Body != null
                         ? JsonElementToDictionary(request.Body.Value)
                         : new Dictionary<string, object?>();
-                    var insertWriteResult = await _writePipeline.InsertAsync(tenantId, tableMetadata, insertData, cancellationToken: cancellationToken);
+                    var insertWriteResult = await _writePipeline.InsertAsync(projectId, tableMetadata, insertData, cancellationToken: cancellationToken);
                     if (!insertWriteResult.Success)
                     {
                         return new ODataBatchResponseItem { Id = request.Id, Status = 400, Error = string.Join("; ", insertWriteResult.Errors.Select(e => e.Message)) };
@@ -410,11 +410,11 @@ public sealed partial class MorphODataController : ControllerBase
                     {
                         return new ODataBatchResponseItem { Id = request.Id, Status = 404, Error = $"Table '{tableName}' not found." };
                     }
-                    var existing = await _dataService.GetByIdAsync(tenantId, tableName, request.Key.Value, cancellationToken);
+                    var existing = await _dataService.GetByIdAsync(projectId, tableName, request.Key.Value, cancellationToken);
                     var updateData = request.Body != null
                         ? JsonElementToDictionary(request.Body.Value)
                         : new Dictionary<string, object?>();
-                    var updateWriteResult = await _writePipeline.UpdateAsync(tenantId, tableMetadata, request.Key.Value, updateData, existing, cancellationToken: cancellationToken);
+                    var updateWriteResult = await _writePipeline.UpdateAsync(projectId, tableMetadata, request.Key.Value, updateData, existing, cancellationToken: cancellationToken);
                     if (!updateWriteResult.Success)
                     {
                         return new ODataBatchResponseItem { Id = request.Id, Status = 400, Error = string.Join("; ", updateWriteResult.Errors.Select(e => e.Message)) };
@@ -440,7 +440,7 @@ public sealed partial class MorphODataController : ControllerBase
                     {
                         return new ODataBatchResponseItem { Id = request.Id, Status = 404, Error = $"Table '{tableName}' not found." };
                     }
-                    var deleteWriteResult = await _writePipeline.DeleteAsync(tenantId, tableMetadata, request.Key.Value, cancellationToken: cancellationToken);
+                    var deleteWriteResult = await _writePipeline.DeleteAsync(projectId, tableMetadata, request.Key.Value, cancellationToken: cancellationToken);
                     return new ODataBatchResponseItem
                     {
                         Id = request.Id,
@@ -451,7 +451,7 @@ public sealed partial class MorphODataController : ControllerBase
                 case "GET":
                     if (request.Key.HasValue)
                     {
-                        var entity = await _dataService.GetByIdAsync(tenantId, tableName, request.Key.Value, cancellationToken);
+                        var entity = await _dataService.GetByIdAsync(projectId, tableName, request.Key.Value, cancellationToken);
                         if (entity == null)
                         {
                             return new ODataBatchResponseItem
@@ -470,7 +470,7 @@ public sealed partial class MorphODataController : ControllerBase
                     }
                     else
                     {
-                        var query = _dataService.Query(tenantId).From(tableName).SelectAll();
+                        var query = _dataService.Query(projectId).From(tableName).SelectAll();
                         if (request.Top > 0)
                             query = query.Limit(request.Top);
                         var records = await query.ToListAsync(cancellationToken);

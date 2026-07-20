@@ -33,20 +33,20 @@ public sealed class CachingSchemaManagerDecorator : ISchemaManager
     {
         var table = await _inner.CreateTableAsync(request, cancellationToken);
 
-        // Cache the new table and invalidate tenant list
+        // Cache the new table and invalidate project list
         await _cache.SetTableAsync(table, cancellationToken);
-        await _cache.InvalidateTenantTablesAsync(request.TenantId, cancellationToken);
+        await _cache.InvalidateProjectTablesAsync(request.ProjectId, cancellationToken);
 
         return table;
     }
 
     public async Task<TableMetadata?> GetTableAsync(
-        Guid tenantId,
+        Guid projectId,
         string logicalName,
         CancellationToken cancellationToken = default)
     {
         // Try cache first
-        var cached = await _cache.GetTableAsync(tenantId, logicalName, cancellationToken);
+        var cached = await _cache.GetTableAsync(projectId, logicalName, cancellationToken);
         if (cached is not null)
         {
             CachingSchemaManagerLogs.CacheHit(_logger, logicalName);
@@ -56,7 +56,7 @@ public sealed class CachingSchemaManagerDecorator : ISchemaManager
         CachingSchemaManagerLogs.CacheMiss(_logger, logicalName);
 
         // Fetch from database
-        var table = await _inner.GetTableAsync(tenantId, logicalName, cancellationToken);
+        var table = await _inner.GetTableAsync(projectId, logicalName, cancellationToken);
         if (table is not null)
         {
             await _cache.SetTableAsync(table, cancellationToken);
@@ -90,22 +90,22 @@ public sealed class CachingSchemaManagerDecorator : ISchemaManager
     }
 
     public async Task<IReadOnlyList<TableMetadata>> ListTablesAsync(
-        Guid tenantId,
+        Guid projectId,
         CancellationToken cancellationToken = default)
     {
         // Try cache first
-        var cached = await _cache.GetTablesAsync(tenantId, cancellationToken);
+        var cached = await _cache.GetTablesAsync(projectId, cancellationToken);
         if (cached is not null)
         {
-            CachingSchemaManagerLogs.TableListCacheHit(_logger, tenantId);
+            CachingSchemaManagerLogs.TableListCacheHit(_logger, projectId);
             return cached;
         }
 
-        CachingSchemaManagerLogs.TableListCacheMiss(_logger, tenantId);
+        CachingSchemaManagerLogs.TableListCacheMiss(_logger, projectId);
 
         // Fetch from database
-        var tables = await _inner.ListTablesAsync(tenantId, cancellationToken);
-        await _cache.SetTablesAsync(tenantId, tables, cancellationToken);
+        var tables = await _inner.ListTablesAsync(projectId, cancellationToken);
+        await _cache.SetTablesAsync(projectId, tables, cancellationToken);
 
         return tables;
     }
@@ -114,7 +114,7 @@ public sealed class CachingSchemaManagerDecorator : ISchemaManager
         UpdateTableRequest request,
         CancellationToken cancellationToken = default)
     {
-        // First get the existing table to know tenant and old name
+        // First get the existing table to know project and old name
         var existing = await _inner.GetTableByIdAsync(request.TableId, cancellationToken);
 
         var table = await _inner.UpdateTableAsync(request, cancellationToken);
@@ -123,7 +123,7 @@ public sealed class CachingSchemaManagerDecorator : ISchemaManager
         await _cache.InvalidateTableAsync(request.TableId, cancellationToken);
         if (existing is not null)
         {
-            await _cache.InvalidateTableAsync(existing.TenantId, existing.LogicalName, cancellationToken);
+            await _cache.InvalidateTableAsync(existing.ProjectId, existing.LogicalName, cancellationToken);
         }
         await _cache.SetTableAsync(table, cancellationToken);
 
@@ -143,8 +143,8 @@ public sealed class CachingSchemaManagerDecorator : ISchemaManager
         await _cache.InvalidateTableAsync(tableId, cancellationToken);
         if (table is not null)
         {
-            await _cache.InvalidateTableAsync(table.TenantId, table.LogicalName, cancellationToken);
-            await _cache.InvalidateTenantTablesAsync(table.TenantId, cancellationToken);
+            await _cache.InvalidateTableAsync(table.ProjectId, table.LogicalName, cancellationToken);
+            await _cache.InvalidateProjectTablesAsync(table.ProjectId, cancellationToken);
         }
     }
 
@@ -159,7 +159,7 @@ public sealed class CachingSchemaManagerDecorator : ISchemaManager
         if (table is not null)
         {
             await _cache.InvalidateTableAsync(table.TableId, cancellationToken);
-            await _cache.InvalidateTableAsync(table.TenantId, table.LogicalName, cancellationToken);
+            await _cache.InvalidateTableAsync(table.ProjectId, table.LogicalName, cancellationToken);
         }
         else
         {
@@ -180,7 +180,7 @@ public sealed class CachingSchemaManagerDecorator : ISchemaManager
         if (table is not null)
         {
             await _cache.InvalidateTableAsync(table.TableId, cancellationToken);
-            await _cache.InvalidateTableAsync(table.TenantId, table.LogicalName, cancellationToken);
+            await _cache.InvalidateTableAsync(table.ProjectId, table.LogicalName, cancellationToken);
         }
 
         return column;
@@ -197,7 +197,7 @@ public sealed class CachingSchemaManagerDecorator : ISchemaManager
         if (table is not null)
         {
             await _cache.InvalidateTableAsync(table.TableId, cancellationToken);
-            await _cache.InvalidateTableAsync(table.TenantId, table.LogicalName, cancellationToken);
+            await _cache.InvalidateTableAsync(table.ProjectId, table.LogicalName, cancellationToken);
         }
 
         return column;
@@ -216,7 +216,7 @@ public sealed class CachingSchemaManagerDecorator : ISchemaManager
         if (tables is not null)
         {
             await _cache.InvalidateTableAsync(tables.TableId, cancellationToken);
-            await _cache.InvalidateTableAsync(tables.TenantId, tables.LogicalName, cancellationToken);
+            await _cache.InvalidateTableAsync(tables.ProjectId, tables.LogicalName, cancellationToken);
         }
     }
 
@@ -231,7 +231,7 @@ public sealed class CachingSchemaManagerDecorator : ISchemaManager
         if (table is not null)
         {
             await _cache.InvalidateTableAsync(table.TableId, cancellationToken);
-            await _cache.InvalidateTableAsync(table.TenantId, table.LogicalName, cancellationToken);
+            await _cache.InvalidateTableAsync(table.ProjectId, table.LogicalName, cancellationToken);
         }
         else
         {
@@ -254,7 +254,7 @@ public sealed class CachingSchemaManagerDecorator : ISchemaManager
         if (table is not null)
         {
             await _cache.InvalidateTableAsync(table.TableId, cancellationToken);
-            await _cache.InvalidateTableAsync(table.TenantId, table.LogicalName, cancellationToken);
+            await _cache.InvalidateTableAsync(table.ProjectId, table.LogicalName, cancellationToken);
         }
     }
 
@@ -267,7 +267,7 @@ public sealed class CachingSchemaManagerDecorator : ISchemaManager
         // Invalidate both source and target tables
         await _cache.InvalidateTableAsync(request.SourceTableId, cancellationToken);
         await _cache.InvalidateTableAsync(request.TargetTableId, cancellationToken);
-        await _cache.InvalidateTenantTablesAsync(request.TenantId, cancellationToken);
+        await _cache.InvalidateProjectTablesAsync(request.ProjectId, cancellationToken);
 
         return relation;
     }
@@ -290,13 +290,13 @@ public sealed class CachingSchemaManagerDecorator : ISchemaManager
             var sourceTable = await _inner.GetTableByIdAsync(relation.SourceTableId, cancellationToken);
             if (sourceTable is not null)
             {
-                await _cache.InvalidateTableAsync(sourceTable.TenantId, sourceTable.LogicalName, cancellationToken);
+                await _cache.InvalidateTableAsync(sourceTable.ProjectId, sourceTable.LogicalName, cancellationToken);
             }
 
             var targetTable = await _inner.GetTableByIdAsync(relation.TargetTableId, cancellationToken);
             if (targetTable is not null)
             {
-                await _cache.InvalidateTableAsync(targetTable.TenantId, targetTable.LogicalName, cancellationToken);
+                await _cache.InvalidateTableAsync(targetTable.ProjectId, targetTable.LogicalName, cancellationToken);
             }
         }
     }
@@ -312,7 +312,7 @@ public sealed class CachingSchemaManagerDecorator : ISchemaManager
         var table = await _inner.GetTableByIdAsync(request.TableId, cancellationToken);
         if (table is not null)
         {
-            await _cache.InvalidateTableAsync(table.TenantId, table.LogicalName, cancellationToken);
+            await _cache.InvalidateTableAsync(table.ProjectId, table.LogicalName, cancellationToken);
         }
 
         return result;
@@ -364,9 +364,9 @@ internal static partial class CachingSchemaManagerLogs
     [LoggerMessage(LogLevel.Debug, "Cache miss for table ID '{TableId}'")]
     public static partial void CacheMissById(ILogger logger, Guid tableId);
 
-    [LoggerMessage(LogLevel.Debug, "Table list cache hit for tenant '{TenantId}'")]
-    public static partial void TableListCacheHit(ILogger logger, Guid tenantId);
+    [LoggerMessage(LogLevel.Debug, "Table list cache hit for project '{ProjectId}'")]
+    public static partial void TableListCacheHit(ILogger logger, Guid projectId);
 
-    [LoggerMessage(LogLevel.Debug, "Table list cache miss for tenant '{TenantId}'")]
-    public static partial void TableListCacheMiss(ILogger logger, Guid tenantId);
+    [LoggerMessage(LogLevel.Debug, "Table list cache miss for project '{ProjectId}'")]
+    public static partial void TableListCacheMiss(ILogger logger, Guid projectId);
 }

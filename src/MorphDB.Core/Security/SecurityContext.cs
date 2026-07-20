@@ -8,9 +8,9 @@ namespace MorphDB.Core.Security;
 public sealed class SecurityContext
 {
     /// <summary>
-    /// Gets or sets the tenant ID.
+    /// Gets or sets the project ID.
     /// </summary>
-    public Guid TenantId { get; set; }
+    public Guid ProjectId { get; set; }
 
     /// <summary>
     /// Gets or sets the authenticated user ID (from JWT sub claim).
@@ -55,10 +55,10 @@ public sealed class SecurityContext
     /// <summary>
     /// Creates an anonymous security context.
     /// </summary>
-    public static SecurityContext Anonymous(Guid tenantId) =>
+    public static SecurityContext Anonymous(Guid projectId) =>
         new()
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             IsAuthenticated = false,
             KeyType = ApiKeyType.Anon,
             BypassRls = false
@@ -67,10 +67,10 @@ public sealed class SecurityContext
     /// <summary>
     /// Creates a service security context (bypasses RLS).
     /// </summary>
-    public static SecurityContext Service(Guid tenantId) =>
+    public static SecurityContext Service(Guid projectId) =>
         new()
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             IsAuthenticated = true,
             KeyType = ApiKeyType.Service,
             BypassRls = true,

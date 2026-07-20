@@ -64,14 +64,14 @@ public static class SystemColumns
 
     // Internal columns (not exposed to users)
 
-    /// <summary>Tenant ID for multi-tenancy isolation (internal, not in API).</summary>
-    public const string TenantId = "tenant_id";
+    /// <summary>Project ID for multi-tenancy isolation (internal, not in API).</summary>
+    public const string ProjectId = "project_id";
 
     /// <summary>
     /// Checks if a column name is a system column.
     /// </summary>
     public static bool IsSystemColumn(string columnName) =>
-        columnName.StartsWith('_') || columnName == TenantId;
+        columnName.StartsWith('_') || columnName == ProjectId;
 
     /// <summary>
     /// Returns all core column names that are always present.

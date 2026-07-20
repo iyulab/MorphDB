@@ -16,7 +16,7 @@ public class RequiredValidatorTests
     {
         return new WriteContext
         {
-            TenantId = Guid.NewGuid(),
+            ProjectId = Guid.NewGuid(),
             Table = new TableMetadata
             {
                 LogicalName = "test_table",

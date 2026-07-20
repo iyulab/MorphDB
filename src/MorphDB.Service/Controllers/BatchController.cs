@@ -18,15 +18,15 @@ public sealed class BatchController : ControllerBase
         _dataService = dataService;
     }
 
-    private Guid GetTenantId()
+    private Guid GetProjectId()
     {
-        if (Request.Headers.TryGetValue("X-Tenant-Id", out var tenantIdHeader) &&
-            Guid.TryParse(tenantIdHeader.FirstOrDefault(), out var tenantId))
+        if (Request.Headers.TryGetValue("X-Project-Id", out var projectIdHeader) &&
+            Guid.TryParse(projectIdHeader.FirstOrDefault(), out var projectId))
         {
-            return tenantId;
+            return projectId;
         }
 
-        throw new InvalidOperationException("X-Tenant-Id header is required");
+        throw new InvalidOperationException("X-Project-Id header is required");
     }
 
     /// <summary>
@@ -45,7 +45,7 @@ public sealed class BatchController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
+            var projectId = GetProjectId();
 
             if (request.Operations == null || request.Operations.Count == 0)
             {
@@ -64,7 +64,7 @@ public sealed class BatchController : ControllerBase
             for (var i = 0; i < request.Operations.Count; i++)
             {
                 var operation = request.Operations[i];
-                var result = await ExecuteOperationAsync(tenantId, i, operation, cancellationToken);
+                var result = await ExecuteOperationAsync(projectId, i, operation, cancellationToken);
                 results.Add(result);
 
                 if (result.Success)
@@ -84,9 +84,9 @@ public sealed class BatchController : ControllerBase
                 FailureCount = failureCount
             });
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
+        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_TENANT" });
+            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (Exception ex)
         {
@@ -107,7 +107,7 @@ public sealed class BatchController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
+            var projectId = GetProjectId();
 
             if (records == null || records.Count == 0)
             {
@@ -128,7 +128,7 @@ public sealed class BatchController : ControllerBase
                 }
             }
 
-            var insertedRecords = await _dataService.InsertBatchAsync(tenantId, table, records, cancellationToken);
+            var insertedRecords = await _dataService.InsertBatchAsync(projectId, table, records, cancellationToken);
 
             var results = insertedRecords.Select((record, index) =>
             {
@@ -149,9 +149,9 @@ public sealed class BatchController : ControllerBase
                 FailureCount = 0
             });
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
+        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_TENANT" });
+            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (Exception ex)
         {
@@ -172,7 +172,7 @@ public sealed class BatchController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
+            var projectId = GetProjectId();
 
             if (request.Data == null || request.Data.Count == 0)
             {
@@ -185,13 +185,13 @@ public sealed class BatchController : ControllerBase
             }
 
             // Build filter query
-            var query = _dataService.Query(tenantId).From(table);
+            var query = _dataService.Query(projectId).From(table);
             if (!string.IsNullOrEmpty(request.Filter))
             {
                 query = ApplyFilter(query, request.Filter);
             }
 
-            var affected = await _dataService.UpdateBatchAsync(tenantId, table, request.Data, query, cancellationToken);
+            var affected = await _dataService.UpdateBatchAsync(projectId, table, request.Data, query, cancellationToken);
 
             return Ok(new BatchResponse
             {
@@ -208,9 +208,9 @@ public sealed class BatchController : ControllerBase
                 FailureCount = 0
             });
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
+        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_TENANT" });
+            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (Exception ex)
         {
@@ -231,10 +231,10 @@ public sealed class BatchController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
+            var projectId = GetProjectId();
 
             // Build filter query
-            var query = _dataService.Query(tenantId).From(table);
+            var query = _dataService.Query(projectId).From(table);
             if (!string.IsNullOrEmpty(filter))
             {
                 query = ApplyFilter(query, filter);
@@ -249,7 +249,7 @@ public sealed class BatchController : ControllerBase
                 });
             }
 
-            var affected = await _dataService.DeleteBatchAsync(tenantId, table, query, cancellationToken);
+            var affected = await _dataService.DeleteBatchAsync(projectId, table, query, cancellationToken);
 
             return Ok(new BatchResponse
             {
@@ -266,9 +266,9 @@ public sealed class BatchController : ControllerBase
                 FailureCount = 0
             });
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
+        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_TENANT" });
+            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (Exception ex)
         {
@@ -290,7 +290,7 @@ public sealed class BatchController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
+            var projectId = GetProjectId();
 
             if (request.Data == null || request.Data.Count == 0)
             {
@@ -319,7 +319,7 @@ public sealed class BatchController : ControllerBase
             }
 
             var result = await _dataService.UpsertAsync(
-                tenantId, table, request.Data, request.KeyColumns.ToArray(), cancellationToken);
+                projectId, table, request.Data, request.KeyColumns.ToArray(), cancellationToken);
 
             var id = result.TryGetValue("_id", out var idValue) && idValue is Guid guid ? guid : Guid.Empty;
 
@@ -333,9 +333,9 @@ public sealed class BatchController : ControllerBase
             // For simplicity, we return OK for all upserts
             return Ok(response);
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
+        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_TENANT" });
+            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (Exception ex)
         {
@@ -357,7 +357,7 @@ public sealed class BatchController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
+            var projectId = GetProjectId();
 
             if (request.Records is not { Count: > 0 })
             {
@@ -393,7 +393,7 @@ public sealed class BatchController : ControllerBase
                     }
 
                     await _dataService.UpsertAsync(
-                        tenantId, table, record, request.KeyColumns.ToArray(), cancellationToken);
+                        projectId, table, record, request.KeyColumns.ToArray(), cancellationToken);
 
                     // Simple heuristic: count as insert (exact tracking requires DB-level info)
                     inserted++;
@@ -412,9 +412,9 @@ public sealed class BatchController : ControllerBase
                 Errors = errors
             });
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
+        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_TENANT" });
+            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (Exception ex)
         {
@@ -425,7 +425,7 @@ public sealed class BatchController : ControllerBase
     #region Private Methods
 
     private async Task<BatchOperationResult> ExecuteOperationAsync(
-        Guid tenantId,
+        Guid projectId,
         int index,
         BatchOperation operation,
         CancellationToken cancellationToken)
@@ -434,10 +434,10 @@ public sealed class BatchController : ControllerBase
         {
             return operation.Method.ToUpperInvariant() switch
             {
-                "INSERT" => await ExecuteInsertAsync(tenantId, index, operation, cancellationToken),
-                "UPDATE" => await ExecuteUpdateAsync(tenantId, index, operation, cancellationToken),
-                "DELETE" => await ExecuteDeleteAsync(tenantId, index, operation, cancellationToken),
-                "UPSERT" => await ExecuteUpsertAsync(tenantId, index, operation, cancellationToken),
+                "INSERT" => await ExecuteInsertAsync(projectId, index, operation, cancellationToken),
+                "UPDATE" => await ExecuteUpdateAsync(projectId, index, operation, cancellationToken),
+                "DELETE" => await ExecuteDeleteAsync(projectId, index, operation, cancellationToken),
+                "UPSERT" => await ExecuteUpsertAsync(projectId, index, operation, cancellationToken),
                 _ => new BatchOperationResult
                 {
                     Index = index,
@@ -458,7 +458,7 @@ public sealed class BatchController : ControllerBase
     }
 
     private async Task<BatchOperationResult> ExecuteInsertAsync(
-        Guid tenantId,
+        Guid projectId,
         int index,
         BatchOperation operation,
         CancellationToken cancellationToken)
@@ -479,7 +479,7 @@ public sealed class BatchController : ControllerBase
             operation.Data["_id"] = Guid.CreateVersion7();
         }
 
-        var result = await _dataService.InsertAsync(tenantId, operation.Table, operation.Data, cancellationToken);
+        var result = await _dataService.InsertAsync(projectId, operation.Table, operation.Data, cancellationToken);
         var id = result.TryGetValue("_id", out var idValue) && idValue is Guid guid ? guid : Guid.Empty;
 
         return new BatchOperationResult
@@ -492,7 +492,7 @@ public sealed class BatchController : ControllerBase
     }
 
     private async Task<BatchOperationResult> ExecuteUpdateAsync(
-        Guid tenantId,
+        Guid projectId,
         int index,
         BatchOperation operation,
         CancellationToken cancellationToken)
@@ -518,7 +518,7 @@ public sealed class BatchController : ControllerBase
         }
 
         var result = await _dataService.UpdateAsync(
-            tenantId, operation.Table, operation.Id.Value, operation.Data, cancellationToken);
+            projectId, operation.Table, operation.Id.Value, operation.Data, cancellationToken);
 
         return new BatchOperationResult
         {
@@ -530,7 +530,7 @@ public sealed class BatchController : ControllerBase
     }
 
     private async Task<BatchOperationResult> ExecuteDeleteAsync(
-        Guid tenantId,
+        Guid projectId,
         int index,
         BatchOperation operation,
         CancellationToken cancellationToken)
@@ -546,7 +546,7 @@ public sealed class BatchController : ControllerBase
         }
 
         var deleted = await _dataService.DeleteAsync(
-            tenantId, operation.Table, operation.Id.Value, cancellationToken);
+            projectId, operation.Table, operation.Id.Value, cancellationToken);
 
         return new BatchOperationResult
         {
@@ -558,7 +558,7 @@ public sealed class BatchController : ControllerBase
     }
 
     private async Task<BatchOperationResult> ExecuteUpsertAsync(
-        Guid tenantId,
+        Guid projectId,
         int index,
         BatchOperation operation,
         CancellationToken cancellationToken)
@@ -590,7 +590,7 @@ public sealed class BatchController : ControllerBase
         }
 
         var result = await _dataService.UpsertAsync(
-            tenantId, operation.Table, operation.Data, operation.KeyColumns.ToArray(), cancellationToken);
+            projectId, operation.Table, operation.Data, operation.KeyColumns.ToArray(), cancellationToken);
         var id = result.TryGetValue("_id", out var idValue) && idValue is Guid guid ? guid : Guid.Empty;
 
         return new BatchOperationResult

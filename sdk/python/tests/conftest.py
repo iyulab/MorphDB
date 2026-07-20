@@ -11,8 +11,8 @@ from morphdb.http import HttpClient
 
 
 @pytest.fixture
-def tenant_id() -> str:
-    """Return a test tenant ID."""
+def project_id() -> str:
+    """Return a test project ID."""
     return str(uuid4())
 
 
@@ -29,11 +29,11 @@ def base_url() -> str:
 
 
 @pytest.fixture
-def mock_http_client(base_url: str, tenant_id: str, api_key: str) -> HttpClient:
+def mock_http_client(base_url: str, project_id: str, api_key: str) -> HttpClient:
     """Create a mock HTTP client for testing."""
     client = HttpClient(
         base_url=base_url,
-        tenant_id=tenant_id,
+        project_id=project_id,
         api_key=api_key,
         timeout=30.0,
         retry_count=1,

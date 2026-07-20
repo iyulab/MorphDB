@@ -81,7 +81,7 @@ export function ViewDialog({
     return new MorphDBClient({
       url: activeConnection.url,
       apiKey,
-      tenantId: activeConnection.tenantId
+      projectId: activeConnection.projectId
     })
   }
 
@@ -91,7 +91,7 @@ export function ViewDialog({
     queryFn: async () => {
       const client = await createClient()
       if (!client) return []
-      return client.listTables(activeConnection?.tenantId)
+      return client.listTables(activeConnection?.projectId)
     },
     enabled: !!activeConnection && open
   })

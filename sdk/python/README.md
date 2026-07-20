@@ -34,7 +34,7 @@ async def main():
     # Create client
     async with MorphDBClient(
         base_url="http://localhost:5000",
-        tenant_id="your-tenant-id",
+        project_id="your-project-id",
         api_key="your-api-key",
     ) as client:
         # Schema Management
@@ -282,7 +282,7 @@ except MorphDBError as e:
 ```python
 client = MorphDBClient(
     base_url="http://localhost:5000",
-    tenant_id="your-tenant-id",
+    project_id="your-project-id",
     api_key="your-api-key",
     jwt_token="optional-jwt-token",
     timeout=30.0,  # 30 seconds
@@ -291,7 +291,7 @@ client = MorphDBClient(
 )
 
 # Update credentials at runtime
-client.set_tenant_id("new-tenant-id")
+client.set_project_id("new-project-id")
 client.set_api_key("new-api-key")
 client.set_jwt_token("new-jwt-token")
 ```

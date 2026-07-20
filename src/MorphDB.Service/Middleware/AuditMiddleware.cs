@@ -96,10 +96,10 @@ public sealed class AuditMiddleware
                 return guid;
         }
 
-        // Try tenant header (legacy)
-        if (context.Request.Headers.TryGetValue("X-Tenant-Id", out var tenantHeader))
+        // Try project header (legacy)
+        if (context.Request.Headers.TryGetValue("X-Project-Id", out var projectHeader))
         {
-            if (Guid.TryParse(tenantHeader.FirstOrDefault(), out var guid))
+            if (Guid.TryParse(projectHeader.FirstOrDefault(), out var guid))
                 return guid;
         }
 

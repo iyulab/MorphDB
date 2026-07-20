@@ -71,7 +71,7 @@ public sealed partial class PostgresSchemaLayerService : ISchemaLayerService
 
             // No extension is enabled here on purpose. Provisioning a project must not require
             // CREATE EXTENSION: managed PostgreSQL gates it behind a server-parameter allow-list,
-            // so a tenant could not be created at all on Azure, Cloud SQL or RDS. Nothing needs it —
+            // so a project could not be created at all on Azure, Cloud SQL or RDS. Nothing needs it —
             // system tables default to the built-in gen_random_uuid(), and DdlBuilder only accepts
             // function defaults from a fixed set that excludes the uuid-ossp ones.
 

@@ -9,7 +9,7 @@ import { RealtimeClient } from '../src/realtime.js';
 describe('MorphDBClient', () => {
   const baseUrl = 'http://localhost:5000';
   const options = {
-    tenantId: 'test-tenant',
+    projectId: 'test-project',
     apiKey: 'test-api-key',
   };
 
@@ -47,8 +47,8 @@ describe('MorphDBClient', () => {
       client = new MorphDBClient(baseUrl, options);
     });
 
-    it('setTenantId updates tenant ID', () => {
-      expect(() => client.setTenantId('new-tenant')).not.toThrow();
+    it('setProjectId updates project ID', () => {
+      expect(() => client.setProjectId('new-project')).not.toThrow();
     });
 
     it('setApiKey updates API key', () => {

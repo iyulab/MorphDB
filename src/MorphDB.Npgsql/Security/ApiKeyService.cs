@@ -20,7 +20,7 @@ public sealed class ApiKeyService : IApiKeyService
     }
 
     public async Task<(ApiKey Key, string RawKey)> CreateKeyAsync(
-        Guid tenantId,
+        Guid projectId,
         ApiKeyType keyType,
         string name,
         string? description = null,
@@ -42,7 +42,7 @@ public sealed class ApiKeyService : IApiKeyService
         var apiKey = new ApiKey
         {
             Id = Guid.NewGuid(),
-            TenantId = tenantId,
+            ProjectId = projectId,
             KeyType = keyType,
             KeyHash = keyHash,
             KeyPrefix = keyPrefixPart,
@@ -56,13 +56,13 @@ public sealed class ApiKeyService : IApiKeyService
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         await connection.ExecuteAsync(
             """
-            INSERT INTO morphdb._morph_api_keys (id, tenant_id, key_type, key_hash, key_prefix, name, description, is_active, created_at, expires_at)
-            VALUES (@Id, @TenantId, @KeyType, @KeyHash, @KeyPrefix, @Name, @Description, @IsActive, @CreatedAt, @ExpiresAt)
+            INSERT INTO morphdb._morph_api_keys (id, project_id, key_type, key_hash, key_prefix, name, description, is_active, created_at, expires_at)
+            VALUES (@Id, @ProjectId, @KeyType, @KeyHash, @KeyPrefix, @Name, @Description, @IsActive, @CreatedAt, @ExpiresAt)
             """,
             new
             {
                 apiKey.Id,
-                apiKey.TenantId,
+                apiKey.ProjectId,
                 KeyType = (int)apiKey.KeyType,
                 apiKey.KeyHash,
                 apiKey.KeyPrefix,
@@ -95,7 +95,7 @@ public sealed class ApiKeyService : IApiKeyService
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         var keys = await connection.QueryAsync<ApiKeyRecord>(
             """
-            SELECT id AS "Id", tenant_id AS "TenantId", key_type AS "KeyType", key_hash AS "KeyHash",
+            SELECT id AS "Id", project_id AS "ProjectId", key_type AS "KeyType", key_hash AS "KeyHash",
                    key_prefix AS "KeyPrefix", name AS "Name", description AS "Description",
                    is_active AS "IsActive", created_at AS "CreatedAt", expires_at AS "ExpiresAt",
                    last_used_at AS "LastUsedAt"
@@ -126,27 +126,27 @@ public sealed class ApiKeyService : IApiKeyService
     }
 
     public async Task<IReadOnlyList<ApiKey>> GetKeysAsync(
-        Guid tenantId,
+        Guid projectId,
         CancellationToken cancellationToken = default)
     {
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         var records = await connection.QueryAsync<ApiKeyRecord>(
             """
-            SELECT id AS "Id", tenant_id AS "TenantId", key_type AS "KeyType", key_hash AS "KeyHash",
+            SELECT id AS "Id", project_id AS "ProjectId", key_type AS "KeyType", key_hash AS "KeyHash",
                    key_prefix AS "KeyPrefix", name AS "Name", description AS "Description",
                    is_active AS "IsActive", created_at AS "CreatedAt", expires_at AS "ExpiresAt",
                    last_used_at AS "LastUsedAt"
             FROM morphdb._morph_api_keys
-            WHERE tenant_id = @TenantId
+            WHERE project_id = @ProjectId
             ORDER BY created_at DESC
             """,
-            new { TenantId = tenantId });
+            new { ProjectId = projectId });
 
         return records.Select(MapToApiKey).ToList();
     }
 
     public async Task RevokeKeyAsync(
-        Guid tenantId,
+        Guid projectId,
         Guid keyId,
         CancellationToken cancellationToken = default)
     {
@@ -155,13 +155,13 @@ public sealed class ApiKeyService : IApiKeyService
             """
             UPDATE morphdb._morph_api_keys
             SET is_active = false
-            WHERE id = @KeyId AND tenant_id = @TenantId
+            WHERE id = @KeyId AND project_id = @ProjectId
             """,
-            new { KeyId = keyId, TenantId = tenantId });
+            new { KeyId = keyId, ProjectId = projectId });
     }
 
     public async Task<(ApiKey Key, string RawKey)> RotateKeyAsync(
-        Guid tenantId,
+        Guid projectId,
         Guid keyId,
         bool revokeOld = true,
         CancellationToken cancellationToken = default)
@@ -169,14 +169,14 @@ public sealed class ApiKeyService : IApiKeyService
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         var oldKey = await connection.QueryFirstOrDefaultAsync<ApiKeyRecord>(
             """
-            SELECT id AS "Id", tenant_id AS "TenantId", key_type AS "KeyType", key_hash AS "KeyHash",
+            SELECT id AS "Id", project_id AS "ProjectId", key_type AS "KeyType", key_hash AS "KeyHash",
                    key_prefix AS "KeyPrefix", name AS "Name", description AS "Description",
                    is_active AS "IsActive", created_at AS "CreatedAt", expires_at AS "ExpiresAt",
                    last_used_at AS "LastUsedAt"
             FROM morphdb._morph_api_keys
-            WHERE id = @KeyId AND tenant_id = @TenantId
+            WHERE id = @KeyId AND project_id = @ProjectId
             """,
-            new { KeyId = keyId, TenantId = tenantId });
+            new { KeyId = keyId, ProjectId = projectId });
 
         if (oldKey == null)
         {
@@ -185,7 +185,7 @@ public sealed class ApiKeyService : IApiKeyService
 
         // Create new key with same properties
         var result = await CreateKeyAsync(
-            tenantId,
+            projectId,
             (ApiKeyType)oldKey.KeyType,
             $"{oldKey.Name} (rotated)",
             oldKey.Description,
@@ -195,7 +195,7 @@ public sealed class ApiKeyService : IApiKeyService
         // Optionally revoke old key
         if (revokeOld)
         {
-            await RevokeKeyAsync(tenantId, keyId, cancellationToken);
+            await RevokeKeyAsync(projectId, keyId, cancellationToken);
         }
 
         return result;
@@ -227,7 +227,7 @@ public sealed class ApiKeyService : IApiKeyService
         return new ApiKey
         {
             Id = record.Id,
-            TenantId = record.TenantId,
+            ProjectId = record.ProjectId,
             KeyType = (ApiKeyType)record.KeyType,
             KeyHash = record.KeyHash,
             KeyPrefix = record.KeyPrefix,
@@ -243,7 +243,7 @@ public sealed class ApiKeyService : IApiKeyService
     private sealed class ApiKeyRecord
     {
         public Guid Id { get; set; }
-        public Guid TenantId { get; set; }
+        public Guid ProjectId { get; set; }
         public int KeyType { get; set; }
         public string KeyHash { get; set; } = string.Empty;
         public string KeyPrefix { get; set; } = string.Empty;

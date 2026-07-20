@@ -24,7 +24,7 @@ public sealed partial class ODataQueryHandler
     /// Executes an OData query and returns the results.
     /// </summary>
     public async Task<ODataQueryResult> ExecuteQueryAsync(
-        Guid tenantId,
+        Guid projectId,
         string entitySetName,
         IEdmModel model,
         ODataQueryOptions options,
@@ -36,13 +36,13 @@ public sealed partial class ODataQueryHandler
                         entitySetToTableNameMap.TryGetValue(entitySetName, out var mappedName)
             ? mappedName
             : ToLogicalName(entitySetName);
-        var table = await _schemaManager.GetTableAsync(tenantId, tableName, cancellationToken);
+        var table = await _schemaManager.GetTableAsync(projectId, tableName, cancellationToken);
         if (table == null)
         {
             throw new InvalidOperationException($"Entity set '{entitySetName}' not found.");
         }
 
-        var query = _dataService.Query(tenantId).From(tableName);
+        var query = _dataService.Query(projectId).From(tableName);
 
         // Apply $select
         if (!string.IsNullOrEmpty(options.Select))
@@ -73,7 +73,7 @@ public sealed partial class ODataQueryHandler
         long? totalCount = null;
         if (options.Count)
         {
-            totalCount = await _dataService.Query(tenantId)
+            totalCount = await _dataService.Query(projectId)
                 .From(tableName)
                 .SelectAll()
                 .CountAsync(cancellationToken);
@@ -111,7 +111,7 @@ public sealed partial class ODataQueryHandler
     /// Gets a single entity by ID.
     /// </summary>
     public async Task<IDictionary<string, object?>?> GetByIdAsync(
-        Guid tenantId,
+        Guid projectId,
         string entitySetName,
         Guid id,
         ODataQueryOptions options,
@@ -123,7 +123,7 @@ public sealed partial class ODataQueryHandler
                         entitySetToTableNameMap.TryGetValue(entitySetName, out var mappedName)
             ? mappedName
             : ToLogicalName(entitySetName);
-        var record = await _dataService.GetByIdAsync(tenantId, tableName, id, cancellationToken);
+        var record = await _dataService.GetByIdAsync(projectId, tableName, id, cancellationToken);
 
         if (record == null)
             return null;

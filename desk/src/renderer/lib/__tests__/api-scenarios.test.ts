@@ -45,7 +45,7 @@ describe('API Scenario: Connection & Health Check', () => {
     client = new MorphDBClient({
       url: 'http://localhost:5000',
       apiKey: 'test-api-key',
-      tenantId: 'test-tenant',
+      projectId: 'test-project',
     })
   })
 
@@ -71,7 +71,7 @@ describe('API Scenario: Connection & Health Check', () => {
     await expect(client.healthCheck()).rejects.toThrow('Network error')
   })
 
-  it('should include tenant ID in all requests', async () => {
+  it('should include project ID in all requests', async () => {
     mockFetch.mockResolvedValueOnce(createMockResponse([]))
 
     await client.listTables()
@@ -80,7 +80,7 @@ describe('API Scenario: Connection & Health Check', () => {
       'http://localhost:5000/api/schema/tables',
       expect.objectContaining({
         headers: expect.objectContaining({
-          'X-Tenant-Id': 'test-tenant',
+          'X-Project-Id': 'test-project',
         }),
       })
     )
@@ -853,10 +853,10 @@ describe('API Scenario: Security Operations', () => {
   it('should manage RLS policies', async () => {
     const policy = {
       id: 'policy-123',
-      name: 'tenant_isolation',
+      name: 'project_isolation',
       tableId: 'table-123',
       policyType: 'select',
-      expression: "tenant_id = current_setting('app.tenant_id')",
+      expression: "project_id = current_setting('app.project_id')",
       isActive: true,
       ordinalPosition: 1,
       createdAt: new Date().toISOString(),
@@ -866,13 +866,13 @@ describe('API Scenario: Security Operations', () => {
     mockFetch.mockResolvedValueOnce(createMockResponse(policy))
 
     const created = await client.createSecurityPolicy({
-      name: 'tenant_isolation',
+      name: 'project_isolation',
       tableName: 'orders',
       policyType: 'select',
-      expression: "tenant_id = current_setting('app.tenant_id')",
+      expression: "project_id = current_setting('app.project_id')",
     })
 
-    expect(created.name).toBe('tenant_isolation')
+    expect(created.name).toBe('project_isolation')
     expect(created.isActive).toBe(true)
   })
 

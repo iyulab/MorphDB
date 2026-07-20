@@ -8,7 +8,7 @@ namespace MorphDB.Core.Models;
 public sealed class WebhookMetadata
 {
     public Guid WebhookId { get; init; }
-    public Guid TenantId { get; init; }
+    public Guid ProjectId { get; init; }
     public Guid TableId { get; init; }
     public required string LogicalName { get; init; }
     public required string Url { get; init; }
@@ -127,7 +127,7 @@ public sealed class WebhookDlqMessage
     public Guid DlqId { get; init; }
     public Guid DeliveryId { get; init; }
     public Guid WebhookId { get; init; }
-    public Guid TenantId { get; init; }
+    public Guid ProjectId { get; init; }
     public Guid? RecordId { get; init; }
     public required WebhookEvent Event { get; init; }
     public required JsonDocument Payload { get; init; }

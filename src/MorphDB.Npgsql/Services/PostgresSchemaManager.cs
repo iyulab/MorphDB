@@ -48,14 +48,14 @@ public sealed class PostgresSchemaManager : ISchemaManager
 
         // Check if table already exists
         var existing = await _repository.GetTableByNameAsync(
-            request.TenantId, request.LogicalName, cancellationToken: cancellationToken);
+            request.ProjectId, request.LogicalName, cancellationToken: cancellationToken);
         if (existing is not null)
         {
             throw new DuplicateNameException("Table", request.LogicalName);
         }
 
         var tableId = Guid.NewGuid();
-        var physicalTableName = _nameHasher.GenerateTableName(request.TenantId, request.LogicalName);
+        var physicalTableName = _nameHasher.GenerateTableName(request.ProjectId, request.LogicalName);
 
         // Acquire advisory lock for DDL
         await using var lockHandle = await _lockManager.AcquireDdlLockAsync(
@@ -77,10 +77,10 @@ public sealed class PostgresSchemaManager : ISchemaManager
         columns.Add(idColumn);
         columnDefinitions.Add(ColumnDefinition.FromMetadata(idColumn));
 
-        // tenant_id: Internal column for multi-tenancy (not exposed to API)
-        var tenantColumn = CreateSystemColumn(tableId, SystemColumns.TenantId, MorphDataType.Uuid, ordinal++);
-        columns.Add(tenantColumn);
-        columnDefinitions.Add(ColumnDefinition.FromMetadata(tenantColumn));
+        // project_id: Internal column for multi-tenancy (not exposed to API)
+        var projectColumn = CreateSystemColumn(tableId, SystemColumns.ProjectId, MorphDataType.Uuid, ordinal++);
+        columns.Add(projectColumn);
+        columnDefinitions.Add(ColumnDefinition.FromMetadata(projectColumn));
 
         // _created_at: Immutable creation timestamp
         var createdAtColumn = CreateSystemColumn(tableId, SystemColumns.CreatedAt, MorphDataType.CreatedTime, ordinal++);
@@ -232,7 +232,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         var tableMetadata = new TableMetadata
         {
             TableId = tableId,
-            TenantId = request.TenantId,
+            ProjectId = request.ProjectId,
             LogicalName = request.LogicalName,
             PhysicalName = physicalTableName,
             SchemaVersion = 1,
@@ -263,15 +263,15 @@ public sealed class PostgresSchemaManager : ISchemaManager
             var createTableSql = DdlBuilder.BuildCreateTable(physicalTableName, columnDefinitions);
             await connection.ExecuteAsync(new CommandDefinition(createTableSql, transaction: transaction, cancellationToken: cancellationToken));
 
-            // Create tenant_id index for RLS performance
-            var tenantIndexSql = DdlBuilder.BuildCreateIndex(new IndexDefinition
+            // Create project_id index for RLS performance
+            var projectIndexSql = DdlBuilder.BuildCreateIndex(new IndexDefinition
             {
-                PhysicalName = $"idx_{physicalTableName}_tenant",
+                PhysicalName = $"idx_{physicalTableName}_project",
                 TablePhysicalName = physicalTableName,
-                Columns = [new IndexColumnInfo { ColumnId = tenantColumn.ColumnId, LogicalName = tenantColumn.LogicalName, PhysicalName = tenantColumn.PhysicalName }],
+                Columns = [new IndexColumnInfo { ColumnId = projectColumn.ColumnId, LogicalName = projectColumn.LogicalName, PhysicalName = projectColumn.PhysicalName }],
                 IndexType = IndexType.BTree
             });
-            await connection.ExecuteAsync(new CommandDefinition(tenantIndexSql, transaction: transaction, cancellationToken: cancellationToken));
+            await connection.ExecuteAsync(new CommandDefinition(projectIndexSql, transaction: transaction, cancellationToken: cancellationToken));
 
             // Create unique/indexed columns
             foreach (var col in columns.Where(c => c.IsUnique && !c.IsPrimaryKey))
@@ -332,7 +332,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         return new TableMetadata
         {
             TableId = insertedTable.TableId,
-            TenantId = insertedTable.TenantId,
+            ProjectId = insertedTable.ProjectId,
             LogicalName = insertedTable.LogicalName,
             PhysicalName = insertedTable.PhysicalName,
             SchemaVersion = insertedTable.SchemaVersion,
@@ -354,11 +354,11 @@ public sealed class PostgresSchemaManager : ISchemaManager
     }
 
     public async Task<TableMetadata?> GetTableAsync(
-        Guid tenantId,
+        Guid projectId,
         string logicalName,
         CancellationToken cancellationToken = default)
     {
-        return await _repository.GetTableByNameAsync(tenantId, logicalName, includeColumns: true, cancellationToken);
+        return await _repository.GetTableByNameAsync(projectId, logicalName, includeColumns: true, cancellationToken);
     }
 
     public async Task<TableMetadata?> GetTableByIdAsync(
@@ -369,10 +369,10 @@ public sealed class PostgresSchemaManager : ISchemaManager
     }
 
     public async Task<IReadOnlyList<TableMetadata>> ListTablesAsync(
-        Guid tenantId,
+        Guid projectId,
         CancellationToken cancellationToken = default)
     {
-        return await _repository.ListTablesAsync(tenantId, includeColumns: true, cancellationToken);
+        return await _repository.ListTablesAsync(projectId, includeColumns: true, cancellationToken);
     }
 
     public async Task<TableMetadata> UpdateTableAsync(
@@ -395,7 +395,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
             LogicalNameValidator.ValidateEntityName(request.LogicalName, "Table");
 
             // Check for duplicate name
-            var existing = await _repository.GetTableByNameAsync(table.TenantId, request.LogicalName, cancellationToken: cancellationToken);
+            var existing = await _repository.GetTableByNameAsync(table.ProjectId, request.LogicalName, cancellationToken: cancellationToken);
             if (existing is not null && existing.TableId != request.TableId)
             {
                 throw new DuplicateNameException("Table", request.LogicalName);
@@ -1064,7 +1064,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
                 ?? $"{sourceTable.LogicalName}_{targetTable.LogicalName}";
 
             var junctionTable = await CreateJunctionTableAsync(
-                request.TenantId,
+                request.ProjectId,
                 junctionTableName,
                 sourceTable,
                 targetTable,
@@ -1076,7 +1076,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         var relation = new RelationMetadata
         {
             RelationId = relationId,
-            TenantId = request.TenantId,
+            ProjectId = request.ProjectId,
             LogicalName = request.LogicalName,
             SourceTableId = request.SourceTableId,
             SourceColumnId = request.SourceColumnId,
@@ -1146,7 +1146,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
     /// The junction table contains source_id and target_id columns.
     /// </summary>
     private async Task<TableMetadata> CreateJunctionTableAsync(
-        Guid tenantId,
+        Guid projectId,
         string junctionTableName,
         TableMetadata sourceTable,
         TableMetadata targetTable,
@@ -1180,7 +1180,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         // Create the junction table
         var junctionTableRequest = new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = junctionTableName,
             Columns = junctionColumns,
             SystemColumns = new SystemColumnOptions

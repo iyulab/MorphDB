@@ -19,15 +19,15 @@ public sealed class AggregationController : ControllerBase
         _aggregationService = aggregationService;
     }
 
-    private Guid GetTenantId()
+    private Guid GetProjectId()
     {
-        if (Request.Headers.TryGetValue("X-Tenant-Id", out var tenantIdHeader) &&
-            Guid.TryParse(tenantIdHeader.FirstOrDefault(), out var tenantId))
+        if (Request.Headers.TryGetValue("X-Project-Id", out var projectIdHeader) &&
+            Guid.TryParse(projectIdHeader.FirstOrDefault(), out var projectId))
         {
-            return tenantId;
+            return projectId;
         }
 
-        throw new InvalidOperationException("X-Tenant-Id header is required");
+        throw new InvalidOperationException("X-Project-Id header is required");
     }
 
     /// <summary>
@@ -69,7 +69,7 @@ public sealed class AggregationController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
+            var projectId = GetProjectId();
 
             // Validate request
             if (request.Aggregations.Count == 0)
@@ -84,20 +84,20 @@ public sealed class AggregationController : ControllerBase
 
             // Execute aggregation
             var result = await _aggregationService.AggregateAsync(
-                tenantId,
+                projectId,
                 table,
                 request.ToModel(),
                 cancellationToken);
 
             return Ok(AggregationApiResponse.FromResult(result));
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
+        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
         {
             return BadRequest(new ErrorResponse
             {
                 Error = "BadRequest",
                 Message = ex.Message,
-                Code = "MISSING_TENANT"
+                Code = "MISSING_PROJECT"
             });
         }
         catch (TableNotFoundException ex)

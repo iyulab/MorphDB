@@ -11,13 +11,13 @@ public interface ILookupResolver
     /// <summary>
     /// Resolves lookup values for a set of records.
     /// </summary>
-    /// <param name="tenantId">The tenant ID.</param>
+    /// <param name="projectId">The project ID.</param>
     /// <param name="records">Records containing the relation key values.</param>
     /// <param name="lookupColumns">Lookup column configurations to resolve.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Records enriched with resolved lookup values.</returns>
     Task<IReadOnlyList<IDictionary<string, object?>>> ResolveLookupValuesAsync(
-        Guid tenantId,
+        Guid projectId,
         IReadOnlyList<IDictionary<string, object?>> records,
         IReadOnlyList<LookupColumnInfo> lookupColumns,
         CancellationToken cancellationToken = default);
@@ -25,13 +25,13 @@ public interface ILookupResolver
     /// <summary>
     /// Builds SQL JOIN clauses for lookup columns to include in a query.
     /// </summary>
-    /// <param name="tenantId">The tenant ID.</param>
+    /// <param name="projectId">The project ID.</param>
     /// <param name="sourceTable">The source table metadata.</param>
     /// <param name="lookupColumns">Lookup columns to resolve.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>SQL fragments for JOINs and SELECT columns.</returns>
     Task<LookupQueryExpansion> BuildLookupExpansionAsync(
-        Guid tenantId,
+        Guid projectId,
         TableMetadata sourceTable,
         IReadOnlyList<LookupColumnInfo> lookupColumns,
         CancellationToken cancellationToken = default);
@@ -39,13 +39,13 @@ public interface ILookupResolver
     /// <summary>
     /// Validates a lookup column configuration.
     /// </summary>
-    /// <param name="tenantId">The tenant ID.</param>
+    /// <param name="projectId">The project ID.</param>
     /// <param name="sourceTable">The source table containing the lookup column.</param>
     /// <param name="config">The lookup configuration to validate.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Validation result with any errors.</returns>
     Task<LookupValidationResult> ValidateLookupConfigAsync(
-        Guid tenantId,
+        Guid projectId,
         TableMetadata sourceTable,
         LookupColumnConfig config,
         CancellationToken cancellationToken = default);
@@ -53,12 +53,12 @@ public interface ILookupResolver
     /// <summary>
     /// Gets the metadata for lookup target columns.
     /// </summary>
-    /// <param name="tenantId">The tenant ID.</param>
+    /// <param name="projectId">The project ID.</param>
     /// <param name="config">The lookup configuration.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Target column metadata.</returns>
     Task<ColumnMetadata?> GetTargetColumnMetadataAsync(
-        Guid tenantId,
+        Guid projectId,
         LookupColumnConfig config,
         CancellationToken cancellationToken = default);
 }

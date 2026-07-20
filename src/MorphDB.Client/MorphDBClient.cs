@@ -105,12 +105,12 @@ public sealed class MorphDBClient : IAsyncDisposable
     public RealtimeClient Realtime { get; }
 
     /// <summary>
-    /// Sets the tenant ID for all requests.
+    /// Sets the project ID for all requests.
     /// </summary>
-    public void SetTenantId(Guid tenantId)
+    public void SetProjectId(Guid projectId)
     {
-        _httpClient.DefaultRequestHeaders.Remove("X-Tenant-Id");
-        _httpClient.DefaultRequestHeaders.Add("X-Tenant-Id", tenantId.ToString());
+        _httpClient.DefaultRequestHeaders.Remove("X-Project-Id");
+        _httpClient.DefaultRequestHeaders.Add("X-Project-Id", projectId.ToString());
     }
 
     /// <summary>
@@ -133,9 +133,9 @@ public sealed class MorphDBClient : IAsyncDisposable
 
     private void ConfigureDefaultHeaders()
     {
-        if (_options.TenantId != Guid.Empty)
+        if (_options.ProjectId != Guid.Empty)
         {
-            _httpClient.DefaultRequestHeaders.Add("X-Tenant-Id", _options.TenantId.ToString());
+            _httpClient.DefaultRequestHeaders.Add("X-Project-Id", _options.ProjectId.ToString());
         }
 
         if (!string.IsNullOrEmpty(_options.ApiKey))

@@ -38,7 +38,7 @@ When you launch MorphDB Desk for the first time, a connection dialog will automa
    - **Name**: A friendly name for this connection
    - **Host**: Server hostname or IP address (default: `localhost`)
    - **Port**: Server port (default: `5000`)
-   - **Tenant ID**: Your tenant identifier
+   - **Project ID**: Your project identifier
    - **API Key** (optional): Authentication key if required
 3. Click **Test Connection** to verify settings
 4. Click **Save** to add the connection

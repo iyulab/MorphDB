@@ -42,13 +42,13 @@ public class RollupFieldTests
     public async Task CreateTableAsync_WithRollupColumn_ShouldCreateVirtualColumn()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
         var uniqueSuffix = Guid.NewGuid().ToString("N")[..8];
 
         // Create parent table (customers) with rollup column
         var customersTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "rollup_customers_" + uniqueSuffix,
             Columns =
             [
@@ -78,7 +78,7 @@ public class RollupFieldTests
         // Create child table (orders) that references customers
         var ordersTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "rollup_orders_" + uniqueSuffix,
             Columns =
             [
@@ -120,13 +120,13 @@ public class RollupFieldTests
     public async Task CreateTableAsync_WithRollupColumn_ShouldPersistRollupConfig()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
         var uniqueSuffix = Guid.NewGuid().ToString("N")[..8];
 
         // Create parent table with rollup
         var parentTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "rollup_persist_parent_" + uniqueSuffix,
             Columns =
             [
@@ -181,13 +181,13 @@ public class RollupFieldTests
     public async Task AddColumnAsync_WithRollupConfig_ShouldAddVirtualColumn()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
         var uniqueSuffix = Guid.NewGuid().ToString("N")[..8];
 
         // Create parent table without rollup initially
         var parentTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "addrollup_parent_" + uniqueSuffix,
             Columns =
             [
@@ -203,7 +203,7 @@ public class RollupFieldTests
         // Create child table
         var childTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "addrollup_child_" + uniqueSuffix,
             Columns =
             [
@@ -260,13 +260,13 @@ public class RollupFieldTests
     public async Task CreateTableAsync_WithMultipleRollupColumns_ShouldCreateAllVirtuals()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
         var uniqueSuffix = Guid.NewGuid().ToString("N")[..8];
 
         // Create parent table with multiple rollups
         var parentTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "multirollup_parent_" + uniqueSuffix,
             Columns =
             [
@@ -359,13 +359,13 @@ public class RollupFieldTests
     public async Task CreateTableAsync_RollupColumn_ShouldNotCreatePhysicalColumn()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
         var uniqueSuffix = Guid.NewGuid().ToString("N")[..8];
 
         // Create table with rollup
         var parentTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "physical_rollup_parent_" + uniqueSuffix,
             Columns =
             [
@@ -429,13 +429,13 @@ public class RollupFieldTests
     public async Task CreateTableAsync_WithStringConcatRollup_ShouldStoreDelimiter()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
         var uniqueSuffix = Guid.NewGuid().ToString("N")[..8];
 
         // Create parent table with StringConcat rollup
         var parentTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "concat_parent_" + uniqueSuffix,
             Columns =
             [
@@ -476,13 +476,13 @@ public class RollupFieldTests
     public async Task CreateTableAsync_WithAllAggregationTypes_ShouldStoreCorrectly()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
         var uniqueSuffix = Guid.NewGuid().ToString("N")[..8];
 
         // Test a few different aggregation types
         var table = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "agg_types_" + uniqueSuffix,
             Columns =
             [

@@ -11,7 +11,7 @@ public interface IWritePipeline
     /// Executes the pipeline for an insert operation.
     /// </summary>
     Task<WriteResult> InsertAsync(
-        Guid tenantId,
+        Guid projectId,
         TableMetadata table,
         IDictionary<string, object?> data,
         WriteOptions? options = null,
@@ -21,7 +21,7 @@ public interface IWritePipeline
     /// Executes the pipeline for an update operation.
     /// </summary>
     Task<WriteResult> UpdateAsync(
-        Guid tenantId,
+        Guid projectId,
         TableMetadata table,
         Guid recordId,
         IDictionary<string, object?> data,
@@ -33,7 +33,7 @@ public interface IWritePipeline
     /// Executes the pipeline for a delete operation.
     /// </summary>
     Task<WriteResult> DeleteAsync(
-        Guid tenantId,
+        Guid projectId,
         TableMetadata table,
         Guid recordId,
         IDictionary<string, object?>? existingData = null,
@@ -44,7 +44,7 @@ public interface IWritePipeline
     /// Validates data without writing (dry run).
     /// </summary>
     Task<WriteResult> ValidateAsync(
-        Guid tenantId,
+        Guid projectId,
         TableMetadata table,
         IDictionary<string, object?> data,
         WriteOperationType operationType,
@@ -55,7 +55,7 @@ public interface IWritePipeline
     /// Validates a batch of records (for deferred validation after bulk import).
     /// </summary>
     Task<IReadOnlyList<WriteResult>> ValidateBatchAsync(
-        Guid tenantId,
+        Guid projectId,
         TableMetadata table,
         IReadOnlyList<IDictionary<string, object?>> records,
         WriteOptions? options = null,

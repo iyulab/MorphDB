@@ -20,7 +20,7 @@ import { MorphDBClient } from '@morphdb/client';
 
 // Create client
 const client = new MorphDBClient('http://localhost:5000', {
-  tenantId: 'your-tenant-id',
+  projectId: 'your-project-id',
   apiKey: 'your-api-key',
 });
 
@@ -249,7 +249,7 @@ try {
 
 ```typescript
 const client = new MorphDBClient('http://localhost:5000', {
-  tenantId: 'your-tenant-id',
+  projectId: 'your-project-id',
   apiKey: 'your-api-key',
   jwtToken: 'optional-jwt-token',
   timeout: 30000, // 30 seconds
@@ -258,7 +258,7 @@ const client = new MorphDBClient('http://localhost:5000', {
 });
 
 // Update credentials at runtime
-client.setTenantId('new-tenant-id');
+client.setProjectId('new-project-id');
 client.setApiKey('new-api-key');
 client.setJwtToken('new-jwt-token');
 ```

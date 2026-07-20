@@ -392,7 +392,7 @@ class ChangeNotification(BaseModel):
     record_id: UUID = Field(alias="recordId")
     data: dict[str, Any] | None = None
     old_data: dict[str, Any] | None = Field(None, alias="oldData")
-    tenant_id: UUID = Field(alias="tenantId")
+    project_id: UUID = Field(alias="projectId")
     timestamp: datetime
 
     model_config = {"populate_by_name": True}

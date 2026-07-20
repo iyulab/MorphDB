@@ -28,7 +28,7 @@ public class MetadataRepositoryTests
         var table = new TableMetadata
         {
             TableId = Guid.NewGuid(),
-            TenantId = Guid.NewGuid(),
+            ProjectId = Guid.NewGuid(),
             LogicalName = "test_table_" + Guid.NewGuid().ToString("N")[..8],
             PhysicalName = "t_" + Guid.NewGuid().ToString("N")[..16],
             SchemaVersion = 1
@@ -52,7 +52,7 @@ public class MetadataRepositoryTests
         var table = new TableMetadata
         {
             TableId = Guid.NewGuid(),
-            TenantId = Guid.NewGuid(),
+            ProjectId = Guid.NewGuid(),
             LogicalName = "test_table_" + Guid.NewGuid().ToString("N")[..8],
             PhysicalName = "t_" + Guid.NewGuid().ToString("N")[..16],
             SchemaVersion = 1
@@ -82,11 +82,11 @@ public class MetadataRepositoryTests
     public async Task GetTableByNameAsync_ShouldReturnTable()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
         var table = new TableMetadata
         {
             TableId = Guid.NewGuid(),
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "test_table_" + Guid.NewGuid().ToString("N")[..8],
             PhysicalName = "t_" + Guid.NewGuid().ToString("N")[..16],
             SchemaVersion = 1
@@ -94,7 +94,7 @@ public class MetadataRepositoryTests
         await _repository.InsertTableAsync(table);
 
         // Act
-        var result = await _repository.GetTableByNameAsync(tenantId, table.LogicalName);
+        var result = await _repository.GetTableByNameAsync(projectId, table.LogicalName);
 
         // Assert
         result.Should().NotBeNull();
@@ -108,7 +108,7 @@ public class MetadataRepositoryTests
         var table = new TableMetadata
         {
             TableId = Guid.NewGuid(),
-            TenantId = Guid.NewGuid(),
+            ProjectId = Guid.NewGuid(),
             LogicalName = "test_table_" + Guid.NewGuid().ToString("N")[..8],
             PhysicalName = "t_" + Guid.NewGuid().ToString("N")[..16],
             SchemaVersion = 1
@@ -134,7 +134,7 @@ public class MetadataRepositoryTests
         var table = new TableMetadata
         {
             TableId = Guid.NewGuid(),
-            TenantId = Guid.NewGuid(),
+            ProjectId = Guid.NewGuid(),
             LogicalName = "test_table_" + Guid.NewGuid().ToString("N")[..8],
             PhysicalName = "t_" + Guid.NewGuid().ToString("N")[..16],
             SchemaVersion = 1
@@ -170,7 +170,7 @@ public class MetadataRepositoryTests
         var table = new TableMetadata
         {
             TableId = Guid.NewGuid(),
-            TenantId = Guid.NewGuid(),
+            ProjectId = Guid.NewGuid(),
             LogicalName = "test_table_" + Guid.NewGuid().ToString("N")[..8],
             PhysicalName = "t_" + Guid.NewGuid().ToString("N")[..16],
             SchemaVersion = 1
@@ -218,7 +218,7 @@ public class MetadataRepositoryTests
         var table = new TableMetadata
         {
             TableId = Guid.NewGuid(),
-            TenantId = Guid.NewGuid(),
+            ProjectId = Guid.NewGuid(),
             LogicalName = "test_table_" + Guid.NewGuid().ToString("N")[..8],
             PhysicalName = "t_" + Guid.NewGuid().ToString("N")[..16],
             SchemaVersion = 1
@@ -255,7 +255,7 @@ public class MetadataRepositoryTests
         var table = new TableMetadata
         {
             TableId = Guid.NewGuid(),
-            TenantId = Guid.NewGuid(),
+            ProjectId = Guid.NewGuid(),
             LogicalName = "test_table_" + Guid.NewGuid().ToString("N")[..8],
             PhysicalName = "t_" + Guid.NewGuid().ToString("N")[..16],
             SchemaVersion = 1
@@ -312,7 +312,7 @@ public class MetadataRepositoryTests
         var table = new TableMetadata
         {
             TableId = Guid.NewGuid(),
-            TenantId = Guid.NewGuid(),
+            ProjectId = Guid.NewGuid(),
             LogicalName = "test_table_" + Guid.NewGuid().ToString("N")[..8],
             PhysicalName = "t_" + Guid.NewGuid().ToString("N")[..16],
             SchemaVersion = 1
@@ -371,7 +371,7 @@ public class MetadataRepositoryTests
         var table = new TableMetadata
         {
             TableId = Guid.NewGuid(),
-            TenantId = Guid.NewGuid(),
+            ProjectId = Guid.NewGuid(),
             LogicalName = "test_table_" + Guid.NewGuid().ToString("N")[..8],
             PhysicalName = "t_" + Guid.NewGuid().ToString("N")[..16],
             SchemaVersion = 1

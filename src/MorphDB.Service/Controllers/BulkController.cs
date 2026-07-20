@@ -20,15 +20,15 @@ public sealed class BulkController : ControllerBase
         _bulkService = bulkService;
     }
 
-    private Guid GetTenantId()
+    private Guid GetProjectId()
     {
-        if (Request.Headers.TryGetValue("X-Tenant-Id", out var tenantIdHeader) &&
-            Guid.TryParse(tenantIdHeader.FirstOrDefault(), out var tenantId))
+        if (Request.Headers.TryGetValue("X-Project-Id", out var projectIdHeader) &&
+            Guid.TryParse(projectIdHeader.FirstOrDefault(), out var projectId))
         {
-            return tenantId;
+            return projectId;
         }
 
-        throw new InvalidOperationException("X-Tenant-Id header is required");
+        throw new InvalidOperationException("X-Project-Id header is required");
     }
 
     #region Import Operations
@@ -47,7 +47,7 @@ public sealed class BulkController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
+            var projectId = GetProjectId();
 
             var csvOptions = new CsvImportOptions
             {
@@ -61,7 +61,7 @@ public sealed class BulkController : ControllerBase
             };
 
             var job = await _bulkService.StartCsvImportAsync(
-                tenantId,
+                projectId,
                 table,
                 Request.Body,
                 csvOptions,
@@ -80,9 +80,9 @@ public sealed class BulkController : ControllerBase
         {
             return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
+        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_TENANT" });
+            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (ArgumentException ex) when (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
         {
@@ -108,7 +108,7 @@ public sealed class BulkController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
+            var projectId = GetProjectId();
 
             var jsonOptions = new JsonImportOptions
             {
@@ -118,7 +118,7 @@ public sealed class BulkController : ControllerBase
             };
 
             var job = await _bulkService.StartJsonImportAsync(
-                tenantId,
+                projectId,
                 table,
                 Request.Body,
                 jsonOptions,
@@ -137,9 +137,9 @@ public sealed class BulkController : ControllerBase
         {
             return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
+        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_TENANT" });
+            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (ArgumentException ex) when (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
         {
@@ -165,7 +165,7 @@ public sealed class BulkController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
+            var projectId = GetProjectId();
 
             var jsonOptions = new JsonImportOptions
             {
@@ -175,7 +175,7 @@ public sealed class BulkController : ControllerBase
             };
 
             var job = await _bulkService.StartNdjsonImportAsync(
-                tenantId,
+                projectId,
                 table,
                 Request.Body,
                 jsonOptions,
@@ -194,9 +194,9 @@ public sealed class BulkController : ControllerBase
         {
             return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
+        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_TENANT" });
+            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (ArgumentException ex) when (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
         {
@@ -239,7 +239,7 @@ public sealed class BulkController : ControllerBase
     }
 
     /// <summary>
-    /// List import jobs for a tenant.
+    /// List import jobs for a project.
     /// </summary>
     [HttpGet("import")]
     [ProducesResponseType(typeof(IReadOnlyList<ImportJobApiResponse>), StatusCodes.Status200OK)]
@@ -250,13 +250,13 @@ public sealed class BulkController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
-            var jobs = await _bulkService.ListImportJobsAsync(tenantId, limit, offset, cancellationToken);
+            var projectId = GetProjectId();
+            var jobs = await _bulkService.ListImportJobsAsync(projectId, limit, offset, cancellationToken);
             return Ok(jobs.Select(ToImportJobResponse).ToList());
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
+        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_TENANT" });
+            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (Exception ex)
         {
@@ -281,7 +281,7 @@ public sealed class BulkController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
+            var projectId = GetProjectId();
 
             var csvOptions = new CsvExportOptions
             {
@@ -293,7 +293,7 @@ public sealed class BulkController : ControllerBase
                 OrderBy = options?.OrderBy
             };
 
-            var job = await _bulkService.StartCsvExportAsync(tenantId, table, csvOptions, cancellationToken);
+            var job = await _bulkService.StartCsvExportAsync(projectId, table, csvOptions, cancellationToken);
 
             return AcceptedAtAction(
                 nameof(GetExportJob),
@@ -308,9 +308,9 @@ public sealed class BulkController : ControllerBase
         {
             return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
+        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_TENANT" });
+            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (ArgumentException ex) when (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
         {
@@ -335,7 +335,7 @@ public sealed class BulkController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
+            var projectId = GetProjectId();
 
             var jsonOptions = new JsonExportOptions
             {
@@ -346,7 +346,7 @@ public sealed class BulkController : ControllerBase
                 OrderBy = options?.OrderBy
             };
 
-            var job = await _bulkService.StartJsonExportAsync(tenantId, table, jsonOptions, cancellationToken);
+            var job = await _bulkService.StartJsonExportAsync(projectId, table, jsonOptions, cancellationToken);
 
             return AcceptedAtAction(
                 nameof(GetExportJob),
@@ -361,9 +361,9 @@ public sealed class BulkController : ControllerBase
         {
             return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
+        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_TENANT" });
+            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (ArgumentException ex) when (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
         {
@@ -388,7 +388,7 @@ public sealed class BulkController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
+            var projectId = GetProjectId();
 
             var xlsxOptions = new XlsxExportOptions
             {
@@ -399,7 +399,7 @@ public sealed class BulkController : ControllerBase
                 OrderBy = options?.OrderBy
             };
 
-            var job = await _bulkService.StartXlsxExportAsync(tenantId, table, xlsxOptions, cancellationToken);
+            var job = await _bulkService.StartXlsxExportAsync(projectId, table, xlsxOptions, cancellationToken);
 
             return AcceptedAtAction(
                 nameof(GetExportJob),
@@ -414,9 +414,9 @@ public sealed class BulkController : ControllerBase
         {
             return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
+        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_TENANT" });
+            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (ArgumentException ex) when (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
         {
@@ -530,7 +530,7 @@ public sealed class BulkController : ControllerBase
     }
 
     /// <summary>
-    /// List export jobs for a tenant.
+    /// List export jobs for a project.
     /// </summary>
     [HttpGet("export")]
     [ProducesResponseType(typeof(IReadOnlyList<ExportJobApiResponse>), StatusCodes.Status200OK)]
@@ -541,13 +541,13 @@ public sealed class BulkController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
-            var jobs = await _bulkService.ListExportJobsAsync(tenantId, limit, offset, cancellationToken);
+            var projectId = GetProjectId();
+            var jobs = await _bulkService.ListExportJobsAsync(projectId, limit, offset, cancellationToken);
             return Ok(jobs.Select(ToExportJobResponse).ToList());
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
+        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_TENANT" });
+            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (Exception ex)
         {

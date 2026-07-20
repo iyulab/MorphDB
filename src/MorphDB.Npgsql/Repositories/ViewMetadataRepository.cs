@@ -23,12 +23,12 @@ public sealed class ViewMetadataRepository : IViewMetadataRepository
     {
         const string sql = """
             INSERT INTO morphdb._morph_views
-                (view_id, tenant_id, logical_name, physical_name, definition,
+                (view_id, project_id, logical_name, physical_name, definition,
                  is_materialized, refresh_policy, refresh_schedule, descriptor)
             VALUES
-                (@ViewId, @TenantId, @LogicalName, @PhysicalName, @Definition::jsonb,
+                (@ViewId, @ProjectId, @LogicalName, @PhysicalName, @Definition::jsonb,
                  @IsMaterialized, @RefreshPolicy, @RefreshSchedule, @Descriptor::jsonb)
-            RETURNING view_id, tenant_id, logical_name, physical_name, definition,
+            RETURNING view_id, project_id, logical_name, physical_name, definition,
                       is_materialized, refresh_policy, refresh_schedule, last_refreshed_at,
                       is_stale, descriptor, is_active, created_at, updated_at
             """;
@@ -37,7 +37,7 @@ public sealed class ViewMetadataRepository : IViewMetadataRepository
         var result = await connection.QuerySingleAsync<ViewRow>(sql, new
         {
             view.ViewId,
-            view.TenantId,
+            view.ProjectId,
             view.LogicalName,
             view.PhysicalName,
             Definition = JsonSerializer.Serialize(view.Definition),
@@ -55,7 +55,7 @@ public sealed class ViewMetadataRepository : IViewMetadataRepository
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-            SELECT view_id, tenant_id, logical_name, physical_name, definition,
+            SELECT view_id, project_id, logical_name, physical_name, definition,
                    is_materialized, refresh_policy, refresh_schedule, last_refreshed_at,
                    is_stale, descriptor, is_active, created_at, updated_at
             FROM morphdb._morph_views
@@ -74,21 +74,21 @@ public sealed class ViewMetadataRepository : IViewMetadataRepository
     }
 
     public async Task<ViewMetadata?> GetViewByNameAsync(
-        Guid tenantId,
+        Guid projectId,
         string logicalName,
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-            SELECT view_id, tenant_id, logical_name, physical_name, definition,
+            SELECT view_id, project_id, logical_name, physical_name, definition,
                    is_materialized, refresh_policy, refresh_schedule, last_refreshed_at,
                    is_stale, descriptor, is_active, created_at, updated_at
             FROM morphdb._morph_views
-            WHERE tenant_id = @TenantId AND logical_name = @LogicalName AND is_active = true
+            WHERE project_id = @ProjectId AND logical_name = @LogicalName AND is_active = true
             """;
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         var row = await connection.QuerySingleOrDefaultAsync<ViewRow>(
-            sql, new { TenantId = tenantId, LogicalName = logicalName });
+            sql, new { ProjectId = projectId, LogicalName = logicalName });
 
         if (row == null)
             return null;
@@ -99,20 +99,20 @@ public sealed class ViewMetadataRepository : IViewMetadataRepository
     }
 
     public async Task<IReadOnlyList<ViewMetadata>> ListViewsAsync(
-        Guid tenantId,
+        Guid projectId,
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-            SELECT view_id, tenant_id, logical_name, physical_name, definition,
+            SELECT view_id, project_id, logical_name, physical_name, definition,
                    is_materialized, refresh_policy, refresh_schedule, last_refreshed_at,
                    is_stale, descriptor, is_active, created_at, updated_at
             FROM morphdb._morph_views
-            WHERE tenant_id = @TenantId AND is_active = true
+            WHERE project_id = @ProjectId AND is_active = true
             ORDER BY created_at DESC
             """;
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-        var rows = await connection.QueryAsync<ViewRow>(sql, new { TenantId = tenantId });
+        var rows = await connection.QueryAsync<ViewRow>(sql, new { ProjectId = projectId });
 
         var views = new List<ViewMetadata>();
         foreach (var row in rows)
@@ -288,7 +288,7 @@ public sealed class ViewMetadataRepository : IViewMetadataRepository
         return new ViewMetadata
         {
             ViewId = row.view_id,
-            TenantId = row.tenant_id,
+            ProjectId = row.project_id,
             LogicalName = row.logical_name,
             PhysicalName = row.physical_name,
             Definition = definition,
@@ -323,7 +323,7 @@ public sealed class ViewMetadataRepository : IViewMetadataRepository
     private sealed class ViewRow
     {
         public Guid view_id { get; set; }
-        public Guid tenant_id { get; set; }
+        public Guid project_id { get; set; }
         public string logical_name { get; set; } = "";
         public string physical_name { get; set; } = "";
         public string definition { get; set; } = "";

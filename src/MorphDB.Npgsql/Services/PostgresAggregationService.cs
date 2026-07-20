@@ -41,7 +41,7 @@ public sealed class PostgresAggregationService : IAggregationService
 
     /// <inheritdoc />
     public async Task<AggregationResult> AggregateAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         AggregationRequest request,
         CancellationToken cancellationToken = default)
@@ -49,14 +49,14 @@ public sealed class PostgresAggregationService : IAggregationService
         var stopwatch = Stopwatch.StartNew();
 
         // Get table metadata with columns
-        var table = await _metadataRepository.GetTableByNameAsync(tenantId, tableName, includeColumns: true, cancellationToken)
+        var table = await _metadataRepository.GetTableByNameAsync(projectId, tableName, includeColumns: true, cancellationToken)
             ?? throw new TableNotFoundException(tableName);
 
         // Build the aggregation query
         var query = BuildAggregationQuery(table, request);
 
         // Apply Row-Level Security
-        await ApplyRlsPolicyAsync(query, tenantId, tableName, cancellationToken);
+        await ApplyRlsPolicyAsync(query, projectId, tableName, cancellationToken);
 
         // Compile and execute
         var compiled = _compiler.Compile(query);
@@ -76,7 +76,7 @@ public sealed class PostgresAggregationService : IAggregationService
         long? totalGroups = null;
         if (request.Limit.HasValue || request.Offset.HasValue)
         {
-            totalGroups = await CountGroupsAsync(tenantId, table, tableName, request, cancellationToken);
+            totalGroups = await CountGroupsAsync(projectId, table, tableName, request, cancellationToken);
         }
 
         return new AggregationResult
@@ -310,7 +310,7 @@ public sealed class PostgresAggregationService : IAggregationService
 
     private async Task ApplyRlsPolicyAsync(
         SqlKataQuery query,
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         CancellationToken cancellationToken)
     {
@@ -319,7 +319,7 @@ public sealed class PostgresAggregationService : IAggregationService
             return;
 
         var rlsExpression = await _securityPolicyService.EvaluatePoliciesAsync(
-            tenantId,
+            projectId,
             tableName,
             PolicyType.Select,
             securityContext,
@@ -332,7 +332,7 @@ public sealed class PostgresAggregationService : IAggregationService
     }
 
     private async Task<long> CountGroupsAsync(
-        Guid tenantId,
+        Guid projectId,
         TableMetadata table,
         string tableName,
         AggregationRequest request,
@@ -348,7 +348,7 @@ public sealed class PostgresAggregationService : IAggregationService
         }
 
         // Apply RLS
-        await ApplyRlsPolicyAsync(subQuery, tenantId, tableName, cancellationToken);
+        await ApplyRlsPolicyAsync(subQuery, projectId, tableName, cancellationToken);
 
         // Add GROUP BY
         foreach (var groupColumn in request.GroupBy)

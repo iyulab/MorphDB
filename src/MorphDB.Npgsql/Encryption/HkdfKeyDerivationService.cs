@@ -7,18 +7,18 @@ namespace MorphDB.Npgsql.Encryption;
 
 /// <summary>
 /// HKDF-based key derivation service for envelope encryption.
-/// Derives unique encryption keys per tenant/table/column from a master key.
+/// Derives unique encryption keys per project/table/column from a master key.
 /// </summary>
 /// <remarks>
 /// Key Hierarchy:
 ///   Master Key (MK)
-///     └── Tenant Key (TK) = HKDF(MK, salt=TenantId)
+///     └── Project Key (TK) = HKDF(MK, salt=ProjectId)
 ///           └── Table Key (TEK) = HKDF(TK, info=TableName)
 ///                 └── Column Key (CEK) = HKDF(TEK, info=ColumnName)
 ///
 /// This hierarchy ensures:
-/// - Each tenant has isolated encryption keys
-/// - Each table within a tenant has a unique key
+/// - Each project has isolated encryption keys
+/// - Each table within a project has a unique key
 /// - Column-level granularity for sensitive data
 /// - Key rotation can be done at any level
 /// </remarks>
@@ -55,37 +55,37 @@ public sealed class HkdfKeyDerivationService : IKeyDerivationService
     public int CurrentKeyVersion => _keyVersion;
 
     /// <inheritdoc />
-    public byte[] DeriveTenantKey(Guid tenantId)
+    public byte[] DeriveProjectKey(Guid projectId)
     {
-        // Use tenant ID bytes as salt for tenant-level key derivation
-        var salt = tenantId.ToByteArray();
-        var info = Encoding.UTF8.GetBytes($"morphdb:tenant:v{_keyVersion}");
+        // Use project ID bytes as salt for project-level key derivation
+        var salt = projectId.ToByteArray();
+        var info = Encoding.UTF8.GetBytes($"morphdb:project:v{_keyVersion}");
 
         return DeriveKey(_masterKey, salt, info);
     }
 
     /// <inheritdoc />
-    public byte[] DeriveTableKey(Guid tenantId, string tableName)
+    public byte[] DeriveTableKey(Guid projectId, string tableName)
     {
-        var tenantKey = DeriveTenantKey(tenantId);
+        var projectKey = DeriveProjectKey(projectId);
         var salt = Encoding.UTF8.GetBytes($"table:{tableName}");
         var info = Encoding.UTF8.GetBytes($"morphdb:table:v{_keyVersion}");
 
         try
         {
-            return DeriveKey(tenantKey, salt, info);
+            return DeriveKey(projectKey, salt, info);
         }
         finally
         {
-            // Clear tenant key from memory
-            CryptographicOperations.ZeroMemory(tenantKey);
+            // Clear project key from memory
+            CryptographicOperations.ZeroMemory(projectKey);
         }
     }
 
     /// <inheritdoc />
-    public byte[] DeriveColumnKey(Guid tenantId, string tableName, string columnName)
+    public byte[] DeriveColumnKey(Guid projectId, string tableName, string columnName)
     {
-        var tableKey = DeriveTableKey(tenantId, tableName);
+        var tableKey = DeriveTableKey(projectId, tableName);
         var salt = Encoding.UTF8.GetBytes($"column:{columnName}");
         var info = Encoding.UTF8.GetBytes($"morphdb:column:v{_keyVersion}");
 

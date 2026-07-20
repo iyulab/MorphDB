@@ -42,7 +42,7 @@ public sealed class RealtimeClient : IAsyncDisposable
             var builder = new HubConnectionBuilder()
                 .WithUrl(hubUrl, options =>
                 {
-                    options.Headers["X-Tenant-Id"] = _options.TenantId.ToString();
+                    options.Headers["X-Project-Id"] = _options.ProjectId.ToString();
                     if (!string.IsNullOrEmpty(_options.ApiKey))
                         options.Headers["X-API-Key"] = _options.ApiKey;
                     if (!string.IsNullOrEmpty(_options.JwtToken))
@@ -75,7 +75,7 @@ public sealed class RealtimeClient : IAsyncDisposable
                         RecordId = data?.TryGetValue("id", out var id) == true && id is JsonElement je && je.TryGetGuid(out var guid)
                             ? guid : Guid.Empty,
                         Data = data,
-                        TenantId = _options.TenantId,
+                        ProjectId = _options.ProjectId,
                         Timestamp = DateTimeOffset.UtcNow
                     };
 

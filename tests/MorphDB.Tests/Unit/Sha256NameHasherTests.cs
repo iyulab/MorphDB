@@ -10,11 +10,11 @@ public class Sha256NameHasherTests
     public void GenerateTableName_ShouldReturnValidFormat()
     {
         // Arrange
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
         var logicalName = "Customers";
 
         // Act
-        var result = _hasher.GenerateTableName(tenantId, logicalName);
+        var result = _hasher.GenerateTableName(projectId, logicalName);
 
         // Assert
         result.Should().StartWith("tbl_");
@@ -38,16 +38,16 @@ public class Sha256NameHasherTests
     }
 
     [Fact]
-    public void GenerateTableName_SameName_ShouldReturnDifferentHashForDifferentTenants()
+    public void GenerateTableName_SameName_ShouldReturnDifferentHashForDifferentProjects()
     {
         // Arrange
-        var tenant1 = Guid.NewGuid();
-        var tenant2 = Guid.NewGuid();
+        var project1 = Guid.NewGuid();
+        var project2 = Guid.NewGuid();
         var logicalName = "Orders";
 
         // Act
-        var result1 = _hasher.GenerateTableName(tenant1, logicalName);
-        var result2 = _hasher.GenerateTableName(tenant2, logicalName);
+        var result1 = _hasher.GenerateTableName(project1, logicalName);
+        var result2 = _hasher.GenerateTableName(project2, logicalName);
 
         // Assert
         result1.Should().NotBe(result2);
@@ -57,12 +57,12 @@ public class Sha256NameHasherTests
     public void GenerateTableName_SameInput_ShouldReturnConsistentHash()
     {
         // Arrange
-        var tenantId = Guid.Parse("12345678-1234-1234-1234-123456789012");
+        var projectId = Guid.Parse("12345678-1234-1234-1234-123456789012");
         var logicalName = "Products";
 
         // Act
-        var result1 = _hasher.GenerateTableName(tenantId, logicalName);
-        var result2 = _hasher.GenerateTableName(tenantId, logicalName);
+        var result1 = _hasher.GenerateTableName(projectId, logicalName);
+        var result2 = _hasher.GenerateTableName(projectId, logicalName);
 
         // Assert
         result1.Should().Be(result2);

@@ -51,15 +51,15 @@ public sealed class DataController : ControllerBase
         _logger = logger;
     }
 
-    private Guid GetTenantId()
+    private Guid GetProjectId()
     {
-        if (Request.Headers.TryGetValue("X-Tenant-Id", out var tenantIdHeader) &&
-            Guid.TryParse(tenantIdHeader.FirstOrDefault(), out var tenantId))
+        if (Request.Headers.TryGetValue("X-Project-Id", out var projectIdHeader) &&
+            Guid.TryParse(projectIdHeader.FirstOrDefault(), out var projectId))
         {
-            return tenantId;
+            return projectId;
         }
 
-        throw new InvalidOperationException("X-Tenant-Id header is required");
+        throw new InvalidOperationException("X-Project-Id header is required");
     }
 
     #region Query Operations
@@ -78,14 +78,14 @@ public sealed class DataController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
+            var projectId = GetProjectId();
 
             // Validate pagination
             var pageSize = Math.Clamp(query.PageSize, 1, Math.Min(1000, MaxPageSize));
             var page = Math.Max(query.Page, 1);
 
             // Build query
-            var morphQuery = _dataService.Query(tenantId).From(table);
+            var morphQuery = _dataService.Query(projectId).From(table);
 
             // Select columns
             if (!string.IsNullOrEmpty(query.Select))
@@ -108,7 +108,7 @@ public sealed class DataController : ControllerBase
             if (!string.IsNullOrEmpty(query.Search))
             {
                 var tableMetadata = await _metadataRepository.GetTableByNameAsync(
-                    tenantId, table, includeColumns: true, cancellationToken);
+                    projectId, table, includeColumns: true, cancellationToken);
 
                 if (tableMetadata is not null)
                 {
@@ -157,9 +157,9 @@ public sealed class DataController : ControllerBase
         {
             return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "INVALID_FILTER" });
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
+        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_TENANT" });
+            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (System.Collections.Generic.KeyNotFoundException ex)
         {
@@ -186,9 +186,9 @@ public sealed class DataController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
+            var projectId = GetProjectId();
 
-            var record = await _dataService.GetByIdAsync(tenantId, table, id, cancellationToken);
+            var record = await _dataService.GetByIdAsync(projectId, table, id, cancellationToken);
 
             if (record == null)
             {
@@ -206,9 +206,9 @@ public sealed class DataController : ControllerBase
                 Data = record
             });
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
+        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_TENANT" });
+            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (System.Collections.Generic.KeyNotFoundException ex)
         {
@@ -235,11 +235,11 @@ public sealed class DataController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
+            var projectId = GetProjectId();
             var pageSize = Math.Clamp(request.PageSize, 1, Math.Min(1000, MaxPageSize));
             var page = Math.Max(request.Page, 1);
 
-            var morphQuery = _dataService.Query(tenantId).From(table);
+            var morphQuery = _dataService.Query(projectId).From(table);
 
             // Select
             if (request.Select is { Count: > 0 })
@@ -288,9 +288,9 @@ public sealed class DataController : ControllerBase
         {
             return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "INVALID_FILTER" });
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
+        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_TENANT" });
+            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (System.Collections.Generic.KeyNotFoundException ex)
         {
@@ -326,10 +326,10 @@ public sealed class DataController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
+            var projectId = GetProjectId();
 
             var tableMetadata = await _metadataRepository.GetTableByNameAsync(
-                tenantId, table, includeColumns: true, cancellationToken);
+                projectId, table, includeColumns: true, cancellationToken);
 
             if (tableMetadata is null)
             {
@@ -358,7 +358,7 @@ public sealed class DataController : ControllerBase
             }
 
             var writeResult = await _writePipeline.InsertAsync(
-                tenantId, tableMetadata, data, options, cancellationToken);
+                projectId, tableMetadata, data, options, cancellationToken);
 
             if (!writeResult.Success)
             {
@@ -381,9 +381,9 @@ public sealed class DataController : ControllerBase
 
             return CreatedAtAction(nameof(GetById), new { table, id }, response);
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
+        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_TENANT" });
+            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (Exception ex)
         {
@@ -411,10 +411,10 @@ public sealed class DataController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
+            var projectId = GetProjectId();
 
             var tableMetadata = await _metadataRepository.GetTableByNameAsync(
-                tenantId, table, includeColumns: true, cancellationToken);
+                projectId, table, includeColumns: true, cancellationToken);
 
             if (tableMetadata is null)
             {
@@ -427,7 +427,7 @@ public sealed class DataController : ControllerBase
             }
 
             // Check if record exists first
-            var existing = await _dataService.GetByIdAsync(tenantId, table, id, cancellationToken);
+            var existing = await _dataService.GetByIdAsync(projectId, table, id, cancellationToken);
             if (existing == null)
             {
                 return NotFound(new ErrorResponse
@@ -439,7 +439,7 @@ public sealed class DataController : ControllerBase
             }
 
             var writeResult = await _writePipeline.UpdateAsync(
-                tenantId, tableMetadata, id, data, existing, cancellationToken: cancellationToken);
+                projectId, tableMetadata, id, data, existing, cancellationToken: cancellationToken);
 
             if (!writeResult.Success)
             {
@@ -457,9 +457,9 @@ public sealed class DataController : ControllerBase
                 Data = writeResult.Data ?? data
             });
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
+        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_TENANT" });
+            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (Exception ex)
         {
@@ -486,10 +486,10 @@ public sealed class DataController : ControllerBase
     {
         try
         {
-            var tenantId = GetTenantId();
+            var projectId = GetProjectId();
 
             var tableMetadata = await _metadataRepository.GetTableByNameAsync(
-                tenantId, table, includeColumns: true, cancellationToken);
+                projectId, table, includeColumns: true, cancellationToken);
 
             if (tableMetadata is null)
             {
@@ -502,7 +502,7 @@ public sealed class DataController : ControllerBase
             }
 
             var writeResult = await _writePipeline.DeleteAsync(
-                tenantId, tableMetadata, id, cancellationToken: cancellationToken);
+                projectId, tableMetadata, id, cancellationToken: cancellationToken);
 
             if (!writeResult.Success)
             {
@@ -516,9 +516,9 @@ public sealed class DataController : ControllerBase
 
             return NoContent();
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Tenant-Id"))
+        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_TENANT" });
+            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (Exception ex)
         {

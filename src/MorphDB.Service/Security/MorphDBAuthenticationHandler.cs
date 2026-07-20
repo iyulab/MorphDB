@@ -17,9 +17,9 @@ public sealed class MorphDBAuthenticationOptions : AuthenticationSchemeOptions
     public string ApiKeyHeaderName { get; set; } = "X-API-Key";
 
     /// <summary>
-    /// The header name for tenant ID.
+    /// The header name for project ID.
     /// </summary>
-    public string TenantIdHeaderName { get; set; } = "X-Tenant-Id";
+    public string ProjectIdHeaderName { get; set; } = "X-Project-Id";
 }
 
 /// <summary>
@@ -47,12 +47,12 @@ public sealed class MorphDBAuthenticationHandler : AuthenticationHandler<MorphDB
 
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
-        // Get tenant ID from header
-        if (!Request.Headers.TryGetValue(Options.TenantIdHeaderName, out var tenantIdHeader) ||
-            !Guid.TryParse(tenantIdHeader.FirstOrDefault(), out var tenantId))
+        // Get project ID from header
+        if (!Request.Headers.TryGetValue(Options.ProjectIdHeaderName, out var projectIdHeader) ||
+            !Guid.TryParse(projectIdHeader.FirstOrDefault(), out var projectId))
         {
-            // Tenant ID is optional for some endpoints
-            tenantId = Guid.Empty;
+            // Project ID is optional for some endpoints
+            projectId = Guid.Empty;
         }
 
         // Try JWT first (from Authorization header)
@@ -64,7 +64,7 @@ public sealed class MorphDBAuthenticationHandler : AuthenticationHandler<MorphDB
 
             if (jwtResult.IsValid && jwtResult.Principal != null)
             {
-                var securityContext = CreateSecurityContextFromJwt(tenantId, jwtResult.Principal);
+                var securityContext = CreateSecurityContextFromJwt(projectId, jwtResult.Principal);
                 _securityContextAccessor.SetContext(securityContext);
 
                 var ticket = new AuthenticationTicket(jwtResult.Principal, Scheme.Name);
@@ -84,10 +84,10 @@ public sealed class MorphDBAuthenticationHandler : AuthenticationHandler<MorphDB
 
                 if (result.IsValid && result.ApiKey != null)
                 {
-                    // Verify tenant ID matches (if provided)
-                    if (tenantId != Guid.Empty && result.ApiKey.TenantId != tenantId)
+                    // Verify project ID matches (if provided)
+                    if (projectId != Guid.Empty && result.ApiKey.ProjectId != projectId)
                     {
-                        return AuthenticateResult.Fail("API key does not match tenant ID");
+                        return AuthenticateResult.Fail("API key does not match project ID");
                     }
 
                     var securityContext = CreateSecurityContextFromApiKey(result.ApiKey);
@@ -96,7 +96,7 @@ public sealed class MorphDBAuthenticationHandler : AuthenticationHandler<MorphDB
                     var claims = new List<Claim>
                     {
                         new(ClaimTypes.NameIdentifier, result.ApiKey.Id.ToString()),
-                        new("tenant_id", result.ApiKey.TenantId.ToString()),
+                        new("project_id", result.ApiKey.ProjectId.ToString()),
                         new("key_type", result.ApiKey.KeyType.ToString())
                     };
 
@@ -116,16 +116,16 @@ public sealed class MorphDBAuthenticationHandler : AuthenticationHandler<MorphDB
             }
         }
 
-        // No credentials provided - authenticate as anonymous with tenant context
+        // No credentials provided - authenticate as anonymous with project context
         // This allows [Authorize] endpoints to proceed; authorization logic handles access control
-        if (tenantId != Guid.Empty)
+        if (projectId != Guid.Empty)
         {
-            var securityContext = SecurityContext.Anonymous(tenantId);
+            var securityContext = SecurityContext.Anonymous(projectId);
             _securityContextAccessor.SetContext(securityContext);
 
             var claims = new List<Claim>
             {
-                new("tenant_id", tenantId.ToString()),
+                new("project_id", projectId.ToString()),
                 new(ClaimTypes.Role, "anonymous")
             };
             var identity = new ClaimsIdentity(claims, Scheme.Name);
@@ -138,7 +138,7 @@ public sealed class MorphDBAuthenticationHandler : AuthenticationHandler<MorphDB
         return AuthenticateResult.NoResult();
     }
 
-    private static SecurityContext CreateSecurityContextFromJwt(Guid tenantId, ClaimsPrincipal principal)
+    private static SecurityContext CreateSecurityContextFromJwt(Guid projectId, ClaimsPrincipal principal)
     {
         var claims = new Dictionary<string, string>();
         foreach (var claim in principal.Claims)
@@ -146,19 +146,19 @@ public sealed class MorphDBAuthenticationHandler : AuthenticationHandler<MorphDB
             claims[claim.Type] = claim.Value;
         }
 
-        // Try to get tenant ID from claims if not provided in header
-        if (tenantId == Guid.Empty)
+        // Try to get project ID from claims if not provided in header
+        if (projectId == Guid.Empty)
         {
-            var tenantClaim = principal.FindFirst("tenant_id");
-            if (tenantClaim != null && Guid.TryParse(tenantClaim.Value, out var claimTenantId))
+            var projectClaim = principal.FindFirst("project_id");
+            if (projectClaim != null && Guid.TryParse(projectClaim.Value, out var claimProjectId))
             {
-                tenantId = claimTenantId;
+                projectId = claimProjectId;
             }
         }
 
         return new SecurityContext
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             UserId = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value ??
                      principal.FindFirst("sub")?.Value,
             Email = principal.FindFirst(ClaimTypes.Email)?.Value ??
@@ -175,8 +175,8 @@ public sealed class MorphDBAuthenticationHandler : AuthenticationHandler<MorphDB
     private static SecurityContext CreateSecurityContextFromApiKey(ApiKey apiKey)
     {
         return apiKey.KeyType == ApiKeyType.Service
-            ? SecurityContext.Service(apiKey.TenantId)
-            : SecurityContext.Anonymous(apiKey.TenantId);
+            ? SecurityContext.Service(apiKey.ProjectId)
+            : SecurityContext.Anonymous(apiKey.ProjectId);
     }
 }
 

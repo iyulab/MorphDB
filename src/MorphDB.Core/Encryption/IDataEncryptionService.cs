@@ -2,7 +2,7 @@ namespace MorphDB.Core.Encryption;
 
 /// <summary>
 /// Service for transparent data encryption and decryption.
-/// Uses envelope encryption with per-tenant, per-table key derivation.
+/// Uses envelope encryption with per-project, per-table key derivation.
 /// </summary>
 public interface IDataEncryptionService
 {
@@ -14,44 +14,44 @@ public interface IDataEncryptionService
     /// <summary>
     /// Encrypts a value for storage.
     /// </summary>
-    /// <param name="tenantId">The tenant ID for key derivation.</param>
+    /// <param name="projectId">The project ID for key derivation.</param>
     /// <param name="tableName">The table name for key derivation.</param>
     /// <param name="columnName">The column name for additional context.</param>
     /// <param name="plaintext">The value to encrypt.</param>
     /// <returns>The encrypted value as a base64 string with metadata prefix.</returns>
-    string Encrypt(Guid tenantId, string tableName, string columnName, string plaintext);
+    string Encrypt(Guid projectId, string tableName, string columnName, string plaintext);
 
     /// <summary>
     /// Decrypts a value from storage.
     /// </summary>
-    /// <param name="tenantId">The tenant ID for key derivation.</param>
+    /// <param name="projectId">The project ID for key derivation.</param>
     /// <param name="tableName">The table name for key derivation.</param>
     /// <param name="columnName">The column name for additional context.</param>
     /// <param name="ciphertext">The encrypted value.</param>
     /// <returns>The decrypted plaintext.</returns>
-    string Decrypt(Guid tenantId, string tableName, string columnName, string ciphertext);
+    string Decrypt(Guid projectId, string tableName, string columnName, string ciphertext);
 
     /// <summary>
     /// Encrypts binary data for storage.
     /// </summary>
-    byte[] EncryptBytes(Guid tenantId, string tableName, string columnName, byte[] plaintext);
+    byte[] EncryptBytes(Guid projectId, string tableName, string columnName, byte[] plaintext);
 
     /// <summary>
     /// Decrypts binary data from storage.
     /// </summary>
-    byte[] DecryptBytes(Guid tenantId, string tableName, string columnName, byte[] ciphertext);
+    byte[] DecryptBytes(Guid projectId, string tableName, string columnName, byte[] ciphertext);
 
     /// <summary>
     /// Encrypts a dictionary of values (for row-level encryption).
     /// Only encrypts values for columns marked as encrypted in metadata.
     /// </summary>
-    /// <param name="tenantId">The tenant ID.</param>
+    /// <param name="projectId">The project ID.</param>
     /// <param name="tableName">The table name.</param>
     /// <param name="data">The data to encrypt.</param>
     /// <param name="encryptedColumns">Column names that should be encrypted.</param>
     /// <returns>The data with encrypted values.</returns>
     IDictionary<string, object?> EncryptRow(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         IDictionary<string, object?> data,
         IReadOnlySet<string> encryptedColumns);
@@ -60,7 +60,7 @@ public interface IDataEncryptionService
     /// Decrypts a dictionary of values (for row-level decryption).
     /// </summary>
     IDictionary<string, object?> DecryptRow(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         IDictionary<string, object?> data,
         IReadOnlySet<string> encryptedColumns);
@@ -100,12 +100,12 @@ public class DataEncryptionOptions
     public bool EncryptAllByDefault { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets columns that should never be encrypted (e.g., id, tenant_id, timestamps).
+    /// Gets or sets columns that should never be encrypted (e.g., id, project_id, timestamps).
     /// </summary>
     public HashSet<string> ExcludedColumns { get; set; } =
     [
         "id",
-        "tenant_id",
+        "project_id",
         "created_at",
         "updated_at",
         "created_by",

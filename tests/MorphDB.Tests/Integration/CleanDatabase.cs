@@ -60,7 +60,7 @@ public sealed class CleanDatabase : IAsyncDisposable
         return await ReadStringsAsync(command);
     }
 
-    public async Task<List<string>> ReadColumnsAsync(string table)
+    public async Task<List<string>> ReadColumnsAsync(string table, string schema = "morphdb")
     {
         await using var connection = new NpgsqlConnection(ConnectionString);
         await connection.OpenAsync();
@@ -68,10 +68,29 @@ public sealed class CleanDatabase : IAsyncDisposable
             """
             SELECT column_name
             FROM information_schema.columns
-            WHERE table_schema = 'morphdb' AND table_name = @table
+            WHERE table_schema = @schema AND table_name = @table
             ORDER BY column_name
             """,
             connection);
+        command.Parameters.AddWithValue("schema", schema);
+        command.Parameters.AddWithValue("table", table);
+
+        return await ReadStringsAsync(command);
+    }
+
+    public async Task<List<string>> ReadIndexesAsync(string table, string schema = "morphdb")
+    {
+        await using var connection = new NpgsqlConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT indexname
+            FROM pg_indexes
+            WHERE schemaname = @schema AND tablename = @table
+            ORDER BY indexname
+            """,
+            connection);
+        command.Parameters.AddWithValue("schema", schema);
         command.Parameters.AddWithValue("table", table);
 
         return await ReadStringsAsync(command);

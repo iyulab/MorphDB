@@ -5,9 +5,9 @@ using MorphDB.Service.Models.Api;
 namespace MorphDB.Service.Filters;
 
 /// <summary>
-/// Exception filter that handles tenant-related exceptions and returns appropriate HTTP responses.
+/// Exception filter that handles project-related exceptions and returns appropriate HTTP responses.
 /// </summary>
-public sealed class TenantExceptionFilter : IExceptionFilter
+public sealed class ProjectExceptionFilter : IExceptionFilter
 {
     public void OnException(ExceptionContext context)
     {
@@ -16,8 +16,8 @@ public sealed class TenantExceptionFilter : IExceptionFilter
         {
             context.Result = new BadRequestObjectResult(new ErrorResponse
             {
-                Error = "InvalidTenant",
-                Message = "Valid tenant ID or API key is required"
+                Error = "InvalidProject",
+                Message = "Valid project ID or API key is required"
             });
             context.ExceptionHandled = true;
         }

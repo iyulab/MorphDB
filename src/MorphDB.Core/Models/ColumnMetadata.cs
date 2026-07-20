@@ -138,7 +138,7 @@ public enum DefaultValueType
     /// <summary>Computed from other fields in the same row.</summary>
     Computed,
 
-    /// <summary>Context-based value (e.g., current user ID, tenant ID).</summary>
+    /// <summary>Context-based value (e.g., current user ID, project ID).</summary>
     ContextBased,
 
     /// <summary>Auto-incrementing sequence.</summary>

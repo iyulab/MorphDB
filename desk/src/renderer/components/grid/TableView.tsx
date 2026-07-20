@@ -44,7 +44,7 @@ export function TableView({ tableName }: TableViewProps): ReactElement {
     return new MorphDBClient({
       url: activeConnection.url,
       apiKey,
-      tenantId: activeConnection.tenantId
+      projectId: activeConnection.projectId
     })
   }
 
@@ -58,7 +58,7 @@ export function TableView({ tableName }: TableViewProps): ReactElement {
     queryFn: async () => {
       const client = await createClient()
       if (!client) throw new Error('No active connection')
-      return client.getTable(tableName, activeConnection?.tenantId)
+      return client.getTable(tableName, activeConnection?.projectId)
     },
     enabled: !!activeConnection && !!tableName
   })

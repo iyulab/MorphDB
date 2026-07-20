@@ -8,7 +8,7 @@ namespace MorphDB.Core.Models;
 public sealed class TableMetadata
 {
     public Guid TableId { get; init; }
-    public Guid TenantId { get; init; }
+    public Guid ProjectId { get; init; }
     public required string LogicalName { get; init; }
     public required string PhysicalName { get; init; }
     public int SchemaVersion { get; init; }

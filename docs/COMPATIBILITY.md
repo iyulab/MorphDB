@@ -89,7 +89,7 @@ The MorphDB Server maintains backward compatibility within minor versions:
 - Dynamic schema with logical-physical separation
 - Write pipeline with virtual constraints
 - System columns (`_created_at`, `_updated_at`, `_version`)
-- Multi-tenant support
+- Multi-project support
 
 ## Upgrade Guidelines
 
@@ -168,7 +168,7 @@ The CI pipeline runs compatibility tests against:
 ### Server (MorphDB.Service)
 
 - **0.2.2** - Check expression physical name translation, error handling improvements
-- **0.2.0** - Write pipeline, virtual constraints, multi-tenant
+- **0.2.0** - Write pipeline, virtual constraints, multi-project
 
 ### .NET SDK (MorphDB.Client)
 

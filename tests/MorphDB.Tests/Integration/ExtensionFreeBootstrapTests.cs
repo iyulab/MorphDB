@@ -45,7 +45,7 @@ public class ExtensionFreeBootstrapTests
             // The bootstrap succeeding is not enough: the UUID defaults have to work without uuid-ossp.
             await using var insert = new NpgsqlCommand(
                 """
-                INSERT INTO morphdb._morph_tables (tenant_id, logical_name, physical_name)
+                INSERT INTO morphdb._morph_tables (project_id, logical_name, physical_name)
                 VALUES (gen_random_uuid(), 'customers', 't_customers')
                 RETURNING table_id
                 """,
@@ -88,7 +88,7 @@ public class ExtensionFreeBootstrapTests
             var after = await ReadExtensionsAsync(connection);
             after.Should().BeEquivalentTo(
                 before,
-                "creating a tenant must work where the caller cannot create extensions — otherwise the service starts but no project can ever be provisioned");
+                "creating a project must work where the caller cannot create extensions — otherwise the service starts but no project can ever be provisioned");
 
             names.SystemSchema.Should().NotBeNullOrEmpty();
         }

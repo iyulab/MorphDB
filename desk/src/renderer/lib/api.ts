@@ -643,18 +643,18 @@ export interface CreateRelationRequest {
 export interface ConnectionConfig {
   url: string
   apiKey: string
-  tenantId?: string
+  projectId?: string
 }
 
 export class MorphDBClient {
   private baseUrl: string
   private apiKey: string
-  private tenantId?: string
+  private projectId?: string
 
   constructor(config: ConnectionConfig) {
     this.baseUrl = config.url.replace(/\/$/, '')
     this.apiKey = config.apiKey
-    this.tenantId = config.tenantId
+    this.projectId = config.projectId
   }
 
   private async request<T>(
@@ -665,7 +665,7 @@ export class MorphDBClient {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'X-API-Key': this.apiKey,
-      ...(this.tenantId && { 'X-Tenant-Id': this.tenantId }),
+      ...(this.projectId && { 'X-Project-Id': this.projectId }),
       ...(options.headers as Record<string, string>)
     }
 
@@ -749,28 +749,28 @@ export class MorphDBClient {
   }
 
   // Tables
-  async listTables(tenantId?: string): Promise<TableApiResponse[]> {
+  async listTables(projectId?: string): Promise<TableApiResponse[]> {
     const headers: Record<string, string> = {}
-    if (tenantId) {
-      headers['X-Tenant-Id'] = tenantId
+    if (projectId) {
+      headers['X-Project-Id'] = projectId
     }
     const raw = await this.request<RawTableApiResponse[]>('/api/schema/tables', { headers })
     return raw.map(toTableApiResponse)
   }
 
-  async getTable(name: string, tenantId?: string): Promise<TableApiResponse> {
+  async getTable(name: string, projectId?: string): Promise<TableApiResponse> {
     const headers: Record<string, string> = {}
-    if (tenantId) {
-      headers['X-Tenant-Id'] = tenantId
+    if (projectId) {
+      headers['X-Project-Id'] = projectId
     }
     const raw = await this.request<RawTableApiResponse>(`/api/schema/tables/${name}`, { headers })
     return toTableApiResponse(raw)
   }
 
-  async createTable(data: CreateTableRequest, tenantId?: string): Promise<TableApiResponse> {
+  async createTable(data: CreateTableRequest, projectId?: string): Promise<TableApiResponse> {
     const headers: Record<string, string> = {}
-    if (tenantId) {
-      headers['X-Tenant-Id'] = tenantId
+    if (projectId) {
+      headers['X-Project-Id'] = projectId
     }
     const raw = await this.request<RawTableApiResponse>('/api/schema/tables', {
       method: 'POST',
@@ -780,10 +780,10 @@ export class MorphDBClient {
     return toTableApiResponse(raw)
   }
 
-  async renameTable(name: string, newName: string, tenantId?: string): Promise<TableApiResponse> {
+  async renameTable(name: string, newName: string, projectId?: string): Promise<TableApiResponse> {
     const headers: Record<string, string> = {}
-    if (tenantId) {
-      headers['X-Tenant-Id'] = tenantId
+    if (projectId) {
+      headers['X-Project-Id'] = projectId
     }
     const raw = await this.request<RawTableApiResponse>(`/api/schema/tables/${name}/rename`, {
       method: 'POST',
@@ -793,10 +793,10 @@ export class MorphDBClient {
     return toTableApiResponse(raw)
   }
 
-  async deleteTable(name: string, tenantId?: string): Promise<void> {
+  async deleteTable(name: string, projectId?: string): Promise<void> {
     const headers: Record<string, string> = {}
-    if (tenantId) {
-      headers['X-Tenant-Id'] = tenantId
+    if (projectId) {
+      headers['X-Project-Id'] = projectId
     }
     await this.request<void>(`/api/schema/tables/${name}`, {
       method: 'DELETE',
@@ -805,10 +805,10 @@ export class MorphDBClient {
   }
 
   // Columns
-  async addColumn(tableName: string, data: CreateColumnRequest, tenantId?: string): Promise<ColumnApiResponse> {
+  async addColumn(tableName: string, data: CreateColumnRequest, projectId?: string): Promise<ColumnApiResponse> {
     const headers: Record<string, string> = {}
-    if (tenantId) {
-      headers['X-Tenant-Id'] = tenantId
+    if (projectId) {
+      headers['X-Project-Id'] = projectId
     }
     const raw = await this.request<RawColumnApiResponse>(`/api/schema/tables/${tableName}/columns`, {
       method: 'POST',
@@ -822,11 +822,11 @@ export class MorphDBClient {
     tableName: string,
     columnName: string,
     data: UpdateColumnRequest,
-    tenantId?: string
+    projectId?: string
   ): Promise<ColumnApiResponse> {
     const headers: Record<string, string> = {}
-    if (tenantId) {
-      headers['X-Tenant-Id'] = tenantId
+    if (projectId) {
+      headers['X-Project-Id'] = projectId
     }
     const raw = await this.request<RawColumnApiResponse>(`/api/schema/tables/${tableName}/columns/${columnName}`, {
       method: 'PUT',
@@ -836,10 +836,10 @@ export class MorphDBClient {
     return toColumnApiResponse(raw)
   }
 
-  async deleteColumn(tableName: string, columnName: string, tenantId?: string): Promise<void> {
+  async deleteColumn(tableName: string, columnName: string, projectId?: string): Promise<void> {
     const headers: Record<string, string> = {}
-    if (tenantId) {
-      headers['X-Tenant-Id'] = tenantId
+    if (projectId) {
+      headers['X-Project-Id'] = projectId
     }
     await this.request<void>(`/api/schema/tables/${tableName}/columns/${columnName}`, {
       method: 'DELETE',
@@ -851,11 +851,11 @@ export class MorphDBClient {
   async createIndex(
     tableName: string,
     data: CreateIndexRequest,
-    tenantId?: string
+    projectId?: string
   ): Promise<IndexApiResponse> {
     const headers: Record<string, string> = {}
-    if (tenantId) {
-      headers['X-Tenant-Id'] = tenantId
+    if (projectId) {
+      headers['X-Project-Id'] = projectId
     }
     return this.request<IndexApiResponse>(`/api/schema/tables/${tableName}/indexes`, {
       method: 'POST',
@@ -864,10 +864,10 @@ export class MorphDBClient {
     })
   }
 
-  async deleteIndex(indexId: string, tenantId?: string): Promise<void> {
+  async deleteIndex(indexId: string, projectId?: string): Promise<void> {
     const headers: Record<string, string> = {}
-    if (tenantId) {
-      headers['X-Tenant-Id'] = tenantId
+    if (projectId) {
+      headers['X-Project-Id'] = projectId
     }
     await this.request<void>(`/api/schema/indexes/${indexId}`, {
       method: 'DELETE',
@@ -876,10 +876,10 @@ export class MorphDBClient {
   }
 
   // Relations
-  async createRelation(data: CreateRelationRequest, tenantId?: string): Promise<RelationApiResponse> {
+  async createRelation(data: CreateRelationRequest, projectId?: string): Promise<RelationApiResponse> {
     const headers: Record<string, string> = {}
-    if (tenantId) {
-      headers['X-Tenant-Id'] = tenantId
+    if (projectId) {
+      headers['X-Project-Id'] = projectId
     }
     return this.request<RelationApiResponse>('/api/schema/relations', {
       method: 'POST',
@@ -888,10 +888,10 @@ export class MorphDBClient {
     })
   }
 
-  async deleteRelation(relationId: string, tenantId?: string): Promise<void> {
+  async deleteRelation(relationId: string, projectId?: string): Promise<void> {
     const headers: Record<string, string> = {}
-    if (tenantId) {
-      headers['X-Tenant-Id'] = tenantId
+    if (projectId) {
+      headers['X-Project-Id'] = projectId
     }
     await this.request<void>(`/api/schema/relations/${relationId}`, {
       method: 'DELETE',
@@ -1033,7 +1033,7 @@ export class MorphDBClient {
       headers: {
         'Content-Type': 'text/csv',
         'X-API-Key': this.apiKey,
-        ...(this.tenantId && { 'X-Tenant-Id': this.tenantId })
+        ...(this.projectId && { 'X-Project-Id': this.projectId })
       },
       body: file
     })
@@ -1064,7 +1064,7 @@ export class MorphDBClient {
       headers: {
         'Content-Type': 'application/json',
         'X-API-Key': this.apiKey,
-        ...(this.tenantId && { 'X-Tenant-Id': this.tenantId })
+        ...(this.projectId && { 'X-Project-Id': this.projectId })
       },
       body: file
     })
@@ -1120,7 +1120,7 @@ export class MorphDBClient {
     const response = await fetch(url, {
       headers: {
         'X-API-Key': this.apiKey,
-        ...(this.tenantId && { 'X-Tenant-Id': this.tenantId })
+        ...(this.projectId && { 'X-Project-Id': this.projectId })
       }
     })
 
@@ -1413,7 +1413,7 @@ export class MorphDBClient {
     )
   }
 
-  async rotateTenantKeys(): Promise<KeyRotationResultApiResponse> {
+  async rotateProjectKeys(): Promise<KeyRotationResultApiResponse> {
     return this.request<KeyRotationResultApiResponse>('/api/security/encryption/rotate', {
       method: 'POST'
     })

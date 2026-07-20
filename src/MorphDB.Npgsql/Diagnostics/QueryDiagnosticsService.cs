@@ -233,7 +233,7 @@ public sealed class QueryExecutionScope : IDisposable
     private readonly IQueryDiagnostics _diagnostics;
     private readonly Stopwatch _stopwatch;
     private readonly Guid _executionId;
-    private readonly Guid? _tenantId;
+    private readonly Guid? _projectId;
     private readonly string? _tableName;
     private readonly QueryOperationType _operationType;
     private readonly string? _source;
@@ -244,13 +244,13 @@ public sealed class QueryExecutionScope : IDisposable
 
     public QueryExecutionScope(
         IQueryDiagnostics diagnostics,
-        Guid? tenantId,
+        Guid? projectId,
         string? tableName,
         QueryOperationType operationType,
         string? source = null)
     {
         _diagnostics = diagnostics;
-        _tenantId = tenantId;
+        _projectId = projectId;
         _tableName = tableName;
         _operationType = operationType;
         _source = source;
@@ -287,7 +287,7 @@ public sealed class QueryExecutionScope : IDisposable
         _diagnostics.RecordQuery(new QueryExecutionEntry
         {
             ExecutionId = _executionId,
-            TenantId = _tenantId,
+            ProjectId = _projectId,
             TableName = _tableName,
             OperationType = _operationType,
             QueryPattern = _queryPattern,

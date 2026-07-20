@@ -33,7 +33,7 @@ public sealed class PostgresTransactionService : ITransactionService
 
     /// <inheritdoc />
     public async Task<TransactionResult> ExecuteAsync(
-        Guid tenantId,
+        Guid projectId,
         TransactionRequest request,
         CancellationToken cancellationToken = default)
     {
@@ -61,7 +61,7 @@ public sealed class PostgresTransactionService : ITransactionService
                 var result = await ExecuteOperationAsync(
                     connection,
                     transaction,
-                    tenantId,
+                    projectId,
                     operation,
                     refResolver,
                     i,
@@ -100,12 +100,12 @@ public sealed class PostgresTransactionService : ITransactionService
 
     /// <inheritdoc />
     public async Task<FinalizeResult> FinalizeAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         Guid recordId,
         CancellationToken cancellationToken = default)
     {
-        var table = await GetTableWithColumnsAsync(tenantId, tableName, cancellationToken);
+        var table = await GetTableWithColumnsAsync(projectId, tableName, cancellationToken);
 
         if (!table.RowStateEnabled)
         {
@@ -150,7 +150,7 @@ public sealed class PostgresTransactionService : ITransactionService
         };
 
         var validationResult = await _writePipeline.ValidateAsync(
-            tenantId, table, record, WriteOperationType.Update, validationOptions, cancellationToken);
+            projectId, table, record, WriteOperationType.Update, validationOptions, cancellationToken);
 
         // Update row state based on validation
         var newState = validationResult.Success ? RowStateValue.Valid : RowStateValue.Error;
@@ -174,7 +174,7 @@ public sealed class PostgresTransactionService : ITransactionService
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<FinalizeResult>> FinalizeBatchAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         IReadOnlyList<Guid> recordIds,
         CancellationToken cancellationToken = default)
@@ -186,7 +186,7 @@ public sealed class PostgresTransactionService : ITransactionService
             if (cancellationToken.IsCancellationRequested)
                 break;
 
-            var result = await FinalizeAsync(tenantId, tableName, recordId, cancellationToken);
+            var result = await FinalizeAsync(projectId, tableName, recordId, cancellationToken);
             results.Add(result);
         }
 
@@ -198,7 +198,7 @@ public sealed class PostgresTransactionService : ITransactionService
     private async Task<TransactionOperationResult> ExecuteOperationAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
-        Guid tenantId,
+        Guid projectId,
         TransactionOperation operation,
         RefResolver refResolver,
         int index,
@@ -207,14 +207,14 @@ public sealed class PostgresTransactionService : ITransactionService
     {
         try
         {
-            var table = await GetTableWithColumnsAsync(tenantId, operation.Table, cancellationToken);
+            var table = await GetTableWithColumnsAsync(projectId, operation.Table, cancellationToken);
 
             return operation.Method.ToUpperInvariant() switch
             {
-                "INSERT" => await ExecuteInsertAsync(connection, transaction, tenantId, table, operation, refResolver, index, returnFullRecords, cancellationToken),
-                "UPDATE" => await ExecuteUpdateAsync(connection, transaction, tenantId, table, operation, refResolver, index, returnFullRecords, cancellationToken),
-                "DELETE" => await ExecuteDeleteAsync(connection, transaction, tenantId, table, operation, refResolver, index, cancellationToken),
-                "UPSERT" => await ExecuteUpsertAsync(connection, transaction, tenantId, table, operation, refResolver, index, returnFullRecords, cancellationToken),
+                "INSERT" => await ExecuteInsertAsync(connection, transaction, projectId, table, operation, refResolver, index, returnFullRecords, cancellationToken),
+                "UPDATE" => await ExecuteUpdateAsync(connection, transaction, projectId, table, operation, refResolver, index, returnFullRecords, cancellationToken),
+                "DELETE" => await ExecuteDeleteAsync(connection, transaction, projectId, table, operation, refResolver, index, cancellationToken),
+                "UPSERT" => await ExecuteUpsertAsync(connection, transaction, projectId, table, operation, refResolver, index, returnFullRecords, cancellationToken),
                 _ => TransactionOperationResult(index, operation.Ref, false, error: $"Unknown method: {operation.Method}")
             };
         }
@@ -235,7 +235,7 @@ public sealed class PostgresTransactionService : ITransactionService
     private async Task<TransactionOperationResult> ExecuteInsertAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
-        Guid tenantId,
+        Guid projectId,
         TableMetadata table,
         TransactionOperation operation,
         RefResolver refResolver,
@@ -251,8 +251,8 @@ public sealed class PostgresTransactionService : ITransactionService
         // Resolve $ref values in data
         var resolvedData = refResolver.ResolveData(operation.Data);
 
-        // Apply tenant_id
-        resolvedData["tenant_id"] = tenantId;
+        // Apply project_id
+        resolvedData["project_id"] = projectId;
 
         // Generate ID if not provided
         if (!resolvedData.ContainsKey("_id") && !resolvedData.ContainsKey("id"))
@@ -261,7 +261,7 @@ public sealed class PostgresTransactionService : ITransactionService
         }
 
         var options = operation.Options ?? WriteOptions.Default;
-        var result = await _writePipeline.InsertAsync(tenantId, table, resolvedData, options, cancellationToken);
+        var result = await _writePipeline.InsertAsync(projectId, table, resolvedData, options, cancellationToken);
 
         if (!result.Success)
         {
@@ -280,7 +280,7 @@ public sealed class PostgresTransactionService : ITransactionService
     private async Task<TransactionOperationResult> ExecuteUpdateAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
-        Guid tenantId,
+        Guid projectId,
         TableMetadata table,
         TransactionOperation operation,
         RefResolver refResolver,
@@ -304,7 +304,7 @@ public sealed class PostgresTransactionService : ITransactionService
         var resolvedData = refResolver.ResolveData(operation.Data);
 
         var options = operation.Options ?? WriteOptions.Default;
-        var result = await _writePipeline.UpdateAsync(tenantId, table, recordId.Value, resolvedData, null, options, cancellationToken);
+        var result = await _writePipeline.UpdateAsync(projectId, table, recordId.Value, resolvedData, null, options, cancellationToken);
 
         if (!result.Success)
         {
@@ -322,7 +322,7 @@ public sealed class PostgresTransactionService : ITransactionService
     private async Task<TransactionOperationResult> ExecuteDeleteAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
-        Guid tenantId,
+        Guid projectId,
         TableMetadata table,
         TransactionOperation operation,
         RefResolver refResolver,
@@ -337,7 +337,7 @@ public sealed class PostgresTransactionService : ITransactionService
         }
 
         var options = operation.Options ?? WriteOptions.Default;
-        var result = await _writePipeline.DeleteAsync(tenantId, table, recordId.Value, null, options, cancellationToken);
+        var result = await _writePipeline.DeleteAsync(projectId, table, recordId.Value, null, options, cancellationToken);
 
         if (!result.Success)
         {
@@ -354,7 +354,7 @@ public sealed class PostgresTransactionService : ITransactionService
     private async Task<TransactionOperationResult> ExecuteUpsertAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
-        Guid tenantId,
+        Guid projectId,
         TableMetadata table,
         TransactionOperation operation,
         RefResolver refResolver,
@@ -375,8 +375,8 @@ public sealed class PostgresTransactionService : ITransactionService
         // Resolve $ref values in data
         var resolvedData = refResolver.ResolveData(operation.Data);
 
-        // Apply tenant_id
-        resolvedData["tenant_id"] = tenantId;
+        // Apply project_id
+        resolvedData["project_id"] = projectId;
 
         // Generate ID if not provided
         if (!resolvedData.ContainsKey("_id") && !resolvedData.ContainsKey("id"))
@@ -400,7 +400,7 @@ public sealed class PostgresTransactionService : ITransactionService
         // Use write pipeline for upsert (it handles UPSERT operation type)
         var writeContext = new WriteContext
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             Table = table,
             OperationType = WriteOperationType.Upsert,
             Data = new Dictionary<string, object?>(resolvedData),
@@ -411,7 +411,7 @@ public sealed class PostgresTransactionService : ITransactionService
 
         // Execute as insert with conflict handling
         var options = operation.Options ?? WriteOptions.Default;
-        var result = await _writePipeline.InsertAsync(tenantId, table, resolvedData, options, cancellationToken);
+        var result = await _writePipeline.InsertAsync(projectId, table, resolvedData, options, cancellationToken);
 
         if (!result.Success)
         {
@@ -479,12 +479,12 @@ public sealed class PostgresTransactionService : ITransactionService
     }
 
     private async Task<TableMetadata> GetTableWithColumnsAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         CancellationToken cancellationToken)
     {
         var table = await _metadataRepository.GetTableByNameAsync(
-            tenantId, tableName, includeColumns: true, cancellationToken);
+            projectId, tableName, includeColumns: true, cancellationToken);
 
         if (table is null)
             throw new NotFoundException($"Table '{tableName}' not found");

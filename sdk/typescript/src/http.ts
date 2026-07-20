@@ -29,8 +29,8 @@ export class HttpClient {
       Accept: 'application/json',
     };
 
-    if (this.options.tenantId) {
-      headers['X-Tenant-Id'] = this.options.tenantId;
+    if (this.options.projectId) {
+      headers['X-Project-Id'] = this.options.projectId;
     }
 
     if (this.options.apiKey) {
@@ -172,8 +172,8 @@ export class HttpClient {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  setTenantId(tenantId: string): void {
-    this.options.tenantId = tenantId;
+  setProjectId(projectId: string): void {
+    this.options.projectId = projectId;
   }
 
   setApiKey(apiKey: string): void {

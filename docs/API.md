@@ -100,7 +100,7 @@ An operation names a **table and a data method** — it is not an embedded HTTP 
 ```http
 POST /api/batch/data
 Content-Type: application/json
-X-Tenant-Id: <project id>
+X-Project-Id: <project id>
 
 {
   "operations": [

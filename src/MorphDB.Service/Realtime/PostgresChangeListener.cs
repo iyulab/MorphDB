@@ -101,7 +101,7 @@ public sealed partial class PostgresChangeListener : BackgroundService
 
         LogChangeReceived(_logger, changeEvent.Operation, changeEvent.Table, changeEvent.RecordId);
 
-        var groupName = MorphHub.GetTableGroupName(changeEvent.TenantId, changeEvent.Table);
+        var groupName = MorphHub.GetTableGroupName(changeEvent.ProjectId, changeEvent.Table);
 
         switch (changeEvent.Operation.ToUpperInvariant())
         {
@@ -189,7 +189,7 @@ public sealed partial class PostgresChangeListener : BackgroundService
 /// </summary>
 internal sealed class DatabaseChangeEvent
 {
-    public Guid TenantId { get; init; }
+    public Guid ProjectId { get; init; }
     public required string Table { get; init; }
     public required string Operation { get; init; }
     public Guid? RecordId { get; init; }

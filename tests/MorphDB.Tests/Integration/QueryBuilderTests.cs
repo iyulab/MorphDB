@@ -48,12 +48,12 @@ public class QueryBuilderTests
             securityContextAccessor);
     }
 
-    private async Task<(Guid TenantId, TableMetadata Table)> SetupTestTableWithDataAsync()
+    private async Task<(Guid ProjectId, TableMetadata Table)> SetupTestTableWithDataAsync()
     {
-        var tenantId = Guid.NewGuid();
+        var projectId = Guid.NewGuid();
         var table = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
-            TenantId = tenantId,
+            ProjectId = projectId,
             LogicalName = "query_test_" + Guid.NewGuid().ToString("N")[..8],
             Columns =
             [
@@ -95,9 +95,9 @@ public class QueryBuilderTests
             }
         };
 
-        await _dataService.InsertBatchAsync(tenantId, table.LogicalName, records);
+        await _dataService.InsertBatchAsync(projectId, table.LogicalName, records);
 
-        return (tenantId, table);
+        return (projectId, table);
     }
 
     #region Basic Query Tests
@@ -106,10 +106,10 @@ public class QueryBuilderTests
     public async Task Query_SelectAll_ShouldReturnAllRecords()
     {
         // Arrange
-        var (tenantId, table) = await SetupTestTableWithDataAsync();
+        var (projectId, table) = await SetupTestTableWithDataAsync();
 
         // Act
-        var results = await _dataService.Query(tenantId)
+        var results = await _dataService.Query(projectId)
             .From(table.LogicalName)
             .SelectAll()
             .ToListAsync();
@@ -124,10 +124,10 @@ public class QueryBuilderTests
     public async Task Query_SelectColumns_ShouldReturnOnlySelectedColumns()
     {
         // Arrange
-        var (tenantId, table) = await SetupTestTableWithDataAsync();
+        var (projectId, table) = await SetupTestTableWithDataAsync();
 
         // Act
-        var results = await _dataService.Query(tenantId)
+        var results = await _dataService.Query(projectId)
             .From(table.LogicalName)
             .SelectColumns("name", "email")
             .ToListAsync();
@@ -149,10 +149,10 @@ public class QueryBuilderTests
     public async Task Query_WhereEquals_ShouldFilterCorrectly()
     {
         // Arrange
-        var (tenantId, table) = await SetupTestTableWithDataAsync();
+        var (projectId, table) = await SetupTestTableWithDataAsync();
 
         // Act
-        var results = await _dataService.Query(tenantId)
+        var results = await _dataService.Query(projectId)
             .From(table.LogicalName)
             .SelectAll()
             .Where("name", FilterOperator.Equals, "Alice")
@@ -167,10 +167,10 @@ public class QueryBuilderTests
     public async Task Query_WhereGreaterThan_ShouldFilterCorrectly()
     {
         // Arrange
-        var (tenantId, table) = await SetupTestTableWithDataAsync();
+        var (projectId, table) = await SetupTestTableWithDataAsync();
 
         // Act
-        var results = await _dataService.Query(tenantId)
+        var results = await _dataService.Query(projectId)
             .From(table.LogicalName)
             .SelectAll()
             .Where("age", FilterOperator.GreaterThan, 28)
@@ -185,10 +185,10 @@ public class QueryBuilderTests
     public async Task Query_WhereIn_ShouldFilterCorrectly()
     {
         // Arrange
-        var (tenantId, table) = await SetupTestTableWithDataAsync();
+        var (projectId, table) = await SetupTestTableWithDataAsync();
 
         // Act
-        var results = await _dataService.Query(tenantId)
+        var results = await _dataService.Query(projectId)
             .From(table.LogicalName)
             .SelectAll()
             .WhereIn("name", new object[] { "Alice", "Bob", "Charlie" })
@@ -202,10 +202,10 @@ public class QueryBuilderTests
     public async Task Query_WhereContains_ShouldFilterCorrectly()
     {
         // Arrange
-        var (tenantId, table) = await SetupTestTableWithDataAsync();
+        var (projectId, table) = await SetupTestTableWithDataAsync();
 
         // Act
-        var results = await _dataService.Query(tenantId)
+        var results = await _dataService.Query(projectId)
             .From(table.LogicalName)
             .SelectAll()
             .Where("email", FilterOperator.Contains, "example")
@@ -219,10 +219,10 @@ public class QueryBuilderTests
     public async Task Query_MultipleWhereConditions_ShouldFilterCorrectly()
     {
         // Arrange
-        var (tenantId, table) = await SetupTestTableWithDataAsync();
+        var (projectId, table) = await SetupTestTableWithDataAsync();
 
         // Act
-        var results = await _dataService.Query(tenantId)
+        var results = await _dataService.Query(projectId)
             .From(table.LogicalName)
             .SelectAll()
             .Where("is_active", FilterOperator.Equals, true)
@@ -241,10 +241,10 @@ public class QueryBuilderTests
     public async Task Query_OrderBy_ShouldSortAscending()
     {
         // Arrange
-        var (tenantId, table) = await SetupTestTableWithDataAsync();
+        var (projectId, table) = await SetupTestTableWithDataAsync();
 
         // Act
-        var results = await _dataService.Query(tenantId)
+        var results = await _dataService.Query(projectId)
             .From(table.LogicalName)
             .SelectAll()
             .OrderBy("age")
@@ -260,10 +260,10 @@ public class QueryBuilderTests
     public async Task Query_OrderByDesc_ShouldSortDescending()
     {
         // Arrange
-        var (tenantId, table) = await SetupTestTableWithDataAsync();
+        var (projectId, table) = await SetupTestTableWithDataAsync();
 
         // Act
-        var results = await _dataService.Query(tenantId)
+        var results = await _dataService.Query(projectId)
             .From(table.LogicalName)
             .SelectAll()
             .OrderByDesc("score")
@@ -283,10 +283,10 @@ public class QueryBuilderTests
     public async Task Query_LimitOffset_ShouldPaginateCorrectly()
     {
         // Arrange
-        var (tenantId, table) = await SetupTestTableWithDataAsync();
+        var (projectId, table) = await SetupTestTableWithDataAsync();
 
         // Act
-        var page1 = await _dataService.Query(tenantId)
+        var page1 = await _dataService.Query(projectId)
             .From(table.LogicalName)
             .SelectAll()
             .OrderBy("name")
@@ -294,7 +294,7 @@ public class QueryBuilderTests
             .Offset(0)
             .ToListAsync();
 
-        var page2 = await _dataService.Query(tenantId)
+        var page2 = await _dataService.Query(projectId)
             .From(table.LogicalName)
             .SelectAll()
             .OrderBy("name")
@@ -313,10 +313,10 @@ public class QueryBuilderTests
     public async Task Query_FirstOrDefault_ShouldReturnFirstRecord()
     {
         // Arrange
-        var (tenantId, table) = await SetupTestTableWithDataAsync();
+        var (projectId, table) = await SetupTestTableWithDataAsync();
 
         // Act
-        var result = await _dataService.Query(tenantId)
+        var result = await _dataService.Query(projectId)
             .From(table.LogicalName)
             .SelectAll()
             .OrderBy("name")
@@ -331,10 +331,10 @@ public class QueryBuilderTests
     public async Task Query_FirstOrDefault_WithNoMatch_ShouldReturnNull()
     {
         // Arrange
-        var (tenantId, table) = await SetupTestTableWithDataAsync();
+        var (projectId, table) = await SetupTestTableWithDataAsync();
 
         // Act
-        var result = await _dataService.Query(tenantId)
+        var result = await _dataService.Query(projectId)
             .From(table.LogicalName)
             .SelectAll()
             .Where("name", FilterOperator.Equals, "NonExistent")
@@ -352,10 +352,10 @@ public class QueryBuilderTests
     public async Task Query_Count_ShouldReturnCorrectCount()
     {
         // Arrange
-        var (tenantId, table) = await SetupTestTableWithDataAsync();
+        var (projectId, table) = await SetupTestTableWithDataAsync();
 
         // Act
-        var count = await _dataService.Query(tenantId)
+        var count = await _dataService.Query(projectId)
             .From(table.LogicalName)
             .CountAsync();
 
@@ -367,10 +367,10 @@ public class QueryBuilderTests
     public async Task Query_CountWithWhere_ShouldReturnFilteredCount()
     {
         // Arrange
-        var (tenantId, table) = await SetupTestTableWithDataAsync();
+        var (projectId, table) = await SetupTestTableWithDataAsync();
 
         // Act
-        var count = await _dataService.Query(tenantId)
+        var count = await _dataService.Query(projectId)
             .From(table.LogicalName)
             .Where("is_active", FilterOperator.Equals, true)
             .CountAsync();
@@ -383,10 +383,10 @@ public class QueryBuilderTests
     public async Task Query_Sum_ShouldReturnCorrectSum()
     {
         // Arrange
-        var (tenantId, table) = await SetupTestTableWithDataAsync();
+        var (projectId, table) = await SetupTestTableWithDataAsync();
 
         // Act
-        var sum = await _dataService.Query(tenantId)
+        var sum = await _dataService.Query(projectId)
             .From(table.LogicalName)
             .SumAsync("score");
 
@@ -398,10 +398,10 @@ public class QueryBuilderTests
     public async Task Query_Avg_ShouldReturnCorrectAverage()
     {
         // Arrange
-        var (tenantId, table) = await SetupTestTableWithDataAsync();
+        var (projectId, table) = await SetupTestTableWithDataAsync();
 
         // Act
-        var avg = await _dataService.Query(tenantId)
+        var avg = await _dataService.Query(projectId)
             .From(table.LogicalName)
             .AvgAsync("age");
 
@@ -413,10 +413,10 @@ public class QueryBuilderTests
     public async Task Query_Min_ShouldReturnMinValue()
     {
         // Arrange
-        var (tenantId, table) = await SetupTestTableWithDataAsync();
+        var (projectId, table) = await SetupTestTableWithDataAsync();
 
         // Act
-        var min = await _dataService.Query(tenantId)
+        var min = await _dataService.Query(projectId)
             .From(table.LogicalName)
             .MinAsync<int>("age");
 
@@ -428,10 +428,10 @@ public class QueryBuilderTests
     public async Task Query_Max_ShouldReturnMaxValue()
     {
         // Arrange
-        var (tenantId, table) = await SetupTestTableWithDataAsync();
+        var (projectId, table) = await SetupTestTableWithDataAsync();
 
         // Act
-        var max = await _dataService.Query(tenantId)
+        var max = await _dataService.Query(projectId)
             .From(table.LogicalName)
             .MaxAsync<decimal>("score");
 
@@ -447,10 +447,10 @@ public class QueryBuilderTests
     public async Task Query_ToSql_ShouldReturnValidSql()
     {
         // Arrange
-        var (tenantId, table) = await SetupTestTableWithDataAsync();
+        var (projectId, table) = await SetupTestTableWithDataAsync();
 
         // Act
-        var sql = _dataService.Query(tenantId)
+        var sql = _dataService.Query(projectId)
             .From(table.LogicalName)
             .SelectAll()
             .Where("name", FilterOperator.Equals, "Alice")

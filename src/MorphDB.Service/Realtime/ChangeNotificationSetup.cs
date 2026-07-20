@@ -47,7 +47,7 @@ public sealed partial class ChangeNotificationSetup : ITableNotificationTriggerM
                 row_data JSONB;
             BEGIN
                 -- Look up the table directly from global morphdb._morph_tables using physical name
-                SELECT t.tenant_id, t.logical_name, t.table_id
+                SELECT t.project_id, t.logical_name, t.table_id
                 INTO project_id, table_name, table_id_val
                 FROM morphdb._morph_tables t
                 WHERE t.physical_name = TG_TABLE_NAME AND t.is_active = true;
@@ -68,7 +68,7 @@ public sealed partial class ChangeNotificationSetup : ITableNotificationTriggerM
                         record_id := (row_data ->> id_col_name)::uuid;
                     END IF;
                     payload := jsonb_build_object(
-                        'tenant_id', project_id,
+                        'project_id', project_id,
                         'table', table_name,
                         'operation', TG_OP,
                         'record_id', record_id,
@@ -80,7 +80,7 @@ public sealed partial class ChangeNotificationSetup : ITableNotificationTriggerM
                         record_id := (row_data ->> id_col_name)::uuid;
                     END IF;
                     payload := jsonb_build_object(
-                        'tenant_id', project_id,
+                        'project_id', project_id,
                         'table', table_name,
                         'operation', TG_OP,
                         'record_id', record_id,

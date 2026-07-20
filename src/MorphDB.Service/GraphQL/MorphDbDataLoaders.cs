@@ -11,25 +11,25 @@ namespace MorphDB.Service.GraphQL;
 public sealed class TableByNameDataLoader : BatchDataLoader<string, TableMetadata?>
 {
     private readonly ISchemaManager _schemaManager;
-    private readonly ITenantContextAccessor _tenantAccessor;
+    private readonly IProjectContextAccessor _projectAccessor;
 
     public TableByNameDataLoader(
         ISchemaManager schemaManager,
-        ITenantContextAccessor tenantAccessor,
+        IProjectContextAccessor projectAccessor,
         IBatchScheduler batchScheduler,
         DataLoaderOptions? options = null)
         : base(batchScheduler, options ?? new DataLoaderOptions())
     {
         _schemaManager = schemaManager;
-        _tenantAccessor = tenantAccessor;
+        _projectAccessor = projectAccessor;
     }
 
     protected override async Task<IReadOnlyDictionary<string, TableMetadata?>> LoadBatchAsync(
         IReadOnlyList<string> keys,
         CancellationToken cancellationToken)
     {
-        var tenantId = _tenantAccessor.TenantId;
-        var tables = await _schemaManager.ListTablesAsync(tenantId, cancellationToken);
+        var projectId = _projectAccessor.ProjectId;
+        var tables = await _schemaManager.ListTablesAsync(projectId, cancellationToken);
 
         var result = new Dictionary<string, TableMetadata?>(StringComparer.OrdinalIgnoreCase);
         foreach (var key in keys)
@@ -87,24 +87,24 @@ public sealed class TableByIdDataLoader : BatchDataLoader<Guid, TableMetadata?>
 public sealed class RecordByIdDataLoader : BatchDataLoader<RecordKey, IDictionary<string, object?>?>
 {
     private readonly IMorphDataService _dataService;
-    private readonly ITenantContextAccessor _tenantAccessor;
+    private readonly IProjectContextAccessor _projectAccessor;
 
     public RecordByIdDataLoader(
         IMorphDataService dataService,
-        ITenantContextAccessor tenantAccessor,
+        IProjectContextAccessor projectAccessor,
         IBatchScheduler batchScheduler,
         DataLoaderOptions? options = null)
         : base(batchScheduler, options ?? new DataLoaderOptions())
     {
         _dataService = dataService;
-        _tenantAccessor = tenantAccessor;
+        _projectAccessor = projectAccessor;
     }
 
     protected override async Task<IReadOnlyDictionary<RecordKey, IDictionary<string, object?>?>> LoadBatchAsync(
         IReadOnlyList<RecordKey> keys,
         CancellationToken cancellationToken)
     {
-        var tenantId = _tenantAccessor.TenantId;
+        var projectId = _projectAccessor.ProjectId;
         var result = new Dictionary<RecordKey, IDictionary<string, object?>?>();
 
         // Group by table for efficient batching
@@ -116,7 +116,7 @@ public sealed class RecordByIdDataLoader : BatchDataLoader<RecordKey, IDictionar
             var ids = group.Select(k => k.RecordId).ToList();
 
             // Fetch records for this table
-            var records = await _dataService.Query(tenantId)
+            var records = await _dataService.Query(projectId)
                 .From(tableName)
                 .SelectAll()
                 .WhereIn("_id", ids.Cast<object>())
@@ -148,24 +148,24 @@ public readonly record struct RecordKey(string TableName, Guid RecordId);
 public sealed class RelatedRecordsDataLoader : GroupedDataLoader<RelationKey, IDictionary<string, object?>>
 {
     private readonly IMorphDataService _dataService;
-    private readonly ITenantContextAccessor _tenantAccessor;
+    private readonly IProjectContextAccessor _projectAccessor;
 
     public RelatedRecordsDataLoader(
         IMorphDataService dataService,
-        ITenantContextAccessor tenantAccessor,
+        IProjectContextAccessor projectAccessor,
         IBatchScheduler batchScheduler,
         DataLoaderOptions? options = null)
         : base(batchScheduler, options ?? new DataLoaderOptions())
     {
         _dataService = dataService;
-        _tenantAccessor = tenantAccessor;
+        _projectAccessor = projectAccessor;
     }
 
     protected override async Task<ILookup<RelationKey, IDictionary<string, object?>>> LoadGroupedBatchAsync(
         IReadOnlyList<RelationKey> keys,
         CancellationToken cancellationToken)
     {
-        var tenantId = _tenantAccessor.TenantId;
+        var projectId = _projectAccessor.ProjectId;
         var results = new List<(RelationKey Key, IDictionary<string, object?> Record)>();
 
         // Group by relation for efficient batching
@@ -179,7 +179,7 @@ public sealed class RelatedRecordsDataLoader : GroupedDataLoader<RelationKey, ID
             var sourceIds = group.Select(k => k.SourceRecordId).Distinct().Cast<object>().ToList();
 
             // Fetch all related records
-            var records = await _dataService.Query(tenantId)
+            var records = await _dataService.Query(projectId)
                 .From(tableName)
                 .SelectAll()
                 .WhereIn(foreignKeyColumn, sourceIds)

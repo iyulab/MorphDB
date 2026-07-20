@@ -60,14 +60,14 @@ public sealed class PostgresDataService : IMorphDataService
     }
 
     /// <inheritdoc />
-    public IMorphQueryBuilder Query(Guid tenantId)
+    public IMorphQueryBuilder Query(Guid projectId)
     {
         return new MorphQueryBuilder(
             _dataSource,
             _metadataRepository,
             _securityPolicyService,
             _securityContextAccessor,
-            tenantId,
+            projectId,
             _lookupResolver,
             _rollupResolver,
             _formulaResolver);
@@ -75,12 +75,12 @@ public sealed class PostgresDataService : IMorphDataService
 
     /// <inheritdoc />
     public async Task<IDictionary<string, object?>?> GetByIdAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         Guid id,
         CancellationToken cancellationToken = default)
     {
-        var table = await GetTableWithColumnsAsync(tenantId, tableName, cancellationToken);
+        var table = await GetTableWithColumnsAsync(projectId, tableName, cancellationToken);
         var idColumn = GetPrimaryKeyColumn(table);
 
         var sql = DmlBuilder.BuildSelectById(table.PhysicalName, idColumn.PhysicalName);
@@ -95,23 +95,23 @@ public sealed class PostgresDataService : IMorphDataService
         var mapped = MapToLogicalDictionary(result, table.Columns);
 
         // Decrypt encrypted columns
-        return DecryptRowData(tenantId, tableName, mapped, table.Columns);
+        return DecryptRowData(projectId, tableName, mapped, table.Columns);
     }
 
     /// <inheritdoc />
     public async Task<IDictionary<string, object?>> InsertAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         IDictionary<string, object?> data,
         CancellationToken cancellationToken = default)
     {
-        var table = await GetTableWithColumnsAsync(tenantId, tableName, cancellationToken);
+        var table = await GetTableWithColumnsAsync(projectId, tableName, cancellationToken);
 
-        // Ensure tenant_id is set
-        var dataWithTenant = EnsureTenantId(data, tenantId);
+        // Ensure project_id is set
+        var dataWithProject = EnsureProjectId(data, projectId);
 
         // Encrypt data before storing
-        var encryptedData = EncryptRowData(tenantId, tableName, dataWithTenant, table.Columns);
+        var encryptedData = EncryptRowData(projectId, tableName, dataWithProject, table.Columns);
 
         // Map logical names to physical and prepare parameters
         var (columns, parameters, values) = PrepareInsertParameters(encryptedData, table.Columns);
@@ -125,22 +125,22 @@ public sealed class PostgresDataService : IMorphDataService
         var mapped = MapToLogicalDictionary(result, table.Columns);
 
         // Return decrypted data to the caller
-        return DecryptRowData(tenantId, tableName, mapped, table.Columns);
+        return DecryptRowData(projectId, tableName, mapped, table.Columns);
     }
 
     /// <inheritdoc />
     public async Task<IDictionary<string, object?>> UpdateAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         Guid id,
         IDictionary<string, object?> data,
         CancellationToken cancellationToken = default)
     {
-        var table = await GetTableWithColumnsAsync(tenantId, tableName, cancellationToken);
+        var table = await GetTableWithColumnsAsync(projectId, tableName, cancellationToken);
         var idColumn = GetPrimaryKeyColumn(table);
 
         // Encrypt data before storing
-        var encryptedData = EncryptRowData(tenantId, tableName, data, table.Columns);
+        var encryptedData = EncryptRowData(projectId, tableName, data, table.Columns);
 
         // Map logical names to physical and prepare parameters
         var (setColumns, values) = PrepareUpdateParameters(encryptedData, table.Columns);
@@ -159,17 +159,17 @@ public sealed class PostgresDataService : IMorphDataService
         var mapped = MapToLogicalDictionary(result, table.Columns);
 
         // Return decrypted data to the caller
-        return DecryptRowData(tenantId, tableName, mapped, table.Columns);
+        return DecryptRowData(projectId, tableName, mapped, table.Columns);
     }
 
     /// <inheritdoc />
     public async Task<bool> DeleteAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         Guid id,
         CancellationToken cancellationToken = default)
     {
-        var table = await GetTableWithColumnsAsync(tenantId, tableName, cancellationToken);
+        var table = await GetTableWithColumnsAsync(projectId, tableName, cancellationToken);
         var idColumn = GetPrimaryKeyColumn(table);
 
         var whereClause = DmlBuilder.BuildIdWhereClause(idColumn.PhysicalName);
@@ -184,7 +184,7 @@ public sealed class PostgresDataService : IMorphDataService
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<IDictionary<string, object?>>> InsertBatchAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         IReadOnlyList<IDictionary<string, object?>> records,
         CancellationToken cancellationToken = default)
@@ -192,7 +192,7 @@ public sealed class PostgresDataService : IMorphDataService
         if (records.Count == 0)
             return Array.Empty<IDictionary<string, object?>>();
 
-        var table = await GetTableWithColumnsAsync(tenantId, tableName, cancellationToken);
+        var table = await GetTableWithColumnsAsync(projectId, tableName, cancellationToken);
 
         // For batch insert, use individual inserts in a transaction for simplicity
         // This could be optimized with COPY or multi-row VALUES in future
@@ -205,11 +205,11 @@ public sealed class PostgresDataService : IMorphDataService
         {
             foreach (var record in records)
             {
-                // Ensure tenant_id is set for each record
-                var recordWithTenant = EnsureTenantId(record, tenantId);
+                // Ensure project_id is set for each record
+                var recordWithProject = EnsureProjectId(record, projectId);
 
                 // Encrypt data before storing
-                var encryptedRecord = EncryptRowData(tenantId, tableName, recordWithTenant, table.Columns);
+                var encryptedRecord = EncryptRowData(projectId, tableName, recordWithProject, table.Columns);
 
                 var (columns, parameters, values) = PrepareInsertParameters(encryptedRecord, table.Columns);
                 var sql = DmlBuilder.BuildInsert(table.PhysicalName, columns, parameters);
@@ -220,7 +220,7 @@ public sealed class PostgresDataService : IMorphDataService
                 var mapped = MapToLogicalDictionary(result, table.Columns);
 
                 // Return decrypted data to the caller
-                results.Add(DecryptRowData(tenantId, tableName, mapped, table.Columns));
+                results.Add(DecryptRowData(projectId, tableName, mapped, table.Columns));
             }
 
             await transaction.CommitAsync(cancellationToken);
@@ -236,13 +236,13 @@ public sealed class PostgresDataService : IMorphDataService
 
     /// <inheritdoc />
     public async Task<int> UpdateBatchAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         IDictionary<string, object?> data,
         IMorphQuery whereClause,
         CancellationToken cancellationToken = default)
     {
-        var table = await GetTableWithColumnsAsync(tenantId, tableName, cancellationToken);
+        var table = await GetTableWithColumnsAsync(projectId, tableName, cancellationToken);
 
         // Map logical names to physical and prepare parameters
         var (setColumns, values) = PrepareUpdateParameters(data, table.Columns);
@@ -268,12 +268,12 @@ public sealed class PostgresDataService : IMorphDataService
 
     /// <inheritdoc />
     public async Task<int> DeleteBatchAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         IMorphQuery whereClause,
         CancellationToken cancellationToken = default)
     {
-        var table = await GetTableWithColumnsAsync(tenantId, tableName, cancellationToken);
+        var table = await GetTableWithColumnsAsync(projectId, tableName, cancellationToken);
 
         // Get physical WHERE clause SQL from the query
         var (whereSql, whereParams) = await whereClause.GetPhysicalWhereClauseAsync(cancellationToken);
@@ -323,13 +323,13 @@ public sealed class PostgresDataService : IMorphDataService
 
     /// <inheritdoc />
     public async Task<IDictionary<string, object?>> UpsertAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         IDictionary<string, object?> data,
         string[] keyColumns,
         CancellationToken cancellationToken = default)
     {
-        var table = await GetTableWithColumnsAsync(tenantId, tableName, cancellationToken);
+        var table = await GetTableWithColumnsAsync(projectId, tableName, cancellationToken);
 
         // Validate key columns exist
         var columnMap = table.Columns.ToDictionary(c => c.LogicalName, c => c);
@@ -342,11 +342,11 @@ public sealed class PostgresDataService : IMorphDataService
         // Map logical key columns to physical
         var physicalKeyColumns = keyColumns.Select(k => columnMap[k].PhysicalName).ToList();
 
-        // Ensure tenant_id is set
-        var dataWithTenant = EnsureTenantId(data, tenantId);
+        // Ensure project_id is set
+        var dataWithProject = EnsureProjectId(data, projectId);
 
         // Encrypt data before storing
-        var encryptedData = EncryptRowData(tenantId, tableName, dataWithTenant, table.Columns);
+        var encryptedData = EncryptRowData(projectId, tableName, dataWithProject, table.Columns);
 
         // Prepare insert parameters
         var (columns, parameters, values) = PrepareInsertParameters(encryptedData, table.Columns);
@@ -360,20 +360,20 @@ public sealed class PostgresDataService : IMorphDataService
         var mapped = MapToLogicalDictionary(result, table.Columns);
 
         // Return decrypted data to the caller
-        return DecryptRowData(tenantId, tableName, mapped, table.Columns);
+        return DecryptRowData(projectId, tableName, mapped, table.Columns);
     }
 
     #region Private Helper Methods
 
     private async Task<TableMetadata> GetTableWithColumnsAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         CancellationToken cancellationToken)
     {
-        var table = await _metadataRepository.GetTableByNameAsync(tenantId, tableName, includeColumns: true, cancellationToken);
+        var table = await _metadataRepository.GetTableByNameAsync(projectId, tableName, includeColumns: true, cancellationToken);
 
         if (table is null)
-            throw new NotFoundException($"Table '{tableName}' not found for tenant '{tenantId}'");
+            throw new NotFoundException($"Table '{tableName}' not found for project '{projectId}'");
 
         if (table.Columns.Count == 0)
             throw new InvalidOperationException($"Table '{tableName}' has no columns");
@@ -393,27 +393,27 @@ public sealed class PostgresDataService : IMorphDataService
     }
 
     /// <summary>
-    /// Ensures the tenant_id is included in the data dictionary.
+    /// Ensures the project_id is included in the data dictionary.
     /// If not present, adds it; if present, verifies it matches.
     /// </summary>
-    private static IDictionary<string, object?> EnsureTenantId(IDictionary<string, object?> data, Guid tenantId)
+    private static IDictionary<string, object?> EnsureProjectId(IDictionary<string, object?> data, Guid projectId)
     {
-        const string TenantIdColumn = "tenant_id";
+        const string ProjectIdColumn = "project_id";
 
-        if (data.TryGetValue(TenantIdColumn, out var existingValue))
+        if (data.TryGetValue(ProjectIdColumn, out var existingValue))
         {
-            // If tenant_id is already in data, verify it matches
-            if (existingValue is Guid existingGuid && existingGuid != tenantId)
+            // If project_id is already in data, verify it matches
+            if (existingValue is Guid existingGuid && existingGuid != projectId)
             {
-                throw new ValidationException($"Provided tenant_id '{existingGuid}' does not match the expected tenant_id '{tenantId}'");
+                throw new ValidationException($"Provided project_id '{existingGuid}' does not match the expected project_id '{projectId}'");
             }
             return data;
         }
 
-        // Create a new dictionary with tenant_id added
+        // Create a new dictionary with project_id added
         var result = new Dictionary<string, object?>(data)
         {
-            [TenantIdColumn] = tenantId
+            [ProjectIdColumn] = projectId
         };
         return result;
     }
@@ -518,7 +518,7 @@ public sealed class PostgresDataService : IMorphDataService
     /// Only encrypts columns that are marked for encryption or configured for auto-encryption.
     /// </summary>
     private IDictionary<string, object?> EncryptRowData(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         IDictionary<string, object?> data,
         IReadOnlyList<ColumnMetadata> columns)
@@ -532,14 +532,14 @@ public sealed class PostgresDataService : IMorphDataService
         if (encryptedColumnNames.Count == 0)
             return data;
 
-        return _encryptionService.EncryptRow(tenantId, tableName, data, encryptedColumnNames);
+        return _encryptionService.EncryptRow(projectId, tableName, data, encryptedColumnNames);
     }
 
     /// <summary>
     /// Decrypts row data for retrieval.
     /// </summary>
     private IDictionary<string, object?> DecryptRowData(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         IDictionary<string, object?> data,
         IReadOnlyList<ColumnMetadata> columns)
@@ -553,7 +553,7 @@ public sealed class PostgresDataService : IMorphDataService
         if (encryptedColumnNames.Count == 0)
             return data;
 
-        return _encryptionService.DecryptRow(tenantId, tableName, data, encryptedColumnNames);
+        return _encryptionService.DecryptRow(projectId, tableName, data, encryptedColumnNames);
     }
 
     /// <summary>
@@ -565,7 +565,7 @@ public sealed class PostgresDataService : IMorphDataService
 
         foreach (var column in columns)
         {
-            // Skip excluded columns (id, tenant_id, timestamps, etc.)
+            // Skip excluded columns (id, project_id, timestamps, etc.)
             if (_encryptionOptions.ExcludedColumns.Contains(column.LogicalName))
                 continue;
 

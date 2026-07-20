@@ -20,7 +20,7 @@ public sealed class PostgresLookupResolver : ILookupResolver
     }
 
     public async Task<IReadOnlyList<IDictionary<string, object?>>> ResolveLookupValuesAsync(
-        Guid tenantId,
+        Guid projectId,
         IReadOnlyList<IDictionary<string, object?>> records,
         IReadOnlyList<LookupColumnInfo> lookupColumns,
         CancellationToken cancellationToken = default)
@@ -40,7 +40,7 @@ public sealed class PostgresLookupResolver : ILookupResolver
         foreach (var (targetTableName, lookups) in lookupsByTarget)
         {
             var targetTable = await _metadataRepository.GetTableByNameAsync(
-                tenantId, targetTableName, includeColumns: true, cancellationToken);
+                projectId, targetTableName, includeColumns: true, cancellationToken);
 
             if (targetTable == null)
                 continue;
@@ -83,7 +83,7 @@ public sealed class PostgresLookupResolver : ILookupResolver
     }
 
     public async Task<LookupQueryExpansion> BuildLookupExpansionAsync(
-        Guid tenantId,
+        Guid projectId,
         TableMetadata sourceTable,
         IReadOnlyList<LookupColumnInfo> lookupColumns,
         CancellationToken cancellationToken = default)
@@ -102,7 +102,7 @@ public sealed class PostgresLookupResolver : ILookupResolver
         {
             // Validate and get metadata
             var validation = await ValidateLookupConfigAsync(
-                tenantId, sourceTable, lookup.Config, cancellationToken);
+                projectId, sourceTable, lookup.Config, cancellationToken);
 
             if (!validation.IsValid)
                 continue;
@@ -152,7 +152,7 @@ public sealed class PostgresLookupResolver : ILookupResolver
     }
 
     public async Task<LookupValidationResult> ValidateLookupConfigAsync(
-        Guid tenantId,
+        Guid projectId,
         TableMetadata sourceTable,
         LookupColumnConfig config,
         CancellationToken cancellationToken = default)
@@ -171,7 +171,7 @@ public sealed class PostgresLookupResolver : ILookupResolver
 
         // Get target table
         var targetTable = await _metadataRepository.GetTableByNameAsync(
-            tenantId, config.TargetTable, includeColumns: true, cancellationToken);
+            projectId, config.TargetTable, includeColumns: true, cancellationToken);
 
         if (targetTable == null)
         {
@@ -207,12 +207,12 @@ public sealed class PostgresLookupResolver : ILookupResolver
     }
 
     public async Task<ColumnMetadata?> GetTargetColumnMetadataAsync(
-        Guid tenantId,
+        Guid projectId,
         LookupColumnConfig config,
         CancellationToken cancellationToken = default)
     {
         var targetTable = await _metadataRepository.GetTableByNameAsync(
-            tenantId, config.TargetTable, includeColumns: true, cancellationToken);
+            projectId, config.TargetTable, includeColumns: true, cancellationToken);
 
         if (targetTable == null)
             return null;

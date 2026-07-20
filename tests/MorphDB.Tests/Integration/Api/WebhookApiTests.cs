@@ -14,13 +14,13 @@ public class WebhookApiTests
 {
     private readonly ApiIntegrationFixture _fixture;
     private readonly HttpClient _client;
-    private readonly Guid _tenantId;
+    private readonly Guid _projectId;
 
     public WebhookApiTests(ApiIntegrationFixture fixture)
     {
         _fixture = fixture;
         _client = fixture.Api.Client;
-        _tenantId = fixture.Api.TenantId;
+        _projectId = fixture.Api.ProjectId;
     }
 
     #region Helper Methods
@@ -120,10 +120,10 @@ public class WebhookApiTests
     }
 
     [Fact]
-    public async Task CreateWebhook_WithoutTenantHeader_ShouldReturnBadRequest()
+    public async Task CreateWebhook_WithoutProjectHeader_ShouldReturnBadRequest()
     {
         // Arrange
-        var client = _fixture.Api.CreateClientWithTenant(Guid.Empty);
+        var client = _fixture.Api.CreateClientWithProject(Guid.Empty);
         var request = new CreateWebhookApiRequest
         {
             Name = "test_webhook",
@@ -183,7 +183,7 @@ public class WebhookApiTests
     #region List Webhooks
 
     [Fact]
-    public async Task ListWebhooks_ShouldReturnWebhooksForTenant()
+    public async Task ListWebhooks_ShouldReturnWebhooksForProject()
     {
         // Arrange
         var tableName = await CreateTestTableAsync();
@@ -410,40 +410,40 @@ public class WebhookApiTests
 
     #endregion
 
-    #region Tenant Isolation
+    #region Project Isolation
 
     [Fact]
-    public async Task Webhook_DifferentTenants_ShouldBeIsolated()
+    public async Task Webhook_DifferentProjects_ShouldBeIsolated()
     {
         // Arrange
-        var tenant1Client = _fixture.Api.CreateClientWithTenant(Guid.NewGuid());
-        var tenant2Client = _fixture.Api.CreateClientWithTenant(Guid.NewGuid());
+        var project1Client = _fixture.Api.CreateClientWithProject(Guid.NewGuid());
+        var project2Client = _fixture.Api.CreateClientWithProject(Guid.NewGuid());
 
-        // Create table for tenant 1
-        var tableName1 = $"tenant1_table_{Guid.NewGuid():N}"[..30];
-        await tenant1Client.PostAsJsonAsync("/api/schema/tables", new CreateTableApiRequest
+        // Create table for project 1
+        var tableName1 = $"project1_table_{Guid.NewGuid():N}"[..30];
+        await project1Client.PostAsJsonAsync("/api/schema/tables", new CreateTableApiRequest
         {
             Name = tableName1,
             Columns = [new CreateColumnApiRequest { Name = "data", Type = "text" }]
         });
 
-        // Create webhook for tenant 1
-        var webhookResponse = await tenant1Client.PostAsJsonAsync("/api/webhooks", new CreateWebhookApiRequest
+        // Create webhook for project 1
+        var webhookResponse = await project1Client.PostAsJsonAsync("/api/webhooks", new CreateWebhookApiRequest
         {
-            Name = "tenant1_webhook",
+            Name = "project1_webhook",
             Table = tableName1,
-            Url = "https://example.com/tenant1"
+            Url = "https://example.com/project1"
         });
         var webhook = await webhookResponse.Content.ReadFromJsonAsync<WebhookApiResponse>();
 
-        // Act - Tenant 2 tries to access tenant 1's webhook
-        var response = await tenant2Client.GetAsync($"/api/webhooks/{webhook!.Id}");
+        // Act - Project 2 tries to access project 1's webhook
+        var response = await project2Client.GetAsync($"/api/webhooks/{webhook!.Id}");
 
-        // Assert - Should not find it (different tenant)
+        // Assert - Should not find it (different project)
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
 
-        // Tenant 2's list should be empty
-        var listResponse = await tenant2Client.GetAsync("/api/webhooks");
+        // Project 2's list should be empty
+        var listResponse = await project2Client.GetAsync("/api/webhooks");
         var webhooks = await listResponse.Content.ReadFromJsonAsync<IReadOnlyList<WebhookApiResponse>>();
         webhooks.Should().BeEmpty();
     }

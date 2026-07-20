@@ -2,8 +2,8 @@
  * MorphDB Client Options
  */
 export interface MorphDBClientOptions {
-  /** Tenant ID for multi-tenant operations */
-  tenantId?: string;
+  /** Project ID for multi-project operations */
+  projectId?: string;
   /** API key for authentication */
   apiKey?: string;
   /** JWT token for authenticated requests */
@@ -297,7 +297,7 @@ export interface ChangeNotification {
   recordId: string;
   data?: Record<string, unknown>;
   oldData?: Record<string, unknown>;
-  tenantId: string;
+  projectId: string;
   timestamp: string;
 }
 

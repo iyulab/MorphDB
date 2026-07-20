@@ -53,7 +53,7 @@ public static class DynamicEdmModelBuilder
             // Add system properties with underscore prefix
             var idProperty = entityType.AddStructuralProperty("_id", EdmPrimitiveTypeKind.Guid, false);
             entityType.AddKeys(idProperty);
-            entityType.AddStructuralProperty("tenant_id", EdmPrimitiveTypeKind.Guid, false);
+            entityType.AddStructuralProperty("project_id", EdmPrimitiveTypeKind.Guid, false);
             entityType.AddStructuralProperty("_created_at", EdmPrimitiveTypeKind.DateTimeOffset, true);
             entityType.AddStructuralProperty("_updated_at", EdmPrimitiveTypeKind.DateTimeOffset, true);
 
@@ -170,7 +170,7 @@ public static class DynamicEdmModelBuilder
 
     private static bool IsSystemColumn(string columnName)
     {
-        return columnName is "_id" or "tenant_id" or "_created_at" or "_updated_at" or "_version";
+        return columnName is "_id" or "project_id" or "_created_at" or "_updated_at" or "_version";
     }
 
     private static string ToPascalCase(string name)

@@ -19,13 +19,13 @@ public interface IMetadataRepository
         CancellationToken cancellationToken = default);
 
     Task<TableMetadata?> GetTableByNameAsync(
-        Guid tenantId,
+        Guid projectId,
         string logicalName,
         bool includeColumns = false,
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<TableMetadata>> ListTablesAsync(
-        Guid tenantId,
+        Guid projectId,
         bool includeColumns = false,
         CancellationToken cancellationToken = default);
 

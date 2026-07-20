@@ -21,7 +21,7 @@ public sealed class PostgresFormulaResolver : IFormulaResolver
     }
 
     public async Task<FormulaQueryExpansion> BuildFormulaExpansionAsync(
-        Guid tenantId,
+        Guid projectId,
         TableMetadata sourceTable,
         IReadOnlyList<FormulaColumnInfo> formulaColumns,
         CancellationToken cancellationToken = default)
@@ -104,7 +104,7 @@ public sealed class PostgresFormulaResolver : IFormulaResolver
     }
 
     public async Task<FormulaValidationResult> ValidateFormulaConfigAsync(
-        Guid tenantId,
+        Guid projectId,
         TableMetadata sourceTable,
         FormulaColumnConfig config,
         CancellationToken cancellationToken = default)

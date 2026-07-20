@@ -42,9 +42,9 @@ public sealed class SecurityPolicy
     public Guid Id { get; set; }
 
     /// <summary>
-    /// Gets or sets the tenant ID this policy belongs to.
+    /// Gets or sets the project ID this policy belongs to.
     /// </summary>
-    public Guid TenantId { get; set; }
+    public Guid ProjectId { get; set; }
 
     /// <summary>
     /// Gets or sets the table ID this policy applies to.

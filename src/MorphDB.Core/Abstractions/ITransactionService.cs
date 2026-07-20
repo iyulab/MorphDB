@@ -12,12 +12,12 @@ public interface ITransactionService
     /// Executes a transaction containing multiple operations across entities.
     /// Supports $ref references to use results from earlier operations.
     /// </summary>
-    /// <param name="tenantId">The tenant ID.</param>
+    /// <param name="projectId">The project ID.</param>
     /// <param name="request">The transaction request containing operations.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The transaction result.</returns>
     Task<TransactionResult> ExecuteAsync(
-        Guid tenantId,
+        Guid projectId,
         TransactionRequest request,
         CancellationToken cancellationToken = default);
 
@@ -25,13 +25,13 @@ public interface ITransactionService
     /// Validates a record and updates its row state.
     /// Changes _row_state from 'draft' to 'valid' or 'error'.
     /// </summary>
-    /// <param name="tenantId">The tenant ID.</param>
+    /// <param name="projectId">The project ID.</param>
     /// <param name="tableName">The logical table name.</param>
     /// <param name="recordId">The record ID to finalize.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The validation result with updated row state.</returns>
     Task<FinalizeResult> FinalizeAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         Guid recordId,
         CancellationToken cancellationToken = default);
@@ -39,13 +39,13 @@ public interface ITransactionService
     /// <summary>
     /// Validates multiple records and updates their row states.
     /// </summary>
-    /// <param name="tenantId">The tenant ID.</param>
+    /// <param name="projectId">The project ID.</param>
     /// <param name="tableName">The logical table name.</param>
     /// <param name="recordIds">The record IDs to finalize.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The validation results for each record.</returns>
     Task<IReadOnlyList<FinalizeResult>> FinalizeBatchAsync(
-        Guid tenantId,
+        Guid projectId,
         string tableName,
         IReadOnlyList<Guid> recordIds,
         CancellationToken cancellationToken = default);

@@ -15,13 +15,13 @@ public class ViewApiTests
 {
     private readonly ApiIntegrationFixture _fixture;
     private readonly HttpClient _client;
-    private readonly Guid _tenantId;
+    private readonly Guid _projectId;
 
     public ViewApiTests(ApiIntegrationFixture fixture)
     {
         _fixture = fixture;
         _client = fixture.Api.Client;
-        _tenantId = fixture.Api.TenantId;
+        _projectId = fixture.Api.ProjectId;
     }
 
     #region Helper Methods
@@ -546,24 +546,24 @@ public class ViewApiTests
 
     #endregion
 
-    #region Tenant Isolation Tests
+    #region Project Isolation Tests
 
     [Fact]
-    public async Task CreateView_DifferentTenants_ShouldBeIsolated()
+    public async Task CreateView_DifferentProjects_ShouldBeIsolated()
     {
         // Arrange
         var viewName = "shared_view_name";
-        var tenant1Client = _fixture.Api.CreateClientWithTenant(Guid.NewGuid());
-        var tenant2Client = _fixture.Api.CreateClientWithTenant(Guid.NewGuid());
+        var project1Client = _fixture.Api.CreateClientWithProject(Guid.NewGuid());
+        var project2Client = _fixture.Api.CreateClientWithProject(Guid.NewGuid());
 
-        // Create base tables for each tenant
+        // Create base tables for each project
         var table1Request = new CreateTableApiRequest
         {
             Name = "base_table",
             Columns = [new CreateColumnApiRequest { Name = "data", Type = "text" }]
         };
-        await tenant1Client.PostAsJsonAsync("/api/schema/tables", table1Request);
-        await tenant2Client.PostAsJsonAsync("/api/schema/tables", table1Request);
+        await project1Client.PostAsJsonAsync("/api/schema/tables", table1Request);
+        await project2Client.PostAsJsonAsync("/api/schema/tables", table1Request);
 
         var viewRequest = new CreateViewApiRequest
         {
@@ -573,16 +573,16 @@ public class ViewApiTests
         };
 
         // Act
-        var response1 = await tenant1Client.PostAsJsonAsync("/api/views", viewRequest);
-        var response2 = await tenant2Client.PostAsJsonAsync("/api/views", viewRequest);
+        var response1 = await project1Client.PostAsJsonAsync("/api/views", viewRequest);
+        var response2 = await project2Client.PostAsJsonAsync("/api/views", viewRequest);
 
-        // Assert - Both should succeed as they're in different tenants
+        // Assert - Both should succeed as they're in different projects
         response1.StatusCode.Should().Be(HttpStatusCode.Created);
         response2.StatusCode.Should().Be(HttpStatusCode.Created);
     }
 
     [Fact]
-    public async Task GetView_DifferentTenant_ShouldReturnNotFound()
+    public async Task GetView_DifferentProject_ShouldReturnNotFound()
     {
         // Arrange
         var baseTable = await CreateBaseTableAsync();
@@ -595,11 +595,11 @@ public class ViewApiTests
             Columns = [new ViewColumnApiSpec { Source = "name", Alias = "name" }]
         });
 
-        // Create a client for a different tenant
-        var otherTenantClient = _fixture.Api.CreateClientWithTenant(Guid.NewGuid());
+        // Create a client for a different project
+        var otherProjectClient = _fixture.Api.CreateClientWithProject(Guid.NewGuid());
 
         // Act
-        var response = await otherTenantClient.GetAsync($"/api/views/{viewName}");
+        var response = await otherProjectClient.GetAsync($"/api/views/{viewName}");
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);

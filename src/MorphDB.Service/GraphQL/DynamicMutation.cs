@@ -24,15 +24,15 @@ public sealed class DynamicMutation
         [GraphQLType(typeof(AnyType))] IDictionary<string, object?> data,
         [Service] IWritePipeline writePipeline,
         [Service] IMetadataRepository metadataRepository,
-        [Service] ITenantContextAccessor tenantAccessor,
+        [Service] IProjectContextAccessor projectAccessor,
         CancellationToken cancellationToken)
     {
         try
         {
-            var tenantId = tenantAccessor.TenantId;
+            var projectId = projectAccessor.ProjectId;
 
             var tableMetadata = await metadataRepository.GetTableByNameAsync(
-                tenantId, table, includeColumns: true, cancellationToken);
+                projectId, table, includeColumns: true, cancellationToken);
             if (tableMetadata is null)
             {
                 return new MutationResult<RecordNode>
@@ -46,7 +46,7 @@ public sealed class DynamicMutation
             var normalizedData = NormalizeData(data);
 
             var writeResult = await writePipeline.InsertAsync(
-                tenantId, tableMetadata, normalizedData, cancellationToken: cancellationToken);
+                projectId, tableMetadata, normalizedData, cancellationToken: cancellationToken);
 
             if (!writeResult.Success)
             {
@@ -95,15 +95,15 @@ public sealed class DynamicMutation
         [Service] IMorphDataService dataService,
         [Service] IWritePipeline writePipeline,
         [Service] IMetadataRepository metadataRepository,
-        [Service] ITenantContextAccessor tenantAccessor,
+        [Service] IProjectContextAccessor projectAccessor,
         CancellationToken cancellationToken)
     {
         try
         {
-            var tenantId = tenantAccessor.TenantId;
+            var projectId = projectAccessor.ProjectId;
 
             var tableMetadata = await metadataRepository.GetTableByNameAsync(
-                tenantId, table, includeColumns: true, cancellationToken);
+                projectId, table, includeColumns: true, cancellationToken);
             if (tableMetadata is null)
             {
                 return new MutationResult<RecordNode>
@@ -115,7 +115,7 @@ public sealed class DynamicMutation
             }
 
             // Verify record exists
-            var existing = await dataService.GetByIdAsync(tenantId, table, id, cancellationToken);
+            var existing = await dataService.GetByIdAsync(projectId, table, id, cancellationToken);
             if (existing is null)
             {
                 return new MutationResult<RecordNode>
@@ -128,7 +128,7 @@ public sealed class DynamicMutation
 
             var normalizedData = NormalizeData(data);
             var writeResult = await writePipeline.UpdateAsync(
-                tenantId, tableMetadata, id, normalizedData, existing, cancellationToken: cancellationToken);
+                projectId, tableMetadata, id, normalizedData, existing, cancellationToken: cancellationToken);
 
             if (!writeResult.Success)
             {
@@ -175,15 +175,15 @@ public sealed class DynamicMutation
         Guid id,
         [Service] IWritePipeline writePipeline,
         [Service] IMetadataRepository metadataRepository,
-        [Service] ITenantContextAccessor tenantAccessor,
+        [Service] IProjectContextAccessor projectAccessor,
         CancellationToken cancellationToken)
     {
         try
         {
-            var tenantId = tenantAccessor.TenantId;
+            var projectId = projectAccessor.ProjectId;
 
             var tableMetadata = await metadataRepository.GetTableByNameAsync(
-                tenantId, table, includeColumns: true, cancellationToken);
+                projectId, table, includeColumns: true, cancellationToken);
             if (tableMetadata is null)
             {
                 return new MutationResult<bool>
@@ -195,7 +195,7 @@ public sealed class DynamicMutation
             }
 
             var writeResult = await writePipeline.DeleteAsync(
-                tenantId, tableMetadata, id, cancellationToken: cancellationToken);
+                projectId, tableMetadata, id, cancellationToken: cancellationToken);
 
             if (!writeResult.Success)
             {
@@ -234,15 +234,15 @@ public sealed class DynamicMutation
         [GraphQLType(typeof(AnyType))] IDictionary<string, object?> data,
         string[] keyColumns,
         [Service] IMorphDataService dataService,
-        [Service] ITenantContextAccessor tenantAccessor,
+        [Service] IProjectContextAccessor projectAccessor,
         CancellationToken cancellationToken)
     {
         try
         {
-            var tenantId = tenantAccessor.TenantId;
+            var projectId = projectAccessor.ProjectId;
 
             var normalizedData = NormalizeData(data);
-            var result = await dataService.UpsertAsync(tenantId, table, normalizedData, keyColumns, cancellationToken);
+            var result = await dataService.UpsertAsync(projectId, table, normalizedData, keyColumns, cancellationToken);
 
             return new MutationResult<RecordNode>
             {
@@ -279,15 +279,15 @@ public sealed class DynamicMutation
         string table,
         [GraphQLType(typeof(ListType<AnyType>))] IReadOnlyList<IDictionary<string, object?>> records,
         [Service] IMorphDataService dataService,
-        [Service] ITenantContextAccessor tenantAccessor,
+        [Service] IProjectContextAccessor projectAccessor,
         CancellationToken cancellationToken)
     {
         try
         {
-            var tenantId = tenantAccessor.TenantId;
+            var projectId = projectAccessor.ProjectId;
 
             var normalizedRecords = records.Select(NormalizeData).ToList();
-            var results = await dataService.InsertBatchAsync(tenantId, table, normalizedRecords, cancellationToken);
+            var results = await dataService.InsertBatchAsync(projectId, table, normalizedRecords, cancellationToken);
 
             var nodes = results.Select(CreateRecordNode).ToList();
 

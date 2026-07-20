@@ -16,31 +16,31 @@ public sealed class SecurityController : ControllerBase
     private readonly IApiKeyService _apiKeyService;
     private readonly ISecurityPolicyService _policyService;
     private readonly IKeyRotationService? _keyRotationService;
-    private readonly ITenantContextAccessor _tenantContext;
+    private readonly IProjectContextAccessor _projectContext;
 
     public SecurityController(
         IApiKeyService apiKeyService,
         ISecurityPolicyService policyService,
-        ITenantContextAccessor tenantContext,
+        IProjectContextAccessor projectContext,
         IKeyRotationService? keyRotationService = null)
     {
         _apiKeyService = apiKeyService;
         _policyService = policyService;
-        _tenantContext = tenantContext;
+        _projectContext = projectContext;
         _keyRotationService = keyRotationService;
     }
 
     #region API Keys
 
     /// <summary>
-    /// Gets all API keys for the current tenant.
+    /// Gets all API keys for the current project.
     /// </summary>
     [HttpGet("keys")]
     [Authorize(Roles = "service,admin")]
     [ProducesResponseType<IReadOnlyList<ApiKeyResponse>>(200)]
     public async Task<IActionResult> GetApiKeys(CancellationToken cancellationToken)
     {
-        var keys = await _apiKeyService.GetKeysAsync(_tenantContext.TenantId, cancellationToken);
+        var keys = await _apiKeyService.GetKeysAsync(_projectContext.ProjectId, cancellationToken);
         var response = keys.Select(MapToResponse).ToList();
         return Ok(response);
     }
@@ -56,7 +56,7 @@ public sealed class SecurityController : ControllerBase
         CancellationToken cancellationToken)
     {
         var (key, rawKey) = await _apiKeyService.CreateKeyAsync(
-            _tenantContext.TenantId,
+            _projectContext.ProjectId,
             request.KeyType,
             request.Name,
             request.Description,
@@ -80,7 +80,7 @@ public sealed class SecurityController : ControllerBase
     [ProducesResponseType(204)]
     public async Task<IActionResult> RevokeApiKey(Guid keyId, CancellationToken cancellationToken)
     {
-        await _apiKeyService.RevokeKeyAsync(_tenantContext.TenantId, keyId, cancellationToken);
+        await _apiKeyService.RevokeKeyAsync(_projectContext.ProjectId, keyId, cancellationToken);
         return NoContent();
     }
 
@@ -96,7 +96,7 @@ public sealed class SecurityController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         var (key, rawKey) = await _apiKeyService.RotateKeyAsync(
-            _tenantContext.TenantId,
+            _projectContext.ProjectId,
             keyId,
             revokeOld,
             cancellationToken);
@@ -121,7 +121,7 @@ public sealed class SecurityController : ControllerBase
     public async Task<IActionResult> GetPolicies(string tableName, CancellationToken cancellationToken)
     {
         var policies = await _policyService.GetPoliciesByTableNameAsync(
-            _tenantContext.TenantId,
+            _projectContext.ProjectId,
             tableName,
             cancellationToken);
 
@@ -140,7 +140,7 @@ public sealed class SecurityController : ControllerBase
         CancellationToken cancellationToken)
     {
         var policy = await _policyService.CreatePolicyAsync(
-            _tenantContext.TenantId,
+            _projectContext.ProjectId,
             new CreatePolicyRequest
             {
                 Name = request.Name,
@@ -169,7 +169,7 @@ public sealed class SecurityController : ControllerBase
         CancellationToken cancellationToken)
     {
         var policy = await _policyService.UpdatePolicyAsync(
-            _tenantContext.TenantId,
+            _projectContext.ProjectId,
             policyId,
             new UpdatePolicyRequest
             {
@@ -191,7 +191,7 @@ public sealed class SecurityController : ControllerBase
     [ProducesResponseType(204)]
     public async Task<IActionResult> DeletePolicy(Guid policyId, CancellationToken cancellationToken)
     {
-        await _policyService.DeletePolicyAsync(_tenantContext.TenantId, policyId, cancellationToken);
+        await _policyService.DeletePolicyAsync(_projectContext.ProjectId, policyId, cancellationToken);
         return NoContent();
     }
 
@@ -218,7 +218,7 @@ public sealed class SecurityController : ControllerBase
         }
 
         var result = await _keyRotationService.RotateTableKeyAsync(
-            _tenantContext.TenantId,
+            _projectContext.ProjectId,
             tableName,
             cancellationToken);
 
@@ -226,21 +226,21 @@ public sealed class SecurityController : ControllerBase
     }
 
     /// <summary>
-    /// Rotates encryption keys for all tables of the current tenant.
+    /// Rotates encryption keys for all tables of the current project.
     /// </summary>
     [HttpPost("encryption/rotate")]
     [Authorize(Roles = "service,admin")]
     [ProducesResponseType<KeyRotationResultResponse>(200)]
     [ProducesResponseType(503)]
-    public async Task<IActionResult> RotateTenantKeys(CancellationToken cancellationToken)
+    public async Task<IActionResult> RotateProjectKeys(CancellationToken cancellationToken)
     {
         if (_keyRotationService is null)
         {
             return StatusCode(503, new { message = "Encryption is not enabled" });
         }
 
-        var result = await _keyRotationService.RotateTenantKeysAsync(
-            _tenantContext.TenantId,
+        var result = await _keyRotationService.RotateProjectKeysAsync(
+            _projectContext.ProjectId,
             cancellationToken);
 
         return Ok(MapToResponse(result));
@@ -263,7 +263,7 @@ public sealed class SecurityController : ControllerBase
         }
 
         var status = await _keyRotationService.GetRotationStatusAsync(
-            _tenantContext.TenantId,
+            _projectContext.ProjectId,
             tableName,
             cancellationToken);
 
@@ -288,7 +288,7 @@ public sealed class SecurityController : ControllerBase
         }
 
         var result = await _keyRotationService.ValidateEncryptionAsync(
-            _tenantContext.TenantId,
+            _projectContext.ProjectId,
             tableName,
             cancellationToken);
 
