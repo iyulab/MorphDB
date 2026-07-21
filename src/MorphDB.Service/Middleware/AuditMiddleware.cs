@@ -96,13 +96,6 @@ public sealed class AuditMiddleware
                 return guid;
         }
 
-        // Try project header (legacy)
-        if (context.Request.Headers.TryGetValue("X-Project-Id", out var projectHeader))
-        {
-            if (Guid.TryParse(projectHeader.FirstOrDefault(), out var guid))
-                return guid;
-        }
-
         return null;
     }
 

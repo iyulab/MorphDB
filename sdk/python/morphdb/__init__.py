@@ -54,7 +54,7 @@ from morphdb.models import (
 )
 from morphdb.realtime import Subscription
 
-__version__ = "0.14.0"
+__version__ = "0.0.0"
 __all__ = [
     # Client
     "MorphDBClient",

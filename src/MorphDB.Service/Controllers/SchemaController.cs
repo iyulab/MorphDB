@@ -112,7 +112,7 @@ public sealed class SchemaController : ControllerBase
 
             return CreatedAtAction(nameof(GetTable), new { name = table.LogicalName }, response);
         }
-        catch (DuplicateException ex)
+        catch (DuplicateNameException ex)
         {
             return Conflict(new ErrorResponse
             {
@@ -217,7 +217,7 @@ public sealed class SchemaController : ControllerBase
 
             return Ok(TableApiResponse.FromMetadata(updatedTable));
         }
-        catch (ConcurrencyException ex)
+        catch (SchemaVersionConflictException ex)
         {
             return Conflict(new ErrorResponse
             {
@@ -340,7 +340,7 @@ public sealed class SchemaController : ControllerBase
                 Message = ex.Message
             });
         }
-        catch (DuplicateException ex)
+        catch (DuplicateNameException ex)
         {
             return Conflict(new ErrorResponse
             {
@@ -407,7 +407,7 @@ public sealed class SchemaController : ControllerBase
                 Message = ex.Message
             });
         }
-        catch (ConcurrencyException ex)
+        catch (SchemaVersionConflictException ex)
         {
             return Conflict(new ErrorResponse
             {
@@ -701,7 +701,7 @@ public sealed class SchemaController : ControllerBase
         {
             return BadRequest(new ErrorResponse { Error = "ValidationError", Message = ex.Message });
         }
-        catch (ConcurrencyException ex)
+        catch (SchemaVersionConflictException ex)
         {
             return Conflict(new ErrorResponse { Error = "ConcurrencyConflict", Message = ex.Message });
         }

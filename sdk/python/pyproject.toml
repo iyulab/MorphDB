@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "morphdb"
-version = "0.14.0"
-description = "Official Python client SDK for MorphDB - a PostgreSQL-based dynamic schema database service"
+version = "0.0.0"
+description = "Reference Python client for MorphDB (not published to PyPI — see README)"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
@@ -21,6 +21,10 @@ keywords = [
     "dynamic-schema"
 ]
 classifiers = [
+    # PyPI rejects any upload carrying a "Private ::" classifier — a hard gate, not a comment.
+    # This package is a reference implementation, and the name "morphdb" on PyPI belongs to an
+    # unrelated project; publishing would require a rename first.
+    "Private :: Do Not Upload",
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",

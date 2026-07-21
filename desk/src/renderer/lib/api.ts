@@ -162,9 +162,10 @@ export interface AggregationRequest {
 
 export interface AggregationResponse {
   data: Record<string, unknown>[]
-  metadata: {
-    executedAt: string
-    rowCount: number
+  totalGroups?: number
+  metadata?: {
+    rowsScanned: number
+    executionTimeMs: number
   }
 }
 
@@ -595,21 +596,37 @@ export interface CreateColumnRequest {
   formula?: FormulaConfigRequest
 }
 
+// These three mirror the server's *ConfigApiRequest records (ApiModels.cs). An earlier version of
+// this file described shapes the server never accepted — the typecheck errors in the scenario tests
+// were pointing at that, not at the tests.
 export interface LookupConfigRequest {
-  relationId: string
-  sourceColumnName: string
+  relationColumn: string
+  targetTable: string
+  targetColumn: string
+  onDelete?: 'set-null' | 'preserve' | 'clear'
+  allowMultiple?: boolean
 }
 
 export interface RollupConfigRequest {
-  relationId: string
-  sourceColumnName: string
+  relation: string
+  targetTable: string
+  foreignKeyColumn: string
+  sourceColumn?: string
   aggregation: string
-  filterExpression?: string
+  filter?: RollupFilterRequest
+  delimiter?: string
+  orderBy?: string
+}
+
+export interface RollupFilterRequest {
+  field: string
+  operator: string
+  value?: unknown
 }
 
 export interface FormulaConfigRequest {
-  expression: string
-  outputType: string
+  formula: string
+  returnType?: string
 }
 
 export interface UpdateColumnRequest {

@@ -1,6 +1,5 @@
-using System.Text.Json;
 using FluentAssertions;
-using MorphDB.Core.Models;
+using MorphDB.Npgsql.Repositories;
 
 namespace MorphDB.Tests.Unit;
 
@@ -11,24 +10,15 @@ namespace MorphDB.Tests.Unit;
 /// camelCase — so rows exist in both shapes.
 ///
 /// These tests hold what both of those rested on: unmapped keys are skipped rather than rejected, and
-/// either shape still reads.
-///
-/// Known limit — say it rather than hide it: <c>ProjectRepository.MapToProject</c> and its options are
-/// private, so these tests configure <c>JsonSerializer</c> the same way instead of calling it. They pin
-/// the serializer's behaviour, not the repository's use of it: change the repository's options and
-/// these stay green while old rows break. Closing that needs the mapping reachable from a test.
+/// either shape still reads. They exercise <see cref="ProjectSettingsColumn"/> — the same code the
+/// repository runs against the column — so changing the policy there turns these red. An earlier
+/// version configured its own <c>JsonSerializer</c> the same way, which pinned the serializer's
+/// behaviour but not the repository's use of it.
 /// </summary>
 public class ProjectSettingsCompatibilityTests
 {
-    /// <summary>Mirrors the policy ProjectRepository applies to the settings column.</summary>
-    private static readonly JsonSerializerOptions SettingsJson = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true
-    };
-
     /// <summary>
-    /// The stored shape, not the wire shape. <c>ProjectRepository</c> serializes the settings column with
+    /// The stored shape, not the wire shape. Before the policy existed the column was written with
     /// <c>JsonSerializer.Serialize</c> and no options, so the jsonb keys are PascalCase even though the
     /// REST surface speaks camelCase. Deserialization is case-sensitive by default, so a fixture written
     /// in the wire shape would prove nothing about the rows that actually exist.
@@ -57,7 +47,7 @@ public class ProjectSettingsCompatibilityTests
     [Fact]
     public void Settings_WrittenBeforeQuotaRemoval_ShouldStillDeserialize()
     {
-        var settings = JsonSerializer.Deserialize<ProjectSettings>(SettingsWrittenBeforeQuotaRemoval, SettingsJson);
+        var settings = ProjectSettingsColumn.Deserialize(SettingsWrittenBeforeQuotaRemoval);
 
         settings.Should().NotBeNull("a project provisioned before the removal must remain readable");
     }
@@ -69,7 +59,7 @@ public class ProjectSettingsCompatibilityTests
     [Fact]
     public void Settings_WrittenBeforeQuotaRemoval_ShouldPreserveTheRemainingFields()
     {
-        var settings = JsonSerializer.Deserialize<ProjectSettings>(SettingsWrittenBeforeQuotaRemoval, SettingsJson)!;
+        var settings = ProjectSettingsColumn.Deserialize(SettingsWrittenBeforeQuotaRemoval)!;
 
         settings.DefaultLocale.Should().Be("ko-KR");
         settings.Timezone.Should().Be("Asia/Seoul");
@@ -84,9 +74,9 @@ public class ProjectSettingsCompatibilityTests
     [Fact]
     public void Settings_ReSerialized_ShouldNotCarryTheRemovedKeysForward()
     {
-        var settings = JsonSerializer.Deserialize<ProjectSettings>(SettingsWrittenBeforeQuotaRemoval, SettingsJson)!;
+        var settings = ProjectSettingsColumn.Deserialize(SettingsWrittenBeforeQuotaRemoval)!;
 
-        var json = JsonSerializer.Serialize(settings, SettingsJson);
+        var json = ProjectSettingsColumn.Serialize(settings);
 
         json.Should().NotContain("axTables", "the quota fields are gone and must not be written back");
         json.Should().NotContain("axStorageBytes");
@@ -103,11 +93,27 @@ public class ProjectSettingsCompatibilityTests
         const string camel = """{"defaultLocale":"ko-KR","timezone":"Asia/Seoul","enableAuditLog":true}""";
         const string pascal = """{"DefaultLocale":"ko-KR","Timezone":"Asia/Seoul","EnableAuditLog":true}""";
 
-        var fromCamel = JsonSerializer.Deserialize<ProjectSettings>(camel, SettingsJson)!;
-        var fromPascal = JsonSerializer.Deserialize<ProjectSettings>(pascal, SettingsJson)!;
+        var fromCamel = ProjectSettingsColumn.Deserialize(camel)!;
+        var fromPascal = ProjectSettingsColumn.Deserialize(pascal)!;
 
         fromCamel.Timezone.Should().Be("Asia/Seoul");
         fromPascal.Timezone.Should().Be("Asia/Seoul", "rows written before the policy must still read");
         fromPascal.DefaultLocale.Should().Be(fromCamel.DefaultLocale);
+    }
+
+    /// <summary>
+    /// The column is written camelCase — the shape the REST surface documents. If serialization ever
+    /// reverts to bare <c>JsonSerializer.Serialize</c>, new rows silently go back to PascalCase and the
+    /// stored shape diverges from the documented one again. This is the write-side half of the policy;
+    /// the tests above only constrain reads.
+    /// </summary>
+    [Fact]
+    public void Settings_Written_ShouldBeCamelCase()
+    {
+        var settings = ProjectSettingsColumn.Deserialize("""{"defaultLocale":"ko-KR"}""");
+
+        var json = ProjectSettingsColumn.Serialize(settings);
+
+        json.Should().Contain("\"defaultLocale\"").And.NotContain("\"DefaultLocale\"");
     }
 }

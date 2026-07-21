@@ -1215,6 +1215,27 @@ public sealed record ColumnDefinition
         };
 
     /// <summary>
+    /// SQL's clock keywords take no parentheses, so the parenthesis test below never saw them: they
+    /// fell through to the literal path and came out quoted — <c>DEFAULT 'CURRENT_TIMESTAMP'</c> —
+    /// which no temporal column can cast, so the DDL failed at execution time.
+    /// <para>
+    /// They are recognised for temporal columns only. On a text column the same word stays an
+    /// ordinary string, so no literal meaning is lost — while a temporal column had no valid use
+    /// for the quoted form at all. Like the function allowlist, what reaches the DDL is the
+    /// dictionary's value, never the caller's text.
+    /// </para>
+    /// </summary>
+    private static readonly Dictionary<string, string> KeywordDefaults =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["CURRENT_TIMESTAMP"] = "CURRENT_TIMESTAMP",
+            ["CURRENT_DATE"] = "CURRENT_DATE",
+            ["CURRENT_TIME"] = "CURRENT_TIME",
+            ["LOCALTIMESTAMP"] = "LOCALTIMESTAMP",
+            ["LOCALTIME"] = "LOCALTIME"
+        };
+
+    /// <summary>
     /// Formats a default value as a valid PostgreSQL expression.
     /// </summary>
     private static string? FormatDefaultExpression(string? value, MorphDataType dataType)
@@ -1234,6 +1255,12 @@ public sealed record ColumnDefinition
             throw new SchemaException(
                 "INVALID_DEFAULT",
                 $"Default '{value}' is not a supported function default. Supported: {string.Join(", ", AllowedFunctionDefaults.Values)}. A literal default must not contain parentheses.");
+        }
+
+        if (dataType is MorphDataType.Date or MorphDataType.DateTime or MorphDataType.Time
+            && KeywordDefaults.TryGetValue(value.Trim(), out var keyword))
+        {
+            return keyword;
         }
 
         // Numeric types - return as-is

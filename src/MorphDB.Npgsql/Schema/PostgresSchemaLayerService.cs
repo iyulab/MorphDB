@@ -48,6 +48,14 @@ public sealed partial class PostgresSchemaLayerService : ISchemaLayerService
         Guid projectId,
         CancellationToken cancellationToken = default)
     {
+        // Guid.Empty is what a broken mapping yields, not a project. Provisioning it would silently
+        // create p_00000000 schemas that every later broken read then collides with — which is
+        // exactly how a mis-mapped repository id once surfaced, two steps away from its cause.
+        if (projectId == Guid.Empty)
+        {
+            throw new ArgumentException("Project id must not be empty.", nameof(projectId));
+        }
+
         var schemaNames = _schemaNameResolver.GetSchemaNames(projectId);
 
         LogProvisioningSchemas(_logger, projectId, schemaNames.SystemSchema, schemaNames.DataSchema);

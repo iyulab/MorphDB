@@ -67,6 +67,36 @@ jobs:
           directory: ./coverage
           fail_ci_if_error: false
 
+  # release-desk.yml runs the same checks, but only on desk-v* tags and manual dispatch — which
+  # meant a red typecheck sat unnoticed at HEAD until the moment someone tried to release (52
+  # errors did exactly that). This job makes every push answer the question the release would ask.
+  desk:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: desk
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: desk/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript check
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
   lint:
     runs-on: ubuntu-latest
 

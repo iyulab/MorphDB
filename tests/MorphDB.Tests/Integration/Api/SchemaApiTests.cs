@@ -85,6 +85,63 @@ public class SchemaApiTests
         table.Columns.Should().HaveCountGreaterThanOrEqualTo(3); // +1 for auto-added id column
     }
 
+    /// <summary>
+    /// The 409 has to actually be reachable. The controller used to catch <c>DuplicateException</c>,
+    /// which nothing throws — the real <c>DuplicateNameException</c> fell through to the SchemaException
+    /// handler and a duplicate create came back 400 "SchemaError", indistinguishable from a malformed
+    /// request. A caller retrying on 400 would retry a conflict forever.
+    /// </summary>
+    [Fact]
+    public async Task CreateTable_WithDuplicateName_ShouldReturnConflict()
+    {
+        // Arrange
+        var request = new CreateTableApiRequest
+        {
+            Name = $"dup_test_{Guid.NewGuid():N}"[..30],
+            Columns = [new CreateColumnApiRequest { Name = "name", Type = "text" }]
+        };
+        var first = await _client.PostAsJsonAsync("/api/schema/tables", request);
+        first.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        // Act
+        var second = await _client.PostAsJsonAsync("/api/schema/tables", request);
+
+        // Assert
+        second.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var error = await second.Content.ReadFromJsonAsync<ErrorResponse>();
+        error!.Error.Should().Be("DuplicateTable");
+    }
+
+    /// <summary>
+    /// Same defect, other verb: the controller caught <c>ConcurrencyException</c>, which nothing throws.
+    /// The real <c>SchemaVersionConflictException</c> escaped the action entirely and a stale-version
+    /// update surfaced as an unhandled 500 — the documented 409 was unreachable.
+    /// </summary>
+    [Fact]
+    public async Task UpdateTable_WithStaleVersion_ShouldReturnConflict()
+    {
+        // Arrange
+        var tableName = $"ver_test_{Guid.NewGuid():N}"[..30];
+        var created = await _client.PostAsJsonAsync("/api/schema/tables", new CreateTableApiRequest
+        {
+            Name = tableName,
+            Columns = [new CreateColumnApiRequest { Name = "name", Type = "text" }]
+        });
+        var table = await created.Content.ReadFromJsonAsync<TableApiResponse>();
+
+        // Act — a version nobody has ever seen
+        var response = await _client.PatchAsJsonAsync($"/api/schema/tables/{tableName}", new UpdateTableApiRequest
+        {
+            Name = $"{tableName}_r",
+            Version = table!.Version + 41
+        });
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        error!.Error.Should().Be("ConcurrencyConflict");
+    }
+
     [Fact]
     public async Task GetTable_WithExistingTable_ShouldReturnTable()
     {

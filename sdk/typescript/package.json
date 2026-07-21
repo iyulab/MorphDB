@@ -1,7 +1,8 @@
 {
   "name": "@morphdb/client",
-  "version": "0.14.0",
-  "description": "Official TypeScript client SDK for MorphDB - a PostgreSQL-based dynamic schema database service",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Reference TypeScript client for MorphDB (not published to npm — see README)",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [

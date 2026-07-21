@@ -17,11 +17,16 @@ public sealed class AggregationController : ControllerBase
 {
     private readonly IAggregationService _aggregationService;
     private readonly IProjectContextAccessor _projectContext;
+    private readonly ILogger<AggregationController> _logger;
 
-    public AggregationController(IAggregationService aggregationService, IProjectContextAccessor projectContext)
+    public AggregationController(
+        IAggregationService aggregationService,
+        IProjectContextAccessor projectContext,
+        ILogger<AggregationController> logger)
     {
         _aggregationService = aggregationService;
         _projectContext = projectContext;
+        _logger = logger;
     }
 
     private Guid GetProjectId() => _projectContext.ProjectId;
@@ -116,11 +121,7 @@ public sealed class AggregationController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new ErrorResponse
-            {
-                Error = "BadRequest",
-                Message = ex.Message
-            });
+            return UnhandledErrors.Map(this, _logger, ex, "aggregate");
         }
     }
 }

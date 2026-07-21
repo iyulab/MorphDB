@@ -17,9 +17,6 @@ internal static partial class AuditControllerLogs
 
     [LoggerMessage(LogLevel.Information, "Getting audit stats for project {ProjectId}")]
     public static partial void GettingAuditStats(ILogger logger, Guid projectId);
-
-    [LoggerMessage(LogLevel.Error, "Audit operation failed: {Error}")]
-    public static partial void AuditOperationFailed(ILogger logger, string error, Exception exception);
 }
 
 /// <summary>
@@ -87,13 +84,7 @@ public sealed class AuditController : ControllerBase
         }
         catch (Exception ex)
         {
-            AuditControllerLogs.AuditOperationFailed(_logger, ex.Message, ex);
-            return BadRequest(new ErrorResponse
-            {
-                Error = "AUDIT_QUERY_FAILED",
-                Message = ex.Message,
-                Code = "AUDIT_QUERY_FAILED"
-            });
+            return UnhandledErrors.Map(this, _logger, ex, "audit query");
         }
     }
 
@@ -155,13 +146,7 @@ public sealed class AuditController : ControllerBase
         }
         catch (Exception ex)
         {
-            AuditControllerLogs.AuditOperationFailed(_logger, ex.Message, ex);
-            return BadRequest(new ErrorResponse
-            {
-                Error = "AUDIT_STATS_FAILED",
-                Message = ex.Message,
-                Code = "AUDIT_STATS_FAILED"
-            });
+            return UnhandledErrors.Map(this, _logger, ex, "audit stats");
         }
     }
 }

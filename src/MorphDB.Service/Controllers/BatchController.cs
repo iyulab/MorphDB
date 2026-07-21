@@ -16,11 +16,16 @@ public sealed class BatchController : ControllerBase
 {
     private readonly IMorphDataService _dataService;
     private readonly IProjectContextAccessor _projectContext;
+    private readonly ILogger<BatchController> _logger;
 
-    public BatchController(IMorphDataService dataService, IProjectContextAccessor projectContext)
+    public BatchController(
+        IMorphDataService dataService,
+        IProjectContextAccessor projectContext,
+        ILogger<BatchController> logger)
     {
         _dataService = dataService;
         _projectContext = projectContext;
+        _logger = logger;
     }
 
     private Guid GetProjectId() => _projectContext.ProjectId;
@@ -82,7 +87,7 @@ public sealed class BatchController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message });
+            return UnhandledErrors.Map(this, _logger, ex, "batch execute");
         }
     }
 
@@ -143,7 +148,7 @@ public sealed class BatchController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message });
+            return UnhandledErrors.Map(this, _logger, ex, "batch insert");
         }
     }
 
@@ -198,7 +203,7 @@ public sealed class BatchController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message });
+            return UnhandledErrors.Map(this, _logger, ex, "batch update");
         }
     }
 
@@ -252,7 +257,7 @@ public sealed class BatchController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message });
+            return UnhandledErrors.Map(this, _logger, ex, "batch delete");
         }
     }
 
@@ -315,7 +320,7 @@ public sealed class BatchController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message });
+            return UnhandledErrors.Map(this, _logger, ex, "upsert");
         }
     }
 
@@ -376,7 +381,11 @@ public sealed class BatchController : ControllerBase
                 }
                 catch (Exception ex)
                 {
-                    errors.Add(new SeedError { Index = index, Message = ex.Message });
+                    errors.Add(new SeedError
+                    {
+                        Index = index,
+                        Message = UnhandledErrors.ItemMessage(_logger, ex, "seed record")
+                    });
                 }
             }
 
@@ -390,7 +399,7 @@ public sealed class BatchController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message });
+            return UnhandledErrors.Map(this, _logger, ex, "seed");
         }
     }
 
@@ -424,7 +433,7 @@ public sealed class BatchController : ControllerBase
             {
                 Index = index,
                 Success = false,
-                Error = ex.Message
+                Error = UnhandledErrors.ItemMessage(_logger, ex, "batch operation")
             };
         }
     }

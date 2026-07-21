@@ -78,6 +78,76 @@ public class MorphHubTests : IAsyncLifetime
         _hubConnection!.State.Should().Be(HubConnectionState.Connected);
     }
 
+    /// <summary>
+    /// A connection that names no project must be refused at connect. It used to fall back to
+    /// <see cref="Guid.Empty"/>, where nothing publishes — the client subscribed successfully and then
+    /// received nothing, forever, with no error to explain it.
+    /// </summary>
+    [Fact]
+    public async Task Connect_WithoutProjectHeader_ShouldBeRefused()
+    {
+        await using var connection = BuildConnectionWithHeaders(new Dictionary<string, string>());
+
+        await AssertRefusedAsync(connection);
+    }
+
+    /// <summary>
+    /// <see cref="Guid.Empty"/> is not a project — it is the exact value the removed fallback used, so
+    /// accepting it would reopen the silent-dead-subscription path under a header that looks valid.
+    /// </summary>
+    [Fact]
+    public async Task Connect_WithEmptyGuidProjectHeader_ShouldBeRefused()
+    {
+        await using var connection = BuildConnectionWithHeaders(
+            new Dictionary<string, string> { ["X-Project-Id"] = Guid.Empty.ToString() });
+
+        await AssertRefusedAsync(connection);
+    }
+
+    private HubConnection BuildConnectionWithHeaders(IDictionary<string, string> headers)
+    {
+        var hubUrl = new Uri(_fixture.Api.BaseAddress, "hubs/morph").ToString();
+
+        return new HubConnectionBuilder()
+            .WithUrl(hubUrl, options =>
+            {
+                foreach (var (name, value) in headers)
+                {
+                    options.Headers.Add(name, value);
+                }
+                options.HttpMessageHandlerFactory = _ => _fixture.Api.CreateHandler();
+            })
+            .Build();
+    }
+
+    /// <summary>
+    /// The refusal can surface in either of two shapes depending on timing: the handshake may fail
+    /// outright (StartAsync throws), or the handshake completes before OnConnectedAsync throws and the
+    /// server then closes the connection. Both count; a connection that stays usable does not.
+    /// </summary>
+    private static async Task AssertRefusedAsync(HubConnection connection)
+    {
+        try
+        {
+            await connection.StartAsync();
+        }
+        catch
+        {
+            connection.State.Should().Be(HubConnectionState.Disconnected);
+            return;
+        }
+
+        var deadline = Task.Delay(TimeSpan.FromSeconds(5));
+        while (connection.State == HubConnectionState.Connected && !deadline.IsCompleted)
+        {
+            await Task.Delay(50);
+        }
+
+        connection.State.Should().Be(
+            HubConnectionState.Disconnected,
+            "a connection that does not name a project must not remain connected");
+    }
+
     #endregion
 
     #region Subscription Tests

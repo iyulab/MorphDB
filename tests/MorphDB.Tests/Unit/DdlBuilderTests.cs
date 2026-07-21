@@ -589,6 +589,51 @@ public class DdlBuilderTests
         definition.DefaultExpression.Should().Be("'O''Brien'");
     }
 
+    private static ColumnMetadata TemporalColumnWithDefault(string defaultValue, MorphDataType type) => new()
+    {
+        LogicalName = "col",
+        PhysicalName = "col",
+        DataType = type,
+        NativeType = "TIMESTAMPTZ",
+        DefaultValue = defaultValue
+    };
+
+    /// <summary>
+    /// SQL's clock keywords take no parentheses, so they used to fall through to the literal path
+    /// and come out quoted — <c>DEFAULT 'CURRENT_TIMESTAMP'</c> — which no temporal column can cast,
+    /// so the CREATE TABLE failed at execution time.
+    /// </summary>
+    [Theory]
+    [InlineData("CURRENT_TIMESTAMP", MorphDataType.DateTime, "CURRENT_TIMESTAMP")]
+    [InlineData("current_timestamp", MorphDataType.DateTime, "CURRENT_TIMESTAMP")]
+    [InlineData("  CURRENT_TIMESTAMP  ", MorphDataType.DateTime, "CURRENT_TIMESTAMP")]
+    [InlineData("CURRENT_DATE", MorphDataType.Date, "CURRENT_DATE")]
+    [InlineData("CURRENT_TIME", MorphDataType.Time, "CURRENT_TIME")]
+    [InlineData("LOCALTIMESTAMP", MorphDataType.DateTime, "LOCALTIMESTAMP")]
+    public void FromMetadata_ShouldEmitClockKeywordDefaultsUnquotedOnTemporalColumns(
+        string declared, MorphDataType type, string expected)
+    {
+        // Act
+        var definition = ColumnDefinition.FromMetadata(TemporalColumnWithDefault(declared, type));
+
+        // Assert
+        definition.DefaultExpression.Should().Be(expected);
+    }
+
+    /// <summary>
+    /// On a text column the same word is ordinary data. The keyword handling is scoped to temporal
+    /// columns precisely so that no literal meaning is lost.
+    /// </summary>
+    [Fact]
+    public void FromMetadata_ShouldKeepClockKeywordsAsLiteralsOnTextColumns()
+    {
+        // Act
+        var definition = ColumnDefinition.FromMetadata(ColumnWithDefault("CURRENT_TIMESTAMP"));
+
+        // Assert
+        definition.DefaultExpression.Should().Be("'CURRENT_TIMESTAMP'");
+    }
+
     #endregion
 
     #region Check expression safety

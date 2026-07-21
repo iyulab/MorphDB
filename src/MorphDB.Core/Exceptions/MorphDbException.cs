@@ -113,51 +113,6 @@ public class LockAcquisitionException : MorphDbException
 }
 
 /// <summary>
-/// Thrown when data validation fails.
-/// </summary>
-public class DataValidationException : MorphDbException
-{
-    public IReadOnlyList<ValidationError> Errors { get; }
-
-    public DataValidationException(IReadOnlyList<ValidationError> errors)
-        : base("VALIDATION_FAILED", "Data validation failed.")
-    {
-        Errors = errors;
-    }
-}
-
-/// <summary>
-/// Represents a single validation error.
-/// </summary>
-public sealed record ValidationError(string Field, string Message, string ErrorCode);
-
-/// <summary>
-/// Thrown when a circular reference is detected.
-/// </summary>
-public class CircularReferenceException : SchemaException
-{
-    public IReadOnlyList<string> Path { get; }
-
-    public CircularReferenceException(IReadOnlyList<string> path)
-        : base("CIRCULAR_REFERENCE",
-            $"Circular reference detected: {string.Join(" -> ", path)}")
-    {
-        Path = path;
-    }
-}
-
-/// <summary>
-/// Thrown when project isolation is violated.
-/// </summary>
-public class ProjectIsolationException : MorphDbException
-{
-    public ProjectIsolationException()
-        : base("PROJECT_ISOLATION_VIOLATION", "Access denied: project isolation violation.")
-    {
-    }
-}
-
-/// <summary>
 /// Thrown when a request does not say which project it applies to.
 /// <para>
 /// Every schema and data operation is scoped to a project, so this is not an authorization failure —
@@ -206,34 +161,3 @@ public class ValidationException : MorphDbException
     }
 }
 
-/// <summary>
-/// Thrown when a duplicate entity is detected.
-/// </summary>
-public class DuplicateException : MorphDbException
-{
-    public DuplicateException(string message)
-        : base("DUPLICATE", message)
-    {
-    }
-
-    public DuplicateException(string entityType, string identifier)
-        : base("DUPLICATE", $"{entityType} '{identifier}' already exists.")
-    {
-    }
-}
-
-/// <summary>
-/// Thrown when a concurrency conflict occurs (optimistic locking).
-/// </summary>
-public class ConcurrencyException : MorphDbException
-{
-    public ConcurrencyException(string message)
-        : base("CONCURRENCY_CONFLICT", message)
-    {
-    }
-
-    public ConcurrencyException(string message, Exception innerException)
-        : base("CONCURRENCY_CONFLICT", message, innerException)
-    {
-    }
-}

@@ -172,6 +172,29 @@ public class BatchApiTests
         result.Results.Should().AllSatisfy(r => r.Success.Should().BeTrue());
     }
 
+    /// <summary>
+    /// A missing table is the caller naming something that does not exist — a 404, as the data
+    /// endpoints already answer. The batch endpoints used to blanket-catch it into a 400 whose
+    /// message was the raw exception text; a real defect took the same shape, so the two were
+    /// indistinguishable on the wire.
+    /// </summary>
+    [Fact]
+    public async Task BulkInsert_IntoMissingTable_ShouldReturnNotFound()
+    {
+        // Arrange
+        var missingTable = $"no_such_{Guid.NewGuid():N}"[..30];
+
+        // Act
+        var response = await _client.PostAsJsonAsync(
+            $"/api/batch/data/{missingTable}/insert",
+            new List<Dictionary<string, object?>> { new() { ["name"] = "x" } });
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        error!.Error.Should().Be("NotFound");
+    }
+
     [Fact]
     public async Task BulkInsert_WithEmptyRecords_ShouldReturnBadRequest()
     {

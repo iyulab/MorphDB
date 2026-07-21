@@ -18,14 +18,22 @@ public sealed class BulkController : ControllerBase
 {
     private readonly IBulkOperationService _bulkService;
     private readonly IProjectContextAccessor _projectContext;
+    private readonly ILogger<BulkController> _logger;
 
-    public BulkController(IBulkOperationService bulkService, IProjectContextAccessor projectContext)
+    public BulkController(
+        IBulkOperationService bulkService,
+        IProjectContextAccessor projectContext,
+        ILogger<BulkController> logger)
     {
         _bulkService = bulkService;
         _projectContext = projectContext;
+        _logger = logger;
     }
 
     private Guid GetProjectId() => _projectContext.ProjectId;
+
+    private IActionResult Unhandled(Exception ex, [System.Runtime.CompilerServices.CallerMemberName] string action = "") =>
+        UnhandledErrors.Map(this, _logger, ex, action);
 
     #region Import Operations
 
@@ -82,7 +90,7 @@ public sealed class BulkController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message });
+            return Unhandled(ex);
         }
     }
 
@@ -135,7 +143,7 @@ public sealed class BulkController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message });
+            return Unhandled(ex);
         }
     }
 
@@ -188,7 +196,7 @@ public sealed class BulkController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message });
+            return Unhandled(ex);
         }
     }
 
@@ -218,7 +226,7 @@ public sealed class BulkController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message });
+            return Unhandled(ex);
         }
     }
 
@@ -240,7 +248,7 @@ public sealed class BulkController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message });
+            return Unhandled(ex);
         }
     }
 
@@ -294,7 +302,7 @@ public sealed class BulkController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message });
+            return Unhandled(ex);
         }
     }
 
@@ -343,7 +351,7 @@ public sealed class BulkController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message });
+            return Unhandled(ex);
         }
     }
 
@@ -392,7 +400,7 @@ public sealed class BulkController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message });
+            return Unhandled(ex);
         }
     }
 
@@ -422,7 +430,7 @@ public sealed class BulkController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message });
+            return Unhandled(ex);
         }
     }
 
@@ -493,7 +501,7 @@ public sealed class BulkController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message });
+            return Unhandled(ex);
         }
     }
 
@@ -515,7 +523,7 @@ public sealed class BulkController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message });
+            return Unhandled(ex);
         }
     }
 
@@ -559,7 +567,7 @@ public sealed class BulkController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message });
+            return Unhandled(ex);
         }
     }
 
@@ -589,7 +597,7 @@ public sealed class BulkController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message });
+            return Unhandled(ex);
         }
     }
 

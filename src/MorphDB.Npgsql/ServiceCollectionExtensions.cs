@@ -38,8 +38,8 @@ public static partial class ServiceCollectionExtensions
         string connectionString,
         Action<MorphDbNpgsqlOptions>? configure = null)
     {
-        // Configure Dapper to map snake_case column names to PascalCase properties
-        DefaultTypeMap.MatchNamesWithUnderscores = true;
+        // Dapper's snake_case mapping is applied by DapperConventions (module initializer), not
+        // here: it must hold for any code that touches this assembly, not only for DI-booted apps.
 
         var options = new MorphDbNpgsqlOptions();
         configure?.Invoke(options);

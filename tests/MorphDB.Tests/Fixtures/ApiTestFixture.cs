@@ -1,7 +1,6 @@
 using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
-using Dapper;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -224,54 +223,36 @@ public sealed class ApiTestFixture : IAsyncLifetime
     public Uri BaseAddress => _factory!.Server.BaseAddress;
 
     /// <summary>
-    /// Pre-provisions a project for the test project.
-    /// This creates the project entry, system/data schemas, and all system tables
-    /// before the web application starts, avoiding the chicken-and-egg problem
-    /// where audit middleware tries to log before tables exist.
+    /// Pre-provisions the test project before the web application starts, avoiding the
+    /// chicken-and-egg problem where audit middleware tries to log before tables exist.
+    /// <para>
+    /// It runs the production provisioning path — <see cref="ProjectService.CreateProjectAsync"/>,
+    /// the same repository, naming and schema-layer code the API runs. An earlier version mirrored
+    /// that path by hand (its own INSERT, its own <c>p_{id}_sys</c> convention, its own
+    /// CREATE SCHEMA), which is the fixture-verifies-itself structure this suite has been burned
+    /// by twice: change how provisioning works and the hand-copy keeps passing over a service
+    /// that provisions differently.
+    /// </para>
     /// </summary>
     private async Task ProvisionTestProjectAsync()
     {
-        // Use the same schema naming convention as PostgresSchemaNameResolver
         var shortId = ProjectId.ToString("N")[..8];
-        var systemSchema = $"p_{shortId}_sys";
-        var dataSchema = $"p_{shortId}_dat";
-        var slug = $"test-project-{shortId}";
 
-        await using var connection = new NpgsqlConnection(_postgresFixture.ConnectionString);
-        await connection.OpenAsync();
+        var resolver = new PostgresSchemaNameResolver();
+        var projectService = new ProjectService(
+            new ProjectRepository(_postgresFixture.DataSource, resolver),
+            new PostgresSchemaLayerService(
+                _postgresFixture.DataSource,
+                resolver,
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<PostgresSchemaLayerService>.Instance),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<ProjectService>.Instance);
 
-        // Insert project record into global _morph_projects table
-        await connection.ExecuteAsync(
-            """
-            INSERT INTO morphdb._morph_projects
-                (project_id, name, slug, system_schema, data_schema, status, created_at, updated_at)
-            VALUES
-                (@ProjectId, @Name, @Slug, @SystemSchema, @DataSchema, 1, NOW(), NOW())
-            ON CONFLICT (project_id) DO NOTHING
-            """,
-            new
-            {
-                ProjectId = ProjectId,
-                Name = $"Test Project {shortId}",
-                Slug = slug,
-                SystemSchema = systemSchema,
-                DataSchema = dataSchema
-            });
-
-        // Create system schema
-        await connection.ExecuteAsync(
-            $"CREATE SCHEMA IF NOT EXISTS \"{systemSchema}\"");
-
-        // Create data schema
-        await connection.ExecuteAsync(
-            $"CREATE SCHEMA IF NOT EXISTS \"{dataSchema}\"");
-
-        // Create all system tables in the system schema using DdlBuilder
-        var systemTablesDdl = MorphDB.Npgsql.Ddl.DdlBuilder.BuildSystemTablesDdl(systemSchema);
-        await connection.ExecuteAsync(systemTablesDdl);
-
-        // No extension is enabled in the data schema, mirroring PostgresSchemaLayerService:
-        // gen_random_uuid() is built in, and no column default may reference uuid_generate_v4().
+        await projectService.CreateProjectAsync(new CreateProjectRequest
+        {
+            ProjectId = ProjectId,
+            Name = $"Test Project {shortId}",
+            Slug = $"test-project-{shortId}"
+        });
     }
 
     public Task DisposeAsync()

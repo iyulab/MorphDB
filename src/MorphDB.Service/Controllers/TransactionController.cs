@@ -17,14 +17,22 @@ public sealed class TransactionController : ControllerBase
 {
     private readonly ITransactionService _transactionService;
     private readonly IProjectContextAccessor _projectContext;
+    private readonly ILogger<TransactionController> _logger;
 
-    public TransactionController(ITransactionService transactionService, IProjectContextAccessor projectContext)
+    public TransactionController(
+        ITransactionService transactionService,
+        IProjectContextAccessor projectContext,
+        ILogger<TransactionController> logger)
     {
         _transactionService = transactionService;
         _projectContext = projectContext;
+        _logger = logger;
     }
 
     private Guid GetProjectId() => _projectContext.ProjectId;
+
+    private IActionResult Unhandled(Exception ex, [System.Runtime.CompilerServices.CallerMemberName] string action = "") =>
+        UnhandledErrors.Map(this, _logger, ex, action);
 
     /// <summary>
     /// Execute a cross-entity transaction with $ref support.
@@ -66,7 +74,7 @@ public sealed class TransactionController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message });
+            return Unhandled(ex);
         }
     }
 
@@ -112,7 +120,7 @@ public sealed class TransactionController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message });
+            return Unhandled(ex);
         }
     }
 
@@ -156,7 +164,7 @@ public sealed class TransactionController : ControllerBase
         }
         catch (Exception ex)
         {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message });
+            return Unhandled(ex);
         }
     }
 

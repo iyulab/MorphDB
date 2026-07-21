@@ -60,7 +60,7 @@ public sealed partial class ProjectRepository : IProjectRepository
             Slug = slug,
             schemaNames.SystemSchema,
             schemaNames.DataSchema,
-            Settings = System.Text.Json.JsonSerializer.Serialize(request.Settings, SettingsJson),
+            Settings = ProjectSettingsColumn.Serialize(request.Settings),
             Status = (int)ProjectStatus.Provisioning
         });
 
@@ -162,7 +162,7 @@ public sealed partial class ProjectRepository : IProjectRepository
         if (request.Settings is not null)
         {
             updates.Add("settings = @Settings::jsonb");
-            parameters.Add("Settings", System.Text.Json.JsonSerializer.Serialize(request.Settings, SettingsJson));
+            parameters.Add("Settings", ProjectSettingsColumn.Serialize(request.Settings));
         }
 
         var sql = $"""
@@ -275,29 +275,9 @@ public sealed partial class ProjectRepository : IProjectRepository
         return slug;
     }
 
-    /// <summary>
-    /// How the settings jsonb column is written and read.
-    /// <para>
-    /// Without an options object the column was written in PascalCase while the REST surface spoke
-    /// camelCase, so the stored shape and the documented shape disagreed — invisible while the same
-    /// code did both halves, and a trap for anyone querying the column directly. Naming the policy
-    /// makes the two agree; reading case-insensitively keeps the rows written under the old shape
-    /// readable, which is why no migration is needed here.
-    /// </para>
-    /// </summary>
-    private static readonly System.Text.Json.JsonSerializerOptions SettingsJson = new()
-    {
-        PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true
-    };
-
     private static Project MapToProject(ProjectEntity entity)
     {
-        ProjectSettings? settings = null;
-        if (!string.IsNullOrEmpty(entity.Settings))
-        {
-            settings = System.Text.Json.JsonSerializer.Deserialize<ProjectSettings>(entity.Settings, SettingsJson);
-        }
+        var settings = ProjectSettingsColumn.Deserialize(entity.Settings);
 
         return new Project
         {

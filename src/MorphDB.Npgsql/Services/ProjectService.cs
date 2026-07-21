@@ -45,8 +45,12 @@ public sealed partial class ProjectService : IProjectService
 
             LogProjectCreated(_logger, project.ProjectId, project.Slug);
 
-            // Return updated project
-            return (await _projectRepository.GetByIdAsync(project.ProjectId, cancellationToken))!;
+            // Refusing the null-forgiveness here: if the row we just created cannot be read back,
+            // something is wrong enough that returning null-as-Project would only defer the crash.
+            return await _projectRepository.GetByIdAsync(project.ProjectId, cancellationToken)
+                ?? throw new MorphDbException(
+                    "PROJECT_CREATION_FAILED",
+                    $"Project '{project.ProjectId}' was created but cannot be read back.");
         }
         catch (Exception ex)
         {

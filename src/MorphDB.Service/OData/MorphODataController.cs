@@ -498,7 +498,7 @@ public sealed partial class MorphODataController : ControllerBase
             {
                 Id = request.Id,
                 Status = 500,
-                Error = ex.Message
+                Error = "An unexpected error occurred"
             };
         }
     }

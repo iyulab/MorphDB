@@ -132,7 +132,7 @@ describe('Usage Scenario: E-Commerce Data Model', () => {
         targetTableId: 'tbl-categories',
         targetColumnId: 'col-id',
         type: 'many-to-one',
-        onDelete: 'SET NULL',
+        onDelete: 'set-null',
       }
 
       mockFetch.mockResolvedValueOnce(createMockResponse(relation))
@@ -144,7 +144,7 @@ describe('Usage Scenario: E-Commerce Data Model', () => {
         targetTable: 'categories',
         targetColumn: '_id',
         type: 'many-to-one',
-        onDelete: 'SET NULL',
+        onDelete: 'set-null',
       })
 
       expect(result.name).toBe('product_category')
@@ -277,7 +277,7 @@ describe('Usage Scenario: E-Commerce Data Model', () => {
           targetColumn: 'name',
           relationColumn: 'category_id',
           allowMultiple: false,
-          onDelete: 'SET NULL',
+          onDelete: 'set-null',
         },
       })
 
@@ -337,7 +337,7 @@ describe('Usage Scenario: E-Commerce Data Model', () => {
           targetTable: 'products',
           targetColumn: 'name',
           relationColumn: 'product_id',
-          onDelete: 'RESTRICT',
+          onDelete: 'preserve',
         },
       })
 
@@ -524,13 +524,13 @@ describe('Usage Scenario: E-Commerce Data Model', () => {
           { table: 'order_items', alias: 'oi', joinType: 'LEFT', condition: 'orders._id = oi.order_id' },
         ],
         columns: [
-          { source: 'orders', column: 'order_number' },
-          { source: 'orders', column: 'status' },
-          { source: 'c', column: 'name', alias: 'customer_name' },
-          { source: 'oi', column: 'quantity' },
-          { source: 'oi', column: 'unit_price' },
+          { source: 'orders.order_number', alias: 'order_number' },
+          { source: 'orders.status', alias: 'status' },
+          { source: 'c.name', alias: 'customer_name' },
+          { source: 'oi.quantity', alias: 'quantity' },
+          { source: 'oi.unit_price', alias: 'unit_price' },
         ],
-        orderBy: [{ column: 'order_number', direction: 'desc' }],
+        orderBy: [{ column: 'order_number', descending: true }],
       })
 
       expect(result.name).toBe('order_details')
@@ -554,13 +554,13 @@ describe('Usage Scenario: E-Commerce Data Model', () => {
           { table: 'categories', alias: 'cat', joinType: 'LEFT', condition: 'products.category_id = cat._id' },
         ],
         columns: [
-          { source: 'products', column: 'name', alias: 'product_name' },
-          { source: 'products', column: 'sku' },
-          { source: 'products', column: 'price' },
-          { source: 'products', column: 'stock' },
-          { source: 'cat', column: 'name', alias: 'category_name' },
+          { source: 'products.name', alias: 'product_name' },
+          { source: 'products.sku', alias: 'sku' },
+          { source: 'products.price', alias: 'price' },
+          { source: 'products.stock', alias: 'stock' },
+          { source: 'cat.name', alias: 'category_name' },
         ],
-        filters: [{ column: 'stock', operator: 'GT', value: 0 }],
+        filters: [{ field: 'stock', operator: 'gt', value: 0 }],
       })
 
       expect(result.name).toBe('product_catalog')
@@ -581,14 +581,14 @@ describe('Usage Scenario: E-Commerce Data Model', () => {
       const result = await client.createView({
         name: 'sales_summary',
         baseTable: 'orders',
-        isMaterialized: true,
+        materialized: true,
         refreshPolicy: 'on_demand',
         joins: [
           { table: 'order_items', alias: 'oi', joinType: 'INNER', condition: 'orders._id = oi.order_id' },
           { table: 'products', alias: 'p', joinType: 'INNER', condition: 'oi.product_id = p._id' },
         ],
         columns: [
-          { source: 'p', column: 'category_id' },
+          { source: 'p.category_id', alias: 'category_id' },
           { expression: 'SUM(oi.quantity * oi.unit_price)', alias: 'total_sales' },
           { expression: 'COUNT(DISTINCT orders._id)', alias: 'order_count' },
         ],
@@ -617,14 +617,13 @@ describe('Usage Scenario: E-Commerce Data Model', () => {
           { table: 'orders', alias: 'o', joinType: 'LEFT', condition: 'customers._id = o.customer_id' },
         ],
         columns: [
-          { source: 'customers', column: 'name' },
-          { source: 'customers', column: 'email' },
+          { source: 'customers.name', alias: 'name' },
+          { source: 'customers.email', alias: 'email' },
           { expression: 'COUNT(o._id)', alias: 'order_count' },
           { expression: 'COALESCE(SUM(o.total), 0)', alias: 'total_spent' },
         ],
         groupBy: ['customers._id', 'customers.name', 'customers.email'],
-        having: [{ expression: 'COUNT(o._id)', operator: 'GT', value: 5 }],
-        orderBy: [{ column: 'total_spent', direction: 'desc' }],
+        orderBy: [{ column: 'total_spent', descending: true }],
         limit: 100,
       })
 
@@ -910,8 +909,8 @@ describe('Usage Scenario: Project Management', () => {
           { table: 'users', alias: 'u', joinType: 'LEFT', condition: 'projects.owner_id = u._id' },
         ],
         columns: [
-          { source: 'projects', column: 'name', alias: 'project_name' },
-          { source: 'u', column: 'username', alias: 'owner' },
+          { source: 'projects.name', alias: 'project_name' },
+          { source: 'u.username', alias: 'owner' },
           { expression: 'COUNT(t._id)', alias: 'total_tasks' },
           { expression: "COUNT(CASE WHEN t.status = 'done' THEN 1 END)", alias: 'completed_tasks' },
           { expression: "ROUND(COUNT(CASE WHEN t.status = 'done' THEN 1 END)::numeric / NULLIF(COUNT(t._id), 0) * 100, 2)", alias: 'progress_pct' },
@@ -940,13 +939,13 @@ describe('Usage Scenario: Project Management', () => {
           { table: 'tasks', alias: 't', joinType: 'LEFT', condition: 'users._id = t.assignee_id' },
         ],
         columns: [
-          { source: 'users', column: 'username' },
-          { source: 'users', column: 'role' },
+          { source: 'users.username', alias: 'username' },
+          { source: 'users.role', alias: 'role' },
           { expression: "COUNT(CASE WHEN t.status != 'done' THEN 1 END)", alias: 'open_tasks' },
           { expression: "COALESCE(SUM(CASE WHEN t.status != 'done' THEN t.estimated_hours END), 0)", alias: 'pending_hours' },
         ],
         groupBy: ['users._id', 'users.username', 'users.role'],
-        orderBy: [{ column: 'pending_hours', direction: 'desc' }],
+        orderBy: [{ column: 'pending_hours', descending: true }],
       })
 
       expect(result.name).toBe('team_workload')
@@ -1279,7 +1278,7 @@ describe('Usage Scenario: Complex Query Patterns', () => {
           { function: 'sum', column: 'total', alias: 'total_spent' },
         ],
         groupBy: ['customer_id'],
-        having: [{ expression: 'COUNT(*)', operator: 'GTE', value: 10 }],
+        having: [{ alias: 'orders', operator: 'gte', value: 10 }],
       })
 
       expect(result.data).toHaveLength(2)
@@ -1303,7 +1302,7 @@ describe('Usage Scenario: Complex Query Patterns', () => {
           { function: 'sum', column: 'total', alias: 'revenue' },
           { function: 'count', alias: 'orders' },
         ],
-        groupBy: [{ expression: "DATE_TRUNC('month', ordered_at)", alias: 'month' }],
+        groupBy: ["DATE_TRUNC('month', ordered_at)"],
         orderBy: [{ column: 'month', direction: 'asc' }],
       })
 
@@ -1314,11 +1313,11 @@ describe('Usage Scenario: Complex Query Patterns', () => {
   describe('View Queries', () => {
     it('should query view with filters', async () => {
       const response = {
-        data: [
+        value: [
           { product_name: 'Laptop', category_name: 'Electronics', price: 999.99, stock: 50 },
           { product_name: 'Phone', category_name: 'Electronics', price: 699.99, stock: 120 },
         ],
-        pagination: { page: 1, pageSize: 20, totalCount: 2, hasNextPage: false },
+        '@odata.count': 2,
       }
 
       mockFetch.mockResolvedValueOnce(createMockResponse(response))
@@ -1329,17 +1328,16 @@ describe('Usage Scenario: Complex Query Patterns', () => {
         $top: 20,
       })
 
-      expect(result.data).toHaveLength(2)
+      expect(result.value).toHaveLength(2)
     })
 
     it('should query materialized view for dashboard', async () => {
       const response = {
-        data: [
+        value: [
           { category_id: 'cat-1', total_sales: 125000, order_count: 450 },
           { category_id: 'cat-2', total_sales: 85000, order_count: 620 },
         ],
-        pagination: { page: 1, pageSize: 100, totalCount: 2, hasNextPage: false },
-        metadata: { isMaterialized: true, lastRefresh: new Date().toISOString() },
+        '@odata.count': 2,
       }
 
       mockFetch.mockResolvedValueOnce(createMockResponse(response))
@@ -1348,15 +1346,20 @@ describe('Usage Scenario: Complex Query Patterns', () => {
         $orderby: 'total_sales desc',
       })
 
-      expect(result.data).toHaveLength(2)
+      expect(result.value).toHaveLength(2)
     })
   })
 
   describe('Cross-Table Operations', () => {
     it('should perform bulk insert into a table', async () => {
       const batchResponse = {
-        affected: 3,
-        ids: ['item-1', 'item-2', 'item-3'],
+        successCount: 3,
+        failureCount: 0,
+        results: [
+          { index: 0, success: true, affectedRows: 1 },
+          { index: 1, success: true, affectedRows: 1 },
+          { index: 2, success: true, affectedRows: 1 },
+        ],
       }
 
       mockFetch.mockResolvedValueOnce(createMockResponse(batchResponse))
@@ -1367,12 +1370,14 @@ describe('Usage Scenario: Complex Query Patterns', () => {
         { order_id: 'order-1', product_id: 'prod-3', quantity: 3, unit_price: 25.00 },
       ])
 
-      expect(result.affected).toBe(3)
+      expect(result.successCount).toBe(3)
     })
 
     it('should perform bulk update with filter', async () => {
       const batchResponse = {
-        affected: 5,
+        successCount: 1,
+        failureCount: 0,
+        results: [{ index: 0, success: true, affectedRows: 5 }],
       }
 
       mockFetch.mockResolvedValueOnce(createMockResponse(batchResponse))
@@ -1383,7 +1388,7 @@ describe('Usage Scenario: Complex Query Patterns', () => {
         "category_id eq 'cat-discontinued'"
       )
 
-      expect(result.affected).toBe(5)
+      expect(result.results[0].affectedRows).toBe(5)
     })
   })
 })
@@ -1425,7 +1430,6 @@ describe('Usage Scenario: Formula Columns', () => {
       formula: {
         formula: 'quantity * unit_price',
         returnType: 'decimal',
-        outputFormat: '0.00',
       },
     })
 
@@ -1454,7 +1458,6 @@ describe('Usage Scenario: Formula Columns', () => {
       formula: {
         formula: 'price * (1 - COALESCE(discount_pct, 0) / 100)',
         returnType: 'decimal',
-        outputFormat: '0.00',
       },
     })
 

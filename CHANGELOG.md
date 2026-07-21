@@ -1,5 +1,60 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **`CURRENT_TIMESTAMP` as a column default failed the CREATE TABLE.** SQL's clock keywords take no
+  parentheses, so the function-default check never saw them: they were quoted as string literals —
+  `DEFAULT 'CURRENT_TIMESTAMP'` — which no temporal column can cast. The keywords
+  (`CURRENT_TIMESTAMP`, `CURRENT_DATE`, `CURRENT_TIME`, `LOCALTIMESTAMP`, `LOCALTIME`) are now
+  recognised on date/time/datetime columns; on a text column the same word remains an ordinary
+  string literal.
+
+- **`MorphDB.Npgsql`'s snake_case mapping only applied if you booted DI.** The Dapper flag the
+  assembly's SQL is written against was set inside `AddMorphDbNpgsql`, so code constructing a
+  repository directly read multi-word columns as defaults — `project_id` came back `Guid.Empty`
+  with no error, and Dapper's per-query deserializer cache kept the wrong mapping alive even after
+  DI later set the flag. The convention is now a module initializer: it holds before the first
+  query this assembly issues, whoever issues it. Provisioning also refuses `Guid.Empty` outright
+  instead of silently creating `p_00000000` schemas, and a created project that cannot be read
+  back is an error rather than a null.
+
+- **Desk described request shapes the server never accepted.** Its lookup, rollup and formula
+  column-config types (`relationId`/`sourceColumnName`, `expression`/`outputType`) matched nothing
+  in the API — creating any of those columns from desk could not have worked. The types now mirror
+  the server's records. Its aggregation-result type was likewise wrong: the panel rendered an
+  `executedAt` field the server never sends ("Invalid Date") and hid the `totalGroups` and
+  scan-metadata fields it does. The scenario tests' typecheck errors had been pointing at exactly
+  this — desk's `vitest` stayed green because mocks accept anything — and a desk typecheck job now
+  runs in `ci.yml` on every push, where before it ran only on release tags.
+
+- **The batch-family endpoints reported every failure — including our own — as a 400 whose message
+  was the raw exception text.** Batch, bulk, transaction, aggregation and audit actions ended in
+  `catch (Exception) { return BadRequest(ex.Message); }`: a caller could not tell a service defect
+  from their own bad request (and retrying "their" error retried our bug), and internal exception
+  text — driver messages, physical identifiers — was copied onto the wire. These actions now answer
+  the way the data endpoints always did: what the service layer legitimately throws keeps its
+  documented status (validation → 400, missing table/record → **404, where it was previously a
+  400**, bad argument → 400), and anything unexpected is a logged **500 with a fixed message**.
+  Per-item errors inside batch/seed responses follow the same rule. The audit endpoints' catch-all
+  `AUDIT_QUERY_FAILED` / `AUDIT_STATS_FAILED` 400s are gone with that branch.
+
+- **The schema API's documented 409s were unreachable.** The controller caught exception types
+  nothing throws (`DuplicateException`, `ConcurrencyException`), so creating a table or column under
+  a taken name came back **400 "SchemaError"** — indistinguishable from a malformed request — and a
+  stale-version update escaped as an **unhandled 500**. The catches now name the types the schema
+  layer actually throws; a duplicate name is 409 `DuplicateTable`/`DuplicateColumn` and a version
+  conflict is 409 `ConcurrencyConflict`, as the endpoints always advertised.
+
+### Removed
+
+- **Exception types no release ever threw**, dead since their introduction:
+  `ProjectIsolationException` (error code `PROJECT_ISOLATION_VIOLATION` — nor its pre-0.7.0 name
+  `TENANT_ISOLATION_VIOLATION`; the 0.7.0 migration table maps the rename for completeness, but the
+  code never appeared in a response), `DataValidationException`, `CircularReferenceException`,
+  `DuplicateException`, and `ConcurrencyException`. None of their error codes ever reached the wire.
+
 ## 0.7.1
 
 A container-image fix. **The NuGet packages are unchanged in substance** — they carry the new number

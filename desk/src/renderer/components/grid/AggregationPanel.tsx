@@ -367,9 +367,11 @@ export function AggregationPanel({
               <label className="text-xs font-medium text-muted-foreground">
                 Results ({result.data.length} rows)
               </label>
-              <span className="text-xs text-muted-foreground">
-                Executed at {new Date(result.metadata.executedAt).toLocaleTimeString()}
-              </span>
+              {result.metadata && (
+                <span className="text-xs text-muted-foreground">
+                  {result.metadata.rowsScanned} rows scanned in {result.metadata.executionTimeMs}ms
+                </span>
+              )}
             </div>
             <div className="border rounded overflow-auto max-h-64">
               <table className="w-full text-xs">

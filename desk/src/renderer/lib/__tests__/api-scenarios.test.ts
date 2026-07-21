@@ -494,7 +494,7 @@ describe('API Scenario: View Management Workflow', () => {
       baseTable: 'users',
       columns: [
         { source: 'user_id', aggregation: 'count', alias: 'user_count' },
-        { source: 'last_active_date' },
+        { source: 'last_active_date', alias: 'last_active_date' },
       ],
       groupBy: ['last_active_date'],
       materialized: true,
@@ -1246,7 +1246,7 @@ describe('API Scenario: Real-time Subscription Workflow', () => {
     })
 
     mockSignalRConnection.on('ColumnAdded', (data: unknown) => {
-      schemaChanges.push({ type: 'column_added', ...data })
+      schemaChanges.push({ type: 'column_added', ...(data as Record<string, unknown>) })
     })
 
     // Subscribe to schema changes
@@ -1302,7 +1302,7 @@ describe('API Scenario: Real-time Subscription Workflow', () => {
     })
 
     mockSignalRConnection.on('ViewBecameStale', (data: unknown) => {
-      viewNotifications.push({ type: 'stale', ...data })
+      viewNotifications.push({ type: 'stale', ...(data as Record<string, unknown>) })
     })
 
     // Simulate view stale notification
@@ -1334,7 +1334,7 @@ describe('API Scenario: Real-time Subscription Workflow', () => {
     })
 
     mockSignalRConnection.on('WebhookFailed', (data: unknown) => {
-      deliveryNotifications.push({ status: 'failed', ...data })
+      deliveryNotifications.push({ status: 'failed', ...(data as Record<string, unknown>) })
     })
 
     // Simulate successful delivery

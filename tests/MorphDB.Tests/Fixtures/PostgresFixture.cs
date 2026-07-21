@@ -1,4 +1,5 @@
-using MorphDB.Npgsql.Ddl;
+using Microsoft.Extensions.Logging.Abstractions;
+using MorphDB.Npgsql.Schema;
 using Npgsql;
 using Testcontainers.PostgreSql;
 
@@ -23,26 +24,20 @@ public sealed class PostgresFixture : IAsyncLifetime
     {
         await _container.StartAsync();
 
-        // Initialize schema
-        await InitializeSchemaAsync();
-
-        // Create data source for tests
         var dataSourceBuilder = new NpgsqlDataSourceBuilder(ConnectionString);
         dataSourceBuilder.EnableDynamicJson();
         DataSource = dataSourceBuilder.Build();
-    }
 
-    private async Task InitializeSchemaAsync()
-    {
         // The production bootstrap is the only source of the global schema. This fixture used to
-        // hand-copy it, which meant no test ever executed the real DDL -- and the copy silently
-        // diverged: it built six control-plane tables production never created, and omitted the
-        // view and policy tables production code queries. Calling the builder is what makes a
-        // broken bootstrap turn tests red.
-        await using var connection = new NpgsqlConnection(ConnectionString);
-        await connection.OpenAsync();
-        await using var cmd = new NpgsqlCommand(DdlBuilder.BuildGlobalSystemSchemaDdl(), connection);
-        await cmd.ExecuteNonQueryAsync();
+        // hand-copy the DDL, which meant no test ever executed the real bootstrap -- and the copy
+        // silently diverged. It then called DdlBuilder directly, which was closer but still skipped
+        // the pre-bootstrap migration step production runs first. Calling the same service method
+        // start-up calls is what makes a broken bootstrap path turn tests red.
+        var schemaLayer = new PostgresSchemaLayerService(
+            DataSource,
+            new PostgresSchemaNameResolver(),
+            NullLogger<PostgresSchemaLayerService>.Instance);
+        await schemaLayer.EnsureGlobalSchemaAsync();
     }
 
     public async Task DisposeAsync()
