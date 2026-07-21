@@ -47,20 +47,6 @@ public interface IProjectService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Suspends a project (disables access but preserves data).
-    /// </summary>
-    Task SuspendProjectAsync(
-        Guid projectId,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Reactivates a suspended project.
-    /// </summary>
-    Task ReactivateProjectAsync(
-        Guid projectId,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Archives a project (read-only mode).
     /// </summary>
     Task ArchiveProjectAsync(

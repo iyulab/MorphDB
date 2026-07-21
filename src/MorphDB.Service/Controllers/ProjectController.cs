@@ -29,12 +29,6 @@ internal static partial class ProjectControllerLogs
     [LoggerMessage(LogLevel.Information, "Updating project: {ProjectId}")]
     public static partial void UpdatingProject(ILogger logger, Guid projectId);
 
-    [LoggerMessage(LogLevel.Information, "Suspending project: {ProjectId}")]
-    public static partial void SuspendingProject(ILogger logger, Guid projectId);
-
-    [LoggerMessage(LogLevel.Information, "Reactivating project: {ProjectId}")]
-    public static partial void ReactivatingProject(ILogger logger, Guid projectId);
-
     [LoggerMessage(LogLevel.Information, "Archiving project: {ProjectId}")]
     public static partial void ArchivingProject(ILogger logger, Guid projectId);
 
@@ -264,90 +258,6 @@ public sealed class ProjectController : ControllerBase
 
             var project = await _projectService.UpdateProjectAsync(coreRequest, cancellationToken);
             return Ok(ProjectApiResponse.FromModel(project));
-        }
-        catch (MorphDbException ex) when (ex.ErrorCode == "PROJECT_NOT_FOUND")
-        {
-            return NotFound(new ErrorResponse
-            {
-                Error = ex.ErrorCode,
-                Message = ex.Message,
-                Code = ex.ErrorCode
-            });
-        }
-        catch (MorphDbException ex)
-        {
-            ProjectControllerLogs.ProjectOperationFailed(_logger, ex.ErrorCode, ex);
-            return BadRequest(new ErrorResponse
-            {
-                Error = ex.ErrorCode,
-                Message = ex.Message,
-                Code = ex.ErrorCode
-            });
-        }
-    }
-
-    /// <summary>
-    /// Suspends a project (disables access but preserves data).
-    /// </summary>
-    /// <param name="id">The project ID.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>No content on success.</returns>
-    [HttpPost("{id:guid}/suspend")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
-    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> SuspendProject(
-        Guid id,
-        CancellationToken cancellationToken)
-    {
-        ProjectControllerLogs.SuspendingProject(_logger, id);
-
-        try
-        {
-            await _projectService.SuspendProjectAsync(id, cancellationToken);
-            return NoContent();
-        }
-        catch (MorphDbException ex) when (ex.ErrorCode == "PROJECT_NOT_FOUND")
-        {
-            return NotFound(new ErrorResponse
-            {
-                Error = ex.ErrorCode,
-                Message = ex.Message,
-                Code = ex.ErrorCode
-            });
-        }
-        catch (MorphDbException ex)
-        {
-            ProjectControllerLogs.ProjectOperationFailed(_logger, ex.ErrorCode, ex);
-            return BadRequest(new ErrorResponse
-            {
-                Error = ex.ErrorCode,
-                Message = ex.Message,
-                Code = ex.ErrorCode
-            });
-        }
-    }
-
-    /// <summary>
-    /// Reactivates a suspended project.
-    /// </summary>
-    /// <param name="id">The project ID.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>No content on success.</returns>
-    [HttpPost("{id:guid}/reactivate")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
-    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> ReactivateProject(
-        Guid id,
-        CancellationToken cancellationToken)
-    {
-        ProjectControllerLogs.ReactivatingProject(_logger, id);
-
-        try
-        {
-            await _projectService.ReactivateProjectAsync(id, cancellationToken);
-            return NoContent();
         }
         catch (MorphDbException ex) when (ex.ErrorCode == "PROJECT_NOT_FOUND")
         {

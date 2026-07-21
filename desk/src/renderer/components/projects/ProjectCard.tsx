@@ -19,8 +19,6 @@ import { cn } from '@/lib/utils'
 interface ProjectCardProps {
   project: ProjectApiResponse
   onEdit?: () => void
-  onSuspend?: () => void
-  onReactivate?: () => void
   onArchive?: () => void
   onDelete?: () => void
   onViewHealth?: () => void
@@ -30,8 +28,6 @@ function getStatusIcon(status: ProjectStatus): ReactElement {
   switch (status) {
     case 'Active':
       return <CheckCircle className="h-4 w-4 text-success" />
-    case 'Suspended':
-      return <Pause className="h-4 w-4 text-warning" />
     case 'Archived':
       return <Archive className="h-4 w-4 text-muted-foreground" />
     default:
@@ -43,8 +39,6 @@ function getStatusColor(status: ProjectStatus): string {
   switch (status) {
     case 'Active':
       return 'text-success'
-    case 'Suspended':
-      return 'text-warning'
     case 'Archived':
       return 'text-muted-foreground'
     default:
@@ -63,8 +57,6 @@ function formatDate(dateString: string): string {
 export function ProjectCard({
   project,
   onEdit,
-  onSuspend,
-  onReactivate,
   onArchive,
   onDelete,
   onViewHealth
@@ -108,24 +100,6 @@ export function ProjectCard({
               </button>
             )}
             <div className="my-1 h-px bg-border" />
-            {project.status === 'Active' && onSuspend && (
-              <button
-                onClick={onSuspend}
-                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent text-warning"
-              >
-                <Pause className="h-4 w-4" />
-                Suspend
-              </button>
-            )}
-            {project.status === 'Suspended' && onReactivate && (
-              <button
-                onClick={onReactivate}
-                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent text-success"
-              >
-                <Play className="h-4 w-4" />
-                Reactivate
-              </button>
-            )}
             {project.status !== 'Archived' && onArchive && (
               <button
                 onClick={onArchive}

@@ -98,8 +98,8 @@ components/
   - [ ] Delete project confirmation
 - [ ] Project Lifecycle
   - [ ] Archive project action
-  - [ ] Suspend project action
-  - [ ] Reactivate project action
+  - ~~Suspend / reactivate project action~~ — removed from the server in 0.7: a suspended project
+    kept serving reads and writes, and subscription state is not this layer's concern.
 - [ ] Project Dashboard
   - [ ] Project stats display
   - [ ] Health status indicator

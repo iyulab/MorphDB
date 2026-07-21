@@ -84,8 +84,7 @@
 - ❌ UpdateProject
 - ❌ DeleteProject
 - ❌ ArchiveProject
-- ❌ SuspendProject
-- ❌ ReactivateProject
+- ~~SuspendProject / ReactivateProject~~ — removed from the server in 0.7, not a gap.
 - ❌ GetProjectStats
 - ❌ ValidateProjectHealth
 - ❌ GetProjectBySlug

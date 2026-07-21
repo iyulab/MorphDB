@@ -44,7 +44,7 @@ export function ProjectsPage(): ReactElement {
   const queryClient = useQueryClient()
 
   const [dialogs, setDialogs] = useState<DialogState>(initialDialogState)
-  const [statusFilter, setStatusFilter] = useState<'all' | 'Active' | 'Suspended' | 'Archived'>('all')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'Active' | 'Archived'>('all')
 
   // Helper to create API client
   const createClient = async (): Promise<MorphDBClient | null> => {
@@ -104,30 +104,6 @@ export function ProjectsPage(): ReactElement {
       const client = await createClient()
       if (!client) throw new Error('No active connection')
       return client.deleteProject(id)
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['projects'] })
-    }
-  })
-
-  // Suspend project mutation
-  const suspendProjectMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const client = await createClient()
-      if (!client) throw new Error('No active connection')
-      return client.suspendProject(id)
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['projects'] })
-    }
-  })
-
-  // Reactivate project mutation
-  const reactivateProjectMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const client = await createClient()
-      if (!client) throw new Error('No active connection')
-      return client.reactivateProject(id)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] })
@@ -194,7 +170,6 @@ export function ProjectsPage(): ReactElement {
   const stats = {
     total: projects?.length || 0,
     active: projects?.filter(p => p.status === 'Active').length || 0,
-    suspended: projects?.filter(p => p.status === 'Suspended').length || 0,
     archived: projects?.filter(p => p.status === 'Archived').length || 0
   }
 
@@ -277,16 +252,6 @@ export function ProjectsPage(): ReactElement {
           Active ({stats.active})
         </button>
         <button
-          onClick={() => setStatusFilter('Suspended')}
-          className={cn(
-            'flex items-center gap-1 text-xs px-2 py-1 rounded',
-            statusFilter === 'Suspended' ? 'bg-warning/20 text-warning' : 'hover:bg-accent'
-          )}
-        >
-          <AlertTriangle className="h-3 w-3" />
-          Suspended ({stats.suspended})
-        </button>
-        <button
           onClick={() => setStatusFilter('Archived')}
           className={cn(
             'flex items-center gap-1 text-xs px-2 py-1 rounded',
@@ -343,8 +308,6 @@ export function ProjectsPage(): ReactElement {
                   ...prev,
                   editProject: { open: true, project }
                 }))}
-                onSuspend={() => suspendProjectMutation.mutate(project.id)}
-                onReactivate={() => reactivateProjectMutation.mutate(project.id)}
                 onArchive={() => archiveProjectMutation.mutate(project.id)}
                 onDelete={() => setDialogs(prev => ({
                   ...prev,

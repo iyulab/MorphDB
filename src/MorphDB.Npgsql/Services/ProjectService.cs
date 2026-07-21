@@ -105,46 +105,6 @@ public sealed partial class ProjectService : IProjectService
     }
 
     /// <inheritdoc/>
-    public async Task SuspendProjectAsync(
-        Guid projectId,
-        CancellationToken cancellationToken = default)
-    {
-        var project = await _projectRepository.GetByIdAsync(projectId, cancellationToken)
-            ?? throw new MorphDbException("PROJECT_NOT_FOUND", $"Project with ID '{projectId}' not found.");
-
-        if (project.Status != ProjectStatus.Active)
-        {
-            throw new MorphDbException(
-                "INVALID_STATUS_TRANSITION",
-                $"Cannot suspend project in status '{project.Status}'. Project must be Active.");
-        }
-
-        await _projectRepository.UpdateStatusAsync(projectId, ProjectStatus.Suspended, cancellationToken);
-
-        LogProjectSuspended(_logger, projectId);
-    }
-
-    /// <inheritdoc/>
-    public async Task ReactivateProjectAsync(
-        Guid projectId,
-        CancellationToken cancellationToken = default)
-    {
-        var project = await _projectRepository.GetByIdAsync(projectId, cancellationToken)
-            ?? throw new MorphDbException("PROJECT_NOT_FOUND", $"Project with ID '{projectId}' not found.");
-
-        if (project.Status != ProjectStatus.Suspended)
-        {
-            throw new MorphDbException(
-                "INVALID_STATUS_TRANSITION",
-                $"Cannot reactivate project in status '{project.Status}'. Project must be Suspended.");
-        }
-
-        await _projectRepository.UpdateStatusAsync(projectId, ProjectStatus.Active, cancellationToken);
-
-        LogProjectReactivated(_logger, projectId);
-    }
-
-    /// <inheritdoc/>
     public async Task ArchiveProjectAsync(
         Guid projectId,
         CancellationToken cancellationToken = default)
@@ -152,7 +112,7 @@ public sealed partial class ProjectService : IProjectService
         var project = await _projectRepository.GetByIdAsync(projectId, cancellationToken)
             ?? throw new MorphDbException("PROJECT_NOT_FOUND", $"Project with ID '{projectId}' not found.");
 
-        if (project.Status is not (ProjectStatus.Active or ProjectStatus.Suspended))
+        if (project.Status is not ProjectStatus.Active)
         {
             throw new MorphDbException(
                 "INVALID_STATUS_TRANSITION",
@@ -242,12 +202,6 @@ public sealed partial class ProjectService : IProjectService
 
     [LoggerMessage(LogLevel.Warning, "Failed to cleanup project record: {ProjectId}")]
     private static partial void LogProjectCleanupFailed(ILogger logger, Guid projectId, Exception exception);
-
-    [LoggerMessage(LogLevel.Information, "Project suspended: {ProjectId}")]
-    private static partial void LogProjectSuspended(ILogger logger, Guid projectId);
-
-    [LoggerMessage(LogLevel.Information, "Project reactivated: {ProjectId}")]
-    private static partial void LogProjectReactivated(ILogger logger, Guid projectId);
 
     [LoggerMessage(LogLevel.Information, "Project archived: {ProjectId}")]
     private static partial void LogProjectArchived(ILogger logger, Guid projectId);

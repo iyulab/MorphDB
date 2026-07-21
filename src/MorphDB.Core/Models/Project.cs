@@ -97,10 +97,10 @@ public enum ProjectStatus
     /// </summary>
     Active = 1,
 
-    /// <summary>
-    /// Project is suspended (temporarily disabled).
-    /// </summary>
-    Suspended = 2,
+    // 2 was Suspended, a subscription state this layer has no business holding. It also did nothing:
+    // requests resolve a schema name from the project id by formatting it, without ever reading the
+    // project row, so a suspended project kept serving reads and writes. The number is left unused
+    // rather than reassigned, because rows written before the removal still carry it.
 
     /// <summary>
     /// Project is being archived.

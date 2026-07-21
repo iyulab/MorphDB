@@ -103,7 +103,7 @@ export interface ApiError {
 }
 
 // Project-related type aliases
-export type ProjectStatus = 'Active' | 'Suspended' | 'Archived'
+export type ProjectStatus = 'Active' | 'Archived'
 export type ProjectSettings = {
   defaultLocale?: string
   timezone?: string
@@ -719,18 +719,6 @@ export class MorphDBClient {
   async deleteProject(id: string): Promise<void> {
     await this.request<void>(`/api/projects/${id}`, {
       method: 'DELETE'
-    })
-  }
-
-  async suspendProject(id: string): Promise<void> {
-    await this.request<void>(`/api/projects/${id}/suspend`, {
-      method: 'POST'
-    })
-  }
-
-  async reactivateProject(id: string): Promise<void> {
-    await this.request<void>(`/api/projects/${id}/reactivate`, {
-      method: 'POST'
     })
   }
 
