@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **The image's HEALTHCHECK called `wget`, which is not in the image.** Every container built from
+  0.6.0 and 0.7.0 reported `unhealthy` forever while the service was serving normally, because
+  `mcr.microsoft.com/dotnet/aspnet` ships neither wget nor curl. `docker compose up --wait` failed,
+  and anything waiting on `depends_on: { condition: service_healthy }` waited forever. The service
+  now probes itself — `dotnet MorphDB.Service.dll --health-check` — which depends on nothing beyond
+  what the image already contains, so it cannot break again when the base image changes.
+- **A fatal start-up failure exited 0**, so a container that never started reported a clean shutdown
+  and `restart: on-failure` did not fire. It now exits 1.
+- The `docker-compose.yml` api service redefined the healthcheck as `curl -f` — the same defect a
+  second time. The override is gone; the image's own definition is the single one.
+
+### Changed
+
+- `--start-period` for the container healthcheck is 15s (was 5s). Start-up runs the global schema
+  migrations, and 5s was optimistic.
+- The Docker release workflow now boots the built image against Postgres and refuses to publish
+  unless the container reports `healthy`. Publishing is irreversible; the gate belongs in that path.
+
 ## 0.7.0
 
 A cleanup release. MorphDB is a virtual-schema layer, and several surfaces had drifted outside that:

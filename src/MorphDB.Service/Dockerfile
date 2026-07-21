@@ -38,9 +38,10 @@ USER $APP_UID
 # Expose port
 EXPOSE 8080
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+# Health check — the service probes itself. This image has no wget and no curl, and a healthcheck
+# that assumes the base image's package set is a healthcheck that lies when that set changes.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD ["dotnet", "MorphDB.Service.dll", "--health-check"]
 
 # Set environment variables
 ENV ASPNETCORE_URLS=http://+:8080

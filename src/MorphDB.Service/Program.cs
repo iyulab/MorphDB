@@ -6,6 +6,7 @@ using MorphDB.Core.Abstractions;
 using MorphDB.Core.Encryption;
 using MorphDB.Npgsql;
 using MorphDB.Npgsql.Security;
+using MorphDB.Service;
 using MorphDB.Service.Extensions;
 using MorphDB.Service.GraphQL;
 using MorphDB.Service.Infrastructure;
@@ -19,6 +20,13 @@ using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using Serilog;
+
+// The container HEALTHCHECK invokes this. It returns before any host is built, so probing costs a
+// CLR start and nothing else.
+if (args is [HealthProbe.Argument])
+{
+    return await HealthProbe.RunAsync().ConfigureAwait(false);
+}
 
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console(formatProvider: CultureInfo.InvariantCulture)
@@ -310,11 +318,17 @@ try
 catch (Exception ex)
 {
     Log.Fatal(ex, "Application terminated unexpectedly");
+
+    // Exit non-zero, or the container reports a clean shutdown after a fatal start-up failure and
+    // `restart: on-failure` never fires.
+    return 1;
 }
 finally
 {
     Log.CloseAndFlush();
 }
+
+return 0;
 
 // Needed for WebApplicationFactory in integration tests
 public partial class Program { }

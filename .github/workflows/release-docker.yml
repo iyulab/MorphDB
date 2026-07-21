@@ -43,6 +43,56 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Publishing is irreversible: `latest` moves the moment the push lands, and every consumer
+      # that follows it gets whatever we shipped. So the image has to prove it works here, before
+      # the push step — not in a workflow that happens to run alongside this one.
+      - name: Build amd64 locally for verification
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: src/MorphDB.Service/Dockerfile
+          load: true
+          tags: morphdb:verify
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify the image reports itself healthy
+        run: |
+          set -u
+          docker network create morphdb-verify
+          docker run -d --name verify-db --network morphdb-verify \
+            -e POSTGRES_USER=morph -e POSTGRES_PASSWORD=morph -e POSTGRES_DB=morphdb \
+            --health-cmd 'pg_isready -U morph -d morphdb' --health-interval 2s --health-retries 15 \
+            postgres:16-alpine
+          for _ in $(seq 30); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' verify-db)" = healthy ] && break
+            sleep 2
+          done
+
+          docker run -d --name verify-api --network morphdb-verify \
+            -e 'ConnectionStrings__MorphDB=Host=verify-db;Port=5432;Database=morphdb;Username=morph;Password=morph' \
+            morphdb:verify
+
+          # The assertion this whole job exists for: the container's own HEALTHCHECK must reach
+          # healthy. 0.6.0 and 0.7.0 both shipped a HEALTHCHECK calling a wget that is not in the
+          # image, so every container was permanently unhealthy while the service was fine.
+          for attempt in $(seq 40); do
+            running=$(docker inspect -f '{{.State.Running}}' verify-api)
+            status=$(docker inspect -f '{{.State.Health.Status}}' verify-api)
+            echo "attempt ${attempt}: running=${running} health=${status}"
+            case "${running}:${status}" in
+              true:healthy) echo "Image reports itself healthy."; exit 0 ;;
+              true:starting) sleep 5 ;;
+              *) break ;;
+            esac
+          done
+
+          echo "::error::The image never reported healthy. Refusing to publish."
+          docker inspect -f '{{json .State.Health}}' verify-api || true
+          docker logs verify-api || true
+          exit 1
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
