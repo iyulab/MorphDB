@@ -1,12 +1,35 @@
 # API Reference
 
-## Authentication
+## Scoping a request
 
-All requests require API Key authentication:
+Every schema and data endpoint applies to one project. Say which:
+
+```http
+X-Project-Id: <project id>
+```
+
+A request that omits it is answered with `400` and the code `MISSING_PROJECT`.
+
+An API key can carry the project instead, in which case the header is optional and a header that
+disagrees with the key is rejected:
 
 ```http
 X-API-Key: your-api-key
 ```
+
+### What this is not
+
+**A project is a schema namespace, not a trust boundary, and the header is not a credential.** The
+schema and data endpoints do not require authentication: a request carrying only `X-Project-Id` is
+served. The project exists so MorphDB can operate physical schemas on its own judgement — it is an
+internal operating unit, not a multi-tenancy feature.
+
+So: run MorphDB where only your application can reach it, and decide there who may see what. Never
+forward a project id supplied by a browser or an end user — whoever picks that value picks which
+schemas they read.
+
+`SecurityController` and `DiagnosticsController` do require an authenticated caller. They are the
+exception, not the rule.
 
 ## REST API
 

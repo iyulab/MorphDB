@@ -97,8 +97,14 @@ Tags: every release publishes `X.Y.Z` and `X.Y`, plus `latest`.
 
 ### First request: create a project
 
-Every schema and data endpoint is project-scoped, so a bare request is answered with `InvalidProject`.
-A project is that project — create one first, then send its id as `X-Project-Id` on everything else.
+Every schema and data endpoint is project-scoped, so a bare request is answered with a 400 carrying
+`MISSING_PROJECT`. Create a project first, then send its id as `X-Project-Id` on everything else.
+
+> **A project is a schema namespace, not a trust boundary.** It exists so MorphDB can operate physical
+> schemas on its own judgement — it is an internal operating unit, not a multi-tenancy feature. The
+> service does not authenticate the data and schema endpoints, so `X-Project-Id` says *which* schemas a
+> request means, not *whether the caller may have them*. If you are building something multi-user, that
+> boundary is yours to stand, in front of MorphDB. Do not pass a client-supplied project id through.
 
 ```bash
 # 1. Create a project. The response carries the id you will scope requests with.
@@ -198,8 +204,8 @@ MorphDB/
 - **Spreadsheet-style databases** - Runtime schema + relational power
 - **Low-code/No-code platforms** - API-first data layer
 - **Dynamic form builders** - Schema-on-the-fly
-- **CRM/ERP with custom fields** - Project-isolated customization
-- **Multi-project SaaS backends** - Secure data isolation
+- **CRM/ERP with custom fields** - Schema-isolated customization
+- **Backends serving many projects** - One deployment, separate schemas (authorization stays in your app)
 
 ## License
 
