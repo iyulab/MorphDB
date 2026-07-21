@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using MorphDB.Core.Abstractions;
+using MorphDB.Service.Filters;
 using MorphDB.Service.Models.Api;
+using MorphDB.Service.Services;
 
 namespace MorphDB.Service.Controllers;
 
@@ -9,25 +11,19 @@ namespace MorphDB.Service.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/batch")]
+[RequireProject]
 public sealed class BatchController : ControllerBase
 {
     private readonly IMorphDataService _dataService;
+    private readonly IProjectContextAccessor _projectContext;
 
-    public BatchController(IMorphDataService dataService)
+    public BatchController(IMorphDataService dataService, IProjectContextAccessor projectContext)
     {
         _dataService = dataService;
+        _projectContext = projectContext;
     }
 
-    private Guid GetProjectId()
-    {
-        if (Request.Headers.TryGetValue("X-Project-Id", out var projectIdHeader) &&
-            Guid.TryParse(projectIdHeader.FirstOrDefault(), out var projectId))
-        {
-            return projectId;
-        }
-
-        throw new InvalidOperationException("X-Project-Id header is required");
-    }
+    private Guid GetProjectId() => _projectContext.ProjectId;
 
     /// <summary>
     /// Execute batch data operations.
@@ -83,10 +79,6 @@ public sealed class BatchController : ControllerBase
                 SuccessCount = successCount,
                 FailureCount = failureCount
             });
-        }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
-        {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (Exception ex)
         {
@@ -149,10 +141,6 @@ public sealed class BatchController : ControllerBase
                 FailureCount = 0
             });
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
-        {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
-        }
         catch (Exception ex)
         {
             return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message });
@@ -208,10 +196,6 @@ public sealed class BatchController : ControllerBase
                 FailureCount = 0
             });
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
-        {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
-        }
         catch (Exception ex)
         {
             return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message });
@@ -265,10 +249,6 @@ public sealed class BatchController : ControllerBase
                 SuccessCount = affected > 0 ? 1 : 0,
                 FailureCount = 0
             });
-        }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
-        {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (Exception ex)
         {
@@ -332,10 +312,6 @@ public sealed class BatchController : ControllerBase
             // Check if this was an insert or update based on whether the record existed
             // For simplicity, we return OK for all upserts
             return Ok(response);
-        }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
-        {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (Exception ex)
         {
@@ -411,10 +387,6 @@ public sealed class BatchController : ControllerBase
                 Updated = updated,
                 Errors = errors
             });
-        }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
-        {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (Exception ex)
         {

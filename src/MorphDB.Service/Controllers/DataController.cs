@@ -3,7 +3,9 @@ using MorphDB.Core.Abstractions;
 using MorphDB.Core.Models;
 using MorphDB.Core.Pipeline;
 using MorphDB.Npgsql.Repositories;
+using MorphDB.Service.Filters;
 using MorphDB.Service.Models.Api;
+using MorphDB.Service.Services;
 
 using static MorphDB.Core.Abstractions.QueryLimits;
 
@@ -32,35 +34,30 @@ internal static partial class DataControllerLogs
 /// </summary>
 [ApiController]
 [Route("api/data")]
+[RequireProject]
 public sealed class DataController : ControllerBase
 {
     private readonly IMorphDataService _dataService;
     private readonly IWritePipeline _writePipeline;
     private readonly IMetadataRepository _metadataRepository;
     private readonly ILogger<DataController> _logger;
+    private readonly IProjectContextAccessor _projectContext;
 
     public DataController(
         IMorphDataService dataService,
         IWritePipeline writePipeline,
         IMetadataRepository metadataRepository,
-        ILogger<DataController> logger)
+        ILogger<DataController> logger,
+        IProjectContextAccessor projectContext)
     {
         _dataService = dataService;
         _writePipeline = writePipeline;
         _metadataRepository = metadataRepository;
         _logger = logger;
+        _projectContext = projectContext;
     }
 
-    private Guid GetProjectId()
-    {
-        if (Request.Headers.TryGetValue("X-Project-Id", out var projectIdHeader) &&
-            Guid.TryParse(projectIdHeader.FirstOrDefault(), out var projectId))
-        {
-            return projectId;
-        }
-
-        throw new InvalidOperationException("X-Project-Id header is required");
-    }
+    private Guid GetProjectId() => _projectContext.ProjectId;
 
     #region Query Operations
 
@@ -157,10 +154,6 @@ public sealed class DataController : ControllerBase
         {
             return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "INVALID_FILTER" });
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
-        {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
-        }
         catch (System.Collections.Generic.KeyNotFoundException ex)
         {
             return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = "TABLE_NOT_FOUND" });
@@ -205,10 +198,6 @@ public sealed class DataController : ControllerBase
                 Id = id,
                 Data = record
             });
-        }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
-        {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (System.Collections.Generic.KeyNotFoundException ex)
         {
@@ -287,10 +276,6 @@ public sealed class DataController : ControllerBase
         catch (ArgumentException ex)
         {
             return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "INVALID_FILTER" });
-        }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
-        {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (System.Collections.Generic.KeyNotFoundException ex)
         {
@@ -381,10 +366,6 @@ public sealed class DataController : ControllerBase
 
             return CreatedAtAction(nameof(GetById), new { table, id }, response);
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
-        {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
-        }
         catch (Exception ex)
         {
             DataControllerLogs.InsertError(_logger, ex, table);
@@ -457,10 +438,6 @@ public sealed class DataController : ControllerBase
                 Data = writeResult.Data ?? data
             });
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
-        {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
-        }
         catch (Exception ex)
         {
             DataControllerLogs.UpdateError(_logger, ex, id, table);
@@ -515,10 +492,6 @@ public sealed class DataController : ControllerBase
             }
 
             return NoContent();
-        }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
-        {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (Exception ex)
         {

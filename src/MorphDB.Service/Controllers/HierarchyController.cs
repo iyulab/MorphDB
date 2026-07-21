@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using MorphDB.Core.Abstractions;
+using MorphDB.Service.Filters;
 using MorphDB.Service.Models.Api;
 using MorphDB.Service.Services;
 
@@ -11,6 +12,7 @@ namespace MorphDB.Service.Controllers;
 [ApiController]
 [Route("api/hierarchy")]
 [Produces("application/json")]
+[RequireProject]
 public sealed class HierarchyController : ControllerBase
 {
     private readonly IHierarchyQueryService _hierarchyService;
@@ -24,15 +26,7 @@ public sealed class HierarchyController : ControllerBase
         _projectContext = projectContext;
     }
 
-    private Guid GetProjectId()
-    {
-        var projectId = _projectContext.ProjectIdOrNull;
-        if (!projectId.HasValue || projectId.Value == Guid.Empty)
-        {
-            throw new UnauthorizedAccessException("Valid API key is required");
-        }
-        return projectId.Value;
-    }
+    private Guid GetProjectId() => _projectContext.ProjectId;
 
     /// <summary>
     /// Gets ancestors (parent chain) of a record.

@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using MorphDB.Core.Exceptions;
 
 namespace MorphDB.Service.Services;
 
@@ -37,12 +38,7 @@ public sealed class HttpProjectContextAccessor : IProjectContextAccessor
     {
         get
         {
-            var projectId = ProjectIdOrNull;
-            if (!projectId.HasValue)
-            {
-                throw new InvalidOperationException("Project ID is required. Provide a valid API key or X-Project-Id header.");
-            }
-            return projectId.Value;
+            return ProjectIdOrNull ?? throw new MissingProjectException();
         }
     }
 
@@ -65,7 +61,7 @@ public sealed class HttpProjectContextAccessor : IProjectContextAccessor
                 }
             }
 
-            // 2. Fallback to X-Project-Id header (for backwards compatibility)
+            // 2. Otherwise the X-Project-Id header, which is how an unauthenticated caller says it.
             if (httpContext.Request.Headers.TryGetValue(ProjectIdHeader, out var projectIdHeader) &&
                 Guid.TryParse(projectIdHeader.FirstOrDefault(), out var headerProjectId) &&
                 headerProjectId != Guid.Empty)

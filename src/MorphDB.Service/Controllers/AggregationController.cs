@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Exceptions;
+using MorphDB.Service.Filters;
 using MorphDB.Service.Models.Api;
+using MorphDB.Service.Services;
 
 namespace MorphDB.Service.Controllers;
 
@@ -10,25 +12,19 @@ namespace MorphDB.Service.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/data")]
+[RequireProject]
 public sealed class AggregationController : ControllerBase
 {
     private readonly IAggregationService _aggregationService;
+    private readonly IProjectContextAccessor _projectContext;
 
-    public AggregationController(IAggregationService aggregationService)
+    public AggregationController(IAggregationService aggregationService, IProjectContextAccessor projectContext)
     {
         _aggregationService = aggregationService;
+        _projectContext = projectContext;
     }
 
-    private Guid GetProjectId()
-    {
-        if (Request.Headers.TryGetValue("X-Project-Id", out var projectIdHeader) &&
-            Guid.TryParse(projectIdHeader.FirstOrDefault(), out var projectId))
-        {
-            return projectId;
-        }
-
-        throw new InvalidOperationException("X-Project-Id header is required");
-    }
+    private Guid GetProjectId() => _projectContext.ProjectId;
 
     /// <summary>
     /// Perform aggregation on a table with optional grouping.
@@ -90,15 +86,6 @@ public sealed class AggregationController : ControllerBase
                 cancellationToken);
 
             return Ok(AggregationApiResponse.FromResult(result));
-        }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
-        {
-            return BadRequest(new ErrorResponse
-            {
-                Error = "BadRequest",
-                Message = ex.Message,
-                Code = "MISSING_PROJECT"
-            });
         }
         catch (TableNotFoundException ex)
         {

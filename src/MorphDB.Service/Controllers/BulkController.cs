@@ -2,7 +2,9 @@ using Microsoft.AspNetCore.Mvc;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
+using MorphDB.Service.Filters;
 using MorphDB.Service.Models.Api;
+using MorphDB.Service.Services;
 
 namespace MorphDB.Service.Controllers;
 
@@ -11,25 +13,19 @@ namespace MorphDB.Service.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/bulk")]
+[RequireProject]
 public sealed class BulkController : ControllerBase
 {
     private readonly IBulkOperationService _bulkService;
+    private readonly IProjectContextAccessor _projectContext;
 
-    public BulkController(IBulkOperationService bulkService)
+    public BulkController(IBulkOperationService bulkService, IProjectContextAccessor projectContext)
     {
         _bulkService = bulkService;
+        _projectContext = projectContext;
     }
 
-    private Guid GetProjectId()
-    {
-        if (Request.Headers.TryGetValue("X-Project-Id", out var projectIdHeader) &&
-            Guid.TryParse(projectIdHeader.FirstOrDefault(), out var projectId))
-        {
-            return projectId;
-        }
-
-        throw new InvalidOperationException("X-Project-Id header is required");
-    }
+    private Guid GetProjectId() => _projectContext.ProjectId;
 
     #region Import Operations
 
@@ -79,10 +75,6 @@ public sealed class BulkController : ControllerBase
         catch (NotFoundException ex)
         {
             return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
-        }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
-        {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (ArgumentException ex) when (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
         {
@@ -137,10 +129,6 @@ public sealed class BulkController : ControllerBase
         {
             return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
-        {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
-        }
         catch (ArgumentException ex) when (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
         {
             return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message });
@@ -193,10 +181,6 @@ public sealed class BulkController : ControllerBase
         catch (NotFoundException ex)
         {
             return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
-        }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
-        {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (ArgumentException ex) when (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
         {
@@ -254,10 +238,6 @@ public sealed class BulkController : ControllerBase
             var jobs = await _bulkService.ListImportJobsAsync(projectId, limit, offset, cancellationToken);
             return Ok(jobs.Select(ToImportJobResponse).ToList());
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
-        {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
-        }
         catch (Exception ex)
         {
             return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message });
@@ -308,10 +288,6 @@ public sealed class BulkController : ControllerBase
         {
             return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
-        {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
-        }
         catch (ArgumentException ex) when (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
         {
             return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message });
@@ -361,10 +337,6 @@ public sealed class BulkController : ControllerBase
         {
             return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
-        {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
-        }
         catch (ArgumentException ex) when (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
         {
             return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message });
@@ -413,10 +385,6 @@ public sealed class BulkController : ControllerBase
         catch (NotFoundException ex)
         {
             return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
-        }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
-        {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (ArgumentException ex) when (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
         {
@@ -544,10 +512,6 @@ public sealed class BulkController : ControllerBase
             var projectId = GetProjectId();
             var jobs = await _bulkService.ListExportJobsAsync(projectId, limit, offset, cancellationToken);
             return Ok(jobs.Select(ToExportJobResponse).ToList());
-        }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
-        {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (Exception ex)
         {

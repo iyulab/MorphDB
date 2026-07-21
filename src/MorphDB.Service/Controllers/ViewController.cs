@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Models;
+using MorphDB.Service.Filters;
 using MorphDB.Service.Models.Api;
 using MorphDB.Service.Services;
 using CoreExceptions = MorphDB.Core.Exceptions;
@@ -28,6 +29,7 @@ internal static partial class ViewControllerLogs
 [ApiController]
 [Route("api/views")]
 [Produces("application/json")]
+[RequireProject]
 public sealed class ViewController : ControllerBase
 {
     private readonly IViewManager _viewManager;
@@ -44,15 +46,7 @@ public sealed class ViewController : ControllerBase
         _projectContext = projectContext;
     }
 
-    private Guid GetProjectId()
-    {
-        var projectId = _projectContext.ProjectIdOrNull;
-        if (!projectId.HasValue || projectId.Value == Guid.Empty)
-        {
-            throw new UnauthorizedAccessException("Valid API key is required");
-        }
-        return projectId.Value;
-    }
+    private Guid GetProjectId() => _projectContext.ProjectId;
 
     #region View CRUD
 

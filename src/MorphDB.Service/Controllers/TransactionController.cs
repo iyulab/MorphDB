@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Models;
+using MorphDB.Service.Filters;
 using MorphDB.Service.Models.Api;
+using MorphDB.Service.Services;
 
 namespace MorphDB.Service.Controllers;
 
@@ -10,25 +12,19 @@ namespace MorphDB.Service.Controllers;
 /// </summary>
 [ApiController]
 [Route("api")]
+[RequireProject]
 public sealed class TransactionController : ControllerBase
 {
     private readonly ITransactionService _transactionService;
+    private readonly IProjectContextAccessor _projectContext;
 
-    public TransactionController(ITransactionService transactionService)
+    public TransactionController(ITransactionService transactionService, IProjectContextAccessor projectContext)
     {
         _transactionService = transactionService;
+        _projectContext = projectContext;
     }
 
-    private Guid GetProjectId()
-    {
-        if (Request.Headers.TryGetValue("X-Project-Id", out var projectIdHeader) &&
-            Guid.TryParse(projectIdHeader.FirstOrDefault(), out var projectId))
-        {
-            return projectId;
-        }
-
-        throw new InvalidOperationException("X-Project-Id header is required");
-    }
+    private Guid GetProjectId() => _projectContext.ProjectId;
 
     /// <summary>
     /// Execute a cross-entity transaction with $ref support.
@@ -67,10 +63,6 @@ public sealed class TransactionController : ControllerBase
             if (!result.Success)
                 return BadRequest(response);
             return Ok(response);
-        }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
-        {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (Exception ex)
         {
@@ -118,10 +110,6 @@ public sealed class TransactionController : ControllerBase
                 ErrorCount = result.Success ? 0 : 1
             });
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
-        {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
-        }
         catch (Exception ex)
         {
             return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message });
@@ -165,10 +153,6 @@ public sealed class TransactionController : ControllerBase
                 ValidCount = validCount,
                 ErrorCount = errorCount
             });
-        }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("X-Project-Id"))
-        {
-            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "MISSING_PROJECT" });
         }
         catch (Exception ex)
         {

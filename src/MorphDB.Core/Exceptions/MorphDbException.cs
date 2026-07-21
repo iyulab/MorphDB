@@ -158,6 +158,23 @@ public class ProjectIsolationException : MorphDbException
 }
 
 /// <summary>
+/// Thrown when a request does not say which project it applies to.
+/// <para>
+/// Every schema and data operation is scoped to a project, so this is not an authorization failure —
+/// the request is simply incomplete. It exists as a type because the alternative was matching on the
+/// text of an <see cref="InvalidOperationException"/>, which made the message part of the contract
+/// and let unrelated exceptions carrying the same words fall into the same branch.
+/// </para>
+/// </summary>
+public class MissingProjectException : MorphDbException
+{
+    public MissingProjectException()
+        : base("MISSING_PROJECT", "This request must say which project it applies to. Send a valid API key, or an X-Project-Id header.")
+    {
+    }
+}
+
+/// <summary>
 /// Thrown when a resource is not found.
 /// </summary>
 public class NotFoundException : MorphDbException

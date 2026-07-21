@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Microsoft.AspNetCore.SignalR;
+using MorphDB.Core.Exceptions;
 
 namespace MorphDB.Service.Realtime;
 
@@ -35,7 +36,9 @@ public sealed partial class MorphHub : Hub<IMorphHubClient>
     /// </summary>
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        var projectId = GetProjectId();
+        // Disconnect must not fail on a connection that never named a project — the connect attempt
+        // already refused that one, and there is nothing left to refuse.
+        var projectId = ProjectIdOrNull() ?? Guid.Empty;
         LogClientDisconnected(_logger, Context.ConnectionId, projectId, exception);
 
         // Remove all subscriptions for this connection
@@ -112,18 +115,23 @@ public sealed partial class MorphHub : Hub<IMorphHubClient>
         return Task.FromResult(subscriptions);
     }
 
-    private Guid GetProjectId()
+    /// <summary>
+    /// The project this connection is scoped to.
+    /// <para>
+    /// A connection that does not name one used to fall back to <see cref="Guid.Empty"/> "for
+    /// development". Nothing publishes to that project, so the client would subscribe successfully
+    /// and then receive nothing, forever, with no error to explain it. Failing here says so.
+    /// </para>
+    /// </summary>
+    private Guid GetProjectId() => ProjectIdOrNull() ?? throw new MissingProjectException();
+
+    private Guid? ProjectIdOrNull()
     {
-        var httpContext = Context.GetHttpContext();
-        var projectIdHeader = httpContext?.Request.Headers["X-Project-Id"].FirstOrDefault();
+        var projectIdHeader = Context.GetHttpContext()?.Request.Headers["X-Project-Id"].FirstOrDefault();
 
-        if (Guid.TryParse(projectIdHeader, out var projectId))
-        {
-            return projectId;
-        }
-
-        // Default project for development
-        return Guid.Empty;
+        return Guid.TryParse(projectIdHeader, out var projectId) && projectId != Guid.Empty
+            ? projectId
+            : null;
     }
 
     internal static string GetTableGroupName(Guid projectId, string tableName)

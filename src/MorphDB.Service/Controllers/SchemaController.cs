@@ -3,6 +3,7 @@ using MorphDB.Core.Abstractions;
 using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
 using MorphDB.Npgsql.Services;
+using MorphDB.Service.Filters;
 using MorphDB.Service.Models.Api;
 using MorphDB.Service.OData;
 using MorphDB.Service.Realtime;
@@ -34,6 +35,7 @@ internal static partial class SchemaControllerLogs
 [ApiController]
 [Route("api/schema")]
 [Produces("application/json")]
+[RequireProject]
 public sealed class SchemaController : ControllerBase
 {
     private readonly ISchemaManager _schemaManager;
@@ -59,15 +61,7 @@ public sealed class SchemaController : ControllerBase
         _projectContext = projectContext;
     }
 
-    private Guid GetProjectId()
-    {
-        var projectId = _projectContext.ProjectIdOrNull;
-        if (!projectId.HasValue || projectId.Value == Guid.Empty)
-        {
-            throw new UnauthorizedAccessException("Valid API key is required");
-        }
-        return projectId.Value;
-    }
+    private Guid GetProjectId() => _projectContext.ProjectId;
 
     #region Tables
 

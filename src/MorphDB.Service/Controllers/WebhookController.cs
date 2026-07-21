@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Models;
+using MorphDB.Service.Filters;
 using MorphDB.Service.Models.Api;
 using MorphDB.Service.Services;
 
@@ -24,6 +25,7 @@ internal static partial class WebhookControllerLogs
 [ApiController]
 [Route("api/webhooks")]
 [Produces("application/json")]
+[RequireProject]
 public sealed class WebhookController : ControllerBase
 {
     private readonly IWebhookManager _webhookManager;
@@ -43,15 +45,7 @@ public sealed class WebhookController : ControllerBase
         _projectContext = projectContext;
     }
 
-    private Guid GetProjectId()
-    {
-        var projectId = _projectContext.ProjectIdOrNull;
-        if (!projectId.HasValue || projectId.Value == Guid.Empty)
-        {
-            throw new UnauthorizedAccessException("Valid API key is required");
-        }
-        return projectId.Value;
-    }
+    private Guid GetProjectId() => _projectContext.ProjectId;
 
     /// <summary>
     /// Creates a new webhook subscription.
