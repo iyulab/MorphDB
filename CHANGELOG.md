@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.7.1
+
+A container-image fix. **The NuGet packages are unchanged in substance** — they carry the new number
+only because one version governs the whole repository. If you consume the client library and not the
+image, there is nothing here for you.
+
+If you run the image, upgrade: every container built from 0.6.0 or 0.7.0 reports itself unhealthy
+forever, and anything waiting on that report waits forever.
 
 ### Fixed
 
