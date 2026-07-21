@@ -561,7 +561,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
         // Get the DLQ message
         var dlqMessage = await GetDlqMessageAsync(dlqId, cancellationToken);
         if (dlqMessage is null)
-            throw new InvalidOperationException($"DLQ message {dlqId} not found");
+            throw new MorphDB.Core.Exceptions.NotFoundException("DLQ message", dlqId.ToString());
 
         // Create a new delivery from the DLQ message
         var newDelivery = await CreateDeliveryAsync(new CreateDeliveryRequest

@@ -33,6 +33,17 @@ jobs:
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
           echo "Detected version: $VERSION, image: $IMAGE"
 
+      # Two gates guard this publish, one per kind of defect: dotnet test catches code that is
+      # wrong, the healthcheck probe below catches an image that is wrong (0.6.0/0.7.0 shipped
+      # permanently-unhealthy images while every test was green). Neither implies the other.
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Test
+        run: dotnet test --configuration Release --verbosity normal
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 

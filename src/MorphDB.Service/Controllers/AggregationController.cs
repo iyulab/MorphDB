@@ -68,60 +68,26 @@ public sealed class AggregationController : ControllerBase
         [FromBody] AggregationApiRequest request,
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var projectId = GetProjectId();
+        var projectId = GetProjectId();
 
-            // Validate request
-            if (request.Aggregations.Count == 0)
-            {
-                return BadRequest(new ErrorResponse
-                {
-                    Error = "BadRequest",
-                    Message = "At least one aggregation is required",
-                    Code = "AGGREGATION_REQUIRED"
-                });
-            }
-
-            // Execute aggregation
-            var result = await _aggregationService.AggregateAsync(
-                projectId,
-                table,
-                request.ToModel(),
-                cancellationToken);
-
-            return Ok(AggregationApiResponse.FromResult(result));
-        }
-        catch (TableNotFoundException ex)
-        {
-            return NotFound(new ErrorResponse
-            {
-                Error = "NotFound",
-                Message = ex.Message,
-                Code = "TABLE_NOT_FOUND"
-            });
-        }
-        catch (ColumnNotFoundException ex)
+        // Validate request
+        if (request.Aggregations.Count == 0)
         {
             return BadRequest(new ErrorResponse
             {
                 Error = "BadRequest",
-                Message = ex.Message,
-                Code = "COLUMN_NOT_FOUND"
+                Message = "At least one aggregation is required",
+                Code = "AGGREGATION_REQUIRED"
             });
         }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new ErrorResponse
-            {
-                Error = "BadRequest",
-                Message = ex.Message,
-                Code = "INVALID_ARGUMENT"
-            });
-        }
-        catch (Exception ex)
-        {
-            return UnhandledErrors.Map(this, _logger, ex, "aggregate");
-        }
+
+        // Execute aggregation
+        var result = await _aggregationService.AggregateAsync(
+            projectId,
+            table,
+            request.ToModel(),
+            cancellationToken);
+
+        return Ok(AggregationApiResponse.FromResult(result));
     }
 }

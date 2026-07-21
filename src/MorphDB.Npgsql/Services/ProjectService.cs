@@ -109,30 +109,6 @@ public sealed partial class ProjectService : IProjectService
     }
 
     /// <inheritdoc/>
-    public async Task ArchiveProjectAsync(
-        Guid projectId,
-        CancellationToken cancellationToken = default)
-    {
-        var project = await _projectRepository.GetByIdAsync(projectId, cancellationToken)
-            ?? throw new MorphDbException("PROJECT_NOT_FOUND", $"Project with ID '{projectId}' not found.");
-
-        if (project.Status is not ProjectStatus.Active)
-        {
-            throw new MorphDbException(
-                "INVALID_STATUS_TRANSITION",
-                $"Cannot archive project in status '{project.Status}'.");
-        }
-
-        await _projectRepository.UpdateStatusAsync(projectId, ProjectStatus.Archiving, cancellationToken);
-
-        // TODO: In Phase 23, implement actual archival process (backup, etc.)
-
-        await _projectRepository.UpdateStatusAsync(projectId, ProjectStatus.Archived, cancellationToken);
-
-        LogProjectArchived(_logger, projectId);
-    }
-
-    /// <inheritdoc/>
     public async Task DeleteProjectAsync(
         Guid projectId,
         CancellationToken cancellationToken = default)
@@ -207,8 +183,6 @@ public sealed partial class ProjectService : IProjectService
     [LoggerMessage(LogLevel.Warning, "Failed to cleanup project record: {ProjectId}")]
     private static partial void LogProjectCleanupFailed(ILogger logger, Guid projectId, Exception exception);
 
-    [LoggerMessage(LogLevel.Information, "Project archived: {ProjectId}")]
-    private static partial void LogProjectArchived(ILogger logger, Guid projectId);
 
     [LoggerMessage(LogLevel.Warning, "Deleting project: {ProjectId} ({Name})")]
     private static partial void LogDeletingProject(ILogger logger, Guid projectId, string name);

@@ -54,6 +54,7 @@ public static class PipelineOrder
     public const int ComputedFieldApplier = 500;
 
     // Validators (run after transformers)
+    public const int UnknownFieldValidator = 900;  // before anything judges a value, the name must exist
     public const int TypeValidator = 1000;
     public const int RequiredValidator = 1100;
     public const int UniqueValidator = 1200;

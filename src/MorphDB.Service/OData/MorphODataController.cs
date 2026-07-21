@@ -50,29 +50,22 @@ public sealed partial class MorphODataController : ControllerBase
     [Produces("application/xml")]
     public async Task<IActionResult> GetMetadata(CancellationToken cancellationToken)
     {
-        try
-        {
-            var projectId = _projectAccessor.ProjectId;
-            var model = await _modelProvider.GetModelAsync(projectId, cancellationToken);
+        var projectId = _projectAccessor.ProjectId;
+        var model = await _modelProvider.GetModelAsync(projectId, cancellationToken);
 
-            // Serialize EDM model to CSDL XML
-            using var stream = new MemoryStream();
-            using (var writer = XmlWriter.Create(stream, new XmlWriterSettings
-            {
-                Indent = true,
-                Async = true
-            }))
-            {
-                CsdlWriter.TryWriteCsdl(model, writer, CsdlTarget.OData, out _);
-            }
-
-            stream.Position = 0;
-            return File(stream.ToArray(), "application/xml");
-        }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("header"))
+        // Serialize EDM model to CSDL XML
+        using var stream = new MemoryStream();
+        using (var writer = XmlWriter.Create(stream, new XmlWriterSettings
         {
-            return BadRequest(new { error = ex.Message });
+            Indent = true,
+            Async = true
+        }))
+        {
+            CsdlWriter.TryWriteCsdl(model, writer, CsdlTarget.OData, out _);
         }
+
+        stream.Position = 0;
+        return File(stream.ToArray(), "application/xml");
     }
 
     /// <summary>
@@ -91,52 +84,41 @@ public sealed partial class MorphODataController : ControllerBase
         [FromQuery(Name = "$count")] bool count,
         CancellationToken cancellationToken)
     {
-        try
+        var projectId = _projectAccessor.ProjectId;
+        var modelResult = await _modelProvider.GetModelWithMappingAsync(projectId, cancellationToken);
+
+        var options = new ODataQueryOptions
         {
-            var projectId = _projectAccessor.ProjectId;
-            var modelResult = await _modelProvider.GetModelWithMappingAsync(projectId, cancellationToken);
+            Filter = filter,
+            OrderBy = orderBy,
+            Top = top ?? 0,
+            Skip = skip ?? 0,
+            Select = select,
+            Expand = expand,
+            Count = count
+        };
 
-            var options = new ODataQueryOptions
-            {
-                Filter = filter,
-                OrderBy = orderBy,
-                Top = top ?? 0,
-                Skip = skip ?? 0,
-                Select = select,
-                Expand = expand,
-                Count = count
-            };
+        var result = await _queryHandler.ExecuteQueryAsync(
+            projectId,
+            entitySet,
+            modelResult.Model,
+            options,
+            modelResult.EntitySetToTableNameMap,
+            cancellationToken);
 
-            var result = await _queryHandler.ExecuteQueryAsync(
-                projectId,
-                entitySet,
-                modelResult.Model,
-                options,
-                modelResult.EntitySetToTableNameMap,
-                cancellationToken);
-
-            // Format as OData response
-            var response = new ODataResponse
-            {
-                Context = $"{Request.Scheme}://{Request.Host}/odata/$metadata#{entitySet}",
-                Value = result.Records
-            };
-
-            if (count && result.TotalCount.HasValue)
-            {
-                response.Count = result.TotalCount.Value;
-            }
-
-            return Ok(response);
-        }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("not found"))
+        // Format as OData response
+        var response = new ODataResponse
         {
-            return NotFound(new { error = ex.Message });
-        }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("header"))
+            Context = $"{Request.Scheme}://{Request.Host}/odata/$metadata#{entitySet}",
+            Value = result.Records
+        };
+
+        if (count && result.TotalCount.HasValue)
         {
-            return BadRequest(new { error = ex.Message });
+            response.Count = result.TotalCount.Value;
         }
+
+        return Ok(response);
     }
 
     /// <summary>
@@ -151,46 +133,35 @@ public sealed partial class MorphODataController : ControllerBase
         [FromQuery(Name = "$expand")] string? expand,
         CancellationToken cancellationToken)
     {
-        try
+        var projectId = _projectAccessor.ProjectId;
+        var modelResult = await _modelProvider.GetModelWithMappingAsync(projectId, cancellationToken);
+
+        var options = new ODataQueryOptions
         {
-            var projectId = _projectAccessor.ProjectId;
-            var modelResult = await _modelProvider.GetModelWithMappingAsync(projectId, cancellationToken);
+            Select = select,
+            Expand = expand
+        };
 
-            var options = new ODataQueryOptions
-            {
-                Select = select,
-                Expand = expand
-            };
+        var entity = await _queryHandler.GetByIdAsync(
+            projectId,
+            entitySet,
+            key,
+            options,
+            modelResult.EntitySetToTableNameMap,
+            cancellationToken);
 
-            var entity = await _queryHandler.GetByIdAsync(
-                projectId,
-                entitySet,
-                key,
-                options,
-                modelResult.EntitySetToTableNameMap,
-                cancellationToken);
-
-            if (entity == null)
-            {
-                return NotFound(new { error = $"Entity with key '{key}' not found in '{entitySet}'." });
-            }
-
-            var response = new ODataSingleResponse
-            {
-                Context = $"{Request.Scheme}://{Request.Host}/odata/$metadata#{entitySet}/$entity",
-                Value = entity
-            };
-
-            return Ok(response);
-        }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("not found"))
+        if (entity == null)
         {
-            return NotFound(new { error = ex.Message });
+            return NotFound(new { error = $"Entity with key '{key}' not found in '{entitySet}'." });
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("header"))
+
+        var response = new ODataSingleResponse
         {
-            return BadRequest(new { error = ex.Message });
-        }
+            Context = $"{Request.Scheme}://{Request.Host}/odata/$metadata#{entitySet}/$entity",
+            Value = entity
+        };
+
+        return Ok(response);
     }
 
     /// <summary>
@@ -339,24 +310,17 @@ public sealed partial class MorphODataController : ControllerBase
         [FromBody] ODataBatchRequest batchRequest,
         CancellationToken cancellationToken)
     {
-        try
-        {
-            var projectId = _projectAccessor.ProjectId;
-            var modelResult = await _modelProvider.GetModelWithMappingAsync(projectId, cancellationToken);
-            var responses = new List<ODataBatchResponseItem>();
+        var projectId = _projectAccessor.ProjectId;
+        var modelResult = await _modelProvider.GetModelWithMappingAsync(projectId, cancellationToken);
+        var responses = new List<ODataBatchResponseItem>();
 
-            foreach (var request in batchRequest.Requests)
-            {
-                var response = await ExecuteBatchItemAsync(projectId, request, modelResult.EntitySetToTableNameMap, cancellationToken);
-                responses.Add(response);
-            }
-
-            return Ok(new ODataBatchResponse { Responses = responses });
-        }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("header"))
+        foreach (var request in batchRequest.Requests)
         {
-            return BadRequest(new { error = ex.Message });
+            var response = await ExecuteBatchItemAsync(projectId, request, modelResult.EntitySetToTableNameMap, cancellationToken);
+            responses.Add(response);
         }
+
+        return Ok(new ODataBatchResponse { Responses = responses });
     }
 
     private async Task<ODataBatchResponseItem> ExecuteBatchItemAsync(

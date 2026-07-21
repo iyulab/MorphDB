@@ -30,6 +30,18 @@ public interface IWritePipeline
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Executes the pipeline for an upsert operation. Conflict resolution uses
+    /// <paramref name="keyColumns"/> (logical names); null means the primary key.
+    /// </summary>
+    Task<WriteResult> UpsertAsync(
+        Guid projectId,
+        TableMetadata table,
+        IDictionary<string, object?> data,
+        IReadOnlyList<string>? keyColumns = null,
+        WriteOptions? options = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Executes the pipeline for a delete operation.
     /// </summary>
     Task<WriteResult> DeleteAsync(

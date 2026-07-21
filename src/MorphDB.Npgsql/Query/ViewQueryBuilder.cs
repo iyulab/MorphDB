@@ -37,7 +37,7 @@ public sealed class ViewQueryBuilder
         var baseTable = await GetTableMetadataAsync(definition.BaseTable, cancellationToken);
         if (baseTable == null)
         {
-            throw new InvalidOperationException($"Base table '{definition.BaseTable}' not found.");
+            throw new MorphDB.Core.Exceptions.TableNotFoundException(definition.BaseTable);
         }
 
         // Build SELECT clause
@@ -72,7 +72,7 @@ public sealed class ViewQueryBuilder
             var joinTable = await GetTableMetadataAsync(join.Table, cancellationToken);
             if (joinTable == null)
             {
-                throw new InvalidOperationException($"Join table '{join.Table}' not found.");
+                throw new MorphDB.Core.Exceptions.TableNotFoundException(join.Table);
             }
 
             sb.Append('\n');

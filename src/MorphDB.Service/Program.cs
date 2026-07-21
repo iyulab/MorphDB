@@ -95,10 +95,12 @@ try
     });
 
     // Add API services
-    builder.Services.AddControllers(options =>
-    {
-        options.Filters.Add<MorphDB.Service.Filters.ProjectExceptionFilter>();
-    });
+    builder.Services.AddControllers();
+
+    // One authority for what an escaped exception becomes on the wire. Without it, anything a
+    // controller's catch chain does not name is a framework-default 500 with an empty body.
+    builder.Services.AddExceptionHandler<MorphDB.Service.ErrorHandling.GlobalExceptionHandler>();
+    builder.Services.AddProblemDetails();
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen(options =>
     {
@@ -244,6 +246,7 @@ try
     await app.Services.EnsureMorphDbSchemaAsync();
 
     // Configure the HTTP request pipeline
+    app.UseExceptionHandler();
     app.UseSerilogRequestLogging();
     app.UseRequestTracking(); // Graceful shutdown request tracking (Phase 24)
 

@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+### Changed — error and write contracts
+
+- **A caller's mistake now answers 4xx with a code and a hint — never a 500, and never an empty
+  body.** A global exception handler is the single authority for what an escaped exception becomes
+  on the wire; live-probed paths that previously answered `500 INTERNAL_ERROR` (or a bodyless 500)
+  now answer: unknown column type on CREATE TABLE → 400 listing the supported types; unknown filter
+  column → **400 `COLUMN_NOT_FOUND`** naming it; a project id no project bears → 404; explicit null
+  into a `nullable:false` column → 400 naming the column (physical `23502`/`23505` violations
+  translate to the same `VALIDATION_ERROR` the app-layer validators produce). Anything genuinely
+  unexpected is a logged 500 carrying the fixed `INTERNAL_ERROR` envelope.
+- **An unknown filter operator is now a 400 listing the supported operators.** It previously fell
+  back to `eq` silently, so a typo became a different query with no signal.
+- **Writes naming a column the table does not declare are rejected (400 `UNKNOWN_COLUMN`) instead
+  of silently dropped.** This applies to every write door — data insert/update, batch, seed,
+  upsert, bulk import rows, and GraphQL mutations — because the write paths that previously built
+  their own SQL now all go through the write pipeline (which also means virtual constraints and
+  system-column transformers apply uniformly; batch/seed/upsert rows now get UUIDv7 ids,
+  timestamps and versions from the pipeline rather than database defaults). Callers that want the
+  old dropping behaviour opt in explicitly with `?ignoreUnknown=true`.
+- **`MISSING_PROJECT` no longer advertises an API key** the server never asks for; it says to send
+  `X-Project-Id`.
+- **Error text no longer carries internal identifiers.** CHECK-expression rejections quote the
+  expression as the caller wrote it (previously the physically-renamed form), and not-found
+  messages no longer embed project GUIDs.
+
 ### Fixed
 
 - **`CURRENT_TIMESTAMP` as a column default failed the CREATE TABLE.** SQL's clock keywords take no
@@ -48,6 +73,15 @@
   conflict is 409 `ConcurrencyConflict`, as the endpoints always advertised.
 
 ### Removed
+
+- **`POST /api/projects/{id}/archive`.** It promised "read-only mode" and no code anywhere enforced
+  it: the endpoint set a status nothing ever read, and its implementation carried a TODO for a
+  backup process the constitution rules out (operational orchestration is a non-goal). A dead
+  promise is worse than an absent feature. The `Archived`/`Archiving` status values remain readable
+  for databases that already carry them.
+- **`ISchemaMapping` / `ISchemaMappingCache`** — interfaces nothing implemented or consumed.
+
+### Removed (earlier in this cycle)
 
 - **Exception types no release ever threw**, dead since their introduction:
   `ProjectIsolationException` (error code `PROJECT_ISOLATION_VIOLATION` — nor its pre-0.7.0 name

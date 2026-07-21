@@ -1,184 +1,40 @@
-# MorphDB Version Compatibility Matrix
+# MorphDB Version Compatibility
 
-This document defines the compatibility relationships between MorphDB components: Server, SDKs, and Desk client.
+One number covers everything: a release publishes the git tag `vX.Y.Z`, the container image
+`X.Y.Z`, and the NuGet packages `X.Y.Z` together. A client and a server that share a version are a
+compatible pair. This is a 0.x line — a minor release may break you, so pin a version rather than
+`latest`; the newest one is the newest [tag](https://github.com/iyulab/MorphDB/tags).
 
-## Component Versions
+## Components
 
-| Component | Current Version | Status |
-|-----------|----------------|--------|
-| **Server** (MorphDB.Service) | 0.2.2 | Development |
-| **.NET SDK** (MorphDB.Client) | 0.2.2 | Development |
-| **Python SDK** (morphdb) | 0.13.0 | Beta |
-| **TypeScript SDK** (@morphdb/client) | 0.13.0 | Beta |
-| **Desk** (morphdb-studio) | 0.1.0 | Alpha |
+| Component | Distribution | Status |
+|-----------|--------------|--------|
+| **Server** (`ghcr.io/iyulab/morphdb`) | Container image, versioned with the repo | Released |
+| **.NET client** (`MorphDB.Client`) | NuGet, versioned with the repo | Released |
+| **TypeScript SDK** (`sdk/typescript`) | **Not published.** Reference implementation only | Reference |
+| **Python SDK** (`sdk/python`) | **Not published.** Reference implementation only | Reference |
+| **Desk** (`desk/`) | Not published; built from source | Development |
 
-## Compatibility Matrix
+The TypeScript and Python SDKs are reference implementations: they document how to talk to the
+API from those ecosystems, carry version `0.0.0`, and are hard-gated against accidental publishing.
+`pip install morphdb` installs an **unrelated project** — do not use it.
 
-### Server ↔ SDK Compatibility
+## Server ↔ .NET client
 
-| Server Version | .NET SDK | Python SDK | TypeScript SDK | Notes |
-|---------------|----------|------------|----------------|-------|
-| 0.2.x | 0.2.x | - | - | Current development |
+| Server | `MorphDB.Client` | Notes |
+|--------|------------------|-------|
+| 0.7.x | 0.7.x | Project scoping via `X-Project-Id`. `X-Tenant-Id` is gone — 0.6.x clients cannot talk to a 0.7.x server. |
+| 0.6.x | 0.6.x | Last version speaking `X-Tenant-Id`. |
 
-### Server ↔ Desk Compatibility
+Known downstream pairs: `Formbase.* 0.3.0` ↔ MorphDB `0.7.x`, `Formbase.* 0.2.0` ↔ MorphDB
+`0.6.x`. Mixing across that line fails at the first request.
 
-| Server Version | Desk Version | Notes |
-|---------------|--------------|-------|
-| 0.2.x | 0.1.x | Current development |
+## Reference SDK coverage
 
-## API Version Support
+The reference SDKs track the core surface (schema, data CRUD, query, batch, bulk, aggregation).
+They do **not** cover the Transactions and Views domains — consult `docs/API.md` for those.
 
-The MorphDB Server maintains backward compatibility within minor versions:
+## Container images
 
-| API Version | Introduced | Deprecated | Removed | Features |
-|-------------|-----------|------------|---------|----------|
-| v1 | 0.1.0 | - | - | Core CRUD, Schema, Query |
-
-## Feature Compatibility
-
-### Core Features
-
-| Feature | Server | Python SDK | TS SDK | Desk |
-|---------|--------|-----------|--------|------|
-| Schema CRUD | ✅ | ✅ | ✅ | ✅ |
-| Data CRUD | ✅ | ✅ | ✅ | ✅ |
-| Batch Operations | ✅ | ✅ | ✅ | 🔄 |
-| Query Filters | ✅ | ✅ | ✅ | ✅ |
-| Pagination | ✅ | ✅ | ✅ | ✅ |
-| Real-time (SignalR) | ✅ | 🔄 | 🔄 | 🔄 |
-| GraphQL | ✅ | ⏳ | ⏳ | ⏳ |
-| OData | ✅ | ⏳ | ⏳ | ⏳ |
-| Webhooks | ✅ | ⏳ | ⏳ | ⏳ |
-
-**Legend**: ✅ Supported | 🔄 In Progress | ⏳ Planned | ❌ Not Supported
-
-### Filter Operators
-
-| Operator | Server | Python SDK | TS SDK | Description |
-|----------|--------|-----------|--------|-------------|
-| EQ | ✅ | ✅ | ✅ | Equals |
-| NEQ | ✅ | ✅ | ✅ | Not equals |
-| GT | ✅ | ✅ | ✅ | Greater than |
-| GTE | ✅ | ✅ | ✅ | Greater than or equal |
-| LT | ✅ | ✅ | ✅ | Less than |
-| LTE | ✅ | ✅ | ✅ | Less than or equal |
-| CONTAINS | ✅ | ✅ | ✅ | String contains |
-| STARTSWITH | ✅ | ✅ | ✅ | String starts with |
-| ENDSWITH | ✅ | ✅ | ✅ | String ends with |
-| IN | ✅ | ✅ | ✅ | Value in array |
-| ISNULL | ✅ | ✅ | ✅ | Is null check |
-
-### Column Types
-
-| Type | Server | Python SDK | TS SDK | PostgreSQL |
-|------|--------|-----------|--------|------------|
-| text | ✅ | ✅ | ✅ | VARCHAR/TEXT |
-| integer | ✅ | ✅ | ✅ | INTEGER |
-| bigint | ✅ | ✅ | ✅ | BIGINT |
-| decimal | ✅ | ✅ | ✅ | DECIMAL |
-| boolean | ✅ | ✅ | ✅ | BOOLEAN |
-| date | ✅ | ✅ | ✅ | DATE |
-| timestamp | ✅ | ✅ | ✅ | TIMESTAMP |
-| uuid | ✅ | ✅ | ✅ | UUID |
-| jsonb | ✅ | ✅ | ✅ | JSONB |
-
-## Breaking Changes
-
-### v0.2.x (Current)
-
-- Dynamic schema with logical-physical separation
-- Write pipeline with virtual constraints
-- System columns (`_created_at`, `_updated_at`, `_version`)
-- Multi-project support
-
-## Upgrade Guidelines
-
-### Server Upgrade
-
-1. **Backup database** before upgrading
-2. **Check SDK compatibility** with target server version
-3. **Run migrations** if required
-4. **Update SDKs** to compatible versions
-
-### SDK Upgrade
-
-1. **Check server compatibility** before upgrading SDK
-2. **Review changelog** for breaking changes
-3. **Update type definitions** if using TypeScript
-4. **Run integration tests** after upgrade
-
-### Desk Upgrade
-
-1. **Close all connections** before upgrading
-2. **Export connection settings** if needed
-3. **Verify server compatibility**
-
-## Testing Compatibility
-
-### Integration Test Commands
-
-```bash
-# Start test server
-docker compose -f docker-compose.test.yml up -d
-
-# Run SDK integration tests
-cd sdk/python && pytest -m integration
-cd sdk/typescript && npm run test:integration
-
-# Run Desk integration tests
-cd desk && npm run test:integration
-```
-
-### Compatibility Test Matrix
-
-The CI pipeline runs compatibility tests against:
-
-| Test Scenario | Components | Status |
-|--------------|------------|--------|
-| Server + Python SDK | Latest | ✅ |
-| Server + TypeScript SDK | Latest | ✅ |
-| Server + Desk | Latest | ✅ |
-| Server (prev) + SDK (curr) | N-1 → N | ✅ |
-| Server (curr) + SDK (prev) | N → N-1 | ✅ |
-
-## Support Policy
-
-| Version Type | Support Period | Compatibility |
-|--------------|----------------|---------------|
-| Major (X.0.0) | 12 months | Breaking changes allowed |
-| Minor (0.X.0) | 6 months | Backward compatible |
-| Patch (0.0.X) | 3 months | Bug fixes only |
-
-## Known Issues
-
-### Current Compatibility Issues
-
-| Issue | Affected Versions | Workaround | Status |
-|-------|------------------|------------|--------|
-| None | - | - | - |
-
-### Resolved Issues
-
-| Issue | Affected Versions | Fixed In | Resolution |
-|-------|------------------|----------|------------|
-| - | - | - | - |
-
-## Version History
-
-### Server (MorphDB.Service)
-
-- **0.2.2** - Check expression physical name translation, error handling improvements
-- **0.2.0** - Write pipeline, virtual constraints, multi-project
-
-### .NET SDK (MorphDB.Client)
-
-- **0.2.2** - Schema, Data, Webhooks, Bulk, Realtime clients
-
-### Desk (morphdb-studio)
-
-- **0.1.0** - Initial alpha release
-
----
-
-*Last Updated: 2026-03-03*
-*Document Version: 1.1.0*
+Use `0.7.1` or newer. Images `0.6.0` and `0.7.0` ship a broken HEALTHCHECK and report themselves
+`unhealthy` forever; any orchestration waiting on that report waits forever.

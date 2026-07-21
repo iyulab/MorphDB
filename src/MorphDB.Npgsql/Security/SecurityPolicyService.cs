@@ -34,7 +34,7 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
 
         if (!tableId.HasValue)
         {
-            throw new InvalidOperationException($"Table '{request.TableName}' not found");
+            throw new MorphDB.Core.Exceptions.TableNotFoundException(request.TableName);
         }
 
         // Get next ordinal position
@@ -148,7 +148,7 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
         var existing = await GetPolicyAsync(projectId, policyId, cancellationToken);
         if (existing == null)
         {
-            throw new InvalidOperationException($"Policy '{policyId}' not found");
+            throw new MorphDB.Core.Exceptions.NotFoundException("Policy", policyId.ToString());
         }
 
         var name = request.Name ?? existing.Name;

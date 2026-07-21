@@ -51,6 +51,18 @@ public sealed class WritePipeline : IWritePipeline
         return await ExecutePipelineAsync(context);
     }
 
+    public async Task<WriteResult> UpsertAsync(
+        Guid projectId,
+        TableMetadata table,
+        IDictionary<string, object?> data,
+        IReadOnlyList<string>? keyColumns = null,
+        WriteOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        var context = CreateContext(projectId, table, data, WriteOperationType.Upsert, options, cancellationToken, keyColumns: keyColumns);
+        return await ExecutePipelineAsync(context);
+    }
+
     public async Task<WriteResult> DeleteAsync(
         Guid projectId,
         TableMetadata table,
@@ -187,7 +199,8 @@ public sealed class WritePipeline : IWritePipeline
         WriteOptions? options,
         CancellationToken cancellationToken,
         Guid? recordId = null,
-        IDictionary<string, object?>? existingData = null)
+        IDictionary<string, object?>? existingData = null,
+        IReadOnlyList<string>? keyColumns = null)
     {
         return new WriteContext
         {
@@ -198,6 +211,7 @@ public sealed class WritePipeline : IWritePipeline
             Data = new Dictionary<string, object?>(data),
             OriginalData = new Dictionary<string, object?>(data),
             ExistingData = existingData,
+            KeyColumns = keyColumns,
             Options = options ?? WriteOptions.Default,
             SecurityContext = _securityContextAccessor.ContextOrNull,
             CancellationToken = cancellationToken

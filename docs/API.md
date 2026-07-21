@@ -100,11 +100,15 @@ GET /api/data/customers?filter=grade:eq:VIP&orderBy=_created_at:desc&page=1&page
 | `gte` | Greater than or equal | `age:gte:18` |
 | `lt` | Less than | `stock:lt:10` |
 | `lte` | Less than or equal | `score:lte:50` |
+| `like` | Pattern match (case-sensitive, `%` wildcards) | `name:like:Jo%` |
+| `ilike` | Pattern match (case-insensitive) | `name:ilike:jo%` |
 | `contains` | String contains | `name:contains:john` |
 | `startswith` | String starts with | `email:startswith:admin` |
 | `endswith` | String ends with | `file:endswith:.pdf` |
-| `in` | Value in list | `status:in:active,pending` |
-| `isnull` | Is null check | `email:isnull:true` |
+
+An operator outside this list is answered with `400` listing the supported set — it is never
+silently coerced. (`in`/`isnull` were documented here once but no server ever accepted them on
+this parameter; use `POST /api/data/{table}/query` for those.)
 
 ### Batch Operations
 
@@ -277,30 +281,29 @@ Webhook payload:
 
 ## Write Options
 
-Control virtual constraint validation and automatic field management during write operations.
+Every write door — data CRUD, batch, seed, upsert, bulk import rows, GraphQL mutations — goes
+through the same write pipeline: virtual constraints (required / unique / FK / CHECK) are
+validated and system columns (`_id`, timestamps, `_version`, audit fields) are applied uniformly.
 
-### Usage
-
-Pass `options` in the request body for data operations:
+The request body of a data write is the record itself — there is no `{ "data": ..., "options": ... }`
+envelope:
 
 ```http
 POST /api/data/{table}
 Content-Type: application/json
 
-{
-  "data": { "name": "John", "email": "john@example.com" },
-  "options": {
-    "validateRequired": true,
-    "validateForeignKeys": true,
-    "validateUnique": true,
-    "validateCheck": true,
-    "applyDefaults": true,
-    "applyTimestamps": true,
-    "applyVersion": true,
-    "expectedVersion": 1
-  }
-}
+{ "name": "John", "email": "john@example.com" }
 ```
+
+Behaviour is selected per request with query parameters:
+
+| Parameter | Effect |
+|-----------|--------|
+| `?mode=draft` | Skips validation and stores the row with `_row_state = 'draft'` (requires row state enabled on the table) |
+| `?ignoreUnknown=true` | Fields naming no declared column are dropped instead of failing the write. Without it, an unknown field is a `400 UNKNOWN_COLUMN` naming the field — a typo must not become silent data loss |
+
+The validation and auto-apply behaviours below are pipeline policy (what the server enforces),
+not request-body switches.
 
 ### Validation Options
 
@@ -494,3 +497,32 @@ GET /health        # Overall health
 GET /health/live   # Liveness probe
 GET /health/ready  # Readiness probe
 ```
+
+---
+
+## Errors
+
+Every error is a JSON envelope — **no path answers a 5xx with an empty body**:
+
+```json
+{ "error": "ValidationError", "message": "what went wrong, and what is possible", "code": "VALIDATION_ERROR" }
+```
+
+`code` is the machine-readable contract; branch on it, not on `message` text. A `4xx` means the
+request must change before retrying; a `500 INTERNAL_ERROR` is a service defect (its message is a
+fixed string — internal exception text never reaches the wire) and retrying may succeed.
+
+| Status | Code | When |
+|--------|------|------|
+| 400 | `VALIDATION_ERROR` | A value failed a virtual constraint (required / unique / FK / CHECK), including physical `NOT NULL`/`UNIQUE` violations, which translate to the same code |
+| 400 | `UNKNOWN_COLUMN` | A write named a column the table does not declare (see `?ignoreUnknown=true`) |
+| 400 | `COLUMN_NOT_FOUND` | A query referenced a column the table does not have |
+| 400 | `INVALID_FILTER` | A malformed `filter` expression, or an unknown filter operator |
+| 400 | `INVALID_ARGUMENT` | A malformed value elsewhere in the request (e.g. an unknown column type — the message lists the supported set) |
+| 400 | `MISSING_PROJECT` | The request did not say which project it applies to — send `X-Project-Id` |
+| 404 | `TABLE_NOT_FOUND` | The table (or the project the request scoped it to) does not exist |
+| 404 | `RECORD_NOT_FOUND` | The record id does not exist in the table |
+| 404 | `NOT_FOUND` | Another addressable resource (job, view, policy…) does not exist |
+| 409 | `DUPLICATE_NAME` | Creating a table/column under a name that is taken |
+| 409 | `SCHEMA_VERSION_CONFLICT` | An optimistic schema update lost the race |
+| 500 | `INTERNAL_ERROR` | Our defect, logged on the server — never your request's fault |

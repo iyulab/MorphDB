@@ -5,6 +5,7 @@ using MorphDB.Core.Abstractions;
 using MorphDB.Core.Encryption;
 using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
+using MorphDB.Core.Pipeline;
 using MorphDB.Core.Security;
 using MorphDB.Npgsql.Dml;
 using MorphDB.Npgsql.Infrastructure;
@@ -25,6 +26,7 @@ public sealed class PostgresDataService : IMorphDataService
     private readonly IMetadataRepository _metadataRepository;
     private readonly ISecurityPolicyService _securityPolicyService;
     private readonly ISecurityContextAccessor _securityContextAccessor;
+    private readonly IWritePipeline _writePipeline;
     private readonly ILookupResolver? _lookupResolver;
     private readonly IRollupResolver? _rollupResolver;
     private readonly IFormulaResolver? _formulaResolver;
@@ -40,6 +42,7 @@ public sealed class PostgresDataService : IMorphDataService
         IMetadataRepository metadataRepository,
         ISecurityPolicyService securityPolicyService,
         ISecurityContextAccessor securityContextAccessor,
+        IWritePipeline writePipeline,
         ILookupResolver? lookupResolver = null,
         IRollupResolver? rollupResolver = null,
         IFormulaResolver? formulaResolver = null,
@@ -51,6 +54,7 @@ public sealed class PostgresDataService : IMorphDataService
         _metadataRepository = metadataRepository ?? throw new ArgumentNullException(nameof(metadataRepository));
         _securityPolicyService = securityPolicyService ?? throw new ArgumentNullException(nameof(securityPolicyService));
         _securityContextAccessor = securityContextAccessor ?? throw new ArgumentNullException(nameof(securityContextAccessor));
+        _writePipeline = writePipeline ?? throw new ArgumentNullException(nameof(writePipeline));
         _lookupResolver = lookupResolver;
         _rollupResolver = rollupResolver;
         _formulaResolver = formulaResolver;
@@ -105,27 +109,12 @@ public sealed class PostgresDataService : IMorphDataService
         IDictionary<string, object?> data,
         CancellationToken cancellationToken = default)
     {
+        // Every write goes through the pipeline. This service used to build its own SQL, which made
+        // it a second door past every validator and transformer: batch, seed, transaction and
+        // GraphQL callers got no virtual constraints and silent unknown-field drops. One door now.
         var table = await GetTableWithColumnsAsync(projectId, tableName, cancellationToken);
-
-        // Ensure project_id is set
-        var dataWithProject = EnsureProjectId(data, projectId);
-
-        // Encrypt data before storing
-        var encryptedData = EncryptRowData(projectId, tableName, dataWithProject, table.Columns);
-
-        // Map logical names to physical and prepare parameters
-        var (columns, parameters, values) = PrepareInsertParameters(encryptedData, table.Columns);
-
-        var sql = DmlBuilder.BuildInsert(table.PhysicalName, columns, parameters);
-
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-        var result = await connection.QuerySingleAsync<dynamic>(
-            new CommandDefinition(sql, values, cancellationToken: cancellationToken));
-
-        var mapped = MapToLogicalDictionary(result, table.Columns);
-
-        // Return decrypted data to the caller
-        return DecryptRowData(projectId, tableName, mapped, table.Columns);
+        var result = await _writePipeline.InsertAsync(projectId, table, data, null, cancellationToken);
+        return UnwrapOrThrow(result, tableName);
     }
 
     /// <inheritdoc />
@@ -137,29 +126,10 @@ public sealed class PostgresDataService : IMorphDataService
         CancellationToken cancellationToken = default)
     {
         var table = await GetTableWithColumnsAsync(projectId, tableName, cancellationToken);
-        var idColumn = GetPrimaryKeyColumn(table);
-
-        // Encrypt data before storing
-        var encryptedData = EncryptRowData(projectId, tableName, data, table.Columns);
-
-        // Map logical names to physical and prepare parameters
-        var (setColumns, values) = PrepareUpdateParameters(encryptedData, table.Columns);
-        values.id = id;
-
-        var whereClause = DmlBuilder.BuildIdWhereClause(idColumn.PhysicalName);
-        var sql = DmlBuilder.BuildUpdate(table.PhysicalName, setColumns, whereClause);
-
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-        var result = await connection.QuerySingleOrDefaultAsync<dynamic>(
-            new CommandDefinition(sql, values, cancellationToken: cancellationToken));
-
-        if (result is null)
+        var result = await _writePipeline.UpdateAsync(projectId, table, id, data, null, null, cancellationToken);
+        if (!result.Success && result.Errors.Any(e => e.Code == ValidationErrorCodes.NotFound))
             throw new NotFoundException($"Record with id '{id}' not found in table '{tableName}'");
-
-        var mapped = MapToLogicalDictionary(result, table.Columns);
-
-        // Return decrypted data to the caller
-        return DecryptRowData(projectId, tableName, mapped, table.Columns);
+        return UnwrapOrThrow(result, tableName);
     }
 
     /// <inheritdoc />
@@ -170,16 +140,9 @@ public sealed class PostgresDataService : IMorphDataService
         CancellationToken cancellationToken = default)
     {
         var table = await GetTableWithColumnsAsync(projectId, tableName, cancellationToken);
-        var idColumn = GetPrimaryKeyColumn(table);
-
-        var whereClause = DmlBuilder.BuildIdWhereClause(idColumn.PhysicalName);
-        var sql = DmlBuilder.BuildDelete(table.PhysicalName, whereClause);
-
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-        var affectedRows = await connection.ExecuteAsync(
-            new CommandDefinition(sql, new { id }, cancellationToken: cancellationToken));
-
-        return affectedRows > 0;
+        var result = await _writePipeline.DeleteAsync(projectId, table, id, null, null, cancellationToken);
+        // The historical contract: false for a record that was not there, not an exception.
+        return result.Success;
     }
 
     /// <inheritdoc />
@@ -194,33 +157,20 @@ public sealed class PostgresDataService : IMorphDataService
 
         var table = await GetTableWithColumnsAsync(projectId, tableName, cancellationToken);
 
-        // For batch insert, use individual inserts in a transaction for simplicity
-        // This could be optimized with COPY or multi-row VALUES in future
+        // Row-by-row through the pipeline (this path always inserted row-by-row), atomic via the
+        // ambient connection scope: the executor picks up this transaction instead of opening its own.
         var results = new List<IDictionary<string, object?>>(records.Count);
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        using var scope = ConnectionScope.Begin(connection, transaction);
 
         try
         {
             foreach (var record in records)
             {
-                // Ensure project_id is set for each record
-                var recordWithProject = EnsureProjectId(record, projectId);
-
-                // Encrypt data before storing
-                var encryptedRecord = EncryptRowData(projectId, tableName, recordWithProject, table.Columns);
-
-                var (columns, parameters, values) = PrepareInsertParameters(encryptedRecord, table.Columns);
-                var sql = DmlBuilder.BuildInsert(table.PhysicalName, columns, parameters);
-
-                var result = await connection.QuerySingleAsync<dynamic>(
-                    new CommandDefinition(sql, values, transaction: transaction, cancellationToken: cancellationToken));
-
-                var mapped = MapToLogicalDictionary(result, table.Columns);
-
-                // Return decrypted data to the caller
-                results.Add(DecryptRowData(projectId, tableName, mapped, table.Columns));
+                var result = await _writePipeline.InsertAsync(projectId, table, record, null, cancellationToken);
+                results.Add(UnwrapOrThrow(result, tableName));
             }
 
             await transaction.CommitAsync(cancellationToken);
@@ -244,7 +194,9 @@ public sealed class PostgresDataService : IMorphDataService
     {
         var table = await GetTableWithColumnsAsync(projectId, tableName, cancellationToken);
 
-        // Map logical names to physical and prepare parameters
+        // Map logical names to physical and prepare parameters. Unlike the pipeline executor's
+        // historical skip, this service's Prepare* rejects unknown columns outright — the bulk
+        // UPDATE door never silently dropped fields (pinned by ErrorSurfaceContractTests).
         var (setColumns, values) = PrepareUpdateParameters(data, table.Columns);
 
         // Get physical WHERE clause SQL from the query
@@ -330,40 +282,29 @@ public sealed class PostgresDataService : IMorphDataService
         CancellationToken cancellationToken = default)
     {
         var table = await GetTableWithColumnsAsync(projectId, tableName, cancellationToken);
-
-        // Validate key columns exist
-        var columnMap = table.Columns.ToDictionary(c => c.LogicalName, c => c);
-        foreach (var key in keyColumns)
-        {
-            if (!columnMap.ContainsKey(key))
-                throw new ValidationException($"Key column '{key}' not found in table '{tableName}'");
-        }
-
-        // Map logical key columns to physical
-        var physicalKeyColumns = keyColumns.Select(k => columnMap[k].PhysicalName).ToList();
-
-        // Ensure project_id is set
-        var dataWithProject = EnsureProjectId(data, projectId);
-
-        // Encrypt data before storing
-        var encryptedData = EncryptRowData(projectId, tableName, dataWithProject, table.Columns);
-
-        // Prepare insert parameters
-        var (columns, parameters, values) = PrepareInsertParameters(encryptedData, table.Columns);
-
-        var sql = DmlBuilder.BuildUpsert(table.PhysicalName, columns, parameters, physicalKeyColumns);
-
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-        var result = await connection.QuerySingleAsync<dynamic>(
-            new CommandDefinition(sql, values, cancellationToken: cancellationToken));
-
-        var mapped = MapToLogicalDictionary(result, table.Columns);
-
-        // Return decrypted data to the caller
-        return DecryptRowData(projectId, tableName, mapped, table.Columns);
+        var result = await _writePipeline.UpsertAsync(projectId, table, data, keyColumns, null, cancellationToken);
+        return UnwrapOrThrow(result, tableName);
     }
 
     #region Private Helper Methods
+
+    /// <summary>
+    /// This interface reports failure by exception; the pipeline reports it as data. The seam
+    /// translates: pipeline validation errors become the ValidationException callers of this
+    /// service have always received.
+    /// </summary>
+    private static IDictionary<string, object?> UnwrapOrThrow(WriteResult result, string tableName)
+    {
+        if (result.Success)
+        {
+            return result.Data ?? new Dictionary<string, object?>();
+        }
+
+        var message = result.Errors.Count == 1
+            ? result.Errors[0].Message
+            : string.Join("; ", result.Errors.Select(e => e.Message));
+        throw new ValidationException($"Write to table '{tableName}' failed: {message}");
+    }
 
     private async Task<TableMetadata> GetTableWithColumnsAsync(
         Guid projectId,
@@ -373,7 +314,7 @@ public sealed class PostgresDataService : IMorphDataService
         var table = await _metadataRepository.GetTableByNameAsync(projectId, tableName, includeColumns: true, cancellationToken);
 
         if (table is null)
-            throw new NotFoundException($"Table '{tableName}' not found for project '{projectId}'");
+            throw new TableNotFoundException(tableName);
 
         if (table.Columns.Count == 0)
             throw new InvalidOperationException($"Table '{tableName}' has no columns");

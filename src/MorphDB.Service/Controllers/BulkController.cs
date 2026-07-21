@@ -32,9 +32,6 @@ public sealed class BulkController : ControllerBase
 
     private Guid GetProjectId() => _projectContext.ProjectId;
 
-    private IActionResult Unhandled(Exception ex, [System.Runtime.CompilerServices.CallerMemberName] string action = "") =>
-        UnhandledErrors.Map(this, _logger, ex, action);
-
     #region Import Operations
 
     /// <summary>
@@ -49,49 +46,30 @@ public sealed class BulkController : ControllerBase
         [FromQuery] CsvImportApiRequest? options,
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var projectId = GetProjectId();
+        var projectId = GetProjectId();
 
-            var csvOptions = new CsvImportOptions
-            {
-                Delimiter = options?.Delimiter ?? ',',
-                HasHeader = options?.HasHeader ?? true,
-                DateFormat = options?.DateFormat,
-                TrimWhitespace = options?.TrimWhitespace ?? true,
-                NullHandling = ParseNullHandling(options?.NullHandling),
-                DuplicateHandling = ParseDuplicateHandling(options?.DuplicateHandling),
-                KeyColumns = options?.KeyColumns
-            };
+        var csvOptions = new CsvImportOptions
+        {
+            Delimiter = options?.Delimiter ?? ',',
+            HasHeader = options?.HasHeader ?? true,
+            DateFormat = options?.DateFormat,
+            TrimWhitespace = options?.TrimWhitespace ?? true,
+            NullHandling = ParseNullHandling(options?.NullHandling),
+            DuplicateHandling = ParseDuplicateHandling(options?.DuplicateHandling),
+            KeyColumns = options?.KeyColumns
+        };
 
-            var job = await _bulkService.StartCsvImportAsync(
-                projectId,
-                table,
-                Request.Body,
-                csvOptions,
-                cancellationToken);
+        var job = await _bulkService.StartCsvImportAsync(
+            projectId,
+            table,
+            Request.Body,
+            csvOptions,
+            cancellationToken);
 
-            return AcceptedAtAction(
-                nameof(GetImportJob),
-                new { jobId = job.JobId },
-                ToImportJobResponse(job));
-        }
-        catch (TableNotFoundException ex)
-        {
-            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
-        }
-        catch (NotFoundException ex)
-        {
-            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
-        }
-        catch (ArgumentException ex) when (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
-        {
-            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            return Unhandled(ex);
-        }
+        return AcceptedAtAction(
+            nameof(GetImportJob),
+            new { jobId = job.JobId },
+            ToImportJobResponse(job));
     }
 
     /// <summary>
@@ -106,45 +84,26 @@ public sealed class BulkController : ControllerBase
         [FromQuery] JsonImportApiRequest? options,
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var projectId = GetProjectId();
+        var projectId = GetProjectId();
 
-            var jsonOptions = new JsonImportOptions
-            {
-                DateFormat = options?.DateFormat,
-                DuplicateHandling = ParseDuplicateHandling(options?.DuplicateHandling),
-                KeyColumns = options?.KeyColumns
-            };
+        var jsonOptions = new JsonImportOptions
+        {
+            DateFormat = options?.DateFormat,
+            DuplicateHandling = ParseDuplicateHandling(options?.DuplicateHandling),
+            KeyColumns = options?.KeyColumns
+        };
 
-            var job = await _bulkService.StartJsonImportAsync(
-                projectId,
-                table,
-                Request.Body,
-                jsonOptions,
-                cancellationToken);
+        var job = await _bulkService.StartJsonImportAsync(
+            projectId,
+            table,
+            Request.Body,
+            jsonOptions,
+            cancellationToken);
 
-            return AcceptedAtAction(
-                nameof(GetImportJob),
-                new { jobId = job.JobId },
-                ToImportJobResponse(job));
-        }
-        catch (TableNotFoundException ex)
-        {
-            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
-        }
-        catch (NotFoundException ex)
-        {
-            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
-        }
-        catch (ArgumentException ex) when (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
-        {
-            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            return Unhandled(ex);
-        }
+        return AcceptedAtAction(
+            nameof(GetImportJob),
+            new { jobId = job.JobId },
+            ToImportJobResponse(job));
     }
 
     /// <summary>
@@ -159,45 +118,26 @@ public sealed class BulkController : ControllerBase
         [FromQuery] JsonImportApiRequest? options,
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var projectId = GetProjectId();
+        var projectId = GetProjectId();
 
-            var jsonOptions = new JsonImportOptions
-            {
-                DateFormat = options?.DateFormat,
-                DuplicateHandling = ParseDuplicateHandling(options?.DuplicateHandling),
-                KeyColumns = options?.KeyColumns
-            };
+        var jsonOptions = new JsonImportOptions
+        {
+            DateFormat = options?.DateFormat,
+            DuplicateHandling = ParseDuplicateHandling(options?.DuplicateHandling),
+            KeyColumns = options?.KeyColumns
+        };
 
-            var job = await _bulkService.StartNdjsonImportAsync(
-                projectId,
-                table,
-                Request.Body,
-                jsonOptions,
-                cancellationToken);
+        var job = await _bulkService.StartNdjsonImportAsync(
+            projectId,
+            table,
+            Request.Body,
+            jsonOptions,
+            cancellationToken);
 
-            return AcceptedAtAction(
-                nameof(GetImportJob),
-                new { jobId = job.JobId },
-                ToImportJobResponse(job));
-        }
-        catch (TableNotFoundException ex)
-        {
-            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
-        }
-        catch (NotFoundException ex)
-        {
-            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
-        }
-        catch (ArgumentException ex) when (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
-        {
-            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            return Unhandled(ex);
-        }
+        return AcceptedAtAction(
+            nameof(GetImportJob),
+            new { jobId = job.JobId },
+            ToImportJobResponse(job));
     }
 
     /// <summary>
@@ -208,26 +148,19 @@ public sealed class BulkController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetImportJob(Guid jobId, CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var job = await _bulkService.GetImportJobAsync(jobId, cancellationToken);
+        var job = await _bulkService.GetImportJobAsync(jobId, cancellationToken);
 
-            if (job == null)
+        if (job == null)
+        {
+            return NotFound(new ErrorResponse
             {
-                return NotFound(new ErrorResponse
-                {
-                    Error = "NotFound",
-                    Message = $"Import job with ID '{jobId}' not found",
-                    Code = "JOB_NOT_FOUND"
-                });
-            }
+                Error = "NotFound",
+                Message = $"Import job with ID '{jobId}' not found",
+                Code = "JOB_NOT_FOUND"
+            });
+        }
 
-            return Ok(ToImportJobResponse(job));
-        }
-        catch (Exception ex)
-        {
-            return Unhandled(ex);
-        }
+        return Ok(ToImportJobResponse(job));
     }
 
     /// <summary>
@@ -240,16 +173,9 @@ public sealed class BulkController : ControllerBase
         [FromQuery] int offset = 0,
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var projectId = GetProjectId();
-            var jobs = await _bulkService.ListImportJobsAsync(projectId, limit, offset, cancellationToken);
-            return Ok(jobs.Select(ToImportJobResponse).ToList());
-        }
-        catch (Exception ex)
-        {
-            return Unhandled(ex);
-        }
+        var projectId = GetProjectId();
+        var jobs = await _bulkService.ListImportJobsAsync(projectId, limit, offset, cancellationToken);
+        return Ok(jobs.Select(ToImportJobResponse).ToList());
     }
 
     #endregion
@@ -267,43 +193,24 @@ public sealed class BulkController : ControllerBase
         [FromBody] CsvExportApiRequest? options,
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var projectId = GetProjectId();
+        var projectId = GetProjectId();
 
-            var csvOptions = new CsvExportOptions
-            {
-                Delimiter = options?.Delimiter ?? ',',
-                IncludeHeader = options?.IncludeHeader ?? true,
-                DateFormat = options?.DateFormat,
-                Columns = options?.Columns,
-                Filter = options?.Filter,
-                OrderBy = options?.OrderBy
-            };
+        var csvOptions = new CsvExportOptions
+        {
+            Delimiter = options?.Delimiter ?? ',',
+            IncludeHeader = options?.IncludeHeader ?? true,
+            DateFormat = options?.DateFormat,
+            Columns = options?.Columns,
+            Filter = options?.Filter,
+            OrderBy = options?.OrderBy
+        };
 
-            var job = await _bulkService.StartCsvExportAsync(projectId, table, csvOptions, cancellationToken);
+        var job = await _bulkService.StartCsvExportAsync(projectId, table, csvOptions, cancellationToken);
 
-            return AcceptedAtAction(
-                nameof(GetExportJob),
-                new { jobId = job.JobId },
-                ToExportJobResponse(job));
-        }
-        catch (TableNotFoundException ex)
-        {
-            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
-        }
-        catch (NotFoundException ex)
-        {
-            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
-        }
-        catch (ArgumentException ex) when (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
-        {
-            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            return Unhandled(ex);
-        }
+        return AcceptedAtAction(
+            nameof(GetExportJob),
+            new { jobId = job.JobId },
+            ToExportJobResponse(job));
     }
 
     /// <summary>
@@ -317,42 +224,23 @@ public sealed class BulkController : ControllerBase
         [FromBody] JsonExportApiRequest? options,
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var projectId = GetProjectId();
+        var projectId = GetProjectId();
 
-            var jsonOptions = new JsonExportOptions
-            {
-                Pretty = options?.Pretty ?? false,
-                DateFormat = options?.DateFormat,
-                Columns = options?.Columns,
-                Filter = options?.Filter,
-                OrderBy = options?.OrderBy
-            };
+        var jsonOptions = new JsonExportOptions
+        {
+            Pretty = options?.Pretty ?? false,
+            DateFormat = options?.DateFormat,
+            Columns = options?.Columns,
+            Filter = options?.Filter,
+            OrderBy = options?.OrderBy
+        };
 
-            var job = await _bulkService.StartJsonExportAsync(projectId, table, jsonOptions, cancellationToken);
+        var job = await _bulkService.StartJsonExportAsync(projectId, table, jsonOptions, cancellationToken);
 
-            return AcceptedAtAction(
-                nameof(GetExportJob),
-                new { jobId = job.JobId },
-                ToExportJobResponse(job));
-        }
-        catch (TableNotFoundException ex)
-        {
-            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
-        }
-        catch (NotFoundException ex)
-        {
-            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
-        }
-        catch (ArgumentException ex) when (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
-        {
-            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            return Unhandled(ex);
-        }
+        return AcceptedAtAction(
+            nameof(GetExportJob),
+            new { jobId = job.JobId },
+            ToExportJobResponse(job));
     }
 
     /// <summary>
@@ -366,42 +254,23 @@ public sealed class BulkController : ControllerBase
         [FromBody] XlsxExportApiRequest? options,
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var projectId = GetProjectId();
+        var projectId = GetProjectId();
 
-            var xlsxOptions = new XlsxExportOptions
-            {
-                SheetName = options?.SheetName ?? "Data",
-                IncludeHeader = options?.IncludeHeader ?? true,
-                Columns = options?.Columns,
-                Filter = options?.Filter,
-                OrderBy = options?.OrderBy
-            };
+        var xlsxOptions = new XlsxExportOptions
+        {
+            SheetName = options?.SheetName ?? "Data",
+            IncludeHeader = options?.IncludeHeader ?? true,
+            Columns = options?.Columns,
+            Filter = options?.Filter,
+            OrderBy = options?.OrderBy
+        };
 
-            var job = await _bulkService.StartXlsxExportAsync(projectId, table, xlsxOptions, cancellationToken);
+        var job = await _bulkService.StartXlsxExportAsync(projectId, table, xlsxOptions, cancellationToken);
 
-            return AcceptedAtAction(
-                nameof(GetExportJob),
-                new { jobId = job.JobId },
-                ToExportJobResponse(job));
-        }
-        catch (TableNotFoundException ex)
-        {
-            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
-        }
-        catch (NotFoundException ex)
-        {
-            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = ex.ErrorCode });
-        }
-        catch (ArgumentException ex) when (ex.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
-        {
-            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            return Unhandled(ex);
-        }
+        return AcceptedAtAction(
+            nameof(GetExportJob),
+            new { jobId = job.JobId },
+            ToExportJobResponse(job));
     }
 
     /// <summary>
@@ -412,26 +281,19 @@ public sealed class BulkController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetExportJob(Guid jobId, CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var job = await _bulkService.GetExportJobAsync(jobId, cancellationToken);
+        var job = await _bulkService.GetExportJobAsync(jobId, cancellationToken);
 
-            if (job == null)
+        if (job == null)
+        {
+            return NotFound(new ErrorResponse
             {
-                return NotFound(new ErrorResponse
-                {
-                    Error = "NotFound",
-                    Message = $"Export job with ID '{jobId}' not found",
-                    Code = "JOB_NOT_FOUND"
-                });
-            }
+                Error = "NotFound",
+                Message = $"Export job with ID '{jobId}' not found",
+                Code = "JOB_NOT_FOUND"
+            });
+        }
 
-            return Ok(ToExportJobResponse(job));
-        }
-        catch (Exception ex)
-        {
-            return Unhandled(ex);
-        }
+        return Ok(ToExportJobResponse(job));
     }
 
     /// <summary>
@@ -443,66 +305,59 @@ public sealed class BulkController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> DownloadExport(Guid jobId, CancellationToken cancellationToken = default)
     {
-        try
+        var job = await _bulkService.GetExportJobAsync(jobId, cancellationToken);
+
+        if (job == null)
         {
-            var job = await _bulkService.GetExportJobAsync(jobId, cancellationToken);
-
-            if (job == null)
+            return NotFound(new ErrorResponse
             {
-                return NotFound(new ErrorResponse
-                {
-                    Error = "NotFound",
-                    Message = $"Export job with ID '{jobId}' not found",
-                    Code = "JOB_NOT_FOUND"
-                });
-            }
-
-            if (job.Status != BulkJobStatus.Completed)
-            {
-                return BadRequest(new ErrorResponse
-                {
-                    Error = "BadRequest",
-                    Message = $"Export job is not completed. Current status: {job.Status}",
-                    Code = "JOB_NOT_COMPLETED"
-                });
-            }
-
-            var contentType = job.Format switch
-            {
-                ExportFormat.Csv => "text/csv",
-                ExportFormat.Json => "application/json",
-                ExportFormat.Xlsx => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                _ => "application/octet-stream"
-            };
-
-            var extension = job.Format switch
-            {
-                ExportFormat.Csv => "csv",
-                ExportFormat.Json => "json",
-                ExportFormat.Xlsx => "xlsx",
-                _ => "bin"
-            };
-
-            var fileName = $"{job.TableName}_{job.JobId:N}.{extension}";
-
-            // Try to get stored export data first (processed by background service)
-            var storedStream = await _bulkService.GetStoredExportDataAsync(jobId, cancellationToken);
-            if (storedStream != null)
-            {
-                return File(storedStream, contentType, fileName);
-            }
-
-            // Fallback: stream export on-the-fly if not stored
-            var stream = new MemoryStream();
-            await _bulkService.StreamExportAsync(jobId, stream, cancellationToken);
-            stream.Position = 0;
-
-            return File(stream, contentType, fileName);
+                Error = "NotFound",
+                Message = $"Export job with ID '{jobId}' not found",
+                Code = "JOB_NOT_FOUND"
+            });
         }
-        catch (Exception ex)
+
+        if (job.Status != BulkJobStatus.Completed)
         {
-            return Unhandled(ex);
+            return BadRequest(new ErrorResponse
+            {
+                Error = "BadRequest",
+                Message = $"Export job is not completed. Current status: {job.Status}",
+                Code = "JOB_NOT_COMPLETED"
+            });
         }
+
+        var contentType = job.Format switch
+        {
+            ExportFormat.Csv => "text/csv",
+            ExportFormat.Json => "application/json",
+            ExportFormat.Xlsx => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            _ => "application/octet-stream"
+        };
+
+        var extension = job.Format switch
+        {
+            ExportFormat.Csv => "csv",
+            ExportFormat.Json => "json",
+            ExportFormat.Xlsx => "xlsx",
+            _ => "bin"
+        };
+
+        var fileName = $"{job.TableName}_{job.JobId:N}.{extension}";
+
+        // Try to get stored export data first (processed by background service)
+        var storedStream = await _bulkService.GetStoredExportDataAsync(jobId, cancellationToken);
+        if (storedStream != null)
+        {
+            return File(storedStream, contentType, fileName);
+        }
+
+        // Fallback: stream export on-the-fly if not stored
+        var stream = new MemoryStream();
+        await _bulkService.StreamExportAsync(jobId, stream, cancellationToken);
+        stream.Position = 0;
+
+        return File(stream, contentType, fileName);
     }
 
     /// <summary>
@@ -515,16 +370,9 @@ public sealed class BulkController : ControllerBase
         [FromQuery] int offset = 0,
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var projectId = GetProjectId();
-            var jobs = await _bulkService.ListExportJobsAsync(projectId, limit, offset, cancellationToken);
-            return Ok(jobs.Select(ToExportJobResponse).ToList());
-        }
-        catch (Exception ex)
-        {
-            return Unhandled(ex);
-        }
+        var projectId = GetProjectId();
+        var jobs = await _bulkService.ListExportJobsAsync(projectId, limit, offset, cancellationToken);
+        return Ok(jobs.Select(ToExportJobResponse).ToList());
     }
 
     #endregion
@@ -539,36 +387,29 @@ public sealed class BulkController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetJobProgress(Guid jobId, CancellationToken cancellationToken = default)
     {
-        try
+        var progress = await _bulkService.GetJobProgressAsync(jobId, cancellationToken);
+
+        if (progress == null)
         {
-            var progress = await _bulkService.GetJobProgressAsync(jobId, cancellationToken);
-
-            if (progress == null)
+            return NotFound(new ErrorResponse
             {
-                return NotFound(new ErrorResponse
-                {
-                    Error = "NotFound",
-                    Message = $"Job with ID '{jobId}' not found",
-                    Code = "JOB_NOT_FOUND"
-                });
-            }
-
-            return Ok(new JobProgressApiResponse
-            {
-                JobId = progress.JobId,
-                Status = progress.Status.ToString().ToLowerInvariant(),
-                TotalRows = progress.TotalRows,
-                ProcessedRows = progress.ProcessedRows,
-                SuccessCount = progress.SuccessCount,
-                ErrorCount = progress.ErrorCount,
-                PercentComplete = progress.PercentComplete,
-                EstimatedTimeRemaining = progress.EstimatedTimeRemaining
+                Error = "NotFound",
+                Message = $"Job with ID '{jobId}' not found",
+                Code = "JOB_NOT_FOUND"
             });
         }
-        catch (Exception ex)
+
+        return Ok(new JobProgressApiResponse
         {
-            return Unhandled(ex);
-        }
+            JobId = progress.JobId,
+            Status = progress.Status.ToString().ToLowerInvariant(),
+            TotalRows = progress.TotalRows,
+            ProcessedRows = progress.ProcessedRows,
+            SuccessCount = progress.SuccessCount,
+            ErrorCount = progress.ErrorCount,
+            PercentComplete = progress.PercentComplete,
+            EstimatedTimeRemaining = progress.EstimatedTimeRemaining
+        });
     }
 
     /// <summary>
@@ -579,26 +420,19 @@ public sealed class BulkController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> CancelJob(Guid jobId, CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var cancelled = await _bulkService.CancelJobAsync(jobId, cancellationToken);
+        var cancelled = await _bulkService.CancelJobAsync(jobId, cancellationToken);
 
-            if (!cancelled)
+        if (!cancelled)
+        {
+            return NotFound(new ErrorResponse
             {
-                return NotFound(new ErrorResponse
-                {
-                    Error = "NotFound",
-                    Message = $"Job with ID '{jobId}' not found or cannot be cancelled",
-                    Code = "JOB_NOT_FOUND"
-                });
-            }
+                Error = "NotFound",
+                Message = $"Job with ID '{jobId}' not found or cannot be cancelled",
+                Code = "JOB_NOT_FOUND"
+            });
+        }
 
-            return NoContent();
-        }
-        catch (Exception ex)
-        {
-            return Unhandled(ex);
-        }
+        return NoContent();
     }
 
     #endregion

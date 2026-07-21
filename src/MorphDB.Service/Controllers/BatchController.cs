@@ -44,51 +44,44 @@ public sealed class BatchController : ControllerBase
         [FromBody] BatchRequest request,
         CancellationToken cancellationToken = default)
     {
-        try
+        var projectId = GetProjectId();
+
+        if (request.Operations == null || request.Operations.Count == 0)
         {
-            var projectId = GetProjectId();
-
-            if (request.Operations == null || request.Operations.Count == 0)
+            return BadRequest(new ErrorResponse
             {
-                return BadRequest(new ErrorResponse
-                {
-                    Error = "BadRequest",
-                    Message = "No operations provided",
-                    Code = "EMPTY_BATCH"
-                });
-            }
-
-            var results = new List<BatchOperationResult>();
-            var successCount = 0;
-            var failureCount = 0;
-
-            for (var i = 0; i < request.Operations.Count; i++)
-            {
-                var operation = request.Operations[i];
-                var result = await ExecuteOperationAsync(projectId, i, operation, cancellationToken);
-                results.Add(result);
-
-                if (result.Success)
-                {
-                    successCount++;
-                }
-                else
-                {
-                    failureCount++;
-                }
-            }
-
-            return Ok(new BatchResponse
-            {
-                Results = results,
-                SuccessCount = successCount,
-                FailureCount = failureCount
+                Error = "BadRequest",
+                Message = "No operations provided",
+                Code = "EMPTY_BATCH"
             });
         }
-        catch (Exception ex)
+
+        var results = new List<BatchOperationResult>();
+        var successCount = 0;
+        var failureCount = 0;
+
+        for (var i = 0; i < request.Operations.Count; i++)
         {
-            return UnhandledErrors.Map(this, _logger, ex, "batch execute");
+            var operation = request.Operations[i];
+            var result = await ExecuteOperationAsync(projectId, i, operation, cancellationToken);
+            results.Add(result);
+
+            if (result.Success)
+            {
+                successCount++;
+            }
+            else
+            {
+                failureCount++;
+            }
         }
+
+        return Ok(new BatchResponse
+        {
+            Results = results,
+            SuccessCount = successCount,
+            FailureCount = failureCount
+        });
     }
 
     /// <summary>
@@ -102,54 +95,47 @@ public sealed class BatchController : ControllerBase
         [FromBody] IReadOnlyList<IDictionary<string, object?>> records,
         CancellationToken cancellationToken = default)
     {
-        try
+        var projectId = GetProjectId();
+
+        if (records == null || records.Count == 0)
         {
-            var projectId = GetProjectId();
-
-            if (records == null || records.Count == 0)
+            return BadRequest(new ErrorResponse
             {
-                return BadRequest(new ErrorResponse
-                {
-                    Error = "BadRequest",
-                    Message = "No records provided",
-                    Code = "EMPTY_BATCH"
-                });
-            }
-
-            // Generate IDs for records that don't have them - using UUID v7
-            foreach (var record in records)
-            {
-                if (!record.ContainsKey("_id"))
-                {
-                    record["_id"] = Guid.CreateVersion7();
-                }
-            }
-
-            var insertedRecords = await _dataService.InsertBatchAsync(projectId, table, records, cancellationToken);
-
-            var results = insertedRecords.Select((record, index) =>
-            {
-                var id = record.TryGetValue("_id", out var idValue) && idValue is Guid guid ? guid : Guid.Empty;
-                return new BatchOperationResult
-                {
-                    Index = index,
-                    Success = true,
-                    Data = new Dictionary<string, object?> { ["_id"] = id },
-                    AffectedRows = 1
-                };
-            }).ToList();
-
-            return Ok(new BatchResponse
-            {
-                Results = results,
-                SuccessCount = insertedRecords.Count,
-                FailureCount = 0
+                Error = "BadRequest",
+                Message = "No records provided",
+                Code = "EMPTY_BATCH"
             });
         }
-        catch (Exception ex)
+
+        // Generate IDs for records that don't have them - using UUID v7
+        foreach (var record in records)
         {
-            return UnhandledErrors.Map(this, _logger, ex, "batch insert");
+            if (!record.ContainsKey("_id"))
+            {
+                record["_id"] = Guid.CreateVersion7();
+            }
         }
+
+        var insertedRecords = await _dataService.InsertBatchAsync(projectId, table, records, cancellationToken);
+
+        var results = insertedRecords.Select((record, index) =>
+        {
+            var id = record.TryGetValue("_id", out var idValue) && idValue is Guid guid ? guid : Guid.Empty;
+            return new BatchOperationResult
+            {
+                Index = index,
+                Success = true,
+                Data = new Dictionary<string, object?> { ["_id"] = id },
+                AffectedRows = 1
+            };
+        }).ToList();
+
+        return Ok(new BatchResponse
+        {
+            Results = results,
+            SuccessCount = insertedRecords.Count,
+            FailureCount = 0
+        });
     }
 
     /// <summary>
@@ -163,48 +149,41 @@ public sealed class BatchController : ControllerBase
         [FromBody] BulkUpdateRequest request,
         CancellationToken cancellationToken = default)
     {
-        try
+        var projectId = GetProjectId();
+
+        if (request.Data == null || request.Data.Count == 0)
         {
-            var projectId = GetProjectId();
-
-            if (request.Data == null || request.Data.Count == 0)
+            return BadRequest(new ErrorResponse
             {
-                return BadRequest(new ErrorResponse
-                {
-                    Error = "BadRequest",
-                    Message = "No data provided",
-                    Code = "EMPTY_DATA"
-                });
-            }
-
-            // Build filter query
-            var query = _dataService.Query(projectId).From(table);
-            if (!string.IsNullOrEmpty(request.Filter))
-            {
-                query = ApplyFilter(query, request.Filter);
-            }
-
-            var affected = await _dataService.UpdateBatchAsync(projectId, table, request.Data, query, cancellationToken);
-
-            return Ok(new BatchResponse
-            {
-                Results =
-                [
-                    new BatchOperationResult
-                    {
-                        Index = 0,
-                        Success = true,
-                        AffectedRows = affected
-                    }
-                ],
-                SuccessCount = affected > 0 ? 1 : 0,
-                FailureCount = 0
+                Error = "BadRequest",
+                Message = "No data provided",
+                Code = "EMPTY_DATA"
             });
         }
-        catch (Exception ex)
+
+        // Build filter query
+        var query = _dataService.Query(projectId).From(table);
+        if (!string.IsNullOrEmpty(request.Filter))
         {
-            return UnhandledErrors.Map(this, _logger, ex, "batch update");
+            query = ApplyFilter(query, request.Filter);
         }
+
+        var affected = await _dataService.UpdateBatchAsync(projectId, table, request.Data, query, cancellationToken);
+
+        return Ok(new BatchResponse
+        {
+            Results =
+            [
+                new BatchOperationResult
+                {
+                    Index = 0,
+                    Success = true,
+                    AffectedRows = affected
+                }
+            ],
+            SuccessCount = affected > 0 ? 1 : 0,
+            FailureCount = 0
+        });
     }
 
     /// <summary>
@@ -218,47 +197,40 @@ public sealed class BatchController : ControllerBase
         [FromQuery] string? filter,
         CancellationToken cancellationToken = default)
     {
-        try
+        var projectId = GetProjectId();
+
+        // Build filter query
+        var query = _dataService.Query(projectId).From(table);
+        if (!string.IsNullOrEmpty(filter))
         {
-            var projectId = GetProjectId();
-
-            // Build filter query
-            var query = _dataService.Query(projectId).From(table);
-            if (!string.IsNullOrEmpty(filter))
+            query = ApplyFilter(query, filter);
+        }
+        else
+        {
+            return BadRequest(new ErrorResponse
             {
-                query = ApplyFilter(query, filter);
-            }
-            else
-            {
-                return BadRequest(new ErrorResponse
-                {
-                    Error = "BadRequest",
-                    Message = "Filter is required for bulk delete to prevent accidental data loss",
-                    Code = "FILTER_REQUIRED"
-                });
-            }
-
-            var affected = await _dataService.DeleteBatchAsync(projectId, table, query, cancellationToken);
-
-            return Ok(new BatchResponse
-            {
-                Results =
-                [
-                    new BatchOperationResult
-                    {
-                        Index = 0,
-                        Success = true,
-                        AffectedRows = affected
-                    }
-                ],
-                SuccessCount = affected > 0 ? 1 : 0,
-                FailureCount = 0
+                Error = "BadRequest",
+                Message = "Filter is required for bulk delete to prevent accidental data loss",
+                Code = "FILTER_REQUIRED"
             });
         }
-        catch (Exception ex)
+
+        var affected = await _dataService.DeleteBatchAsync(projectId, table, query, cancellationToken);
+
+        return Ok(new BatchResponse
         {
-            return UnhandledErrors.Map(this, _logger, ex, "batch delete");
-        }
+            Results =
+            [
+                new BatchOperationResult
+                {
+                    Index = 0,
+                    Success = true,
+                    AffectedRows = affected
+                }
+            ],
+            SuccessCount = affected > 0 ? 1 : 0,
+            FailureCount = 0
+        });
     }
 
     /// <summary>
@@ -273,55 +245,48 @@ public sealed class BatchController : ControllerBase
         [FromBody] UpsertRequest request,
         CancellationToken cancellationToken = default)
     {
-        try
+        var projectId = GetProjectId();
+
+        if (request.Data == null || request.Data.Count == 0)
         {
-            var projectId = GetProjectId();
-
-            if (request.Data == null || request.Data.Count == 0)
+            return BadRequest(new ErrorResponse
             {
-                return BadRequest(new ErrorResponse
-                {
-                    Error = "BadRequest",
-                    Message = "No data provided",
-                    Code = "EMPTY_DATA"
-                });
-            }
-
-            if (request.KeyColumns == null || request.KeyColumns.Count == 0)
-            {
-                return BadRequest(new ErrorResponse
-                {
-                    Error = "BadRequest",
-                    Message = "Key columns are required for upsert",
-                    Code = "MISSING_KEY_COLUMNS"
-                });
-            }
-
-            // Generate ID if not provided - using UUID v7
-            if (!request.Data.ContainsKey("_id"))
-            {
-                request.Data["_id"] = Guid.CreateVersion7();
-            }
-
-            var result = await _dataService.UpsertAsync(
-                projectId, table, request.Data, request.KeyColumns.ToArray(), cancellationToken);
-
-            var id = result.TryGetValue("_id", out var idValue) && idValue is Guid guid ? guid : Guid.Empty;
-
-            var response = new DataRecordResponse
-            {
-                Id = id,
-                Data = result
-            };
-
-            // Check if this was an insert or update based on whether the record existed
-            // For simplicity, we return OK for all upserts
-            return Ok(response);
+                Error = "BadRequest",
+                Message = "No data provided",
+                Code = "EMPTY_DATA"
+            });
         }
-        catch (Exception ex)
+
+        if (request.KeyColumns == null || request.KeyColumns.Count == 0)
         {
-            return UnhandledErrors.Map(this, _logger, ex, "upsert");
+            return BadRequest(new ErrorResponse
+            {
+                Error = "BadRequest",
+                Message = "Key columns are required for upsert",
+                Code = "MISSING_KEY_COLUMNS"
+            });
         }
+
+        // Generate ID if not provided - using UUID v7
+        if (!request.Data.ContainsKey("_id"))
+        {
+            request.Data["_id"] = Guid.CreateVersion7();
+        }
+
+        var result = await _dataService.UpsertAsync(
+            projectId, table, request.Data, request.KeyColumns.ToArray(), cancellationToken);
+
+        var id = result.TryGetValue("_id", out var idValue) && idValue is Guid guid ? guid : Guid.Empty;
+
+        var response = new DataRecordResponse
+        {
+            Id = id,
+            Data = result
+        };
+
+        // Check if this was an insert or update based on whether the record existed
+        // For simplicity, we return OK for all upserts
+        return Ok(response);
     }
 
     /// <summary>
@@ -336,71 +301,64 @@ public sealed class BatchController : ControllerBase
         [FromBody] SeedRequest request,
         CancellationToken cancellationToken = default)
     {
-        try
+        var projectId = GetProjectId();
+
+        if (request.Records is not { Count: > 0 })
         {
-            var projectId = GetProjectId();
-
-            if (request.Records is not { Count: > 0 })
+            return BadRequest(new ErrorResponse
             {
-                return BadRequest(new ErrorResponse
-                {
-                    Error = "BadRequest",
-                    Message = "No records provided",
-                    Code = "EMPTY_DATA"
-                });
-            }
-
-            if (request.KeyColumns is not { Count: > 0 })
-            {
-                return BadRequest(new ErrorResponse
-                {
-                    Error = "BadRequest",
-                    Message = "Key columns are required for seeding",
-                    Code = "MISSING_KEY_COLUMNS"
-                });
-            }
-
-            var inserted = 0;
-            var updated = 0;
-            var errors = new List<SeedError>();
-
-            foreach (var (record, index) in request.Records.Select((r, i) => (r, i)))
-            {
-                try
-                {
-                    if (!record.ContainsKey("_id"))
-                    {
-                        record["_id"] = Guid.CreateVersion7();
-                    }
-
-                    await _dataService.UpsertAsync(
-                        projectId, table, record, request.KeyColumns.ToArray(), cancellationToken);
-
-                    // Simple heuristic: count as insert (exact tracking requires DB-level info)
-                    inserted++;
-                }
-                catch (Exception ex)
-                {
-                    errors.Add(new SeedError
-                    {
-                        Index = index,
-                        Message = UnhandledErrors.ItemMessage(_logger, ex, "seed record")
-                    });
-                }
-            }
-
-            return Ok(new SeedResponse
-            {
-                TotalRecords = request.Records.Count,
-                Inserted = inserted - updated,
-                Updated = updated,
-                Errors = errors
+                Error = "BadRequest",
+                Message = "No records provided",
+                Code = "EMPTY_DATA"
             });
         }
-        catch (Exception ex)
+
+        if (request.KeyColumns is not { Count: > 0 })
         {
-            return UnhandledErrors.Map(this, _logger, ex, "seed");
+            return BadRequest(new ErrorResponse
+            {
+                Error = "BadRequest",
+                Message = "Key columns are required for seeding",
+                Code = "MISSING_KEY_COLUMNS"
+            });
         }
+
+        var inserted = 0;
+        var updated = 0;
+        var errors = new List<SeedError>();
+
+        foreach (var (record, index) in request.Records.Select((r, i) => (r, i)))
+        {
+            try
+            {
+                if (!record.ContainsKey("_id"))
+                {
+                    record["_id"] = Guid.CreateVersion7();
+                }
+
+                await _dataService.UpsertAsync(
+                    projectId, table, record, request.KeyColumns.ToArray(), cancellationToken);
+
+                // Simple heuristic: count as insert (exact tracking requires DB-level info)
+                inserted++;
+            }
+            catch (Exception ex)
+            {
+                errors.Add(new SeedError
+                {
+                    Index = index,
+                    Message = UnhandledErrors.ItemMessage(_logger, ex, "seed record")
+                });
+            }
+        }
+
+        return Ok(new SeedResponse
+        {
+            TotalRecords = request.Records.Count,
+            Inserted = inserted - updated,
+            Updated = updated,
+            Errors = errors
+        });
     }
 
     #region Private Methods

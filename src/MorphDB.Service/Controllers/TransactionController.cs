@@ -31,9 +31,6 @@ public sealed class TransactionController : ControllerBase
 
     private Guid GetProjectId() => _projectContext.ProjectId;
 
-    private IActionResult Unhandled(Exception ex, [System.Runtime.CompilerServices.CallerMemberName] string action = "") =>
-        UnhandledErrors.Map(this, _logger, ex, action);
-
     /// <summary>
     /// Execute a cross-entity transaction with $ref support.
     /// </summary>
@@ -50,32 +47,25 @@ public sealed class TransactionController : ControllerBase
         [FromBody] TransactionApiRequest request,
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var projectId = GetProjectId();
+        var projectId = GetProjectId();
 
-            if (request.Operations.Count == 0)
+        if (request.Operations.Count == 0)
+        {
+            return BadRequest(new ErrorResponse
             {
-                return BadRequest(new ErrorResponse
-                {
-                    Error = "BadRequest",
-                    Message = "Transaction must contain at least one operation",
-                    Code = "EMPTY_TRANSACTION"
-                });
-            }
-
-            var coreRequest = MapToTransactionRequest(request);
-            var result = await _transactionService.ExecuteAsync(projectId, coreRequest, cancellationToken);
-
-            var response = MapToTransactionResponse(result);
-            if (!result.Success)
-                return BadRequest(response);
-            return Ok(response);
+                Error = "BadRequest",
+                Message = "Transaction must contain at least one operation",
+                Code = "EMPTY_TRANSACTION"
+            });
         }
-        catch (Exception ex)
-        {
-            return Unhandled(ex);
-        }
+
+        var coreRequest = MapToTransactionRequest(request);
+        var result = await _transactionService.ExecuteAsync(projectId, coreRequest, cancellationToken);
+
+        var response = MapToTransactionResponse(result);
+        if (!result.Success)
+            return BadRequest(response);
+        return Ok(response);
     }
 
     /// <summary>
@@ -94,34 +84,27 @@ public sealed class TransactionController : ControllerBase
         Guid id,
         CancellationToken cancellationToken = default)
     {
-        try
+        var projectId = GetProjectId();
+
+        var result = await _transactionService.FinalizeAsync(projectId, table, id, cancellationToken);
+
+        if (!result.Success && result.Errors.Any(e => e.Error == "not_found"))
         {
-            var projectId = GetProjectId();
-
-            var result = await _transactionService.FinalizeAsync(projectId, table, id, cancellationToken);
-
-            if (!result.Success && result.Errors.Any(e => e.Error == "not_found"))
+            return NotFound(new ErrorResponse
             {
-                return NotFound(new ErrorResponse
-                {
-                    Error = "NotFound",
-                    Message = $"Record with id '{id}' not found in table '{table}'",
-                    Code = "NOT_FOUND"
-                });
-            }
-
-            var apiResult = MapToFinalizeResultApi(result);
-            return Ok(new FinalizeApiResponse
-            {
-                Results = [apiResult],
-                ValidCount = result.Success ? 1 : 0,
-                ErrorCount = result.Success ? 0 : 1
+                Error = "NotFound",
+                Message = $"Record with id '{id}' not found in table '{table}'",
+                Code = "NOT_FOUND"
             });
         }
-        catch (Exception ex)
+
+        var apiResult = MapToFinalizeResultApi(result);
+        return Ok(new FinalizeApiResponse
         {
-            return Unhandled(ex);
-        }
+            Results = [apiResult],
+            ValidCount = result.Success ? 1 : 0,
+            ErrorCount = result.Success ? 0 : 1
+        });
     }
 
     /// <summary>
@@ -135,37 +118,30 @@ public sealed class TransactionController : ControllerBase
         [FromBody] FinalizeApiRequest request,
         CancellationToken cancellationToken = default)
     {
-        try
+        var projectId = GetProjectId();
+
+        if (request.RecordIds is null || request.RecordIds.Count == 0)
         {
-            var projectId = GetProjectId();
-
-            if (request.RecordIds is null || request.RecordIds.Count == 0)
+            return BadRequest(new ErrorResponse
             {
-                return BadRequest(new ErrorResponse
-                {
-                    Error = "BadRequest",
-                    Message = "At least one record ID is required",
-                    Code = "EMPTY_RECORD_IDS"
-                });
-            }
-
-            var results = await _transactionService.FinalizeBatchAsync(
-                projectId, table, request.RecordIds, cancellationToken);
-
-            var validCount = results.Count(r => r.Success);
-            var errorCount = results.Count(r => !r.Success);
-
-            return Ok(new FinalizeApiResponse
-            {
-                Results = results.Select(MapToFinalizeResultApi).ToList(),
-                ValidCount = validCount,
-                ErrorCount = errorCount
+                Error = "BadRequest",
+                Message = "At least one record ID is required",
+                Code = "EMPTY_RECORD_IDS"
             });
         }
-        catch (Exception ex)
+
+        var results = await _transactionService.FinalizeBatchAsync(
+            projectId, table, request.RecordIds, cancellationToken);
+
+        var validCount = results.Count(r => r.Success);
+        var errorCount = results.Count(r => !r.Success);
+
+        return Ok(new FinalizeApiResponse
         {
-            return Unhandled(ex);
-        }
+            Results = results.Select(MapToFinalizeResultApi).ToList(),
+            ValidCount = validCount,
+            ErrorCount = errorCount
+        });
     }
 
     #region Mapping Methods

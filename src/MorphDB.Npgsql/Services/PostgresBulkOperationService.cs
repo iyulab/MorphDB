@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading.Channels;
 using Dapper;
 using MorphDB.Core.Abstractions;
+using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
 using MorphDB.Core.Pipeline;
 using Npgsql;
@@ -49,7 +50,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         options ??= new CsvImportOptions();
 
         var table = await _schemaManager.GetTableAsync(projectId, tableName, cancellationToken)
-            ?? throw new ArgumentException($"Table '{tableName}' not found");
+            ?? throw new TableNotFoundException(tableName);
 
         var jobId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
@@ -85,7 +86,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         options ??= new JsonImportOptions();
 
         var table = await _schemaManager.GetTableAsync(projectId, tableName, cancellationToken)
-            ?? throw new ArgumentException($"Table '{tableName}' not found");
+            ?? throw new TableNotFoundException(tableName);
 
         var jobId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
@@ -121,7 +122,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         options ??= new JsonImportOptions();
 
         var table = await _schemaManager.GetTableAsync(projectId, tableName, cancellationToken)
-            ?? throw new ArgumentException($"Table '{tableName}' not found");
+            ?? throw new TableNotFoundException(tableName);
 
         var jobId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
@@ -152,7 +153,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var job = await GetImportJobAsync(jobId, cancellationToken)
-            ?? throw new ArgumentException($"Import job '{jobId}' not found");
+            ?? throw new NotFoundException("Import job", jobId.ToString());
 
         // Update status to processing
         await UpdateImportJobStatusAsync(jobId, BulkJobStatus.Processing, cancellationToken);
@@ -224,7 +225,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         options ??= new CsvExportOptions();
 
         var table = await _schemaManager.GetTableAsync(projectId, tableName, cancellationToken)
-            ?? throw new ArgumentException($"Table '{tableName}' not found");
+            ?? throw new TableNotFoundException(tableName);
 
         var jobId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
@@ -259,7 +260,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         options ??= new JsonExportOptions();
 
         var table = await _schemaManager.GetTableAsync(projectId, tableName, cancellationToken)
-            ?? throw new ArgumentException($"Table '{tableName}' not found");
+            ?? throw new TableNotFoundException(tableName);
 
         var jobId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
@@ -293,7 +294,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         options ??= new XlsxExportOptions();
 
         var table = await _schemaManager.GetTableAsync(projectId, tableName, cancellationToken)
-            ?? throw new ArgumentException($"Table '{tableName}' not found");
+            ?? throw new TableNotFoundException(tableName);
 
         var jobId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
@@ -324,7 +325,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         CancellationToken cancellationToken = default)
     {
         var job = await GetExportJobAsync(jobId, cancellationToken)
-            ?? throw new ArgumentException($"Export job '{jobId}' not found");
+            ?? throw new NotFoundException("Export job", jobId.ToString());
 
         await UpdateExportJobStatusAsync(jobId, BulkJobStatus.Processing, cancellationToken);
 
@@ -824,7 +825,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         await using var writer = new StreamWriter(outputStream, Encoding.UTF8, leaveOpen: true);
 
         var table = await _schemaManager.GetTableAsync(job.ProjectId, job.TableName, cancellationToken)
-            ?? throw new InvalidOperationException($"Table '{job.TableName}' not found");
+            ?? throw new TableNotFoundException(job.TableName);
 
         var columns = options.Columns?.ToList() ?? table.Columns.Select(c => c.LogicalName).ToList();
 
@@ -863,7 +864,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         await using var writer = new Utf8JsonWriter(outputStream, jsonOptions);
 
         var table = await _schemaManager.GetTableAsync(job.ProjectId, job.TableName, cancellationToken)
-            ?? throw new InvalidOperationException($"Table '{job.TableName}' not found");
+            ?? throw new TableNotFoundException(job.TableName);
 
         var columns = options.Columns?.ToList() ?? table.Columns.Select(c => c.LogicalName).ToList();
 
@@ -907,7 +908,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         await using var writer = new StreamWriter(outputStream, Encoding.UTF8, leaveOpen: true);
 
         var table = await _schemaManager.GetTableAsync(job.ProjectId, job.TableName, cancellationToken)
-            ?? throw new InvalidOperationException($"Table '{job.TableName}' not found");
+            ?? throw new TableNotFoundException(job.TableName);
 
         var columns = options.Columns?.ToList() ?? table.Columns.Select(c => c.LogicalName).ToList();
 
@@ -1010,7 +1011,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         CancellationToken cancellationToken)
     {
         var table = await _schemaManager.GetTableAsync(projectId, tableName, cancellationToken)
-            ?? throw new ArgumentException($"Table '{tableName}' not found");
+            ?? throw new TableNotFoundException(tableName);
 
         var sql = $"SELECT COUNT(*) FROM {table.PhysicalName}";
         // Note: In production, filter would be parsed and added safely
@@ -1028,7 +1029,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var table = await _schemaManager.GetTableAsync(projectId, tableName, cancellationToken)
-            ?? throw new ArgumentException($"Table '{tableName}' not found");
+            ?? throw new TableNotFoundException(tableName);
 
         var columnMap = table.Columns.ToDictionary(c => c.LogicalName, c => c.PhysicalName);
         var selectColumns = columns.Select(c => columnMap.GetValueOrDefault(c, c)).ToList();

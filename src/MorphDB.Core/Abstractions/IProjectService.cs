@@ -47,13 +47,6 @@ public interface IProjectService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Archives a project (read-only mode).
-    /// </summary>
-    Task ArchiveProjectAsync(
-        Guid projectId,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Deletes a project and its associated schemas.
     /// This is a destructive operation.
     /// </summary>

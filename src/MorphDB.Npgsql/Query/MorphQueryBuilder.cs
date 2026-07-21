@@ -1,5 +1,6 @@
 using Dapper;
 using MorphDB.Core.Abstractions;
+using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
 using MorphDB.Core.Security;
 using MorphDB.Npgsql.Infrastructure;
@@ -685,7 +686,7 @@ internal sealed class MorphQuery : IMorphQuery
             var physicalGroupBy = _groupByColumns
                 .Select(c =>
                 {
-                    var physCol = GetPhysicalColumnName(c, table);
+                    var physCol = GetPhysicalColumnNameOrSelf(c, table);
                     return useBaseTableAlias ? $"base_table.{physCol}" : physCol;
                 })
                 .ToArray();
@@ -695,7 +696,7 @@ internal sealed class MorphQuery : IMorphQuery
         // HAVING
         foreach (var condition in _havingConditions)
         {
-            var physicalColumn = GetPhysicalColumnName(condition.Column, table);
+            var physicalColumn = GetPhysicalColumnNameOrSelf(condition.Column, table);
             var columnRef = useBaseTableAlias ? $"base_table.{physicalColumn}" : physicalColumn;
             var (sqlOp, value) = GetSqlOperator(condition.Operator, condition.Value);
             query.HavingRaw($"{columnRef} {sqlOp} ?", value);
@@ -815,7 +816,7 @@ internal sealed class MorphQuery : IMorphQuery
         // Aggregates
         foreach (var (function, column, alias) in _aggregates)
         {
-            var physicalColumn = GetPhysicalColumnName(column, table);
+            var physicalColumn = GetPhysicalColumnNameOrSelf(column, table);
             var columnRef = useBaseTableAlias ? $"base_table.{physicalColumn}" : physicalColumn;
             var aggExpr = BuildAggregateExpression(function, columnRef);
             if (!string.IsNullOrEmpty(alias))
@@ -1124,7 +1125,29 @@ internal sealed class MorphQuery : IMorphQuery
         };
     }
 
+    /// <summary>
+    /// Resolves a logical column to its physical name, failing loudly on a name the table does not
+    /// declare. Before this check an unknown filter column flowed straight into SQL and PostgreSQL's
+    /// 42703 surfaced as a 500 — the caller's typo reported as our defect. System columns pass
+    /// through: they are legitimately addressable but not part of the declared column set.
+    /// </summary>
     private static string GetPhysicalColumnName(string logicalName, TableMetadata table)
+    {
+        var column = table.Columns.FirstOrDefault(c => c.LogicalName == logicalName);
+        if (column is not null)
+            return column.PhysicalName;
+
+        if (SystemColumns.IsSystemColumn(logicalName))
+            return logicalName;
+
+        throw new ColumnNotFoundException(table.LogicalName, logicalName);
+    }
+
+    /// <summary>
+    /// Lenient variant for the clauses where a name may legitimately be a SELECT alias rather than
+    /// a declared column (GROUP BY / HAVING / aggregate targets on the programmatic query surface).
+    /// </summary>
+    private static string GetPhysicalColumnNameOrSelf(string logicalName, TableMetadata table)
     {
         var column = table.Columns.FirstOrDefault(c => c.LogicalName == logicalName);
         return column?.PhysicalName ?? logicalName;
@@ -1138,8 +1161,11 @@ internal sealed class MorphQuery : IMorphQuery
         _tableMetadata = await _metadataRepository.GetTableByNameAsync(
             _projectId, _tableName, includeColumns: true, cancellationToken);
 
+        // The domain type, not InvalidOperationException: this is how a caller's typo'd table (or a
+        // project that does not exist — no project, no tables) becomes the documented 404 instead of
+        // a 500. The message also stays free of the project GUID (hidden-layer principle).
         if (_tableMetadata is null)
-            throw new InvalidOperationException($"Table '{_tableName}' not found for project '{_projectId}'");
+            throw new TableNotFoundException(_tableName);
 
         // Load RLS expression for SELECT operations
         await LoadRlsExpressionAsync(PolicyType.Select, cancellationToken);
@@ -1158,7 +1184,7 @@ internal sealed class MorphQuery : IMorphQuery
             _projectId, tableName, includeColumns: true, cancellationToken);
 
         if (metadata is null)
-            throw new InvalidOperationException($"Joined table '{tableName}' not found for project '{_projectId}'");
+            throw new TableNotFoundException(tableName);
 
         _joinedTableMetadata[tableName] = metadata;
         return metadata;

@@ -29,8 +29,6 @@ internal static partial class ProjectControllerLogs
     [LoggerMessage(LogLevel.Information, "Updating project: {ProjectId}")]
     public static partial void UpdatingProject(ILogger logger, Guid projectId);
 
-    [LoggerMessage(LogLevel.Information, "Archiving project: {ProjectId}")]
-    public static partial void ArchivingProject(ILogger logger, Guid projectId);
 
     [LoggerMessage(LogLevel.Warning, "Deleting project: {ProjectId}")]
     public static partial void DeletingProject(ILogger logger, Guid projectId);
@@ -258,48 +256,6 @@ public sealed class ProjectController : ControllerBase
 
             var project = await _projectService.UpdateProjectAsync(coreRequest, cancellationToken);
             return Ok(ProjectApiResponse.FromModel(project));
-        }
-        catch (MorphDbException ex) when (ex.ErrorCode == "PROJECT_NOT_FOUND")
-        {
-            return NotFound(new ErrorResponse
-            {
-                Error = ex.ErrorCode,
-                Message = ex.Message,
-                Code = ex.ErrorCode
-            });
-        }
-        catch (MorphDbException ex)
-        {
-            ProjectControllerLogs.ProjectOperationFailed(_logger, ex.ErrorCode, ex);
-            return BadRequest(new ErrorResponse
-            {
-                Error = ex.ErrorCode,
-                Message = ex.Message,
-                Code = ex.ErrorCode
-            });
-        }
-    }
-
-    /// <summary>
-    /// Archives a project (read-only mode).
-    /// </summary>
-    /// <param name="id">The project ID.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>No content on success.</returns>
-    [HttpPost("{id:guid}/archive")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
-    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> ArchiveProject(
-        Guid id,
-        CancellationToken cancellationToken)
-    {
-        ProjectControllerLogs.ArchivingProject(_logger, id);
-
-        try
-        {
-            await _projectService.ArchiveProjectAsync(id, cancellationToken);
-            return NoContent();
         }
         catch (MorphDbException ex) when (ex.ErrorCode == "PROJECT_NOT_FOUND")
         {

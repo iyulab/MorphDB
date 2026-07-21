@@ -1713,7 +1713,7 @@ public sealed record QueryFilterConditionApiRequest
     {
         Column = Column,
         Operator = ApiModelExtensions.ParseFilterOperator(Operator),
-        Value = Value
+        Value = ApiModelExtensions.NormalizeJsonValue(Value)
     };
 }
 
@@ -1744,7 +1744,7 @@ public sealed record HavingConditionApiRequest
     {
         Alias = Alias,
         Operator = ApiModelExtensions.ParseFilterOperator(Operator),
-        Value = Value
+        Value = ApiModelExtensions.NormalizeJsonValue(Value)!
     };
 }
 
@@ -1950,6 +1950,33 @@ public sealed record SchemaChangeApiResponse
 
 public static class ApiModelExtensions
 {
+    /// <summary>
+    /// Materializes a request value typed as <c>object</c> into a .NET value. System.Text.Json
+    /// leaves such values as <see cref="System.Text.Json.JsonElement"/>, which no database driver
+    /// accepts as a parameter — the aggregation Filter/Having paths shipped broken for exactly this
+    /// reason (their tests sat skipped as "serialization needs debugging"). Strings stay strings;
+    /// integers stay integral (an id must not become a double).
+    /// </summary>
+    public static object? NormalizeJsonValue(object? value)
+    {
+        if (value is not System.Text.Json.JsonElement element)
+        {
+            return value;
+        }
+
+        return element.ValueKind switch
+        {
+            System.Text.Json.JsonValueKind.String => element.GetString(),
+            System.Text.Json.JsonValueKind.Number => element.TryGetInt64(out var l) ? l : element.GetDecimal(),
+            System.Text.Json.JsonValueKind.True => true,
+            System.Text.Json.JsonValueKind.False => false,
+            System.Text.Json.JsonValueKind.Null => null,
+            System.Text.Json.JsonValueKind.Array => element.EnumerateArray()
+                .Select(e => NormalizeJsonValue(e)).ToArray(),
+            _ => element.GetRawText()
+        };
+    }
+
     public static MorphDataType ParseDataType(string type)
     {
         return type.ToLowerInvariant() switch
@@ -1971,7 +1998,9 @@ public static class ApiModelExtensions
             "phone" => MorphDataType.Phone,
             _ => Enum.TryParse<MorphDataType>(type, ignoreCase: true, out var result)
                 ? result
-                : throw new ArgumentException($"Unknown data type: {type}")
+                : throw new ArgumentException(
+                    $"Unknown data type '{type}'. Supported types: text, longtext, integer, biginteger, " +
+                    "decimal, boolean, date, datetime, time, uuid, json, array, email, url, phone.")
         };
     }
 
@@ -2027,7 +2056,11 @@ public static class ApiModelExtensions
             "contains" => FilterOperator.Contains,
             "startswith" => FilterOperator.StartsWith,
             "endswith" => FilterOperator.EndsWith,
-            _ => FilterOperator.Equals
+            // An unknown operator used to fall back to Equals silently — the caller's typo became a
+            // different query with no signal. Failing loudly is the contract boundary doing its job.
+            _ => throw new ArgumentException(
+                $"Unknown filter operator '{op}'. Supported operators: eq, neq, gt, gte, lt, lte, " +
+                "like, ilike, contains, startswith, endswith.")
         };
     }
 }

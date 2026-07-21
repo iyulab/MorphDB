@@ -1,8 +1,10 @@
-using FluentAssertions;
-using Microsoft.AspNetCore.Mvc;
+using System.Text.Json;
+using AwesomeAssertions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using MorphDB.Core.Exceptions;
 using MorphDB.Service.Controllers;
+using MorphDB.Service.ErrorHandling;
 using MorphDB.Service.Models.Api;
 
 namespace MorphDB.Tests.Unit;
@@ -11,86 +13,147 @@ namespace MorphDB.Tests.Unit;
 /// The terminal catch of the batch-family actions used to be
 /// <c>catch (Exception ex) { return BadRequest(ex.Message); }</c> — every defect became a 400 a
 /// caller could not tell from their own bad request, with internal exception text on the wire.
-/// These tests pin the mapping that replaced it: what the service layer legitimately throws keeps
-/// its documented status, and everything else is a 500 whose body says nothing about the exception.
+/// These tests pin the mapping that replaced it, now living in the global
+/// <see cref="GlobalExceptionHandler"/>: what the service layer legitimately throws keeps its
+/// documented status, and everything else is a 500 whose body says nothing about the exception.
 /// </summary>
-public class UnhandledErrorsTests
+public class GlobalExceptionHandlerTests
 {
-    private sealed class ProbeController : ControllerBase;
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
-    private static readonly ProbeController Controller = new();
-
-    private static ErrorResponse BodyOf(IActionResult result) =>
-        (ErrorResponse)((ObjectResult)result).Value!;
-
-    [Fact]
-    public void ValidationException_IsA400_WithItsOwnCodeAndMessage()
+    private static async Task<(int Status, ErrorResponse? Body, bool Handled)> RunAsync(Exception ex)
     {
-        var result = UnhandledErrors.Map(Controller, NullLogger.Instance,
-            new ValidationException("age", "must be positive"), "op");
+        var handler = new GlobalExceptionHandler(NullLogger<GlobalExceptionHandler>.Instance);
+        var ctx = new DefaultHttpContext();
+        ctx.Response.Body = new MemoryStream();
 
-        ((ObjectResult)result).StatusCode.Should().Be(400);
-        BodyOf(result).Code.Should().Be("VALIDATION_ERROR");
-        BodyOf(result).Message.Should().Contain("age");
+        var handled = await handler.TryHandleAsync(ctx, ex, CancellationToken.None);
+
+        ctx.Response.Body.Position = 0;
+        ErrorResponse? body = null;
+        if (handled && ctx.Response.Body.Length > 0)
+        {
+            body = await JsonSerializer.DeserializeAsync<ErrorResponse>(ctx.Response.Body, Json);
+        }
+
+        return (ctx.Response.StatusCode, body, handled);
     }
 
     [Fact]
-    public void NotFoundException_IsA404()
+    public async Task ValidationException_IsA400_WithItsOwnCodeAndMessage()
     {
-        var result = UnhandledErrors.Map(Controller, NullLogger.Instance,
-            new NotFoundException("Table", "orders"), "op");
+        var (status, body, _) = await RunAsync(new ValidationException("age", "must be positive"));
 
-        ((ObjectResult)result).StatusCode.Should().Be(404);
-        BodyOf(result).Code.Should().Be("NOT_FOUND");
+        status.Should().Be(400);
+        body!.Code.Should().Be("VALIDATION_ERROR");
+        body.Message.Should().Contain("age");
     }
 
     [Fact]
-    public void KeyNotFoundException_IsA404()
+    public async Task MissingProjectException_IsA400_AndDoesNotAdvertiseAnApiKey()
     {
-        var result = UnhandledErrors.Map(Controller, NullLogger.Instance,
-            new KeyNotFoundException("Table 'orders' not found"), "op");
+        var (status, body, _) = await RunAsync(new MissingProjectException());
 
-        ((ObjectResult)result).StatusCode.Should().Be(404);
-        BodyOf(result).Code.Should().Be("TABLE_NOT_FOUND");
+        status.Should().Be(400);
+        body!.Code.Should().Be("MISSING_PROJECT");
+        body.Message.Should().Contain("X-Project-Id");
+        body.Message.Should().NotContain("API key",
+            "the server never asks for an API key — advertising one sends callers hunting for a credential that does not exist");
     }
 
     [Fact]
-    public void ArgumentException_IsA400()
+    public async Task NotFoundException_IsA404()
     {
-        var result = UnhandledErrors.Map(Controller, NullLogger.Instance,
-            new ArgumentException("bad filter"), "op");
+        var (status, body, _) = await RunAsync(new NotFoundException("Table", "orders"));
 
-        ((ObjectResult)result).StatusCode.Should().Be(400);
-        BodyOf(result).Code.Should().Be("INVALID_ARGUMENT");
+        status.Should().Be(404);
+        body!.Code.Should().Be("NOT_FOUND");
+    }
+
+    [Fact]
+    public async Task TableNotFoundException_IsA404()
+    {
+        var (status, body, _) = await RunAsync(new TableNotFoundException("orders"));
+
+        status.Should().Be(404);
+        body!.Code.Should().Be("TABLE_NOT_FOUND");
+    }
+
+    [Fact]
+    public async Task ColumnNotFoundException_IsA400_BecauseAColumnIsNotARouteResource()
+    {
+        var (status, body, _) = await RunAsync(new ColumnNotFoundException("orders", "nosuch"));
+
+        status.Should().Be(400);
+        body!.Code.Should().Be("COLUMN_NOT_FOUND");
+    }
+
+    [Fact]
+    public async Task KeyNotFoundException_IsA404()
+    {
+        var (status, body, _) = await RunAsync(new KeyNotFoundException("Table 'orders' not found"));
+
+        status.Should().Be(404);
+        body!.Code.Should().Be("TABLE_NOT_FOUND");
+    }
+
+    [Fact]
+    public async Task DuplicateNameException_IsA409()
+    {
+        var (status, body, _) = await RunAsync(new DuplicateNameException("Table", "orders"));
+
+        status.Should().Be(409);
+        body!.Code.Should().Be("DUPLICATE_NAME");
+    }
+
+    [Fact]
+    public async Task SchemaVersionConflict_IsA409()
+    {
+        var (status, body, _) = await RunAsync(new SchemaVersionConflictException(2, 3));
+
+        status.Should().Be(409);
+        body!.Code.Should().Be("SCHEMA_VERSION_CONFLICT");
+    }
+
+    [Fact]
+    public async Task ArgumentException_IsA400()
+    {
+        var (status, body, _) = await RunAsync(new ArgumentException("bad filter"));
+
+        status.Should().Be(400);
+        body!.Code.Should().Be("INVALID_ARGUMENT");
     }
 
     /// <summary>
     /// The point of the whole class: a defect must not answer 400, and its text must not reach the
     /// caller — driver messages carry physical names the hidden-layer principle exists to hide.
+    /// It must also never be an <em>empty</em> 500: the body always carries the INTERNAL_ERROR
+    /// envelope, so a caller has a code to branch on.
     /// </summary>
     [Fact]
-    public void AnythingElse_IsA500_AndItsMessageStaysOffTheWire()
+    public async Task AnythingElse_IsA500_WithAnEnvelope_AndItsMessageStaysOffTheWire()
     {
-        var result = UnhandledErrors.Map(Controller, NullLogger.Instance,
-            new InvalidOperationException("relation \"p_a1b2._t_orders\" does not exist"), "op");
+        var (status, body, handled) = await RunAsync(
+            new InvalidOperationException("relation \"p_a1b2._t_orders\" does not exist"));
 
-        ((ObjectResult)result).StatusCode.Should().Be(500);
-        BodyOf(result).Code.Should().Be("INTERNAL_ERROR");
-        BodyOf(result).Message.Should().NotContain("_t_orders",
+        handled.Should().BeTrue("no exception may fall through to the framework's empty-body 500");
+        status.Should().Be(500);
+        body!.Code.Should().Be("INTERNAL_ERROR");
+        body.Message.Should().NotContain("_t_orders",
             "internal exception text must not be echoed to the caller");
     }
 
     /// <summary>
     /// A canceled request is nobody's error — mapping it to any status invents an answer for a
-    /// caller who already hung up. It must propagate for the host to observe.
+    /// caller who already hung up. The handler declines it so the host observes the cancellation.
     /// </summary>
     [Fact]
-    public void OperationCanceled_Rethrows()
+    public async Task OperationCanceled_IsDeclined()
     {
-        var act = () => UnhandledErrors.Map(Controller, NullLogger.Instance,
-            new OperationCanceledException(), "op");
+        var (_, body, handled) = await RunAsync(new OperationCanceledException());
 
-        act.Should().Throw<OperationCanceledException>();
+        handled.Should().BeFalse();
+        body.Should().BeNull();
     }
 
     [Fact]

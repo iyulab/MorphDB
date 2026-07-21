@@ -1,4 +1,4 @@
-using FluentAssertions;
+using AwesomeAssertions;
 using MorphDB.Npgsql.Repositories;
 
 namespace MorphDB.Tests.Unit;

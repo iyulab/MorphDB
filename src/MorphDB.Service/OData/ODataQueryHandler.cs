@@ -39,7 +39,7 @@ public sealed partial class ODataQueryHandler
         var table = await _schemaManager.GetTableAsync(projectId, tableName, cancellationToken);
         if (table == null)
         {
-            throw new InvalidOperationException($"Entity set '{entitySetName}' not found.");
+            throw new MorphDB.Core.Exceptions.NotFoundException("Entity set", entitySetName);
         }
 
         var query = _dataService.Query(projectId).From(tableName);

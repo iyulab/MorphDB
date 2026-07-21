@@ -154,16 +154,6 @@ public sealed class DataController : ControllerBase
         {
             return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "INVALID_FILTER" });
         }
-        catch (System.Collections.Generic.KeyNotFoundException ex)
-        {
-            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = "TABLE_NOT_FOUND" });
-        }
-        catch (Exception ex)
-        {
-            DataControllerLogs.QueryError(_logger, ex, table);
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                new ErrorResponse { Error = "InternalError", Message = "An unexpected error occurred", Code = "INTERNAL_ERROR" });
-        }
     }
 
     /// <summary>
@@ -177,38 +167,25 @@ public sealed class DataController : ControllerBase
         Guid id,
         CancellationToken cancellationToken = default)
     {
-        try
+        var projectId = GetProjectId();
+
+        var record = await _dataService.GetByIdAsync(projectId, table, id, cancellationToken);
+
+        if (record == null)
         {
-            var projectId = GetProjectId();
-
-            var record = await _dataService.GetByIdAsync(projectId, table, id, cancellationToken);
-
-            if (record == null)
+            return NotFound(new ErrorResponse
             {
-                return NotFound(new ErrorResponse
-                {
-                    Error = "NotFound",
-                    Message = $"Record with ID '{id}' not found in table '{table}'",
-                    Code = "RECORD_NOT_FOUND"
-                });
-            }
-
-            return Ok(new DataRecordResponse
-            {
-                Id = id,
-                Data = record
+                Error = "NotFound",
+                Message = $"Record with ID '{id}' not found in table '{table}'",
+                Code = "RECORD_NOT_FOUND"
             });
         }
-        catch (System.Collections.Generic.KeyNotFoundException ex)
+
+        return Ok(new DataRecordResponse
         {
-            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = "TABLE_NOT_FOUND" });
-        }
-        catch (Exception ex)
-        {
-            DataControllerLogs.GetByIdError(_logger, ex, id, table);
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                new ErrorResponse { Error = "InternalError", Message = "An unexpected error occurred", Code = "INTERNAL_ERROR" });
-        }
+            Id = id,
+            Data = record
+        });
     }
 
     /// <summary>
@@ -277,16 +254,6 @@ public sealed class DataController : ControllerBase
         {
             return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "INVALID_FILTER" });
         }
-        catch (System.Collections.Generic.KeyNotFoundException ex)
-        {
-            return NotFound(new ErrorResponse { Error = "NotFound", Message = ex.Message, Code = "TABLE_NOT_FOUND" });
-        }
-        catch (Exception ex)
-        {
-            DataControllerLogs.QueryError(_logger, ex, table);
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                new ErrorResponse { Error = "InternalError", Message = "An unexpected error occurred", Code = "INTERNAL_ERROR" });
-        }
     }
 
     #endregion
@@ -307,71 +274,69 @@ public sealed class DataController : ControllerBase
         string table,
         [FromBody] IDictionary<string, object?> data,
         [FromQuery] string? mode = null,
+        [FromQuery] bool ignoreUnknown = false,
         CancellationToken cancellationToken = default)
     {
-        try
+        var projectId = GetProjectId();
+
+        var tableMetadata = await _metadataRepository.GetTableByNameAsync(
+            projectId, table, includeColumns: true, cancellationToken);
+
+        if (tableMetadata is null)
         {
-            var projectId = GetProjectId();
-
-            var tableMetadata = await _metadataRepository.GetTableByNameAsync(
-                projectId, table, includeColumns: true, cancellationToken);
-
-            if (tableMetadata is null)
+            return NotFound(new ErrorResponse
             {
-                return NotFound(new ErrorResponse
-                {
-                    Error = "NotFound",
-                    Message = $"Table '{table}' not found",
-                    Code = "TABLE_NOT_FOUND"
-                });
-            }
+                Error = "NotFound",
+                Message = $"Table '{table}' not found",
+                Code = "TABLE_NOT_FOUND"
+            });
+        }
 
-            // Determine write options based on mode
-            WriteOptions? options = null;
-            if (mode?.Equals("draft", StringComparison.OrdinalIgnoreCase) == true)
-            {
-                if (!tableMetadata.RowStateEnabled)
-                {
-                    return BadRequest(new ErrorResponse
-                    {
-                        Error = "BadRequest",
-                        Message = $"Table '{table}' does not have row state enabled. Draft mode is not supported.",
-                        Code = "ROW_STATE_NOT_ENABLED"
-                    });
-                }
-                options = WriteOptions.DraftMode;
-            }
-
-            var writeResult = await _writePipeline.InsertAsync(
-                projectId, tableMetadata, data, options, cancellationToken);
-
-            if (!writeResult.Success)
+        // Determine write options based on mode
+        WriteOptions? options = null;
+        if (mode?.Equals("draft", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            if (!tableMetadata.RowStateEnabled)
             {
                 return BadRequest(new ErrorResponse
                 {
-                    Error = "ValidationError",
-                    Message = string.Join("; ", writeResult.Errors.Select(e => e.Message)),
-                    Code = "VALIDATION_FAILED"
+                    Error = "BadRequest",
+                    Message = $"Table '{table}' does not have row state enabled. Draft mode is not supported.",
+                    Code = "ROW_STATE_NOT_ENABLED"
                 });
             }
-
-            var result = writeResult.Data ?? data;
-            var id = result.TryGetValue("_id", out var idValue) && idValue is Guid guid ? guid : Guid.Empty;
-
-            var response = new DataRecordResponse
-            {
-                Id = id,
-                Data = result
-            };
-
-            return CreatedAtAction(nameof(GetById), new { table, id }, response);
+            options = WriteOptions.DraftMode;
         }
-        catch (Exception ex)
+
+        // The explicit opt-in that turns dropping unknown fields from data loss into a feature.
+        if (ignoreUnknown)
         {
-            DataControllerLogs.InsertError(_logger, ex, table);
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                new ErrorResponse { Error = "InternalError", Message = "An unexpected error occurred", Code = "INTERNAL_ERROR" });
+            options = (options ?? WriteOptions.Default) with { AllowUnknownFields = true };
         }
+
+        var writeResult = await _writePipeline.InsertAsync(
+            projectId, tableMetadata, data, options, cancellationToken);
+
+        if (!writeResult.Success)
+        {
+            return BadRequest(new ErrorResponse
+            {
+                Error = "ValidationError",
+                Message = string.Join("; ", writeResult.Errors.Select(e => e.Message)),
+                Code = "VALIDATION_FAILED"
+            });
+        }
+
+        var result = writeResult.Data ?? data;
+        var id = result.TryGetValue("_id", out var idValue) && idValue is Guid guid ? guid : Guid.Empty;
+
+        var response = new DataRecordResponse
+        {
+            Id = id,
+            Data = result
+        };
+
+        return CreatedAtAction(nameof(GetById), new { table, id }, response);
     }
 
     #endregion
@@ -388,62 +353,57 @@ public sealed class DataController : ControllerBase
         string table,
         Guid id,
         [FromBody] IDictionary<string, object?> data,
+        [FromQuery] bool ignoreUnknown = false,
         CancellationToken cancellationToken = default)
     {
-        try
+        var projectId = GetProjectId();
+
+        var tableMetadata = await _metadataRepository.GetTableByNameAsync(
+            projectId, table, includeColumns: true, cancellationToken);
+
+        if (tableMetadata is null)
         {
-            var projectId = GetProjectId();
-
-            var tableMetadata = await _metadataRepository.GetTableByNameAsync(
-                projectId, table, includeColumns: true, cancellationToken);
-
-            if (tableMetadata is null)
+            return NotFound(new ErrorResponse
             {
-                return NotFound(new ErrorResponse
-                {
-                    Error = "NotFound",
-                    Message = $"Table '{table}' not found",
-                    Code = "TABLE_NOT_FOUND"
-                });
-            }
-
-            // Check if record exists first
-            var existing = await _dataService.GetByIdAsync(projectId, table, id, cancellationToken);
-            if (existing == null)
-            {
-                return NotFound(new ErrorResponse
-                {
-                    Error = "NotFound",
-                    Message = $"Record with ID '{id}' not found in table '{table}'",
-                    Code = "RECORD_NOT_FOUND"
-                });
-            }
-
-            var writeResult = await _writePipeline.UpdateAsync(
-                projectId, tableMetadata, id, data, existing, cancellationToken: cancellationToken);
-
-            if (!writeResult.Success)
-            {
-                return BadRequest(new ErrorResponse
-                {
-                    Error = "ValidationError",
-                    Message = string.Join("; ", writeResult.Errors.Select(e => e.Message)),
-                    Code = "VALIDATION_FAILED"
-                });
-            }
-
-            return Ok(new DataRecordResponse
-            {
-                Id = id,
-                Data = writeResult.Data ?? data
+                Error = "NotFound",
+                Message = $"Table '{table}' not found",
+                Code = "TABLE_NOT_FOUND"
             });
         }
-        catch (Exception ex)
+
+        // Check if record exists first
+        var existing = await _dataService.GetByIdAsync(projectId, table, id, cancellationToken);
+        if (existing == null)
         {
-            DataControllerLogs.UpdateError(_logger, ex, id, table);
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                new ErrorResponse { Error = "InternalError", Message = "An unexpected error occurred", Code = "INTERNAL_ERROR" });
+            return NotFound(new ErrorResponse
+            {
+                Error = "NotFound",
+                Message = $"Record with ID '{id}' not found in table '{table}'",
+                Code = "RECORD_NOT_FOUND"
+            });
         }
+
+        var updateOptions = ignoreUnknown
+            ? WriteOptions.Default with { AllowUnknownFields = true }
+            : null;
+        var writeResult = await _writePipeline.UpdateAsync(
+            projectId, tableMetadata, id, data, existing, updateOptions, cancellationToken);
+
+        if (!writeResult.Success)
+        {
+            return BadRequest(new ErrorResponse
+            {
+                Error = "ValidationError",
+                Message = string.Join("; ", writeResult.Errors.Select(e => e.Message)),
+                Code = "VALIDATION_FAILED"
+            });
+        }
+
+        return Ok(new DataRecordResponse
+        {
+            Id = id,
+            Data = writeResult.Data ?? data
+        });
     }
 
     #endregion
@@ -461,44 +421,35 @@ public sealed class DataController : ControllerBase
         Guid id,
         CancellationToken cancellationToken = default)
     {
-        try
+        var projectId = GetProjectId();
+
+        var tableMetadata = await _metadataRepository.GetTableByNameAsync(
+            projectId, table, includeColumns: true, cancellationToken);
+
+        if (tableMetadata is null)
         {
-            var projectId = GetProjectId();
-
-            var tableMetadata = await _metadataRepository.GetTableByNameAsync(
-                projectId, table, includeColumns: true, cancellationToken);
-
-            if (tableMetadata is null)
+            return NotFound(new ErrorResponse
             {
-                return NotFound(new ErrorResponse
-                {
-                    Error = "NotFound",
-                    Message = $"Table '{table}' not found",
-                    Code = "TABLE_NOT_FOUND"
-                });
-            }
-
-            var writeResult = await _writePipeline.DeleteAsync(
-                projectId, tableMetadata, id, cancellationToken: cancellationToken);
-
-            if (!writeResult.Success)
-            {
-                return NotFound(new ErrorResponse
-                {
-                    Error = "NotFound",
-                    Message = $"Record with ID '{id}' not found in table '{table}'",
-                    Code = "RECORD_NOT_FOUND"
-                });
-            }
-
-            return NoContent();
+                Error = "NotFound",
+                Message = $"Table '{table}' not found",
+                Code = "TABLE_NOT_FOUND"
+            });
         }
-        catch (Exception ex)
+
+        var writeResult = await _writePipeline.DeleteAsync(
+            projectId, tableMetadata, id, cancellationToken: cancellationToken);
+
+        if (!writeResult.Success)
         {
-            DataControllerLogs.DeleteError(_logger, ex, id, table);
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                new ErrorResponse { Error = "InternalError", Message = "An unexpected error occurred", Code = "INTERNAL_ERROR" });
+            return NotFound(new ErrorResponse
+            {
+                Error = "NotFound",
+                Message = $"Record with ID '{id}' not found in table '{table}'",
+                Code = "RECORD_NOT_FOUND"
+            });
         }
+
+        return NoContent();
     }
 
     #endregion

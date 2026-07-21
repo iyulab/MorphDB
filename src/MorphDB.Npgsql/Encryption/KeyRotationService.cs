@@ -66,7 +66,7 @@ public sealed partial class KeyRotationService : IKeyRotationService
             var table = await _metadataRepository.GetTableByNameAsync(projectId, tableName, true, cancellationToken);
             if (table is null)
             {
-                throw new InvalidOperationException($"Table '{tableName}' not found for project {projectId}");
+                throw new MorphDB.Core.Exceptions.TableNotFoundException(tableName);
             }
 
             // Get encrypted columns
@@ -335,7 +335,7 @@ public sealed partial class KeyRotationService : IKeyRotationService
         var table = await _metadataRepository.GetTableByNameAsync(projectId, tableName, true, cancellationToken);
         if (table is null)
         {
-            throw new InvalidOperationException($"Table '{tableName}' not found for project {projectId}");
+            throw new MorphDB.Core.Exceptions.TableNotFoundException(tableName);
         }
 
         var encryptedColumns = table.Columns

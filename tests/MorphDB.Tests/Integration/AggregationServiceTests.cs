@@ -43,8 +43,7 @@ public class AggregationServiceTests
         var securityPolicyService = new SecurityPolicyService(fixture.DataSource);
         var securityContextAccessor = new SecurityContextAccessor();
 
-        _dataService = new PostgresDataService(
-            fixture.DataSource,
+        _dataService = fixture.CreateDataService(
             _metadataRepository,
             securityPolicyService,
             securityContextAccessor);

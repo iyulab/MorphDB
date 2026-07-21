@@ -44,6 +44,11 @@ public interface IWriteContext
     IDictionary<string, object?>? ExistingData { get; }
 
     /// <summary>
+    /// Logical key columns for Upsert conflict resolution. Null means the primary key.
+    /// </summary>
+    IReadOnlyList<string>? KeyColumns { get; }
+
+    /// <summary>
     /// Write options controlling validation behavior.
     /// </summary>
     WriteOptions Options { get; }
@@ -92,6 +97,7 @@ public sealed class WriteContext : IWriteContext
     public IDictionary<string, object?> Data { get; init; } = new Dictionary<string, object?>();
     public IDictionary<string, object?> OriginalData { get; init; } = new Dictionary<string, object?>();
     public IDictionary<string, object?>? ExistingData { get; init; }
+    public IReadOnlyList<string>? KeyColumns { get; init; }
     public WriteOptions Options { get; init; } = WriteOptions.Default;
     public SecurityContext? SecurityContext { get; init; }
     public IList<ValidationError> Errors { get; } = new List<ValidationError>();

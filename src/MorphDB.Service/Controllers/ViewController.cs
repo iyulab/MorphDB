@@ -107,15 +107,6 @@ public sealed class ViewController : ControllerBase
                 Code = ex.ErrorCode
             });
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("not found"))
-        {
-            return NotFound(new ErrorResponse
-            {
-                Error = "NotFound",
-                Message = ex.Message,
-                Code = "RESOURCE_NOT_FOUND"
-            });
-        }
     }
 
     /// <summary>

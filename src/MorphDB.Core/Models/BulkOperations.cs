@@ -224,7 +224,8 @@ public sealed record WriteOptions
         ValidateCheck = false,
         ApplyDefaults = false,
         ApplyTimestamps = false,
-        ApplyVersion = false
+        ApplyVersion = false,
+        AllowUnknownFields = true
     };
 
     /// <summary>
@@ -301,6 +302,14 @@ public sealed record WriteOptions
     public bool DeferValidation { get; init; }
 
     /// <summary>
+    /// When true, fields naming no declared column are silently dropped instead of failing the
+    /// write. Off by default: a dropped value is data loss unless the caller explicitly asked
+    /// for it. (The executor has always skipped unknown keys; this flag is what makes that skip
+    /// consent instead of silence.)
+    /// </summary>
+    public bool AllowUnknownFields { get; init; }
+
+    /// <summary>
     /// Expected version for optimistic locking (null to skip check).
     /// </summary>
     public int? ExpectedVersion { get; init; }
@@ -369,4 +378,5 @@ public static class ValidationErrorCodes
     public const string VersionConflict = "VERSION_CONFLICT";
     public const string InvalidValue = "INVALID_VALUE";
     public const string NotFound = "NOT_FOUND";
+    public const string UnknownColumn = "UNKNOWN_COLUMN";
 }

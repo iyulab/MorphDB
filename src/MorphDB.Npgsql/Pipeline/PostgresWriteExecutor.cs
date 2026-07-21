@@ -102,6 +102,14 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             scope.SetRowCount(affectedRows);
             return WriteResult.Ok(new Dictionary<string, object?> { ["deleted"] = true, ["id"] = context.RecordId });
         }
+        catch (PostgresException pg) when (pg.SqlState is PostgresErrorCodes.NotNullViolation or PostgresErrorCodes.UniqueViolation)
+        {
+            // A physical constraint the app-layer validators did not intercept is still the
+            // caller's mistake, not our defect — translate it before it can surface as a 500.
+            var translated = TranslateConstraintViolation(pg, context.Table);
+            scope.SetError(translated.Message);
+            throw translated;
+        }
         catch (Exception ex)
         {
             scope.SetError(ex.Message);
@@ -142,6 +150,14 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             var decrypted = DecryptRowData(context.ProjectId, table.LogicalName, mapped, table.Columns);
             scope.SetRowCount(1);
             return WriteResult.Ok(decrypted);
+        }
+        catch (PostgresException pg) when (pg.SqlState is PostgresErrorCodes.NotNullViolation or PostgresErrorCodes.UniqueViolation)
+        {
+            // A physical constraint the app-layer validators did not intercept is still the
+            // caller's mistake, not our defect — translate it before it can surface as a 500.
+            var translated = TranslateConstraintViolation(pg, context.Table);
+            scope.SetError(translated.Message);
+            throw translated;
         }
         catch (Exception ex)
         {
@@ -203,6 +219,14 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             scope.SetRowCount(1);
             return WriteResult.Ok(decrypted);
         }
+        catch (PostgresException pg) when (pg.SqlState is PostgresErrorCodes.NotNullViolation or PostgresErrorCodes.UniqueViolation)
+        {
+            // A physical constraint the app-layer validators did not intercept is still the
+            // caller's mistake, not our defect — translate it before it can surface as a 500.
+            var translated = TranslateConstraintViolation(pg, context.Table);
+            scope.SetError(translated.Message);
+            throw translated;
+        }
         catch (Exception ex)
         {
             scope.SetError(ex.Message);
@@ -212,9 +236,34 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
 
     private async Task<WriteResult> ExecuteUpsertAsync(IWriteContext context)
     {
-        // For upsert, we need key columns - use primary key
         var table = context.Table;
-        var pkColumn = GetPrimaryKeyColumn(table);
+
+        // Conflict resolution: the caller's key columns (logical → physical, validated), or the
+        // primary key when none were named.
+        List<string> conflictColumns;
+        if (context.KeyColumns is { Count: > 0 })
+        {
+            var columnMap = table.Columns.ToDictionary(c => c.LogicalName, c => c);
+            conflictColumns = new List<string>(context.KeyColumns.Count);
+            foreach (var key in context.KeyColumns)
+            {
+                if (!columnMap.TryGetValue(key, out var keyColumn))
+                {
+                    return WriteResult.Failed(new ValidationError
+                    {
+                        Field = key,
+                        Code = ValidationErrorCodes.UnknownColumn,
+                        Message = $"Key column '{key}' not found in table '{table.LogicalName}'."
+                    });
+                }
+
+                conflictColumns.Add(keyColumn.PhysicalName);
+            }
+        }
+        else
+        {
+            conflictColumns = [GetPrimaryKeyColumn(table).PhysicalName];
+        }
 
         using var scope = new QueryExecutionScope(
             _queryDiagnostics,
@@ -234,7 +283,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             // Prepare insert parameters
             var (columns, parameters, values) = PrepareInsertParameters(encryptedData, table.Columns);
 
-            var sql = DmlBuilder.BuildUpsert(table.PhysicalName, columns, parameters, [pkColumn.PhysicalName]);
+            var sql = DmlBuilder.BuildUpsert(table.PhysicalName, columns, parameters, conflictColumns);
 
             await using var conn = await GetScopedConnectionAsync(context.CancellationToken);
             var result = await conn.Connection.QuerySingleAsync<dynamic>(
@@ -244,6 +293,14 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             var decrypted = DecryptRowData(context.ProjectId, table.LogicalName, mapped, table.Columns);
             scope.SetRowCount(1);
             return WriteResult.Ok(decrypted);
+        }
+        catch (PostgresException pg) when (pg.SqlState is PostgresErrorCodes.NotNullViolation or PostgresErrorCodes.UniqueViolation)
+        {
+            // A physical constraint the app-layer validators did not intercept is still the
+            // caller's mistake, not our defect — translate it before it can surface as a 500.
+            var translated = TranslateConstraintViolation(pg, context.Table);
+            scope.SetError(translated.Message);
+            throw translated;
         }
         catch (Exception ex)
         {
@@ -300,6 +357,14 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             var mapped = MapToLogicalDictionary(result, table.Columns);
             scope.SetRowCount(1);
             return WriteResult.Ok(mapped);
+        }
+        catch (PostgresException pg) when (pg.SqlState is PostgresErrorCodes.NotNullViolation or PostgresErrorCodes.UniqueViolation)
+        {
+            // A physical constraint the app-layer validators did not intercept is still the
+            // caller's mistake, not our defect — translate it before it can surface as a 500.
+            var translated = TranslateConstraintViolation(pg, context.Table);
+            scope.SetError(translated.Message);
+            throw translated;
         }
         catch (Exception ex)
         {
@@ -552,6 +617,25 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
         };
     }
 
+    /// <summary>
+    /// Turns a physical NOT NULL / UNIQUE violation into the same kind of error the app-layer
+    /// validators produce, naming the logical column — never the physical one — because internal
+    /// names are not contract (hidden-layer principle).
+    /// </summary>
+    private static MorphDB.Core.Exceptions.ValidationException TranslateConstraintViolation(
+        PostgresException pg, TableMetadata table)
+    {
+        if (pg.SqlState == PostgresErrorCodes.NotNullViolation)
+        {
+            var logical = table.Columns.FirstOrDefault(c => c.PhysicalName == pg.ColumnName)?.LogicalName;
+            return logical is null
+                ? new MorphDB.Core.Exceptions.ValidationException("A required column does not allow null values.")
+                : new MorphDB.Core.Exceptions.ValidationException(logical, "a value is required and cannot be null");
+        }
+
+        return new MorphDB.Core.Exceptions.ValidationException(
+            "A value in this request conflicts with an existing row: it violates a unique constraint.");
+    }
+
     #endregion
 }
-

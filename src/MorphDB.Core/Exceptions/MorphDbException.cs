@@ -124,7 +124,7 @@ public class LockAcquisitionException : MorphDbException
 public class MissingProjectException : MorphDbException
 {
     public MissingProjectException()
-        : base("MISSING_PROJECT", "This request must say which project it applies to. Send a valid API key, or an X-Project-Id header.")
+        : base("MISSING_PROJECT", "This request must say which project it applies to. Send an X-Project-Id header.")
     {
     }
 }

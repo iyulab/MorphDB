@@ -42,8 +42,7 @@ public class DataServiceTests
         var securityPolicyService = new SecurityPolicyService(fixture.DataSource);
         var securityContextAccessor = new SecurityContextAccessor();
 
-        _dataService = new PostgresDataService(
-            fixture.DataSource,
+        _dataService = fixture.CreateDataService(
             _metadataRepository,
             securityPolicyService,
             securityContextAccessor);
@@ -220,7 +219,9 @@ public class DataServiceTests
 
         // Act & Assert
         var act = () => _dataService.GetByIdAsync(projectId, "nonexistent_table", Guid.NewGuid());
-        await act.Should().ThrowAsync<NotFoundException>();
+        // The domain type (not a message-bearing generic NotFoundException): it maps to the same
+        // 404, and its message no longer embeds the project GUID (hidden-layer sweep).
+        await act.Should().ThrowAsync<TableNotFoundException>();
     }
 
     #endregion

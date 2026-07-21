@@ -15,31 +15,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    services:
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_USER: test
-          POSTGRES_PASSWORD: test
-          POSTGRES_DB: morphdb_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
+    # No service containers: the tests are Testcontainers-self-sufficient (the fixture starts its
+    # own postgres and injects the connection string in-memory). The postgres/redis services and
+    # ConnectionStrings env vars that used to sit here were leftovers no test ever read.
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -57,9 +35,6 @@ jobs:
 
       - name: Test
         run: dotnet test --no-build --configuration Release --verbosity normal --collect:"XPlat Code Coverage" --results-directory ./coverage
-        env:
-          ConnectionStrings__MorphDB: "Host=localhost;Port=5432;Database=morphdb_test;Username=test;Password=test"
-          ConnectionStrings__Redis: "localhost:6379"
 
       - name: Upload coverage
         uses: codecov/codecov-action@v4
@@ -90,6 +65,12 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      # Critical-level only, deliberately: the remaining highs need major bumps of the electron
+      # toolchain (electron 33→43, vite 5→8) that electron-vite does not yet support — a gate that
+      # is red on day one teaches everyone to ignore it. Tighten to high when those land.
+      - name: Audit production-severity vulnerabilities
+        run: npm audit --audit-level=critical
 
       - name: TypeScript check
         run: npm run typecheck

@@ -227,7 +227,8 @@ public sealed class DynamicMutation
     /// <summary>
     /// Upserts a record (insert or update based on key columns).
     /// </summary>
-    // TODO: Migrate to IWritePipeline when Upsert support is added
+    // Reaches the pipeline via IMorphDataService, whose write methods now delegate to
+    // IWritePipeline — the same validators and transformers as every other door.
     [GraphQLDescription("Upserts a record (insert or update based on key columns)")]
     public async Task<MutationResult<RecordNode>> UpsertRecord(
         string table,
@@ -273,7 +274,8 @@ public sealed class DynamicMutation
     /// <summary>
     /// Inserts multiple records in a batch.
     /// </summary>
-    // TODO: Migrate to IWritePipeline when Batch insert support is added
+    // Reaches the pipeline via IMorphDataService.InsertBatchAsync (pipeline per row, one
+    // transaction via the ambient connection scope).
     [GraphQLDescription("Inserts multiple records in a batch")]
     public async Task<MutationResult<IReadOnlyList<RecordNode>>> CreateRecords(
         string table,

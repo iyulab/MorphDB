@@ -23,8 +23,12 @@ public sealed class UniqueValidator : IValidator
 
     public bool ShouldExecute(IWriteContext context)
     {
+        // Upsert is excluded on purpose: a collision on the conflict key is not an error there —
+        // it is the very signal that turns the write into an update. Pre-checking would veto the
+        // operation's whole reason to exist; the physical ON CONFLICT resolves the key collision
+        // and the executor's 23505 translation still answers for any other unique column.
         return context.Options.ValidateUnique
-            && context.OperationType is WriteOperationType.Insert or WriteOperationType.Update or WriteOperationType.Upsert;
+            && context.OperationType is WriteOperationType.Insert or WriteOperationType.Update;
     }
 
     public async Task ExecuteAsync(IWriteContext context)

@@ -988,6 +988,12 @@ public static class DdlBuilder
         if (string.IsNullOrEmpty(checkExpression))
             return checkExpression;
 
+        // Validate the caller's original text, before names are rewritten: a rejection must quote
+        // the expression the caller actually wrote. The post-translation validation at the emit
+        // site still runs as defence in depth, but (since translation only swaps identifiers and
+        // strips nothing) an invalid expression fails here first, with logical names in the message.
+        ValidateInlineExpression(checkExpression, "Check");
+
         var result = checkExpression;
 
         // Sort by length descending to replace longer names first (e.g., "unit_price" before "price")

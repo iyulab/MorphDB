@@ -270,6 +270,7 @@ public static partial class ServiceCollectionExtensions
         services.AddSingleton<ITransformer, RowStateApplier>(); // Row state for draft mode
 
         // Register Validators (virtual constraint enforcement)
+        services.AddSingleton<IValidator, UnknownFieldValidator>();
         services.AddSingleton<IValidator, RequiredValidator>();
         services.AddSingleton<IValidator, UniqueValidator>();
         services.AddSingleton<IValidator, ForeignKeyValidator>();

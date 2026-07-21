@@ -56,36 +56,29 @@ public sealed class AuditController : ControllerBase
     {
         AuditControllerLogs.QueryingAuditLogs(_logger, projectId);
 
-        try
+        var query = new AuditLogQuery
         {
-            var query = new AuditLogQuery
-            {
-                Category = parameters.Category.HasValue
-                    ? (AuditCategory)parameters.Category.Value
-                    : null,
-                MinSeverity = parameters.MinSeverity.HasValue
-                    ? (AuditSeverity)parameters.MinSeverity.Value
-                    : null,
-                ActorId = parameters.ActorId,
-                ResourceType = parameters.ResourceType,
-                ResourceId = parameters.ResourceId,
-                Action = parameters.Action,
-                From = parameters.From,
-                To = parameters.To,
-                SearchText = parameters.SearchText,
-                Page = Math.Max(1, parameters.Page),
-                PageSize = Math.Clamp(parameters.PageSize, 1, 100),
-                OrderBy = parameters.OrderBy ?? "timestamp",
-                Descending = parameters.Descending
-            };
+            Category = parameters.Category.HasValue
+                ? (AuditCategory)parameters.Category.Value
+                : null,
+            MinSeverity = parameters.MinSeverity.HasValue
+                ? (AuditSeverity)parameters.MinSeverity.Value
+                : null,
+            ActorId = parameters.ActorId,
+            ResourceType = parameters.ResourceType,
+            ResourceId = parameters.ResourceId,
+            Action = parameters.Action,
+            From = parameters.From,
+            To = parameters.To,
+            SearchText = parameters.SearchText,
+            Page = Math.Max(1, parameters.Page),
+            PageSize = Math.Clamp(parameters.PageSize, 1, 100),
+            OrderBy = parameters.OrderBy ?? "timestamp",
+            Descending = parameters.Descending
+        };
 
-            var page = await _auditService.QueryAsync(projectId, query, cancellationToken);
-            return Ok(AuditLogPageApiResponse.FromModel(page));
-        }
-        catch (Exception ex)
-        {
-            return UnhandledErrors.Map(this, _logger, ex, "audit query");
-        }
+        var page = await _auditService.QueryAsync(projectId, query, cancellationToken);
+        return Ok(AuditLogPageApiResponse.FromModel(page));
     }
 
     /// <summary>
@@ -139,15 +132,8 @@ public sealed class AuditController : ControllerBase
     {
         AuditControllerLogs.GettingAuditStats(_logger, projectId);
 
-        try
-        {
-            var stats = await _auditService.GetStatsAsync(projectId, fromDate: from, toDate: to, cancellationToken);
-            return Ok(AuditStatsApiResponse.FromModel(stats));
-        }
-        catch (Exception ex)
-        {
-            return UnhandledErrors.Map(this, _logger, ex, "audit stats");
-        }
+        var stats = await _auditService.GetStatsAsync(projectId, fromDate: from, toDate: to, cancellationToken);
+        return Ok(AuditStatsApiResponse.FromModel(stats));
     }
 }
 

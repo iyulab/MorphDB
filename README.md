@@ -42,7 +42,7 @@ MorphDB: [Developer] → [Logical Schema] → [Physical DB]
 ### Docker (Recommended)
 
 ```bash
-docker pull ghcr.io/iyulab/morphdb:0.7.0
+docker pull ghcr.io/iyulab/morphdb:0.7.1
 ```
 
 One number covers everything: a release publishes the git tag `vX.Y.Z`, the image `X.Y.Z`, and the
@@ -56,9 +56,11 @@ Run with PostgreSQL using docker-compose:
 # docker-compose.yml
 services:
   morphdb:
-    image: ghcr.io/iyulab/morphdb:0.7.0
+    image: ghcr.io/iyulab/morphdb:0.7.1
     ports:
-      - "8080:8080"
+      # Bound to loopback on purpose: this quick-start compose has no authentication in front of
+      # it. To serve other machines, put a reverse proxy (or your app) in front and bind that.
+      - "127.0.0.1:8080:8080"
     environment:
       ConnectionStrings__MorphDB: Host=postgres;Port=5432;Database=morphdb;Username=morph;Password=morph
     depends_on:

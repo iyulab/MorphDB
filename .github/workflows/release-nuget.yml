@@ -42,6 +42,12 @@ jobs:
       - name: Build
         run: dotnet build --no-restore --configuration Release
 
+      # Gate the release on a green suite — publishing is irreversible (NuGet can only unlist),
+      # so the gate has to live inside the publish path itself, not in ci.yml racing alongside.
+      # Tests are Testcontainers-self-sufficient; ubuntu-latest provides the Docker they need.
+      - name: Test
+        run: dotnet test --no-build --configuration Release --verbosity normal
+
       - name: Pack
         run: dotnet pack --no-build --configuration Release --output ./nupkgs /p:PackageVersion=${{ steps.version.outputs.version }}
 

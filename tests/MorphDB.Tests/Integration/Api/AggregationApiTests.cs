@@ -245,7 +245,7 @@ public class AggregationApiTests
 
     #region Filter Tests
 
-    [Fact(Skip = "Filter API serialization needs debugging")]
+    [Fact]
     public async Task Aggregate_WithFilter_ShouldApplyFilter()
     {
         // Arrange
@@ -290,7 +290,7 @@ public class AggregationApiTests
 
     #region Having Tests
 
-    [Fact(Skip = "Having API serialization needs debugging")]
+    [Fact]
     public async Task Aggregate_WithHaving_ShouldFilterAggregatedResults()
     {
         // Arrange

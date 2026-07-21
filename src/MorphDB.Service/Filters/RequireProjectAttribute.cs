@@ -41,11 +41,14 @@ internal sealed class RequireProjectFilter : IActionFilter
             return;
         }
 
+        // The exception type owns the wording — duplicating the literal here once let the two
+        // drift, and the filter briefly advertised an API key the server never asks for.
+        var missing = new MorphDB.Core.Exceptions.MissingProjectException();
         context.Result = new BadRequestObjectResult(new ErrorResponse
         {
             Error = "BadRequest",
-            Message = "This request must say which project it applies to. Send a valid API key, or an X-Project-Id header.",
-            Code = "MISSING_PROJECT"
+            Message = missing.Message,
+            Code = missing.ErrorCode
         });
     }
 
