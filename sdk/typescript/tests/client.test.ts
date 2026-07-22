@@ -84,8 +84,5 @@ describe('MorphDBClient', () => {
       });
       expect(client).toBeDefined();
     });
-
-      expect(client).toBeDefined();
-    });
   });
 });
