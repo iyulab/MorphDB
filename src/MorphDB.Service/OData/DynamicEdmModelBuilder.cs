@@ -53,7 +53,8 @@ public static class DynamicEdmModelBuilder
             // Add system properties with underscore prefix
             var idProperty = entityType.AddStructuralProperty("_id", EdmPrimitiveTypeKind.Guid, false);
             entityType.AddKeys(idProperty);
-            entityType.AddStructuralProperty("project_id", EdmPrimitiveTypeKind.Guid, false);
+            // project_id is internal (§3.10-B2): rows no longer carry it, so the EDM must not
+            // declare it either.
             entityType.AddStructuralProperty("_created_at", EdmPrimitiveTypeKind.DateTimeOffset, true);
             entityType.AddStructuralProperty("_updated_at", EdmPrimitiveTypeKind.DateTimeOffset, true);
 

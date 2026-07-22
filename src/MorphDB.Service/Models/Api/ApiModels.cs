@@ -533,7 +533,11 @@ public sealed record TableApiResponse
         Version = table.SchemaVersion,
         CreatedAt = table.CreatedAt,
         UpdatedAt = table.UpdatedAt,
-        Columns = table.Columns.Select(ColumnApiResponse.FromMetadata).ToList(),
+        // project_id is an internal operating detail — the request is already project-scoped, so
+        // the column says nothing to a consumer and stays out of the schema surface (§3.10-B2).
+        Columns = table.Columns
+            .Where(c => c.LogicalName != MorphDB.Core.Models.SystemColumns.ProjectId)
+            .Select(ColumnApiResponse.FromMetadata).ToList(),
         Indexes = table.Indexes.Select(IndexApiResponse.FromMetadata).ToList(),
         Relations = table.Relations.Select(RelationApiResponse.FromMetadata).ToList(),
         SystemColumns = SystemColumnOptionsApiResponse.FromMetadata(table)

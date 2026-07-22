@@ -4,6 +4,14 @@
 
 ### Changed
 
+- **`project_id` no longer appears on any consumption surface.** The project is an internal
+  operating unit and every request is already scoped by `X-Project-Id`, so the GUID carried zero
+  information — yet it leaked into every data row (REST, complex query, OData, write responses),
+  the schema column list, and the "Available columns" error text. All three surfaces now exclude
+  it; the physical column and scope isolation are unchanged server-side. Consumers that read the
+  leaked value must stop — it was never part of the row contract. (The four private copies of the
+  physical-row→logical-dictionary mapping converged into one `RowMapper` on the way.)
+
 - **Request envelopes are strict.** A JSON member a request DTO does not declare is refused with
   `400 INVALID_ARGUMENT` naming the member and listing the supported ones — previously it was
   silently dropped by default deserialization, so a typo'd `filters` against

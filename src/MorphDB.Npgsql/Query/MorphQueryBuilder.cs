@@ -352,7 +352,7 @@ internal sealed class MorphQuery : IMorphQuery
         var mappedResults = new List<IDictionary<string, object?>>();
         foreach (var row in results)
         {
-            mappedResults.Add(MapToLogicalDictionary(row, table.Columns));
+            mappedResults.Add(Infrastructure.RowMapper.MapToLogicalDictionary(row, table.Columns));
         }
         return mappedResults;
     }
@@ -1210,34 +1210,6 @@ internal sealed class MorphQuery : IMorphQuery
             cancellationToken);
     }
 
-    private static Dictionary<string, object?> MapToLogicalDictionary(
-        dynamic row,
-        IReadOnlyList<ColumnMetadata> columns)
-    {
-        var physicalToLogical = columns.ToDictionary(
-            c => c.PhysicalName.ToLowerInvariant(),
-            c => c);
-        var result = new Dictionary<string, object?>();
-
-        var rowDict = (IDictionary<string, object?>)row;
-
-        foreach (var (key, value) in rowDict)
-        {
-            var normalizedKey = key.ToLowerInvariant();
-            if (physicalToLogical.TryGetValue(normalizedKey, out var column))
-            {
-                var convertedValue = TypeMapper.FromDbValue(value, column.DataType);
-                result[column.LogicalName] = convertedValue;
-            }
-            else
-            {
-                // Unknown column (e.g., aggregate alias), keep as-is
-                result[key] = value;
-            }
-        }
-
-        return result;
-    }
 
     #endregion
 }

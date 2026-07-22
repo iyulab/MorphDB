@@ -144,7 +144,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             var result = await conn.Connection.QuerySingleAsync<dynamic>(
                 new CommandDefinition(sql, values, transaction: conn.Transaction, cancellationToken: context.CancellationToken));
 
-            var mapped = MapToLogicalDictionary(result, table.Columns);
+            var mapped = Infrastructure.RowMapper.MapToLogicalDictionary(result, table.Columns);
 
             // Return decrypted data to the caller
             var decrypted = DecryptRowData(context.ProjectId, table.LogicalName, mapped, table.Columns);
@@ -214,7 +214,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
                 });
             }
 
-            var mapped = MapToLogicalDictionary(result, table.Columns);
+            var mapped = Infrastructure.RowMapper.MapToLogicalDictionary(result, table.Columns);
             var decrypted = DecryptRowData(context.ProjectId, table.LogicalName, mapped, table.Columns);
             scope.SetRowCount(1);
             return WriteResult.Ok(decrypted);
@@ -289,7 +289,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             var result = await conn.Connection.QuerySingleAsync<dynamic>(
                 new CommandDefinition(sql, values, transaction: conn.Transaction, cancellationToken: context.CancellationToken));
 
-            var mapped = MapToLogicalDictionary(result, table.Columns);
+            var mapped = Infrastructure.RowMapper.MapToLogicalDictionary(result, table.Columns);
             var decrypted = DecryptRowData(context.ProjectId, table.LogicalName, mapped, table.Columns);
             scope.SetRowCount(1);
             return WriteResult.Ok(decrypted);
@@ -354,7 +354,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
                 });
             }
 
-            var mapped = MapToLogicalDictionary(result, table.Columns);
+            var mapped = Infrastructure.RowMapper.MapToLogicalDictionary(result, table.Columns);
             scope.SetRowCount(1);
             return WriteResult.Ok(mapped);
         }
@@ -516,31 +516,6 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
         return (setColumns, values);
     }
 
-    private static Dictionary<string, object?> MapToLogicalDictionary(
-        dynamic row,
-        IReadOnlyList<ColumnMetadata> columns)
-    {
-        var physicalToLogical = columns.ToDictionary(c => c.PhysicalName.ToLowerInvariant(), c => c);
-        var result = new Dictionary<string, object?>();
-
-        var rowDict = (IDictionary<string, object?>)row;
-
-        foreach (var (key, value) in rowDict)
-        {
-            var normalizedKey = key.ToLowerInvariant();
-            if (physicalToLogical.TryGetValue(normalizedKey, out var column))
-            {
-                var convertedValue = TypeMapper.FromDbValue(value, column.DataType);
-                result[column.LogicalName] = convertedValue;
-            }
-            else
-            {
-                result[key] = value;
-            }
-        }
-
-        return result;
-    }
 
     private IDictionary<string, object?> EncryptRowData(
         Guid projectId,

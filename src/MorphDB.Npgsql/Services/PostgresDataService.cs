@@ -96,7 +96,7 @@ public sealed class PostgresDataService : IMorphDataService
         if (result is null)
             return null;
 
-        var mapped = MapToLogicalDictionary(result, table.Columns);
+        var mapped = Infrastructure.RowMapper.MapToLogicalDictionary(result, table.Columns);
 
         // Decrypt encrypted columns
         return DecryptRowData(projectId, tableName, mapped, table.Columns);
@@ -426,33 +426,6 @@ public sealed class PostgresDataService : IMorphDataService
         return (setColumns, values);
     }
 
-    private static Dictionary<string, object?> MapToLogicalDictionary(
-        dynamic row,
-        IReadOnlyList<ColumnMetadata> columns)
-    {
-        var physicalToLogical = columns.ToDictionary(c => c.PhysicalName.ToLowerInvariant(), c => c);
-        var result = new Dictionary<string, object?>();
-
-        var rowDict = (IDictionary<string, object?>)row;
-
-        foreach (var (key, value) in rowDict)
-        {
-            var normalizedKey = key.ToLowerInvariant();
-            if (physicalToLogical.TryGetValue(normalizedKey, out var column))
-            {
-                // Convert from database type to .NET type
-                var convertedValue = TypeMapper.FromDbValue(value, column.DataType);
-                result[column.LogicalName] = convertedValue;
-            }
-            else
-            {
-                // Unknown column, keep as-is
-                result[key] = value;
-            }
-        }
-
-        return result;
-    }
 
     /// <summary>
     /// Encrypts row data for storage.

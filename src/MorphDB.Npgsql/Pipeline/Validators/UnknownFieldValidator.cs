@@ -51,7 +51,10 @@ public sealed class UnknownFieldValidator : IValidator
             return Task.CompletedTask;
         }
 
-        var available = string.Join(", ", declared.OrderBy(n => n, StringComparer.Ordinal));
+        // project_id is internal — naming it here would advertise a column no caller may use.
+        var available = string.Join(", ", declared
+            .Where(n => n != SystemColumns.ProjectId)
+            .OrderBy(n => n, StringComparer.Ordinal));
         foreach (var key in unknown)
         {
             ((WriteContext)context).AddError(

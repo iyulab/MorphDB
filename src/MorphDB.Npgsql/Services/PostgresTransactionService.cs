@@ -515,7 +515,7 @@ public sealed class PostgresTransactionService : ITransactionService
         if (result is null)
             return null;
 
-        return MapToLogicalDictionary(result, table.Columns);
+        return Infrastructure.RowMapper.MapToLogicalDictionary(result, table.Columns);
     }
 
     private static RowStateValue GetRowState(IDictionary<string, object?> data)
@@ -597,34 +597,9 @@ public sealed class PostgresTransactionService : ITransactionService
             new CommandDefinition(sql, new { id = recordId, state = stateString, errors = errorsJson },
                 cancellationToken: cancellationToken));
 
-        return MapToLogicalDictionary(result, table.Columns);
+        return Infrastructure.RowMapper.MapToLogicalDictionary(result, table.Columns);
     }
 
-    private static Dictionary<string, object?> MapToLogicalDictionary(
-        dynamic row,
-        IReadOnlyList<ColumnMetadata> columns)
-    {
-        var physicalToLogical = columns.ToDictionary(c => c.PhysicalName.ToLowerInvariant(), c => c);
-        var result = new Dictionary<string, object?>();
-
-        var rowDict = (IDictionary<string, object?>)row;
-
-        foreach (var (key, value) in rowDict)
-        {
-            var normalizedKey = key.ToLowerInvariant();
-            if (physicalToLogical.TryGetValue(normalizedKey, out var column))
-            {
-                var convertedValue = TypeMapper.FromDbValue(value, column.DataType);
-                result[column.LogicalName] = convertedValue;
-            }
-            else
-            {
-                result[key] = value;
-            }
-        }
-
-        return result;
-    }
 
     #endregion
 }
