@@ -13,7 +13,10 @@
   `_morph_api_keys` control-plane table (existing databases drop it on start), the `Jwt`
   configuration section, and the client options and methods that carried credentials
   (`MorphDBClientOptions.ApiKey`/`JwtToken`, `SetApiKey`, `SetJwtToken`). Access control is the
-  deployment's job: bind the service privately, or put an authenticating proxy in front.
+  deployment's job: bind the service privately, or put an authenticating proxy in front. Desk's
+  credential storage (the connection dialog's API-key field and the encrypted store behind it),
+  its API-keys management tab, and the credential options of the TypeScript and Python reference
+  SDKs went with it.
 - **The role gates fell with it.** The security-policy, encryption-rotation and diagnostics
   endpoints — previously `[Authorize]`-gated behind a role no production caller could hold, and so
   unreachable — now answer like every other endpoint. Row-level security still evaluates: an HTTP
