@@ -17,24 +17,17 @@ def project_id() -> str:
 
 
 @pytest.fixture
-def api_key() -> str:
-    """Return a test API key."""
-    return "test-api-key-12345"
-
-
-@pytest.fixture
 def base_url() -> str:
     """Return a test base URL."""
     return "http://localhost:5000"
 
 
 @pytest.fixture
-def mock_http_client(base_url: str, project_id: str, api_key: str) -> HttpClient:
+def mock_http_client(base_url: str, project_id: str) -> HttpClient:
     """Create a mock HTTP client for testing."""
     client = HttpClient(
         base_url=base_url,
         project_id=project_id,
-        api_key=api_key,
         timeout=30.0,
         retry_count=1,
         retry_delay=0.1,

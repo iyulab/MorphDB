@@ -46,30 +46,20 @@ class RealtimeClient:
         self,
         base_url: str,
         project_id: str,
-        api_key: str | None = None,
-        jwt_token: str | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._project_id = project_id
-        self._api_key = api_key
-        self._jwt_token = jwt_token
         self._connection: Any | None = None
         self._subscriptions: dict[str, ChangeCallback] = {}
         self._is_connected = False
 
     def _build_hub_url(self) -> str:
-        """Build the SignalR hub URL with authentication."""
-        url = f"{self._base_url}/hubs/data?projectId={self._project_id}"
-        if self._api_key:
-            url += f"&apiKey={self._api_key}"
-        return url
+        """Build the SignalR hub URL."""
+        return f"{self._base_url}/hubs/data?projectId={self._project_id}"
 
     def _get_headers(self) -> dict[str, str]:
         """Get connection headers."""
-        headers: dict[str, str] = {}
-        if self._jwt_token:
-            headers["Authorization"] = f"Bearer {self._jwt_token}"
-        return headers
+        return {}
 
     async def connect(self) -> None:
         """Connect to the real-time hub."""

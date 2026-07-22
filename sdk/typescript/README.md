@@ -21,7 +21,6 @@ import { MorphDBClient } from '@morphdb/client';
 // Create client
 const client = new MorphDBClient('http://localhost:5000', {
   projectId: 'your-project-id',
-  apiKey: 'your-api-key',
 });
 
 // Schema Management
@@ -250,17 +249,13 @@ try {
 ```typescript
 const client = new MorphDBClient('http://localhost:5000', {
   projectId: 'your-project-id',
-  apiKey: 'your-api-key',
-  jwtToken: 'optional-jwt-token',
   timeout: 30000, // 30 seconds
   retryCount: 3,
   retryDelay: 1000, // 1 second
 });
 
-// Update credentials at runtime
+// Update the project scope at runtime
 client.setProjectId('new-project-id');
-client.setApiKey('new-api-key');
-client.setJwtToken('new-jwt-token');
 ```
 
 ## License

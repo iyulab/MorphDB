@@ -18,7 +18,6 @@ describe('HttpClient', () => {
     global.fetch = fetchMock;
     httpClient = new HttpClient('http://localhost:5000', {
       projectId: 'test-project',
-      apiKey: 'test-api-key',
     });
   });
 
@@ -156,45 +155,7 @@ describe('HttpClient', () => {
       );
     });
 
-    it('includes API key header', async () => {
-      fetchMock.mockResolvedValue({
-        ok: true,
-        text: () => Promise.resolve('{}'),
-      });
 
-      await httpClient.get('/test');
-
-      expect(fetchMock).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            'X-API-Key': 'test-api-key',
-          }),
-        })
-      );
-    });
-
-    it('includes JWT authorization header', async () => {
-      const client = new HttpClient('http://localhost:5000', {
-        jwtToken: 'test-jwt-token',
-      });
-
-      fetchMock.mockResolvedValue({
-        ok: true,
-        text: () => Promise.resolve('{}'),
-      });
-
-      await client.get('/test');
-
-      expect(fetchMock).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            Authorization: 'Bearer test-jwt-token',
-          }),
-        })
-      );
-    });
   });
 
   describe('error handling', () => {
@@ -296,45 +257,7 @@ describe('HttpClient', () => {
       );
     });
 
-    it('setApiKey updates API key', async () => {
-      httpClient.setApiKey('new-api-key');
 
-      fetchMock.mockResolvedValue({
-        ok: true,
-        text: () => Promise.resolve('{}'),
-      });
-
-      await httpClient.get('/test');
-
-      expect(fetchMock).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            'X-API-Key': 'new-api-key',
-          }),
-        })
-      );
-    });
-
-    it('setJwtToken updates JWT token', async () => {
-      httpClient.setJwtToken('new-jwt-token');
-
-      fetchMock.mockResolvedValue({
-        ok: true,
-        text: () => Promise.resolve('{}'),
-      });
-
-      await httpClient.get('/test');
-
-      expect(fetchMock).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            Authorization: 'Bearer new-jwt-token',
-          }),
-        })
-      );
-    });
   });
 
   describe('getBlob', () => {

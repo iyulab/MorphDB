@@ -16,25 +16,22 @@ class TestMorphDBClient:
     """Test cases for MorphDBClient."""
 
     @pytest.fixture
-    def client(self, base_url: str, project_id: str, api_key: str) -> MorphDBClient:
+    def client(self, base_url: str, project_id: str) -> MorphDBClient:
         """Create a MorphDBClient."""
         return MorphDBClient(
             base_url=base_url,
             project_id=project_id,
-            api_key=api_key,
         )
 
     def test_client_initialization(
         self,
         base_url: str,
         project_id: str,
-        api_key: str,
     ) -> None:
         """Test client initialization."""
         client = MorphDBClient(
             base_url=base_url,
             project_id=project_id,
-            api_key=api_key,
         )
 
         assert client is not None
@@ -44,34 +41,15 @@ class TestMorphDBClient:
         assert isinstance(client.bulk, BulkClient)
         assert isinstance(client.realtime, RealtimeClient)
 
-    def test_client_initialization_with_jwt(
-        self,
-        base_url: str,
-        project_id: str,
-    ) -> None:
-        """Test client initialization with JWT token."""
-        jwt_token = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
-
-        client = MorphDBClient(
-            base_url=base_url,
-            project_id=project_id,
-            jwt_token=jwt_token,
-        )
-
-        assert client is not None
-        assert client._http.jwt_token == jwt_token
-
     def test_client_initialization_with_custom_options(
         self,
         base_url: str,
         project_id: str,
-        api_key: str,
     ) -> None:
         """Test client initialization with custom options."""
         client = MorphDBClient(
             base_url=base_url,
             project_id=project_id,
-            api_key=api_key,
             timeout=60.0,
             retry_count=5,
             retry_delay=2.0,
@@ -88,22 +66,6 @@ class TestMorphDBClient:
         client.set_project_id(new_project_id)
 
         assert client._http.project_id == new_project_id
-
-    def test_set_api_key(self, client: MorphDBClient) -> None:
-        """Test setting API key."""
-        new_api_key = "new-api-key"
-
-        client.set_api_key(new_api_key)
-
-        assert client._http.api_key == new_api_key
-
-    def test_set_jwt_token(self, client: MorphDBClient) -> None:
-        """Test setting JWT token."""
-        jwt_token = "new-jwt-token"
-
-        client.set_jwt_token(jwt_token)
-
-        assert client._http.jwt_token == jwt_token
 
     @pytest.mark.asyncio
     async def test_disconnect(self, client: MorphDBClient) -> None:
@@ -132,14 +94,12 @@ class TestMorphDBClient:
         self,
         base_url: str,
         project_id: str,
-        api_key: str,
     ) -> None:
         """Test async context manager."""
         with patch.object(MorphDBClient, "close", new_callable=AsyncMock) as mock_close:
             async with MorphDBClient(
                 base_url=base_url,
                 project_id=project_id,
-                api_key=api_key,
             ) as client:
                 assert client is not None
                 assert isinstance(client, MorphDBClient)
@@ -149,13 +109,11 @@ class TestMorphDBClient:
     def test_base_url_trailing_slash_removed(
         self,
         project_id: str,
-        api_key: str,
     ) -> None:
         """Test that trailing slash is removed from base URL."""
         client = MorphDBClient(
             base_url="http://localhost:5000/",
             project_id=project_id,
-            api_key=api_key,
         )
 
         assert client._http.base_url == "http://localhost:5000"
@@ -165,12 +123,11 @@ class TestMorphDBClientProperties:
     """Test MorphDBClient property accessors."""
 
     @pytest.fixture
-    def client(self, base_url: str, project_id: str, api_key: str) -> MorphDBClient:
+    def client(self, base_url: str, project_id: str) -> MorphDBClient:
         """Create a MorphDBClient."""
         return MorphDBClient(
             base_url=base_url,
             project_id=project_id,
-            api_key=api_key,
         )
 
     def test_schema_property(self, client: MorphDBClient) -> None:

@@ -25,8 +25,6 @@ export function createMockHttpClient(): HttpClient {
     postFormData: vi.fn(),
     getBlob: vi.fn(),
     setProjectId: vi.fn(),
-    setApiKey: vi.fn(),
-    setJwtToken: vi.fn(),
   } as unknown as HttpClient;
 }
 

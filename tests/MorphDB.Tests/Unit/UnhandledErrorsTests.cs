@@ -98,6 +98,26 @@ public class GlobalExceptionHandlerTests
     }
 
     [Fact]
+    public async Task ProjectNotFoundException_IsA404()
+    {
+        // Thrown by the project repository/service; outside ProjectController's typed catches it
+        // must still answer 404 — a missing project is the caller's addressing mistake, not a defect.
+        var (status, body, _) = await RunAsync(new ProjectNotFoundException(Guid.NewGuid()));
+
+        status.Should().Be(404);
+        body!.Code.Should().Be("PROJECT_NOT_FOUND");
+    }
+
+    [Fact]
+    public async Task DuplicateSlugException_IsA409()
+    {
+        var (status, body, _) = await RunAsync(new DuplicateSlugException("crm"));
+
+        status.Should().Be(409);
+        body!.Code.Should().Be("DUPLICATE_SLUG");
+    }
+
+    [Fact]
     public async Task DuplicateNameException_IsA409()
     {
         var (status, body, _) = await RunAsync(new DuplicateNameException("Table", "orders"));

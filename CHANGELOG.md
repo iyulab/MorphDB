@@ -29,6 +29,10 @@
 
 ### Changed — error and write contracts
 
+- **`PROJECT_NOT_FOUND` and `DUPLICATE_SLUG` are typed exceptions** (`ProjectNotFoundException`,
+  `DuplicateSlugException`) instead of code-string matches on the base exception, and the global
+  handler maps them (404 / 409). Wire responses on the project endpoints are unchanged; the floor
+  improves — these escaping on any other path answered 500, now 404/409.
 - **A caller's mistake now answers 4xx with a code and a hint — never a 500, and never an empty
   body.** A global exception handler is the single authority for what an escaped exception becomes
   on the wire; live-probed paths that previously answered `500 INTERNAL_ERROR` (or a bodyless 500)

@@ -36,7 +36,7 @@ public sealed partial class ProjectRepository : IProjectRepository
         // Check slug availability
         if (!await IsSlugAvailableAsync(slug, cancellationToken))
         {
-            throw new MorphDbException("DUPLICATE_SLUG", $"Project slug '{slug}' is already in use.");
+            throw new DuplicateSlugException(slug);
         }
 
         const string sql = """
@@ -147,7 +147,7 @@ public sealed partial class ProjectRepository : IProjectRepository
         CancellationToken cancellationToken = default)
     {
         var existing = await GetByIdAsync(request.ProjectId, cancellationToken)
-            ?? throw new MorphDbException("PROJECT_NOT_FOUND", $"Project with ID '{request.ProjectId}' not found.");
+            ?? throw new ProjectNotFoundException(request.ProjectId);
 
         var updates = new List<string> { "updated_at = NOW()" };
         var parameters = new DynamicParameters();

@@ -130,6 +130,37 @@ public class MissingProjectException : MorphDbException
 }
 
 /// <summary>
+/// Thrown when a request addresses a project that does not exist. Exists as a type for the same
+/// reason as <see cref="MissingProjectException"/>: the alternative was branching on the
+/// <c>ErrorCode</c> string, which made the code literal part of every catch site.
+/// </summary>
+public class ProjectNotFoundException : MorphDbException
+{
+    public Guid ProjectId { get; }
+
+    public ProjectNotFoundException(Guid projectId)
+        : base("PROJECT_NOT_FOUND", $"Project with ID '{projectId}' not found.")
+    {
+        ProjectId = projectId;
+    }
+}
+
+/// <summary>
+/// Thrown when a project slug is already in use. A sibling of <see cref="DuplicateNameException"/>
+/// with the project-specific code the API documents.
+/// </summary>
+public class DuplicateSlugException : MorphDbException
+{
+    public string Slug { get; }
+
+    public DuplicateSlugException(string slug)
+        : base("DUPLICATE_SLUG", $"Project slug '{slug}' is already in use.")
+    {
+        Slug = slug;
+    }
+}
+
+/// <summary>
 /// Thrown when a resource is not found.
 /// </summary>
 public class NotFoundException : MorphDbException

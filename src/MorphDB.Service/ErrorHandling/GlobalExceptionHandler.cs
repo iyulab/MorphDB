@@ -48,6 +48,8 @@ internal sealed class GlobalExceptionHandler : IExceptionHandler
             // in the request body/query, so it stays 400 (the contract aggregation documented).
             ColumnNotFoundException c => (StatusCodes.Status400BadRequest, "BadRequest", c.ErrorCode),
             DuplicateNameException d => (StatusCodes.Status409Conflict, "Conflict", d.ErrorCode),
+            DuplicateSlugException ds => (StatusCodes.Status409Conflict, "Conflict", ds.ErrorCode),
+            ProjectNotFoundException p => (StatusCodes.Status404NotFound, "NotFound", p.ErrorCode),
             SchemaVersionConflictException s => (StatusCodes.Status409Conflict, "Conflict", s.ErrorCode),
             LockAcquisitionException l => (StatusCodes.Status409Conflict, "Conflict", l.ErrorCode),
             NotFoundException n => (StatusCodes.Status404NotFound, "NotFound", n.ErrorCode),

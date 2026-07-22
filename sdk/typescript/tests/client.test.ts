@@ -10,7 +10,6 @@ describe('MorphDBClient', () => {
   const baseUrl = 'http://localhost:5000';
   const options = {
     projectId: 'test-project',
-    apiKey: 'test-api-key',
   };
 
   describe('initialization', () => {
@@ -51,13 +50,7 @@ describe('MorphDBClient', () => {
       expect(() => client.setProjectId('new-project')).not.toThrow();
     });
 
-    it('setApiKey updates API key', () => {
-      expect(() => client.setApiKey('new-api-key')).not.toThrow();
-    });
 
-    it('setJwtToken updates JWT token', () => {
-      expect(() => client.setJwtToken('new-jwt-token')).not.toThrow();
-    });
   });
 
   describe('disconnect', () => {
@@ -92,10 +85,6 @@ describe('MorphDBClient', () => {
       expect(client).toBeDefined();
     });
 
-    it('uses JWT token for authentication', () => {
-      const client = new MorphDBClient(baseUrl, {
-        jwtToken: 'test-jwt-token',
-      });
       expect(client).toBeDefined();
     });
   });

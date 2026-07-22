@@ -23,16 +23,12 @@ class HttpClient:
         self,
         base_url: str,
         project_id: str,
-        api_key: str | None = None,
-        jwt_token: str | None = None,
         timeout: float = 30.0,
         retry_count: int = 3,
         retry_delay: float = 1.0,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.project_id = project_id
-        self.api_key = api_key
-        self.jwt_token = jwt_token
         self.timeout = timeout
         self.retry_count = retry_count
         self.retry_delay = retry_delay
@@ -44,10 +40,6 @@ class HttpClient:
             "Content-Type": "application/json",
             "X-Project-Id": self.project_id,
         }
-        if self.api_key:
-            headers["X-API-Key"] = self.api_key
-        if self.jwt_token:
-            headers["Authorization"] = f"Bearer {self.jwt_token}"
         return headers
 
     async def _get_client(self) -> httpx.AsyncClient:
@@ -70,13 +62,6 @@ class HttpClient:
         """Update project ID."""
         self.project_id = project_id
 
-    def set_api_key(self, api_key: str) -> None:
-        """Update API key."""
-        self.api_key = api_key
-
-    def set_jwt_token(self, jwt_token: str) -> None:
-        """Update JWT token."""
-        self.jwt_token = jwt_token
 
     async def _handle_response(self, response: httpx.Response) -> Any:
         """Handle HTTP response and raise appropriate exceptions."""

@@ -99,11 +99,11 @@ public sealed class ProjectController : ControllerBase
                 new { id = project.ProjectId },
                 response);
         }
-        catch (MorphDbException ex) when (ex.ErrorCode == "DUPLICATE_SLUG")
+        catch (DuplicateSlugException ex)
         {
             return Conflict(new ErrorResponse
             {
-                Error = "DUPLICATE_SLUG",
+                Error = ex.ErrorCode,
                 Message = ex.Message,
                 Code = ex.ErrorCode
             });
@@ -257,7 +257,7 @@ public sealed class ProjectController : ControllerBase
             var project = await _projectService.UpdateProjectAsync(coreRequest, cancellationToken);
             return Ok(ProjectApiResponse.FromModel(project));
         }
-        catch (MorphDbException ex) when (ex.ErrorCode == "PROJECT_NOT_FOUND")
+        catch (ProjectNotFoundException ex)
         {
             return NotFound(new ErrorResponse
             {
@@ -300,7 +300,7 @@ public sealed class ProjectController : ControllerBase
             await _projectService.DeleteProjectAsync(id, cancellationToken);
             return NoContent();
         }
-        catch (MorphDbException ex) when (ex.ErrorCode == "PROJECT_NOT_FOUND")
+        catch (ProjectNotFoundException ex)
         {
             return NotFound(new ErrorResponse
             {
@@ -341,7 +341,7 @@ public sealed class ProjectController : ControllerBase
             var stats = await _projectService.GetProjectStatsAsync(id, cancellationToken);
             return Ok(ProjectStatsApiResponse.FromModel(stats));
         }
-        catch (MorphDbException ex) when (ex.ErrorCode == "PROJECT_NOT_FOUND")
+        catch (ProjectNotFoundException ex)
         {
             return NotFound(new ErrorResponse
             {
@@ -372,7 +372,7 @@ public sealed class ProjectController : ControllerBase
             var report = await _projectService.ValidateProjectHealthAsync(id, cancellationToken);
             return Ok(SchemaHealthApiResponse.FromModel(report));
         }
-        catch (MorphDbException ex) when (ex.ErrorCode == "PROJECT_NOT_FOUND")
+        catch (ProjectNotFoundException ex)
         {
             return NotFound(new ErrorResponse
             {

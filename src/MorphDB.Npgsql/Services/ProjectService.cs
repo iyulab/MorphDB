@@ -114,7 +114,7 @@ public sealed partial class ProjectService : IProjectService
         CancellationToken cancellationToken = default)
     {
         var project = await _projectRepository.GetByIdAsync(projectId, cancellationToken)
-            ?? throw new MorphDbException("PROJECT_NOT_FOUND", $"Project with ID '{projectId}' not found.");
+            ?? throw new ProjectNotFoundException(projectId);
 
         LogDeletingProject(_logger, projectId, project.Name);
 
@@ -151,7 +151,7 @@ public sealed partial class ProjectService : IProjectService
         CancellationToken cancellationToken = default)
     {
         var project = await _projectRepository.GetByIdAsync(projectId, cancellationToken)
-            ?? throw new MorphDbException("PROJECT_NOT_FOUND", $"Project with ID '{projectId}' not found.");
+            ?? throw new ProjectNotFoundException(projectId);
 
         return await _schemaLayerService.GetProjectStatsAsync(projectId, cancellationToken);
     }
@@ -162,7 +162,7 @@ public sealed partial class ProjectService : IProjectService
         CancellationToken cancellationToken = default)
     {
         var project = await _projectRepository.GetByIdAsync(projectId, cancellationToken)
-            ?? throw new MorphDbException("PROJECT_NOT_FOUND", $"Project with ID '{projectId}' not found.");
+            ?? throw new ProjectNotFoundException(projectId);
 
         return await _schemaLayerService.ValidateSchemaHealthAsync(projectId, cancellationToken);
     }

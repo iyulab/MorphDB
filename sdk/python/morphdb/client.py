@@ -24,7 +24,6 @@ class MorphDBClient:
         async with MorphDBClient(
             base_url="http://localhost:5000",
             project_id="your-project-id",
-            api_key="your-api-key",
         ) as client:
             # Create a table
             await client.schema.create_table(CreateTableRequest(
@@ -51,8 +50,6 @@ class MorphDBClient:
         self,
         base_url: str,
         project_id: str,
-        api_key: str | None = None,
-        jwt_token: str | None = None,
         timeout: float = 30.0,
         retry_count: int = 3,
         retry_delay: float = 1.0,
@@ -63,8 +60,6 @@ class MorphDBClient:
         Args:
             base_url: The base URL of the MorphDB API server.
             project_id: The project ID for multi-project isolation.
-            api_key: Optional API key for authentication.
-            jwt_token: Optional JWT token for authentication.
             timeout: Request timeout in seconds (default: 30).
             retry_count: Number of retry attempts for failed requests (default: 3).
             retry_delay: Base delay between retries in seconds (default: 1).
@@ -72,8 +67,6 @@ class MorphDBClient:
         self._http = HttpClient(
             base_url=base_url,
             project_id=project_id,
-            api_key=api_key,
-            jwt_token=jwt_token,
             timeout=timeout,
             retry_count=retry_count,
             retry_delay=retry_delay,
@@ -82,8 +75,6 @@ class MorphDBClient:
         self._realtime = RealtimeClient(
             base_url=base_url,
             project_id=project_id,
-            api_key=api_key,
-            jwt_token=jwt_token,
         )
 
         # Initialize sub-clients
@@ -127,13 +118,6 @@ class MorphDBClient:
         """Update the project ID."""
         self._http.set_project_id(project_id)
 
-    def set_api_key(self, api_key: str) -> None:
-        """Update the API key."""
-        self._http.set_api_key(api_key)
-
-    def set_jwt_token(self, jwt_token: str) -> None:
-        """Update the JWT token."""
-        self._http.set_jwt_token(jwt_token)
 
     async def disconnect(self) -> None:
         """Disconnect all connections."""
