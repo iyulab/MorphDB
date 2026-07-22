@@ -21,7 +21,7 @@ public sealed class SchemaClient
     public async Task<IReadOnlyList<TableInfo>> GetTablesAsync(CancellationToken cancellationToken = default)
     {
         var response = await _httpClient.GetAsync("/api/schema/tables", cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<List<TableInfo>>(MorphDBJson.Options, cancellationToken) ?? [];
     }
 
@@ -33,7 +33,7 @@ public sealed class SchemaClient
         var response = await _httpClient.GetAsync($"/api/schema/tables/{Uri.EscapeDataString(tableName)}", cancellationToken);
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             return null;
-        await EnsureSuccessAsync(response, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<TableInfo>(MorphDBJson.Options, cancellationToken);
     }
 
@@ -43,7 +43,7 @@ public sealed class SchemaClient
     public async Task<TableInfo> CreateTableAsync(CreateTableRequest request, CancellationToken cancellationToken = default)
     {
         var response = await _httpClient.PostAsJsonAsync("/api/schema/tables", request, cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<TableInfo>(MorphDBJson.Options, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize table response");
     }
@@ -54,7 +54,7 @@ public sealed class SchemaClient
     public async Task DropTableAsync(string tableName, CancellationToken cancellationToken = default)
     {
         var response = await _httpClient.DeleteAsync($"/api/schema/tables/{Uri.EscapeDataString(tableName)}", cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
     }
 
     /// <summary>
@@ -66,7 +66,7 @@ public sealed class SchemaClient
             $"/api/schema/tables/{Uri.EscapeDataString(tableName)}/columns",
             request,
             cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<ColumnInfo>(MorphDBJson.Options, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize column response");
     }
@@ -80,7 +80,7 @@ public sealed class SchemaClient
             $"/api/schema/tables/{Uri.EscapeDataString(tableName)}/columns/{Uri.EscapeDataString(columnName)}",
             request,
             cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<ColumnInfo>(MorphDBJson.Options, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize column response");
     }
@@ -93,23 +93,7 @@ public sealed class SchemaClient
         var response = await _httpClient.DeleteAsync(
             $"/api/schema/tables/{Uri.EscapeDataString(tableName)}/columns/{Uri.EscapeDataString(columnName)}",
             cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
     }
 
-    private static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken cancellationToken)
-    {
-        if (!response.IsSuccessStatusCode)
-        {
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            throw response.StatusCode switch
-            {
-                System.Net.HttpStatusCode.NotFound => new MorphDBNotFoundException($"Resource not found: {response.RequestMessage?.RequestUri}", body),
-                System.Net.HttpStatusCode.BadRequest => new MorphDBValidationException($"Validation failed", responseBody: body),
-                System.Net.HttpStatusCode.Unauthorized => new MorphDBAuthenticationException("Authentication required", body),
-                System.Net.HttpStatusCode.Forbidden => new MorphDBAuthorizationException("Access denied", body),
-                System.Net.HttpStatusCode.Conflict => new MorphDBConflictException("Resource conflict", body),
-                _ => new MorphDBApiException($"API request failed: {response.ReasonPhrase}", response.StatusCode, responseBody: body)
-            };
-        }
-    }
 }

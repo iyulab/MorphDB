@@ -44,7 +44,7 @@ public sealed class BulkClient
             $"/api/bulk/{Uri.EscapeDataString(tableName)}/import/csv",
             content,
             cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<ImportJobStatus>(MorphDBJson.Options, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize import job response");
     }
@@ -74,7 +74,7 @@ public sealed class BulkClient
             $"/api/bulk/{Uri.EscapeDataString(tableName)}/import/json",
             content,
             cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<ImportJobStatus>(MorphDBJson.Options, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize import job response");
     }
@@ -102,7 +102,7 @@ public sealed class BulkClient
             $"/api/bulk/{Uri.EscapeDataString(tableName)}/import/ndjson",
             content,
             cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<ImportJobStatus>(MorphDBJson.Options, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize import job response");
     }
@@ -117,7 +117,7 @@ public sealed class BulkClient
         var response = await _httpClient.GetAsync($"/api/bulk/import/{jobId}", cancellationToken);
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             return null;
-        await EnsureSuccessAsync(response, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<ImportJobStatus>(MorphDBJson.Options, cancellationToken);
     }
 
@@ -127,7 +127,7 @@ public sealed class BulkClient
     public async Task CancelImportJobAsync(Guid jobId, CancellationToken cancellationToken = default)
     {
         var response = await _httpClient.PostAsync($"/api/bulk/import/{jobId}/cancel", null, cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
     }
 
     #endregion
@@ -146,7 +146,7 @@ public sealed class BulkClient
             $"/api/bulk/{Uri.EscapeDataString(tableName)}/export/csv",
             options ?? new CsvExportOptions(),
             cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<ExportJobStatus>(MorphDBJson.Options, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize export job response");
     }
@@ -163,7 +163,7 @@ public sealed class BulkClient
             $"/api/bulk/{Uri.EscapeDataString(tableName)}/export/json",
             options ?? new JsonExportOptions(),
             cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<ExportJobStatus>(MorphDBJson.Options, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize export job response");
     }
@@ -180,7 +180,7 @@ public sealed class BulkClient
             $"/api/bulk/{Uri.EscapeDataString(tableName)}/export/xlsx",
             options ?? new XlsxExportOptions(),
             cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<ExportJobStatus>(MorphDBJson.Options, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize export job response");
     }
@@ -195,7 +195,7 @@ public sealed class BulkClient
         var response = await _httpClient.GetAsync($"/api/bulk/export/{jobId}", cancellationToken);
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             return null;
-        await EnsureSuccessAsync(response, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<ExportJobStatus>(MorphDBJson.Options, cancellationToken);
     }
 
@@ -207,7 +207,7 @@ public sealed class BulkClient
         CancellationToken cancellationToken = default)
     {
         var response = await _httpClient.GetAsync($"/api/bulk/export/{jobId}/download", cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadAsStreamAsync(cancellationToken);
     }
 
@@ -217,25 +217,9 @@ public sealed class BulkClient
     public async Task CancelExportJobAsync(Guid jobId, CancellationToken cancellationToken = default)
     {
         var response = await _httpClient.PostAsync($"/api/bulk/export/{jobId}/cancel", null, cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
     }
 
     #endregion
 
-    private static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken cancellationToken)
-    {
-        if (!response.IsSuccessStatusCode)
-        {
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            throw response.StatusCode switch
-            {
-                System.Net.HttpStatusCode.NotFound => new MorphDBNotFoundException($"Resource not found: {response.RequestMessage?.RequestUri}", body),
-                System.Net.HttpStatusCode.BadRequest => new MorphDBValidationException($"Validation failed", responseBody: body),
-                System.Net.HttpStatusCode.Unauthorized => new MorphDBAuthenticationException("Authentication required", body),
-                System.Net.HttpStatusCode.Forbidden => new MorphDBAuthorizationException("Access denied", body),
-                System.Net.HttpStatusCode.Conflict => new MorphDBConflictException("Resource conflict", body),
-                _ => new MorphDBApiException($"API request failed: {response.ReasonPhrase}", response.StatusCode, responseBody: body)
-            };
-        }
-    }
 }

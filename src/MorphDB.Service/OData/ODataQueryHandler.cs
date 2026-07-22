@@ -173,7 +173,7 @@ public sealed partial class ODataQueryHandler
                 "ge" => query.Where(column, FilterOperator.GreaterThanOrEquals, value),
                 "lt" => query.Where(column, FilterOperator.LessThan, value),
                 "le" => query.Where(column, FilterOperator.LessThanOrEquals, value),
-                _ => query
+                _ => throw UnsupportedFilter(filter)
             };
         }
 
@@ -202,9 +202,15 @@ public sealed partial class ODataQueryHandler
             return query.Where(column, FilterOperator.EndsWith, value);
         }
 
-        // If we can't parse the filter, just return the query as-is
-        return query;
+        // A filter this handler cannot parse must refuse loudly: answering 200 with the filter
+        // silently ignored hands the caller every row and lets them believe it matched their predicate.
+        throw UnsupportedFilter(filter);
     }
+
+    private static MorphDB.Core.Exceptions.ValidationException UnsupportedFilter(string filter) =>
+        new("$filter", $"Unsupported or malformed OData filter expression: '{filter}'. " +
+            "Supported forms: <column> eq|ne|gt|ge|lt|le <value>, contains(<column>,'v'), " +
+            "startswith(<column>,'v'), endswith(<column>,'v').");
 
     private static IMorphQuery ApplyOrderBy(IMorphQuery query, string orderBy)
     {

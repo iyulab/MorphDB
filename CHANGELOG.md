@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **The C# SDK now delivers the server's error contract.** Every client (`Schema`, `Data`, `Batch`,
+  `Bulk`, `Transactions`, `Views`, `Webhooks`) parses the server's `{error, message, code}` envelope
+  into the exception it throws: `Message` is the server's message (what went wrong and what to do),
+  `ErrorCode` is the server's code (the machine-readable contract `docs/API.md` says to branch on).
+  Previously all seven surfaces threw fixed strings — `"Validation failed"` — and `ErrorCode` was
+  always null, so the 0.8.0 error contract never reached SDK consumers. A response body that is not
+  an envelope (a proxy's HTML error page) falls back to the legacy fixed messages and per-type
+  default codes. The seven per-client copies of the status-to-exception mapping converged into one
+  shared helper.
+- **An OData `$filter` the handler cannot parse is refused (400 `VALIDATION_ERROR`), not silently
+  ignored.** Previously an unparseable filter expression (e.g. `$filter=name eq`) answered 200 with
+  every row, letting the caller believe the predicate matched. The OData error surface is now pinned
+  by contract tests alongside REST, GraphQL and the C# SDK: unknown column in
+  `$filter`/`$orderby`/`$select` answers 400 `COLUMN_NOT_FOUND`, an unknown entity set answers 404
+  `NOT_FOUND`, all with the standard envelope.
+
 ## 0.8.0
 
 ### Removed — the authentication machinery

@@ -30,7 +30,7 @@ public sealed class DataClient
         var response = await _httpClient.GetAsync(
             $"/api/data/{Uri.EscapeDataString(tableName)}{queryString}",
             cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<PagedResponse<DataRecord>>(MorphDBJson.Options, cancellationToken)
             ?? new PagedResponse<DataRecord> { Data = [], Pagination = new PaginationInfo() };
     }
@@ -48,7 +48,7 @@ public sealed class DataClient
             cancellationToken);
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             return null;
-        await EnsureSuccessAsync(response, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<DataRecord>(MorphDBJson.Options, cancellationToken);
     }
 
@@ -64,7 +64,7 @@ public sealed class DataClient
             $"/api/data/{Uri.EscapeDataString(tableName)}",
             data,
             cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<DataRecord>(MorphDBJson.Options, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize record response");
     }
@@ -82,7 +82,7 @@ public sealed class DataClient
             $"/api/data/{Uri.EscapeDataString(tableName)}/{id}",
             data,
             cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<DataRecord>(MorphDBJson.Options, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize record response");
     }
@@ -98,7 +98,7 @@ public sealed class DataClient
         var response = await _httpClient.DeleteAsync(
             $"/api/data/{Uri.EscapeDataString(tableName)}/{id}",
             cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
     }
 
     /// <summary>
@@ -113,7 +113,7 @@ public sealed class DataClient
             $"/api/data/{Uri.EscapeDataString(tableName)}",
             data,
             cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<DataRecord>(MorphDBJson.Options, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize record response");
     }
@@ -135,7 +135,7 @@ public sealed class DataClient
             $"/api/data/{Uri.EscapeDataString(tableName)}/aggregate",
             apiRequest,
             cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<AggregationResponse>(MorphDBJson.Options, cancellationToken)
             ?? new AggregationResponse { Data = [] };
     }
@@ -238,20 +238,4 @@ public sealed class DataClient
         _ => "eq"
     };
 
-    private static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken cancellationToken)
-    {
-        if (!response.IsSuccessStatusCode)
-        {
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            throw response.StatusCode switch
-            {
-                System.Net.HttpStatusCode.NotFound => new MorphDBNotFoundException($"Resource not found: {response.RequestMessage?.RequestUri}", body),
-                System.Net.HttpStatusCode.BadRequest => new MorphDBValidationException($"Validation failed", responseBody: body),
-                System.Net.HttpStatusCode.Unauthorized => new MorphDBAuthenticationException("Authentication required", body),
-                System.Net.HttpStatusCode.Forbidden => new MorphDBAuthorizationException("Access denied", body),
-                System.Net.HttpStatusCode.Conflict => new MorphDBConflictException("Resource conflict", body),
-                _ => new MorphDBApiException($"API request failed: {response.ReasonPhrase}", response.StatusCode, responseBody: body)
-            };
-        }
-    }
 }

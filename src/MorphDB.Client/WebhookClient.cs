@@ -22,7 +22,7 @@ public sealed class WebhookClient
     public async Task<IReadOnlyList<WebhookInfo>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         var response = await _httpClient.GetAsync("/api/webhooks", cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<List<WebhookInfo>>(MorphDBJson.Options, cancellationToken) ?? [];
     }
 
@@ -34,7 +34,7 @@ public sealed class WebhookClient
         var response = await _httpClient.GetAsync($"/api/webhooks/{webhookId}", cancellationToken);
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             return null;
-        await EnsureSuccessAsync(response, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<WebhookInfo>(MorphDBJson.Options, cancellationToken);
     }
 
@@ -44,7 +44,7 @@ public sealed class WebhookClient
     public async Task<IReadOnlyList<WebhookInfo>> GetByTableAsync(string tableName, CancellationToken cancellationToken = default)
     {
         var response = await _httpClient.GetAsync($"/api/webhooks?tableName={Uri.EscapeDataString(tableName)}", cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<List<WebhookInfo>>(MorphDBJson.Options, cancellationToken) ?? [];
     }
 
@@ -54,7 +54,7 @@ public sealed class WebhookClient
     public async Task<WebhookInfo> CreateAsync(CreateWebhookRequest request, CancellationToken cancellationToken = default)
     {
         var response = await _httpClient.PostAsJsonAsync("/api/webhooks", request, cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<WebhookInfo>(MorphDBJson.Options, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize webhook response");
     }
@@ -65,7 +65,7 @@ public sealed class WebhookClient
     public async Task DeleteAsync(Guid webhookId, CancellationToken cancellationToken = default)
     {
         var response = await _httpClient.DeleteAsync($"/api/webhooks/{webhookId}", cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
     }
 
     /// <summary>
@@ -79,7 +79,7 @@ public sealed class WebhookClient
     {
         var url = string.Create(CultureInfo.InvariantCulture, $"/api/webhooks/{webhookId}/deliveries?page={page}&pageSize={pageSize}");
         var response = await _httpClient.GetAsync(url, cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<List<WebhookDelivery>>(MorphDBJson.Options, cancellationToken) ?? [];
     }
 
@@ -89,23 +89,7 @@ public sealed class WebhookClient
     public async Task RetryDeliveryAsync(Guid deliveryId, CancellationToken cancellationToken = default)
     {
         var response = await _httpClient.PostAsync($"/api/webhooks/deliveries/{deliveryId}/retry", null, cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
     }
 
-    private static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken cancellationToken)
-    {
-        if (!response.IsSuccessStatusCode)
-        {
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            throw response.StatusCode switch
-            {
-                System.Net.HttpStatusCode.NotFound => new MorphDBNotFoundException($"Resource not found: {response.RequestMessage?.RequestUri}", body),
-                System.Net.HttpStatusCode.BadRequest => new MorphDBValidationException($"Validation failed", responseBody: body),
-                System.Net.HttpStatusCode.Unauthorized => new MorphDBAuthenticationException("Authentication required", body),
-                System.Net.HttpStatusCode.Forbidden => new MorphDBAuthorizationException("Access denied", body),
-                System.Net.HttpStatusCode.Conflict => new MorphDBConflictException("Resource conflict", body),
-                _ => new MorphDBApiException($"API request failed: {response.ReasonPhrase}", response.StatusCode, responseBody: body)
-            };
-        }
-    }
 }

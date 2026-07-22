@@ -62,8 +62,8 @@ public class MorphDBNotFoundException : MorphDBApiException
     /// <summary>
     /// Creates a new not found exception.
     /// </summary>
-    public MorphDBNotFoundException(string message, string? responseBody = null)
-        : base(message, HttpStatusCode.NotFound, "NOT_FOUND", responseBody) { }
+    public MorphDBNotFoundException(string message, string? responseBody = null, string? errorCode = null)
+        : base(message, HttpStatusCode.NotFound, errorCode ?? "NOT_FOUND", responseBody) { }
 }
 
 /// <summary>
@@ -82,8 +82,9 @@ public class MorphDBValidationException : MorphDBApiException
     public MorphDBValidationException(
         string message,
         IReadOnlyDictionary<string, string[]>? errors = null,
-        string? responseBody = null)
-        : base(message, HttpStatusCode.BadRequest, "VALIDATION_ERROR", responseBody)
+        string? responseBody = null,
+        string? errorCode = null)
+        : base(message, HttpStatusCode.BadRequest, errorCode ?? "VALIDATION_ERROR", responseBody)
     {
         Errors = errors ?? new Dictionary<string, string[]>();
     }
@@ -97,8 +98,8 @@ public class MorphDBAuthenticationException : MorphDBApiException
     /// <summary>
     /// Creates a new authentication exception.
     /// </summary>
-    public MorphDBAuthenticationException(string message, string? responseBody = null)
-        : base(message, HttpStatusCode.Unauthorized, "UNAUTHORIZED", responseBody) { }
+    public MorphDBAuthenticationException(string message, string? responseBody = null, string? errorCode = null)
+        : base(message, HttpStatusCode.Unauthorized, errorCode ?? "UNAUTHORIZED", responseBody) { }
 }
 
 /// <summary>
@@ -109,8 +110,8 @@ public class MorphDBAuthorizationException : MorphDBApiException
     /// <summary>
     /// Creates a new authorization exception.
     /// </summary>
-    public MorphDBAuthorizationException(string message, string? responseBody = null)
-        : base(message, HttpStatusCode.Forbidden, "FORBIDDEN", responseBody) { }
+    public MorphDBAuthorizationException(string message, string? responseBody = null, string? errorCode = null)
+        : base(message, HttpStatusCode.Forbidden, errorCode ?? "FORBIDDEN", responseBody) { }
 }
 
 /// <summary>
@@ -121,8 +122,8 @@ public class MorphDBConflictException : MorphDBApiException
     /// <summary>
     /// Creates a new conflict exception.
     /// </summary>
-    public MorphDBConflictException(string message, string? responseBody = null)
-        : base(message, HttpStatusCode.Conflict, "CONFLICT", responseBody) { }
+    public MorphDBConflictException(string message, string? responseBody = null, string? errorCode = null)
+        : base(message, HttpStatusCode.Conflict, errorCode ?? "CONFLICT", responseBody) { }
 }
 
 /// <summary>

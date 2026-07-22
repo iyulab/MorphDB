@@ -27,7 +27,7 @@ public sealed class TransactionClient
             "/api/batch/transaction",
             request,
             cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<TransactionResponse>(MorphDBJson.Options, cancellationToken)
             ?? new TransactionResponse { Success = false, Error = "Failed to deserialize response" };
     }
@@ -44,7 +44,7 @@ public sealed class TransactionClient
             $"/api/data/{Uri.EscapeDataString(tableName)}/{recordId}/finalize",
             null,
             cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<FinalizeResponse>(MorphDBJson.Options, cancellationToken)
             ?? new FinalizeResponse();
     }
@@ -61,23 +61,9 @@ public sealed class TransactionClient
             $"/api/data/{Uri.EscapeDataString(tableName)}/finalize",
             request,
             cancellationToken);
-        await EnsureSuccessAsync(response, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<FinalizeResponse>(MorphDBJson.Options, cancellationToken)
             ?? new FinalizeResponse();
     }
 
-    private static async Task EnsureSuccessAsync(HttpResponseMessage response, CancellationToken cancellationToken)
-    {
-        if (!response.IsSuccessStatusCode)
-        {
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            throw response.StatusCode switch
-            {
-                System.Net.HttpStatusCode.NotFound => new MorphDBNotFoundException("Resource not found", body),
-                System.Net.HttpStatusCode.BadRequest => new MorphDBValidationException("Validation failed", responseBody: body),
-                System.Net.HttpStatusCode.Conflict => new MorphDBConflictException("Transaction conflict", body),
-                _ => new MorphDBApiException($"API request failed: {response.ReasonPhrase}", response.StatusCode, responseBody: body)
-            };
-        }
-    }
 }
