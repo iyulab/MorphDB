@@ -49,6 +49,13 @@
   available on this endpoint was false and is corrected: the 11-operator vocabulary is the whole
   set, on every surface.
 
+### Docs
+
+- `docs/SYSTEM_COLUMNS.md` is now in English, and its constraint matrix no longer contradicts the
+  constitution's amended boundary (it still described FK/NOT NULL/UNIQUE as virtual; they are
+  physical with pipeline pre-checks, and only CHECK is virtual). The stale "to implement" list was
+  replaced with the actual implementation map.
+
 ### Fixed
 
 - **A failed transaction now tells you why.** The failed operation's result — with its
