@@ -33,15 +33,18 @@ public sealed class MetadataRepository : IMetadataRepository
             """;
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-        var result = await connection.QuerySingleAsync<TableRow>(sql, new
-        {
-            table.TableId,
-            table.ProjectId,
+        var result = await MetadataConstraintTranslation.AsDuplicateNameAsync(
+            "Table",
             table.LogicalName,
-            table.PhysicalName,
-            table.SchemaVersion,
-            Descriptor = table.Descriptor?.RootElement.GetRawText()
-        });
+            () => connection.QuerySingleAsync<TableRow>(sql, new
+            {
+                table.TableId,
+                table.ProjectId,
+                table.LogicalName,
+                table.PhysicalName,
+                table.SchemaVersion,
+                Descriptor = table.Descriptor?.RootElement.GetRawText()
+            }));
 
         return MapToTableMetadata(result);
     }
@@ -160,6 +163,20 @@ public sealed class MetadataRepository : IMetadataRepository
         await connection.ExecuteAsync(sql, new { TableId = tableId, LogicalName = logicalName, NewVersion = newVersion });
     }
 
+    /// <summary>
+    /// Retires a table and everything that only existed as part of it.
+    /// <para>
+    /// This used to update the table row alone, which left its columns, its indexes and any
+    /// relation touching it reading as live — metadata describing objects that no longer exist,
+    /// since deleting a table drops the physical table and, with it, every index on it. A
+    /// virtual-schema layer owns the hygiene of the physical world it hides, so leaving the
+    /// wreckage marked active is that duty going unmet, not a harmless leftover.
+    /// </para>
+    /// <para>
+    /// The statements run as one command, so PostgreSQL wraps them in a single implicit
+    /// transaction: a table is never retired with its parts still live.
+    /// </para>
+    /// </summary>
     public async Task SoftDeleteTableAsync(
         Guid tableId,
         CancellationToken cancellationToken = default)
@@ -167,7 +184,19 @@ public sealed class MetadataRepository : IMetadataRepository
         const string sql = """
             UPDATE morphdb._morph_tables
             SET is_active = false, updated_at = NOW()
-            WHERE table_id = @TableId
+            WHERE table_id = @TableId;
+
+            UPDATE morphdb._morph_columns
+            SET is_active = false
+            WHERE table_id = @TableId AND is_active = true;
+
+            UPDATE morphdb._morph_indexes
+            SET is_active = false
+            WHERE table_id = @TableId AND is_active = true;
+
+            UPDATE morphdb._morph_relations
+            SET is_active = false
+            WHERE (source_table_id = @TableId OR target_table_id = @TableId) AND is_active = true;
             """;
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
@@ -200,28 +229,31 @@ public sealed class MetadataRepository : IMetadataRepository
             """;
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-        var result = await connection.QuerySingleAsync<ColumnRow>(sql, new
-        {
-            column.ColumnId,
-            column.TableId,
+        var result = await MetadataConstraintTranslation.AsDuplicateNameAsync(
+            "Column",
             column.LogicalName,
-            column.PhysicalName,
-            DataType = column.DataType.ToString(),
-            column.NativeType,
-            column.IsNullable,
-            column.IsUnique,
-            column.IsPrimaryKey,
-            column.IsIndexed,
-            column.IsEncrypted,
-            column.DefaultValue,
-            column.CheckExpression,
-            column.OrdinalPosition,
-            Descriptor = column.Descriptor?.RootElement.GetRawText(),
-            LookupConfig = SerializeConfig(column.LookupConfig),
-            RollupConfig = SerializeConfig(column.RollupConfig),
-            FormulaConfig = SerializeConfig(column.FormulaConfig),
-            ComputedConfig = SerializeConfig(column.ComputedConfig)
-        });
+            () => connection.QuerySingleAsync<ColumnRow>(sql, new
+            {
+                column.ColumnId,
+                column.TableId,
+                column.LogicalName,
+                column.PhysicalName,
+                DataType = column.DataType.ToString(),
+                column.NativeType,
+                column.IsNullable,
+                column.IsUnique,
+                column.IsPrimaryKey,
+                column.IsIndexed,
+                column.IsEncrypted,
+                column.DefaultValue,
+                column.CheckExpression,
+                column.OrdinalPosition,
+                Descriptor = column.Descriptor?.RootElement.GetRawText(),
+                LookupConfig = SerializeConfig(column.LookupConfig),
+                RollupConfig = SerializeConfig(column.RollupConfig),
+                FormulaConfig = SerializeConfig(column.FormulaConfig),
+                ComputedConfig = SerializeConfig(column.ComputedConfig)
+            }));
 
         return MapToColumnMetadata(result);
     }
@@ -369,18 +401,21 @@ public sealed class MetadataRepository : IMetadataRepository
             """;
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-        var result = await connection.QuerySingleAsync<IndexRow>(sql, new
-        {
-            index.IndexId,
-            index.TableId,
+        var result = await MetadataConstraintTranslation.AsDuplicateNameAsync(
+            "Index",
             index.LogicalName,
-            index.PhysicalName,
-            Columns = columnsJson,
-            IndexType = index.IndexType.ToString().ToLowerInvariant(),
-            index.IsUnique,
-            index.WhereClause,
-            Descriptor = index.Descriptor?.RootElement.GetRawText()
-        });
+            () => connection.QuerySingleAsync<IndexRow>(sql, new
+            {
+                index.IndexId,
+                index.TableId,
+                index.LogicalName,
+                index.PhysicalName,
+                Columns = columnsJson,
+                IndexType = index.IndexType.ToString().ToLowerInvariant(),
+                index.IsUnique,
+                index.WhereClause,
+                Descriptor = index.Descriptor?.RootElement.GetRawText()
+            }));
 
         return MapToIndexMetadata(result);
     }

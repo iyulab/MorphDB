@@ -29,6 +29,49 @@
 
 ### Fixed
 
+- **A deleted logical name could never be created again.** DELETE drops the physical object and
+  keeps the metadata row as a tombstone, but uniqueness was a plain table-level constraint that
+  counts tombstones as occupants — while the lookups guarding creation filter `is_active = true`
+  and so could not see them. The second declaration of any name therefore died on a raw `23505`
+  that escaped as a 500, permanently: drop-and-rebuild, the standard schema-evolution path, was a
+  one-way door from the second declaration onward. Uniqueness is now a partial index over the live
+  rows on every soft-deleted control-plane table — tables (logical **and** physical name), columns,
+  indexes, views and security policies — so a tombstone releases the name it no longer uses while
+  two live objects still cannot share one. Existing databases are migrated on start; a control
+  plane older than the `is_active` flag gets it before the indexes are built, so the bootstrap
+  cannot crash-loop. A unique violation on a control-plane insert now answers **409
+  `DUPLICATE_NAME`** rather than a 500.
+
+- **Deleting a table left its columns, indexes and relations marked live.** The delete drops the
+  physical table — and with it every index on it — but only the table's own metadata row was
+  retired, so the control plane went on describing parts of a table that no longer existed, and a
+  relation kept pointing at a table that was gone. A delete now retires the table's columns,
+  its indexes, and every relation touching either end, in one statement with the table itself.
+
+- **Deleting a table that another table references answered a bare 500.** The drop carries no
+  CASCADE on purpose — tearing down another table's foreign key is not something deleting this one
+  should decide — but PostgreSQL's refusal escaped untranslated, quoting a physical table name the
+  caller is not meant to know exists. It now answers `TABLE_HAS_DEPENDENTS` naming the table by the
+  logical name the caller gave it.
+
+- **A security policy's expression reached the WHERE clause unvalidated.** Policy expressions are
+  spliced into ordinary queries, which makes them caller-authored strings that reach SQL verbatim —
+  the same category as a CHECK predicate or an index predicate, both of which were already gated
+  while this path shipped open. A statement separator, a comment opener, an unbalanced parenthesis
+  or an unterminated quote is now refused (400 `INVALID_EXPRESSION`) when the policy is created or
+  updated, and again on the substituted text at evaluation time, so a row stored before this
+  release fails the read rather than being emitted. The validator itself moved out of `DdlBuilder`
+  (it stopped being about DDL) and is now the one gate every such path calls.
+
+- **Security policies never worked at all.** Both name lookups asked `_morph_tables` for a column
+  called `name`, which it has never had (`logical_name`), so every create and every by-name read
+  answered `42703` as a 500; and the row type was a positional record, which Dapper cannot
+  materialise under the assembly's snake_case convention, so every read by id or table failed on
+  materialisation. `POST /security/policies` and the policy reads behind it were shipped and
+  unreachable. Both name lookups now use `logical_name` and exclude deleted tables, and the row
+  type maps by property as the rest of the assembly does. The service has integration coverage for
+  the first time.
+
 - **`CURRENT_TIMESTAMP` as a column default failed the CREATE TABLE.** SQL's clock keywords take no
   parentheses, so the function-default check never saw them: they were quoted as string literals —
   `DEFAULT 'CURRENT_TIMESTAMP'` — which no temporal column can cast. The keywords

@@ -439,7 +439,22 @@ public sealed class PostgresSchemaManager : ISchemaManager
         // Execute DDL
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         var dropTableSql = DdlBuilder.BuildDropTable(table.PhysicalName);
-        await connection.ExecuteAsync(new CommandDefinition(dropTableSql, cancellationToken: cancellationToken));
+        try
+        {
+            await connection.ExecuteAsync(new CommandDefinition(dropTableSql, cancellationToken: cancellationToken));
+        }
+        catch (PostgresException pg) when (pg.SqlState == PostgresErrorCodes.DependentObjectsStillExist)
+        {
+            // A relation pointing at this table is a foreign key on the other table, and the DROP
+            // carries no CASCADE — deliberately, since tearing down another table's constraint is
+            // not something a delete of this one should decide. The caller has to remove the
+            // relation first, and needs to be told so: left alone this escaped as an opaque 500
+            // naming a physical table they are not supposed to know exists.
+            throw new SchemaException(
+                "TABLE_HAS_DEPENDENTS",
+                $"Table '{table.LogicalName}' cannot be deleted while other tables reference it. " +
+                "Delete the relations that target it first.");
+        }
 
         // Soft delete metadata
         await _repository.SoftDeleteTableAsync(tableId, cancellationToken);

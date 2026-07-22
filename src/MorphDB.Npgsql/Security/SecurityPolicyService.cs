@@ -1,6 +1,8 @@
 using System.Text.RegularExpressions;
 using Dapper;
 using MorphDB.Core.Security;
+using MorphDB.Npgsql.Infrastructure;
+using MorphDB.Npgsql.Repositories;
 using Npgsql;
 
 namespace MorphDB.Npgsql.Security;
@@ -22,13 +24,18 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
         CreatePolicyRequest request,
         CancellationToken cancellationToken = default)
     {
+        // A policy expression is spliced into the WHERE clause of ordinary queries, so it is a
+        // caller-authored string that reaches SQL verbatim — the same category as a CHECK predicate,
+        // and subject to the same gate. Rejecting it here quotes the caller their own text.
+        InlineExpressionValidator.Validate(request.Expression, "Policy");
+
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
 
         // Get table ID
         var tableId = await connection.QueryFirstOrDefaultAsync<Guid?>(
             """
             SELECT table_id FROM morphdb._morph_tables
-            WHERE project_id = @ProjectId AND name = @TableName
+            WHERE project_id = @ProjectId AND logical_name = @TableName AND is_active = true
             """,
             new { ProjectId = projectId, request.TableName });
 
@@ -61,26 +68,29 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
             UpdatedAt = now
         };
 
-        await connection.ExecuteAsync(
-            """
-            INSERT INTO morphdb._morph_security_policies
-            (id, project_id, table_id, name, description, policy_type, expression, is_active, ordinal_position, created_at, updated_at)
-            VALUES (@Id, @ProjectId, @TableId, @Name, @Description, @PolicyType, @Expression, @IsActive, @OrdinalPosition, @CreatedAt, @UpdatedAt)
-            """,
-            new
-            {
-                policy.Id,
-                policy.ProjectId,
-                policy.TableId,
-                policy.Name,
-                policy.Description,
-                PolicyType = (int)policy.PolicyType,
-                policy.Expression,
-                policy.IsActive,
-                policy.OrdinalPosition,
-                policy.CreatedAt,
-                policy.UpdatedAt
-            });
+        await MetadataConstraintTranslation.AsDuplicateNameAsync(
+            "SecurityPolicy",
+            policy.Name,
+            () => connection.ExecuteAsync(
+                """
+                INSERT INTO morphdb._morph_security_policies
+                (id, project_id, table_id, name, description, policy_type, expression, is_active, ordinal_position, created_at, updated_at)
+                VALUES (@Id, @ProjectId, @TableId, @Name, @Description, @PolicyType, @Expression, @IsActive, @OrdinalPosition, @CreatedAt, @UpdatedAt)
+                """,
+                new
+                {
+                    policy.Id,
+                    policy.ProjectId,
+                    policy.TableId,
+                    policy.Name,
+                    policy.Description,
+                    PolicyType = (int)policy.PolicyType,
+                    policy.Expression,
+                    policy.IsActive,
+                    policy.OrdinalPosition,
+                    policy.CreatedAt,
+                    policy.UpdatedAt
+                }));
 
         return policy;
     }
@@ -114,7 +124,7 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
             SELECT p.id, p.project_id, p.table_id, p.name, p.description, p.policy_type, p.expression, p.is_active, p.ordinal_position, p.created_at, p.updated_at
             FROM morphdb._morph_security_policies p
             INNER JOIN morphdb._morph_tables t ON t.table_id = p.table_id AND t.project_id = p.project_id
-            WHERE p.project_id = @ProjectId AND t.name = @TableName
+            WHERE p.project_id = @ProjectId AND t.logical_name = @TableName AND t.is_active = true
             ORDER BY p.ordinal_position
             """,
             new { ProjectId = projectId, TableName = tableName });
@@ -153,6 +163,11 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
 
         var name = request.Name ?? existing.Name;
         var expression = request.Expression ?? existing.Expression;
+        if (request.Expression is not null)
+        {
+            InlineExpressionValidator.Validate(request.Expression, "Policy");
+        }
+
         var isActive = request.IsActive ?? existing.IsActive;
         var description = request.Description ?? existing.Description;
         var updatedAt = DateTimeOffset.UtcNow;
@@ -227,10 +242,18 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
             return null;
         }
 
-        // Combine policies with AND
+        // Combine policies with AND. Validation runs again on the substituted form, and on rows
+        // that predate the write-side gate: this is the text that actually reaches the query, and a
+        // policy that cannot be emitted safely must fail the read rather than be dropped from it —
+        // silently ignoring a row-level security rule is the one outcome worse than an error.
         var expressions = applicablePolicies
             .Select(p => SubstituteVariables(p.Expression, context))
             .Where(e => !string.IsNullOrWhiteSpace(e))
+            .Select(e =>
+            {
+                InlineExpressionValidator.Validate(e, "Policy");
+                return e;
+            })
             .ToList();
 
         if (expressions.Count == 0)
@@ -294,16 +317,24 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
         };
     }
 
-    private sealed record PolicyRecord(
-        Guid Id,
-        Guid ProjectId,
-        Guid TableId,
-        string Name,
-        string? Description,
-        int PolicyType,
-        string Expression,
-        bool IsActive,
-        int OrdinalPosition,
-        DateTimeOffset CreatedAt,
-        DateTimeOffset UpdatedAt);
+    /// <summary>
+    /// A row of _morph_security_policies. Settable properties, not a positional record: Dapper
+    /// applies MatchNamesWithUnderscores when it maps columns onto properties, but a positional
+    /// record forces it to look for a constructor whose parameters are named exactly like the
+    /// columns — which no C# record can be — so every read threw on materialization instead.
+    /// </summary>
+    private sealed class PolicyRecord
+    {
+        public Guid Id { get; set; }
+        public Guid ProjectId { get; set; }
+        public Guid TableId { get; set; }
+        public string Name { get; set; } = "";
+        public string? Description { get; set; }
+        public int PolicyType { get; set; }
+        public string Expression { get; set; } = "";
+        public bool IsActive { get; set; }
+        public int OrdinalPosition { get; set; }
+        public DateTimeOffset CreatedAt { get; set; }
+        public DateTimeOffset UpdatedAt { get; set; }
+    }
 }

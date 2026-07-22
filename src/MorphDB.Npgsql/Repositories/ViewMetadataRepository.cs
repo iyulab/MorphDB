@@ -34,18 +34,21 @@ public sealed class ViewMetadataRepository : IViewMetadataRepository
             """;
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-        var result = await connection.QuerySingleAsync<ViewRow>(sql, new
-        {
-            view.ViewId,
-            view.ProjectId,
+        var result = await MetadataConstraintTranslation.AsDuplicateNameAsync(
+            "View",
             view.LogicalName,
-            view.PhysicalName,
-            Definition = JsonSerializer.Serialize(view.Definition),
-            view.IsMaterialized,
-            RefreshPolicy = view.RefreshPolicy.ToString(),
-            view.RefreshSchedule,
-            Descriptor = view.Descriptor?.RootElement.GetRawText()
-        });
+            () => connection.QuerySingleAsync<ViewRow>(sql, new
+            {
+                view.ViewId,
+                view.ProjectId,
+                view.LogicalName,
+                view.PhysicalName,
+                Definition = JsonSerializer.Serialize(view.Definition),
+                view.IsMaterialized,
+                RefreshPolicy = view.RefreshPolicy.ToString(),
+                view.RefreshSchedule,
+                Descriptor = view.Descriptor?.RootElement.GetRawText()
+            }));
 
         return MapToViewMetadata(result);
     }

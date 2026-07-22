@@ -175,6 +175,124 @@ public class GlobalSchemaMigrationTests
         tables.Should().Contain("_morph_projects");
     }
 
+    /// <summary>
+    /// The shape a released MorphDB actually created: soft-deletable control-plane tables whose
+    /// uniqueness was a plain table-level constraint, so a tombstone kept holding the name.
+    /// </summary>
+    private const string LegacyWholeTableUniques = """
+        CREATE SCHEMA IF NOT EXISTS morphdb;
+
+        CREATE TABLE morphdb._morph_tables (
+            table_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            project_id UUID NOT NULL,
+            logical_name VARCHAR(255) NOT NULL,
+            physical_name VARCHAR(63) NOT NULL UNIQUE,
+            schema_version INTEGER NOT NULL DEFAULT 1,
+            descriptor JSONB,
+            is_active BOOLEAN NOT NULL DEFAULT true,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE (project_id, logical_name)
+        );
+
+        CREATE TABLE morphdb._morph_api_keys (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            project_id UUID NOT NULL,
+            key_type INTEGER NOT NULL DEFAULT 0,
+            key_hash VARCHAR(255) NOT NULL,
+            key_prefix VARCHAR(50) NOT NULL,
+            name VARCHAR(100) NOT NULL,
+            is_active BOOLEAN NOT NULL DEFAULT true,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE (key_hash)
+        );
+        """;
+
+    /// <summary>
+    /// A database that already ran a released version carries the old constraints, and CREATE TABLE
+    /// IF NOT EXISTS cannot reshape them. Left alone, every logical name it ever deleted stays
+    /// permanently unusable.
+    /// </summary>
+    [Fact]
+    public async Task Bootstrapping_replaces_the_whole_table_uniques_with_live_only_ones()
+    {
+        await using var db = await CleanDatabase.EmptyAsync("morphdb_legacy_uniques");
+        await db.ExecuteAsync(LegacyWholeTableUniques);
+
+        await EnsureGlobalSchemaAsync(db);
+
+        var constraints = await ReadUniqueConstraintsAsync(db, "_morph_tables");
+        constraints.Should().BeEmpty("uniqueness now lives in partial indexes, not table constraints");
+
+        var indexes = await db.ReadIndexesAsync("_morph_tables");
+        indexes.Should().Contain("idx_morph_tables_physical_active");
+        indexes.Should().Contain("idx_morph_tables_logical_active");
+
+        // The point of the migration, stated as behaviour: a tombstone no longer holds the name.
+        var projectId = Guid.NewGuid();
+        await db.ExecuteAsync($"""
+            INSERT INTO morphdb._morph_tables (project_id, logical_name, physical_name, is_active)
+            VALUES ('{projectId}', 'lead', 'tbl_deadbeef', false);
+            INSERT INTO morphdb._morph_tables (project_id, logical_name, physical_name, is_active)
+            VALUES ('{projectId}', 'lead', 'tbl_deadbeef', true);
+            """);
+    }
+
+    /// <summary>
+    /// A retired API key's hash must stay claimed — its uniqueness has nothing to do with liveness.
+    /// The migration names the tables it touches so that reasoning cannot be lost by accident.
+    /// </summary>
+    [Fact]
+    public async Task The_migration_leaves_uniqueness_that_is_not_about_liveness_alone()
+    {
+        await using var db = await CleanDatabase.EmptyAsync("morphdb_legacy_uniques_scope");
+        await db.ExecuteAsync(LegacyWholeTableUniques);
+
+        await EnsureGlobalSchemaAsync(db);
+
+        var constraints = await ReadUniqueConstraintsAsync(db, "_morph_api_keys");
+        constraints.Should().NotBeEmpty("a key hash stays unique whether the key is active or not");
+    }
+
+    [Fact]
+    public async Task Bootstrapping_twice_over_the_legacy_uniques_is_a_no_op()
+    {
+        await using var db = await CleanDatabase.EmptyAsync("morphdb_legacy_uniques_twice");
+        await db.ExecuteAsync(LegacyWholeTableUniques);
+
+        await EnsureGlobalSchemaAsync(db);
+        await EnsureGlobalSchemaAsync(db);
+
+        var indexes = await db.ReadIndexesAsync("_morph_tables");
+        indexes.Should().Contain("idx_morph_tables_logical_active");
+    }
+
+    private static async Task<List<string>> ReadUniqueConstraintsAsync(CleanDatabase db, string table)
+    {
+        await using var connection = new NpgsqlConnection(db.ConnectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT con.conname
+            FROM pg_constraint con
+            JOIN pg_class rel ON rel.oid = con.conrelid
+            JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+            WHERE nsp.nspname = 'morphdb' AND rel.relname = @table AND con.contype = 'u'
+            ORDER BY con.conname
+            """,
+            connection);
+        command.Parameters.AddWithValue("table", table);
+
+        await using var reader = await command.ExecuteReaderAsync();
+        var names = new List<string>();
+        while (await reader.ReadAsync())
+        {
+            names.Add(reader.GetString(0));
+        }
+
+        return names;
+    }
+
     [Fact]
     public async Task Bootstrapping_a_brand_new_database_is_unaffected_by_the_migration()
     {

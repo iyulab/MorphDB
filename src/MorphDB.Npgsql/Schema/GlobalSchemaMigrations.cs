@@ -80,5 +80,50 @@ public static class GlobalSchemaMigrations
                     replace(target.indexname, 'tenant', 'project'));
             END LOOP;
         END $$;
+
+        -- Uniqueness is about to be expressed as an index over is_active, and CREATE TABLE IF NOT
+        -- EXISTS adds no column to a table that already exists. An older control plane missing the
+        -- flag would therefore fail the CREATE INDEX on every start -- a boot crash loop, not a
+        -- degraded feature. Whatever the column already is, this leaves it alone.
+        ALTER TABLE IF EXISTS morphdb._morph_tables ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
+        ALTER TABLE IF EXISTS morphdb._morph_columns ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
+        ALTER TABLE IF EXISTS morphdb._morph_indexes ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
+        ALTER TABLE IF EXISTS morphdb._morph_views ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
+        ALTER TABLE IF EXISTS morphdb._morph_security_policies ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
+
+        -- The soft-deleted control-plane tables carried table-level UNIQUE constraints, which count
+        -- tombstones as occupants of the name they hold. A database created before this ran cannot
+        -- recreate any logical name it ever deleted -- the constraint rejects the INSERT with 23505
+        -- and no amount of retrying helps. The canonical DDL now expresses the same uniqueness as a
+        -- partial index over is_active = true, but CREATE TABLE IF NOT EXISTS cannot remove what the
+        -- old shape already built, so the constraints are dropped here first.
+        --
+        -- Scoped to the five soft-deleted tables by name on purpose. _morph_projects (slug,
+        -- schemas) and _morph_api_keys (key_hash) are unique for reasons unrelated to liveness --
+        -- a retired key's hash must stay claimed -- so their constraints are left standing.
+        -- Idempotent: a second run selects nothing, because the constraints are gone.
+        DO $$
+        DECLARE
+            target RECORD;
+        BEGIN
+            FOR target IN
+                SELECT rel.relname AS table_name, con.conname AS constraint_name
+                FROM pg_constraint con
+                JOIN pg_class rel ON rel.oid = con.conrelid
+                JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+                WHERE nsp.nspname = 'morphdb'
+                  AND con.contype = 'u'
+                  AND rel.relname IN (
+                      '_morph_tables',
+                      '_morph_columns',
+                      '_morph_indexes',
+                      '_morph_views',
+                      '_morph_security_policies')
+            LOOP
+                EXECUTE format(
+                    'ALTER TABLE morphdb.%I DROP CONSTRAINT %I',
+                    target.table_name, target.constraint_name);
+            END LOOP;
+        END $$;
         """;
 }

@@ -120,6 +120,78 @@ public class SchemaManagerTests
         await act.Should().ThrowAsync<DuplicateNameException>();
     }
 
+    /// <summary>
+    /// Redeclaring a table is drop-and-rebuild: delete, then create the new shape under the same
+    /// logical name. It is the standard evolution path for a projection layer above this one, and
+    /// it used to be a one-way door — DELETE left the metadata row behind as a tombstone, still
+    /// holding the derived physical name under a plain UNIQUE, so the second declaration died on a
+    /// raw 23505 and the name could never be created again.
+    /// </summary>
+    [Fact]
+    public async Task A_deleted_table_can_be_created_again_with_a_new_shape()
+    {
+        var projectId = Guid.NewGuid();
+        var tableName = "recreated_table_" + Guid.NewGuid().ToString("N")[..8];
+
+        var first = await _schemaManager.CreateTableAsync(new CreateTableRequest
+        {
+            ProjectId = projectId,
+            LogicalName = tableName,
+            Columns = [new CreateColumnRequest { LogicalName = "sku", DataType = MorphDataType.Text }]
+        });
+
+        await _schemaManager.DeleteTableAsync(first.TableId);
+
+        var second = await _schemaManager.CreateTableAsync(new CreateTableRequest
+        {
+            ProjectId = projectId,
+            LogicalName = tableName,
+            Columns =
+            [
+                new CreateColumnRequest { LogicalName = "sku", DataType = MorphDataType.Text },
+                new CreateColumnRequest { LogicalName = "warehouse", DataType = MorphDataType.Text }
+            ]
+        });
+
+        second.TableId.Should().NotBe(first.TableId, "the second declaration is a new table");
+        second.Columns.Should().Contain(c => c.LogicalName == "warehouse", "the new shape must take effect");
+
+        // Third time as well: the guarantee is a property of the delete path, not a one-off pardon.
+        await _schemaManager.DeleteTableAsync(second.TableId);
+        var third = await _schemaManager.CreateTableAsync(new CreateTableRequest
+        {
+            ProjectId = projectId,
+            LogicalName = tableName,
+            Columns = [new CreateColumnRequest { LogicalName = "sku", DataType = MorphDataType.Text }]
+        });
+        third.TableId.Should().NotBe(second.TableId);
+    }
+
+    /// <summary>
+    /// The tombstone had to stop occupying the name — but only for names nothing live holds.
+    /// Scoping uniqueness to is_active must not become "uniqueness is optional".
+    /// </summary>
+    [Fact]
+    public async Task Two_live_tables_still_cannot_share_a_logical_name_after_a_delete_cycle()
+    {
+        var projectId = Guid.NewGuid();
+        var tableName = "still_unique_" + Guid.NewGuid().ToString("N")[..8];
+        var request = new CreateTableRequest
+        {
+            ProjectId = projectId,
+            LogicalName = tableName,
+            Columns = [new CreateColumnRequest { LogicalName = "data", DataType = MorphDataType.Text }]
+        };
+
+        var created = await _schemaManager.CreateTableAsync(request);
+        await _schemaManager.DeleteTableAsync(created.TableId);
+        await _schemaManager.CreateTableAsync(request);
+
+        var act = () => _schemaManager.CreateTableAsync(request);
+        await act.Should().ThrowAsync<DuplicateNameException>(
+            "a tombstone releases the name, a live table does not");
+    }
+
     [Fact]
     public async Task AddColumnAsync_ShouldAddColumnToExistingTable()
     {
@@ -445,5 +517,121 @@ public class SchemaManagerTests
         tables.Should().HaveCountGreaterThanOrEqualTo(2);
         tables.Should().Contain(t => t.LogicalName == "list_table_1_" + uniqueSuffix);
         tables.Should().Contain(t => t.LogicalName == "list_table_2_" + uniqueSuffix);
+    }
+
+    /// <summary>
+    /// Deleting a table drops the physical table, and with it every index on it. The metadata for
+    /// those parts used to stay marked live, so the control plane went on describing columns and
+    /// indexes that no longer existed anywhere — and a relation kept pointing at a table that was
+    /// gone. Hiding the physical schema is what obliges this layer to keep it tidy.
+    /// </summary>
+    [Fact]
+    public async Task Deleting_a_table_retires_its_columns_indexes_and_relations_with_it()
+    {
+        var projectId = Guid.NewGuid();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        var parent = await _schemaManager.CreateTableAsync(new CreateTableRequest
+        {
+            ProjectId = projectId,
+            LogicalName = "cascade_parent_" + suffix,
+            // Unique: a relation targets a key, and PostgreSQL refuses a foreign key to a column
+            // nothing guarantees is unique.
+            Columns = [new CreateColumnRequest { LogicalName = "code", DataType = MorphDataType.Text, IsUnique = true }]
+        });
+        var child = await _schemaManager.CreateTableAsync(new CreateTableRequest
+        {
+            ProjectId = projectId,
+            LogicalName = "cascade_child_" + suffix,
+            Columns = [new CreateColumnRequest { LogicalName = "parent_code", DataType = MorphDataType.Text }]
+        });
+
+        await _schemaManager.CreateIndexAsync(new CreateIndexRequest
+        {
+            TableId = parent.TableId,
+            LogicalName = "ix_cascade_" + suffix,
+            ColumnIds = [parent.Columns.First(c => c.LogicalName == "code").ColumnId]
+        });
+        await _schemaManager.CreateRelationAsync(new CreateRelationRequest
+        {
+            ProjectId = projectId,
+            LogicalName = "rel_cascade_" + suffix,
+            SourceTableId = child.TableId,
+            SourceColumnId = child.Columns.First(c => c.LogicalName == "parent_code").ColumnId,
+            TargetTableId = parent.TableId,
+            TargetColumnId = parent.Columns.First(c => c.LogicalName == "code").ColumnId,
+            RelationType = RelationType.OneToMany
+        });
+
+        // The child holds the foreign key, so it is the side that can be dropped. (Deleting the
+        // target side is a separate matter — the physical DROP has nothing to cascade with.)
+        await _schemaManager.CreateIndexAsync(new CreateIndexRequest
+        {
+            TableId = child.TableId,
+            LogicalName = "ix_cascade_child_" + suffix,
+            ColumnIds = [child.Columns.First(c => c.LogicalName == "parent_code").ColumnId]
+        });
+
+        (await _metadataRepository.GetColumnsByTableIdAsync(child.TableId)).Should().NotBeEmpty();
+        (await _metadataRepository.GetIndexesByTableIdAsync(child.TableId)).Should().NotBeEmpty();
+        (await _metadataRepository.GetRelationsByTableIdAsync(child.TableId)).Should().NotBeEmpty();
+
+        await _schemaManager.DeleteTableAsync(child.TableId);
+
+        (await _metadataRepository.GetColumnsByTableIdAsync(child.TableId))
+            .Should().BeEmpty("the columns went with the table that held them");
+        (await _metadataRepository.GetIndexesByTableIdAsync(child.TableId))
+            .Should().BeEmpty("dropping the table dropped its indexes physically too");
+        (await _metadataRepository.GetRelationsByTableIdAsync(child.TableId))
+            .Should().BeEmpty("a relation whose source table is gone is not a relation");
+
+        // The cascade follows the deleted table, not the project: the other side is untouched.
+        (await _metadataRepository.GetColumnsByTableIdAsync(parent.TableId))
+            .Should().NotBeEmpty("the surviving table keeps its columns");
+        (await _metadataRepository.GetIndexesByTableIdAsync(parent.TableId))
+            .Should().NotBeEmpty("and its indexes");
+    }
+
+    /// <summary>
+    /// A relation is a foreign key on the other table, and the DROP carries no CASCADE — deleting
+    /// the referenced side is refused by PostgreSQL. That refusal used to escape as an opaque 500
+    /// quoting a physical table name the caller is not supposed to know exists.
+    /// </summary>
+    [Fact]
+    public async Task Deleting_a_table_another_one_references_says_so_instead_of_failing_opaquely()
+    {
+        var projectId = Guid.NewGuid();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        var target = await _schemaManager.CreateTableAsync(new CreateTableRequest
+        {
+            ProjectId = projectId,
+            LogicalName = "referenced_" + suffix,
+            Columns = [new CreateColumnRequest { LogicalName = "code", DataType = MorphDataType.Text, IsUnique = true }]
+        });
+        var source = await _schemaManager.CreateTableAsync(new CreateTableRequest
+        {
+            ProjectId = projectId,
+            LogicalName = "referencing_" + suffix,
+            Columns = [new CreateColumnRequest { LogicalName = "target_code", DataType = MorphDataType.Text }]
+        });
+
+        await _schemaManager.CreateRelationAsync(new CreateRelationRequest
+        {
+            ProjectId = projectId,
+            LogicalName = "rel_dependent_" + suffix,
+            SourceTableId = source.TableId,
+            SourceColumnId = source.Columns.First(c => c.LogicalName == "target_code").ColumnId,
+            TargetTableId = target.TableId,
+            TargetColumnId = target.Columns.First(c => c.LogicalName == "code").ColumnId,
+            RelationType = RelationType.OneToMany
+        });
+
+        var act = () => _schemaManager.DeleteTableAsync(target.TableId);
+
+        var thrown = await act.Should().ThrowAsync<SchemaException>();
+        thrown.Which.ErrorCode.Should().Be("TABLE_HAS_DEPENDENTS");
+        thrown.Which.Message.Should().Contain(target.LogicalName, "the caller is told which table, by the name they gave it");
+        thrown.Which.Message.Should().NotContain(target.PhysicalName, "the physical name is hidden layer");
     }
 }

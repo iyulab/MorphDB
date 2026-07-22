@@ -490,6 +490,41 @@ POST /api/data/{table}
 
 ---
 
+## Row-Level Security Policies
+
+A policy narrows what a table's rows answer, per operation. Applicable policies are combined with
+`AND`, so adding one can only ever restrict a read further.
+
+```yaml
+GET    /api/security/policies/{tableName}      # Policies applying to a table
+POST   /api/security/policies                  # Create a policy
+PATCH  /api/security/policies/{policyId}       # Update name, expression, description or is_active
+DELETE /api/security/policies/{policyId}       # Delete a policy
+```
+
+```json
+{
+  "name": "owner_reads_only",
+  "tableName": "orders",
+  "policyType": "Select",
+  "expression": "owner_id = {{user_id}}"
+}
+```
+
+`policyType` is `Select`, `Insert`, `Update`, `Delete` or `All`. The expression is a SQL predicate
+over the table's own columns, with `{{user_id}}`, `{{email}}`, `{{role}}`, `{{project_id}}`,
+`{{is_authenticated}}` and `{{claims.<name>}}` substituted for the caller before the query runs.
+Substituted values are emitted as quoted literals — a caller's identity cannot become part of the
+predicate.
+
+**The expression is a predicate, not a statement.** It is checked before it is stored and again
+before it is used: a statement separator, a comment opener, an unbalanced parenthesis or an
+unterminated quote is refused with `INVALID_EXPRESSION`. A stored policy that fails that check
+fails the read rather than being quietly dropped from it — a security rule that silently stops
+applying is worse than an error.
+
+---
+
 ## Health Checks
 
 ```http
@@ -520,6 +555,8 @@ fixed string — internal exception text never reaches the wire) and retrying ma
 | 400 | `INVALID_FILTER` | A malformed `filter` expression, or an unknown filter operator |
 | 400 | `INVALID_ARGUMENT` | A malformed value elsewhere in the request (e.g. an unknown column type — the message lists the supported set) |
 | 400 | `MISSING_PROJECT` | The request did not say which project it applies to — send `X-Project-Id` |
+| 400 | `INVALID_EXPRESSION` | A CHECK predicate, index predicate or policy expression that could escape the clause it is written into |
+| 400 | `TABLE_HAS_DEPENDENTS` | Deleting a table another table still references — delete those relations first |
 | 404 | `TABLE_NOT_FOUND` | The table (or the project the request scoped it to) does not exist |
 | 404 | `RECORD_NOT_FOUND` | The record id does not exist in the table |
 | 404 | `NOT_FOUND` | Another addressable resource (job, view, policy…) does not exist |

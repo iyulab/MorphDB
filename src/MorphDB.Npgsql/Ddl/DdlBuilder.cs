@@ -205,7 +205,7 @@ public static class DdlBuilder
 
         if (!string.IsNullOrWhiteSpace(index.WhereClause))
         {
-            ValidateInlineExpression(index.WhereClause, "Index predicate");
+            InlineExpressionValidator.Validate(index.WhereClause, "Index predicate");
             sb.Append(CultureInfo.InvariantCulture, $" WHERE {index.WhereClause}");
         }
 
@@ -665,13 +665,12 @@ public static class DdlBuilder
                 table_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 project_id UUID NOT NULL,
                 logical_name VARCHAR(255) NOT NULL,
-                physical_name VARCHAR(63) NOT NULL UNIQUE,
+                physical_name VARCHAR(63) NOT NULL,
                 schema_version INTEGER NOT NULL DEFAULT 1,
                 descriptor JSONB,
                 is_active BOOLEAN NOT NULL DEFAULT true,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                UNIQUE (project_id, logical_name)
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
 
             CREATE TABLE IF NOT EXISTS morphdb._morph_columns (
@@ -694,9 +693,7 @@ public static class DdlBuilder
                 rollup_config JSONB,
                 formula_config JSONB,
                 computed_config JSONB,
-                is_active BOOLEAN NOT NULL DEFAULT true,
-                UNIQUE (table_id, logical_name),
-                UNIQUE (table_id, physical_name)
+                is_active BOOLEAN NOT NULL DEFAULT true
             );
 
             CREATE TABLE IF NOT EXISTS morphdb._morph_relations (
@@ -719,7 +716,7 @@ public static class DdlBuilder
                 index_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 table_id UUID NOT NULL REFERENCES morphdb._morph_tables(table_id) ON DELETE CASCADE,
                 logical_name VARCHAR(255) NOT NULL,
-                physical_name VARCHAR(63) NOT NULL UNIQUE,
+                physical_name VARCHAR(63) NOT NULL,
                 columns JSONB NOT NULL,
                 index_type VARCHAR(20) NOT NULL DEFAULT 'btree',
                 is_unique BOOLEAN NOT NULL DEFAULT false,
@@ -877,15 +874,14 @@ public static class DdlBuilder
                 is_active BOOLEAN NOT NULL DEFAULT true,
                 ordinal_position INTEGER NOT NULL DEFAULT 0,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                UNIQUE (project_id, table_id, name)
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
 
             CREATE TABLE IF NOT EXISTS morphdb._morph_views (
                 view_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 project_id UUID NOT NULL,
                 logical_name VARCHAR(255) NOT NULL,
-                physical_name VARCHAR(63) NOT NULL UNIQUE,
+                physical_name VARCHAR(63) NOT NULL,
                 definition JSONB NOT NULL,
                 is_materialized BOOLEAN NOT NULL DEFAULT false,
                 refresh_policy VARCHAR(20) NOT NULL DEFAULT 'OnDemand',
@@ -895,8 +891,7 @@ public static class DdlBuilder
                 descriptor JSONB,
                 is_active BOOLEAN NOT NULL DEFAULT true,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                UNIQUE (project_id, logical_name)
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
 
             CREATE TABLE IF NOT EXISTS morphdb._morph_view_columns (
@@ -908,6 +903,29 @@ public static class DdlBuilder
                 expression TEXT,
                 ordinal_position INTEGER NOT NULL
             );
+
+            -- Uniqueness over the live namespace only.
+            --
+            -- Every one of these tables is soft-deleted: DELETE drops the physical object and leaves
+            -- the metadata row behind with is_active = false. A plain UNIQUE constraint does not
+            -- know that, so the tombstone kept occupying the name -- and since the lookups that
+            -- guard creation all filter is_active = true, the tombstone was invisible to the guard
+            -- and only surfaced as a raw 23505 from the INSERT. The effect was permanent: a logical
+            -- name, once deleted, could never be created again, which killed drop-and-rebuild as a
+            -- schema-evolution path from the second declaration onward.
+            --
+            -- A partial index scoped to is_active = true says what was always meant: two live
+            -- objects may not share a name, a dead one holds nothing. The derived physical name is
+            -- deterministic, so a recreated table reuses the tombstone's physical_name -- which is
+            -- correct, because its physical table was already dropped.
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_morph_tables_physical_active ON morphdb._morph_tables(physical_name) WHERE is_active = true;
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_morph_tables_logical_active ON morphdb._morph_tables(project_id, logical_name) WHERE is_active = true;
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_morph_columns_logical_active ON morphdb._morph_columns(table_id, logical_name) WHERE is_active = true;
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_morph_columns_physical_active ON morphdb._morph_columns(table_id, physical_name) WHERE is_active = true;
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_morph_indexes_physical_active ON morphdb._morph_indexes(physical_name) WHERE is_active = true;
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_morph_views_physical_active ON morphdb._morph_views(physical_name) WHERE is_active = true;
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_morph_views_logical_active ON morphdb._morph_views(project_id, logical_name) WHERE is_active = true;
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_morph_security_policies_name_active ON morphdb._morph_security_policies(project_id, table_id, name) WHERE is_active = true;
 
             -- Indexes (IF NOT EXISTS)
             CREATE INDEX IF NOT EXISTS idx_morph_tables_project ON morphdb._morph_tables(project_id);
@@ -992,7 +1010,7 @@ public static class DdlBuilder
         // the expression the caller actually wrote. The post-translation validation at the emit
         // site still runs as defence in depth, but (since translation only swaps identifiers and
         // strips nothing) an invalid expression fails here first, with logical names in the message.
-        ValidateInlineExpression(checkExpression, "Check");
+        InlineExpressionValidator.Validate(checkExpression, "Check");
 
         var result = checkExpression;
 
@@ -1030,93 +1048,13 @@ public static class DdlBuilder
 
         if (col.CheckExpression is not null)
         {
-            ValidateInlineExpression(col.CheckExpression, "Check");
+            InlineExpressionValidator.Validate(col.CheckExpression, "Check");
             sb.Append(CultureInfo.InvariantCulture, $" CHECK ({col.CheckExpression})");
         }
 
         return sb.ToString();
     }
 
-    /// <summary>
-    /// Rejects an expression that would not stay inside the clause it is written into.
-    /// </summary>
-    /// <remarks>
-    /// Check constraints and index predicates are free-form predicates, so neither can be matched
-    /// against a fixed set the way a function default can. A check is emitted as <c>CHECK (expr)</c>,
-    /// though, and escaping that form requires a closing parenthesis with no opener of its own —
-    /// which is exactly what unbalanced counting detects. Quoted text is skipped so that parentheses
-    /// inside a string literal or a quoted identifier do not count. Statement separators and comment
-    /// openers are refused outright: neither belongs in a predicate, both could truncate the
-    /// statement, and an index predicate sits at the end of its statement where a separator is all
-    /// an escape would need.
-    /// Anything this cannot account for is refused rather than passed through — the expression
-    /// reaches DDL verbatim and is executed by a role that a project must never borrow.
-    /// </remarks>
-    private static void ValidateInlineExpression(string expression, string clause)
-    {
-        var depth = 0;
-
-        for (var i = 0; i < expression.Length; i++)
-        {
-            var c = expression[i];
-
-            if (c is '\'' or '"')
-            {
-                // Skip to the closing quote. A doubled quote is an escape, so the scan simply
-                // continues past it and looks for the next one.
-                var quote = c;
-                var end = expression.IndexOf(quote, i + 1);
-                if (end < 0)
-                {
-                    throw new SchemaException(
-                        "INVALID_EXPRESSION",
-                        $"{clause} expression '{expression}' has an unterminated quote.");
-                }
-
-                i = end;
-                continue;
-            }
-
-            switch (c)
-            {
-                case '(':
-                    depth++;
-                    break;
-
-                case ')':
-                    depth--;
-                    if (depth < 0)
-                    {
-                        throw new SchemaException(
-                            "INVALID_EXPRESSION",
-                            $"{clause} expression '{expression}' closes a parenthesis it never opened.");
-                    }
-
-                    break;
-
-                case ';':
-                    throw new SchemaException(
-                        "INVALID_EXPRESSION",
-                        $"{clause} expression '{expression}' must not contain a statement separator.");
-
-                case '-' when i + 1 < expression.Length && expression[i + 1] == '-':
-                case '/' when i + 1 < expression.Length && expression[i + 1] == '*':
-                    throw new SchemaException(
-                        "INVALID_EXPRESSION",
-                        $"{clause} expression '{expression}' must not contain a comment.");
-
-                default:
-                    break;
-            }
-        }
-
-        if (depth != 0)
-        {
-            throw new SchemaException(
-                "INVALID_EXPRESSION",
-                $"{clause} expression '{expression}' leaves {depth} parenthesis/parentheses unclosed.");
-        }
-    }
 
     /// <summary>
     /// Quotes a PostgreSQL identifier (table, column, schema name).
