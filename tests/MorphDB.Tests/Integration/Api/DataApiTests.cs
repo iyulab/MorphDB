@@ -442,7 +442,7 @@ public class DataApiTests
         // Assert — unique violation surfaces as a validation error, not a 500
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
-        error!.Code.Should().Be("VALIDATION_FAILED");
+        error!.Code.Should().Be("VALIDATION_ERROR");
     }
 
     #endregion
@@ -484,7 +484,7 @@ public class DataApiTests
         // Assert — rejected at the validation layer with a clean 400
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
-        error!.Code.Should().Be("VALIDATION_FAILED");
+        error!.Code.Should().Be("VALIDATION_ERROR");
     }
 
     [Fact]

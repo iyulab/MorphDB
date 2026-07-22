@@ -168,6 +168,8 @@ public class ErrorSurfaceContractTests
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         var body = await response.Content.ReadFromJsonAsync<ErrorResponse>();
         (body!.Message ?? "").Should().Contain("emial_typo");
+        body.Code.Should().Be("UNKNOWN_COLUMN",
+            "docs/API.md promises exactly this code for a write naming an undeclared column");
     }
 
     [Fact]

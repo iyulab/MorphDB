@@ -54,7 +54,7 @@ public sealed class DynamicMutation
                 {
                     Success = false,
                     Error = string.Join("; ", writeResult.Errors.Select(e => e.Message)),
-                    ErrorCode = "VALIDATION_FAILED"
+                    ErrorCode = ErrorHandling.WriteFailure.CodeFor(writeResult)
                 };
             }
 
@@ -136,7 +136,7 @@ public sealed class DynamicMutation
                 {
                     Success = false,
                     Error = string.Join("; ", writeResult.Errors.Select(e => e.Message)),
-                    ErrorCode = "VALIDATION_FAILED"
+                    ErrorCode = ErrorHandling.WriteFailure.CodeFor(writeResult)
                 };
             }
 

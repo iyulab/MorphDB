@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Changed
+
+- **Write-failure error codes are now the documented ones.** A write refused because it named
+  undeclared columns answers `400 UNKNOWN_COLUMN` (exactly what docs/API.md always promised); every
+  other validation failure — and any mix of causes — answers `400 VALIDATION_ERROR`, the same code
+  physical constraint violations translate to. The previous `VALIDATION_FAILED` appeared in no
+  documentation and is retired, on the REST and GraphQL write surfaces alike.
+- **The Errors table in docs/API.md now lists every code the server can answer** (17 codes were
+  produced but undocumented — job/view/audit lookups, batch preconditions, and more), and a parity
+  test (`DocsErrorCodeParityTests`) holds the table and the server inventory equal from now on: a
+  code added on either side without the other fails the suite.
+- **`POST /api/data/{table}/query` is now documented** — filter-tree (`$type`
+  condition/group), `select`, `orderBy`, paging, and the paged response envelope — and its examples
+  run verbatim as contract tests (`ComplexQueryApiTests`). The docs' claim that `in`/`isnull` are
+  available on this endpoint was false and is corrected: the 11-operator vocabulary is the whole
+  set, on every surface.
+
 ### Fixed
 
 - **The C# SDK now delivers the server's error contract.** Every client (`Schema`, `Data`, `Batch`,

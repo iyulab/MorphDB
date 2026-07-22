@@ -39,13 +39,13 @@ public class ClientErrorEnvelopeTests
     public async Task A_validation_failure_carries_the_servers_code_through_the_data_surface()
     {
         await using var client = ClientReturning(HttpStatusCode.BadRequest,
-            """{"error":"BadRequest","message":"Unknown column 'nmae' in filter.","code":"VALIDATION_FAILED","details":null}""");
+            """{"error":"BadRequest","message":"Unknown column 'nmae' in filter.","code":"VALIDATION_ERROR","details":null}""");
 
         var act = () => client.Data.QueryAsync("items", new());
 
         var ex = (await act.Should().ThrowAsync<MorphDBValidationException>()).Which;
         ex.Message.Should().Contain("nmae");
-        ex.ErrorCode.Should().Be("VALIDATION_FAILED");
+        ex.ErrorCode.Should().Be("VALIDATION_ERROR");
     }
 
     [Fact]

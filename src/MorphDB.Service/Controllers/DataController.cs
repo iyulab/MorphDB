@@ -323,7 +323,7 @@ public sealed class DataController : ControllerBase
             {
                 Error = "ValidationError",
                 Message = string.Join("; ", writeResult.Errors.Select(e => e.Message)),
-                Code = "VALIDATION_FAILED"
+                Code = ErrorHandling.WriteFailure.CodeFor(writeResult)
             });
         }
 
@@ -395,7 +395,7 @@ public sealed class DataController : ControllerBase
             {
                 Error = "ValidationError",
                 Message = string.Join("; ", writeResult.Errors.Select(e => e.Message)),
-                Code = "VALIDATION_FAILED"
+                Code = ErrorHandling.WriteFailure.CodeFor(writeResult)
             });
         }
 

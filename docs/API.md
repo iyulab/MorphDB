@@ -97,8 +97,46 @@ GET /api/data/customers?filter=grade:eq:VIP&orderBy=_created_at:desc&page=1&page
 | `endswith` | String ends with | `file:endswith:.pdf` |
 
 An operator outside this list is answered with `400` listing the supported set — it is never
-silently coerced. (`in`/`isnull` were documented here once but no server ever accepted them on
-this parameter; use `POST /api/data/{table}/query` for those.)
+silently coerced. (`in`/`isnull` were documented here once but no server ever accepted them — on
+this parameter or anywhere else; the operator vocabulary above is the whole set, on every surface.)
+
+### Complex query — `POST /api/data/{table}/query`
+
+For predicates the flat `filter` parameter cannot express — AND/OR trees — post a filter tree.
+A node is either a `condition` or a `group` (discriminated by `$type`); conditions use the same
+operator vocabulary as the `filter` parameter above:
+
+```http
+POST /api/data/customers/query
+Content-Type: application/json
+X-Project-Id: <project id>
+
+{
+  "filter": {
+    "$type": "group",
+    "logic": "and",
+    "filters": [
+      { "$type": "condition", "column": "grade", "operator": "eq", "value": "vip" },
+      { "$type": "condition", "column": "amount", "operator": "gte", "value": 50 }
+    ]
+  },
+  "select": ["name", "amount"],
+  "orderBy": ["amount:desc"],
+  "page": 1,
+  "pageSize": 10
+}
+```
+
+- `filter` — optional; a `condition` (`column`, `operator`, `value`) or a `group` (`logic`:
+  `"and"`|`"or"`, `filters`: child nodes).
+- `select` — optional column list; omitted selects all.
+- `orderBy` — optional `column` or `column:desc` entries.
+- `page` / `pageSize` — 1-based; `pageSize` is clamped to the server maximum.
+
+The response is the same paged envelope as `GET /api/data/{table}`:
+`{ "data": [...], "pagination": { "page", "pageSize", "totalCount", "totalPages", "hasNext", "hasPrevious" } }`.
+These examples run verbatim in the contract suite (`ComplexQueryApiTests`) — if the wire shape
+drifts, the suite fails before the docs lie.
 
 ### Batch Operations
 
@@ -545,17 +583,33 @@ fixed string — internal exception text never reaches the wire) and retrying ma
 
 | Status | Code | When |
 |--------|------|------|
-| 400 | `VALIDATION_ERROR` | A value failed constraint validation (required / unique / FK / CHECK); physical `NOT NULL`/`UNIQUE` violations translate to the same code |
-| 400 | `UNKNOWN_COLUMN` | A write named a column the table does not declare (see `?ignoreUnknown=true`) |
+| 400 | `VALIDATION_ERROR` | A value failed validation — a required / unique / FK / CHECK constraint, a type mismatch, or any mix of write-validation causes; physical `NOT NULL`/`UNIQUE` violations translate to the same code |
+| 400 | `UNKNOWN_COLUMN` | A write named a column the table does not declare (see `?ignoreUnknown=true`) — answered whenever undeclared fields are the only thing wrong with the write |
 | 400 | `COLUMN_NOT_FOUND` | A query referenced a column the table does not have |
 | 400 | `INVALID_FILTER` | A malformed `filter` expression, or an unknown filter operator |
 | 400 | `INVALID_ARGUMENT` | A malformed value elsewhere in the request (e.g. an unknown column type — the message lists the supported set) |
 | 400 | `MISSING_PROJECT` | The request did not say which project it applies to — send `X-Project-Id` |
 | 400 | `INVALID_EXPRESSION` | A CHECK predicate, index predicate or policy expression that could escape the clause it is written into |
 | 400 | `TABLE_HAS_DEPENDENTS` | Deleting a table another table still references — delete those relations first |
+| 400 | `EMPTY_BATCH` | A batch request with no operations |
+| 400 | `EMPTY_DATA` | A batch write with no rows |
+| 400 | `EMPTY_TRANSACTION` | A transaction with no operations |
+| 400 | `EMPTY_RECORD_IDS` | A bulk-delete with no record ids |
+| 400 | `MISSING_KEY_COLUMNS` | A batch upsert without the key columns to match on |
+| 400 | `FILTER_REQUIRED` | A batch update-by-filter without a filter (a full-table write must be said out loud) |
+| 400 | `AGGREGATION_REQUIRED` | An aggregate query with no aggregation |
+| 400 | `ROW_STATE_NOT_ENABLED` | A row-state operation on a table whose `systemColumns.rowState` is off |
+| 400 | `JOB_NOT_COMPLETED` | Reading the result of a bulk job that has not finished |
+| 400 | `NOT_MATERIALIZED` | Refreshing or reading a view that is not materialized |
 | 404 | `TABLE_NOT_FOUND` | The table (or the project the request scoped it to) does not exist |
 | 404 | `RECORD_NOT_FOUND` | The record id does not exist in the table |
-| 404 | `NOT_FOUND` | Another addressable resource (job, view, policy…) does not exist |
+| 404 | `PROJECT_NOT_FOUND` | The project id does not exist |
+| 404 | `VIEW_NOT_FOUND` | The view does not exist |
+| 404 | `JOB_NOT_FOUND` | The bulk job does not exist |
+| 404 | `AUDIT_LOG_NOT_FOUND` | The audit log entry does not exist |
+| 404 | `NOT_FOUND` | Another addressable resource (entity set, policy…) does not exist |
 | 409 | `DUPLICATE_NAME` | Creating a table/column under a name that is taken |
+| 409 | `DUPLICATE_SLUG` | Creating a project under a slug that is taken |
 | 409 | `SCHEMA_VERSION_CONFLICT` | An optimistic schema update lost the race |
+| 409 | `LOCK_ACQUISITION_FAILED` | A concurrent schema operation holds the lock — retry |
 | 500 | `INTERNAL_ERROR` | Our defect, logged on the server — never your request's fault |
