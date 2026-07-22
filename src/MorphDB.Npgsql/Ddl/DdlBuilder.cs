@@ -975,42 +975,6 @@ public static class DdlBuilder
 
     #endregion
 
-    #region Check Expression Translation
-
-    /// <summary>
-    /// Translates logical column names in a CHECK expression to their quoted physical names.
-    /// Uses word-boundary matching to avoid partial replacements.
-    /// Also translates the MATCHES operator to PostgreSQL's native ~ (regex match) operator.
-    /// </summary>
-    public static string? TranslateCheckExpression(
-        string? checkExpression,
-        IReadOnlyDictionary<string, string> logicalToPhysicalMap)
-    {
-        if (string.IsNullOrEmpty(checkExpression))
-            return checkExpression;
-
-        // Validate the caller's original text, before names are rewritten: a rejection must quote
-        // the expression the caller actually wrote. The post-translation validation at the emit
-        // site still runs as defence in depth, but (since translation only swaps identifiers and
-        // strips nothing) an invalid expression fails here first, with logical names in the message.
-        InlineExpressionValidator.Validate(checkExpression, "Check");
-
-        var result = checkExpression;
-
-        // Sort by length descending to replace longer names first (e.g., "unit_price" before "price")
-        foreach (var (logicalName, physicalName) in logicalToPhysicalMap.OrderByDescending(kv => kv.Key.Length))
-        {
-            var pattern = $@"\b{Regex.Escape(logicalName)}\b";
-            result = Regex.Replace(result, pattern, QuoteIdentifier(physicalName));
-        }
-
-        // Translate MATCHES operator to PostgreSQL's native ~ (regex match) operator
-        result = Regex.Replace(result, @"\bMATCHES\b", "~", RegexOptions.IgnoreCase);
-
-        return result;
-    }
-
-    #endregion
 
     #region Private Helpers
 
@@ -1029,11 +993,8 @@ public static class DdlBuilder
             sb.Append(CultureInfo.InvariantCulture, $" DEFAULT {col.DefaultExpression}");
         }
 
-        if (col.CheckExpression is not null)
-        {
-            InlineExpressionValidator.Validate(col.CheckExpression, "Check");
-            sb.Append(CultureInfo.InvariantCulture, $" CHECK ({col.CheckExpression})");
-        }
+        // CHECK is deliberately absent: it is a virtual constraint enforced by the app-layer
+        // evaluator only (the expression lives in logical-name space; see CheckGrammar).
 
         return sb.ToString();
     }

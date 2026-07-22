@@ -78,13 +78,13 @@ public sealed partial class CheckValidator : IValidator
         expression = expression.Trim();
 
         // Remove outer parentheses if present
-        while (expression.StartsWith('(') && expression.EndsWith(')') && IsBalancedParentheses(expression[1..^1]))
+        while (expression.StartsWith('(') && expression.EndsWith(')') && Infrastructure.CheckGrammar.IsBalanced(expression[1..^1]))
         {
             expression = expression[1..^1].Trim();
         }
 
         // Check for OR operator (lowest precedence, evaluated first to split)
-        var orSplit = SplitByLogicalOperator(expression, "OR");
+        var orSplit = Infrastructure.CheckGrammar.SplitByLogicalOperator(expression, "OR");
         if (orSplit.Count > 1)
         {
             // OR: true if any sub-expression is true
@@ -92,7 +92,7 @@ public sealed partial class CheckValidator : IValidator
         }
 
         // Check for AND operator
-        var andSplit = SplitByLogicalOperator(expression, "AND");
+        var andSplit = Infrastructure.CheckGrammar.SplitByLogicalOperator(expression, "AND");
         if (andSplit.Count > 1)
         {
             // AND: true only if all sub-expressions are true
@@ -101,66 +101,6 @@ public sealed partial class CheckValidator : IValidator
 
         // Evaluate as simple expression
         return EvaluateSimpleExpression(expression, columnName, value, data);
-    }
-
-    /// <summary>
-    /// Splits an expression by a logical operator (AND/OR), respecting parentheses.
-    /// </summary>
-    private static List<string> SplitByLogicalOperator(string expression, string op)
-    {
-        var result = new List<string>();
-        var depth = 0;
-        var lastSplit = 0;
-        var opPattern = $" {op} ";
-        var i = 0;
-
-        while (i < expression.Length)
-        {
-            if (expression[i] == '(')
-                depth++;
-            else if (expression[i] == ')')
-                depth--;
-            else if (depth == 0)
-            {
-                // Check if we're at the operator
-                var remaining = expression[i..];
-                if (remaining.StartsWith(opPattern, StringComparison.OrdinalIgnoreCase))
-                {
-                    result.Add(expression[lastSplit..i].Trim());
-                    i += opPattern.Length;
-                    lastSplit = i;
-                    continue;
-                }
-            }
-            i++;
-        }
-
-        // Add the remaining part
-        var lastPart = expression[lastSplit..].Trim();
-        if (!string.IsNullOrEmpty(lastPart))
-        {
-            result.Add(lastPart);
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Checks if the parentheses in an expression are balanced.
-    /// </summary>
-    private static bool IsBalancedParentheses(string expression)
-    {
-        var depth = 0;
-        foreach (var c in expression)
-        {
-            if (c == '(')
-                depth++;
-            else if (c == ')')
-                depth--;
-            if (depth < 0)
-                return false;
-        }
-        return depth == 0;
     }
 
     /// <summary>
@@ -182,7 +122,7 @@ public sealed partial class CheckValidator : IValidator
 
         // Pattern: field operator value
         // Examples: "price > 0", "quantity >= 1", "age < 150"
-        var simpleMatch = SimpleCheckPattern().Match(expression);
+        var simpleMatch = Infrastructure.CheckGrammar.SimplePattern().Match(expression);
         if (simpleMatch.Success)
         {
             var field = simpleMatch.Groups["field"].Value.Trim();
@@ -199,7 +139,7 @@ public sealed partial class CheckValidator : IValidator
 
         // Pattern: field1 operator field2
         // Examples: "end_date > start_date"
-        var crossFieldMatch = CrossFieldCheckPattern().Match(expression);
+        var crossFieldMatch = Infrastructure.CheckGrammar.CrossFieldPattern().Match(expression);
         if (crossFieldMatch.Success)
         {
             var field1 = crossFieldMatch.Groups["field1"].Value.Trim();
@@ -217,7 +157,7 @@ public sealed partial class CheckValidator : IValidator
 
         // Pattern: field MATCHES 'regex_pattern'
         // Supports regex validation for CHECK expressions generated from @pattern annotations.
-        var matchesMatch = MatchesCheckPattern().Match(expression);
+        var matchesMatch = Infrastructure.CheckGrammar.MatchesPattern().Match(expression);
         if (matchesMatch.Success)
         {
             var field = matchesMatch.Groups["field"].Value.Trim();
@@ -382,13 +322,4 @@ public sealed partial class CheckValidator : IValidator
 
         return value;
     }
-
-    [GeneratedRegex(@"^(?<field>\w+)\s*(?<op>[><=!]+)\s*(?<value>.+)$")]
-    private static partial Regex SimpleCheckPattern();
-
-    [GeneratedRegex(@"^(?<field1>\w+)\s*(?<op>[><=!]+)\s*(?<field2>\w+)$")]
-    private static partial Regex CrossFieldCheckPattern();
-
-    [GeneratedRegex(@"^(?<field>\w+)\s+MATCHES\s+'(?<pattern>[^']+)'$", RegexOptions.IgnoreCase)]
-    private static partial Regex MatchesCheckPattern();
 }

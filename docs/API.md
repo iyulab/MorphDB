@@ -456,13 +456,17 @@ All fields except `version` are optional. Only provided fields are changed.
 
 ### Expression fields
 
-`default`, `check` and an index `where` are written into DDL, so what they may contain is bounded.
-A value outside these bounds is answered with `400` and an error code, not applied.
+`default` and an index `where` are written into DDL, so what they may contain is bounded. `check`
+never reaches DDL at all — it is a **virtual constraint**, enforced by the app-layer evaluator, and
+a declaration is accepted only when that evaluator can enforce it (a stored-but-unenforceable CHECK
+would constrain nothing, silently). A value outside these bounds is answered with `400` and an
+error code, not applied.
 
 | Field | Accepted | Rejected (`400`) |
 |-------|----------|------------------|
 | `default` | A literal (`0`, `pending`, `O'Brien` — quoted for you), or one of `gen_random_uuid()`, `now()`, `transaction_timestamp()`, `statement_timestamp()`, `clock_timestamp()` | Any other value containing parentheses → `INVALID_DEFAULT`. Notably `uuid_generate_v4()`: it needs the `uuid-ossp` extension, which managed PostgreSQL does not grant. Use `gen_random_uuid()`. |
-| `check`, index `where` | Any predicate that stays within itself — `age >= 0 AND age <= 150`, `status = 'a)b'`, `name ~ '^[a-z]+$'` | Unbalanced parentheses or quotes, a statement separator, or a comment → `INVALID_EXPRESSION` |
+| `check` | The CHECK grammar: `<field> <op> <value>` or `<field> <op> <field>` (op: `>` `>=` `<` `<=` `=` `==` `!=` `<>`; value: a `'quoted string'`, number, `true`/`false`/`null`), `<field> MATCHES '<regex>'`, combined with `AND`/`OR` and parentheses — `age >= 0 AND age <= 150`, `status = 'a)b'`, `email MATCHES '^[^@]+@[^@]+$'` | Anything else — SQL functions, `IN`, `BETWEEN`, the `~` operator (use `MATCHES`) → `INVALID_ARGUMENT` listing the supported forms |
+| index `where` | Any predicate that stays within itself — `age >= 0`, `status = 'a)b'` | Unbalanced parentheses or quotes, a statement separator, or a comment → `INVALID_EXPRESSION` |
 
 MorphDB requires no PostgreSQL extension. This is what lets it run on Azure Database for PostgreSQL,
 Cloud SQL and RDS, where `CREATE EXTENSION` is gated behind a server-parameter allow-list.

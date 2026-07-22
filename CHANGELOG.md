@@ -4,6 +4,18 @@
 
 ### Changed
 
+- **CHECK has one grammar, and it is the enforced one.** A CHECK expression is accepted at
+  declaration only when the app-layer evaluator can enforce it: comparisons (`> >= < <= = == !=
+  <>` against a literal or another field), `MATCHES '<regex>'`, combined with `AND`/`OR` and
+  parentheses. Previously the declaration accepted any inline-safe SQL predicate, stored it, and
+  the evaluator silently skipped what it could not parse — enforcement fell to a physical CHECK
+  constraint that the ALTER path could never update (a redeclared rule left the old one physically
+  enforced). No physical CHECK is emitted anymore (the constitution's "only CHECK is virtual"
+  boundary now holds in code); expressions like `name ~ '...'` or `length(name) > 3` are refused
+  with `400 INVALID_ARGUMENT` listing the supported forms — use `MATCHES` for regex. Tables created
+  by earlier versions keep their existing physical CHECK constraints; they enforce the same
+  declared rule and may be dropped manually.
+
 - **`project_id` no longer appears on any consumption surface.** The project is an internal
   operating unit and every request is already scoped by `X-Project-Id`, so the GUID carried zero
   information — yet it leaked into every data row (REST, complex query, OData, write responses),

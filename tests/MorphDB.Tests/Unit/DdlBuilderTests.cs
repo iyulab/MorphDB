@@ -104,8 +104,9 @@ public class DdlBuilderTests
         // Act
         var sql = DdlBuilder.BuildCreateTable("t_people", columns);
 
-        // Assert
-        sql.Should().Contain("CHECK (age >= 0 AND age <= 150)");
+        // Assert - CHECK is a virtual constraint: the expression must never reach DDL. The
+        // app-layer evaluator (CheckGrammar/CheckValidator) is its only enforcement.
+        sql.Should().NotContain("CHECK");
     }
 
     [Fact]
@@ -412,77 +413,15 @@ public class DdlBuilderTests
         sql.Should().Contain("\"col\"\"name\"");
     }
 
-    [Fact]
-    public void TranslateCheckExpression_ShouldReplaceLogicalWithPhysicalNames()
-    {
-        // Arrange
-        var columnMappings = new Dictionary<string, string>
-        {
-            ["quantity"] = "col_a1b2c3d4e5f6",
-            ["price"] = "col_f6e5d4c3b2a1"
-        };
 
-        // Act
-        var result = DdlBuilder.TranslateCheckExpression("quantity >= 0 AND price > 0", columnMappings);
 
-        // Assert
-        result.Should().Be("\"col_a1b2c3d4e5f6\" >= 0 AND \"col_f6e5d4c3b2a1\" > 0");
-    }
+
+
 
     [Fact]
-    public void TranslateCheckExpression_ShouldNotReplacePartialMatches()
+    public void BuildCreateTable_WithCheckMetadata_EmitsNoCheck()
     {
-        // "price" should not match "unit_price"
-        var columnMappings = new Dictionary<string, string>
-        {
-            ["price"] = "col_aaa",
-            ["unit_price"] = "col_bbb"
-        };
-
-        var result = DdlBuilder.TranslateCheckExpression("unit_price > 0 AND price < 10000", columnMappings);
-
-        result.Should().Be("\"col_bbb\" > 0 AND \"col_aaa\" < 10000");
-    }
-
-    [Fact]
-    public void TranslateCheckExpression_WithNullOrEmpty_ShouldReturnAsIs()
-    {
-        var mappings = new Dictionary<string, string> { ["x"] = "col_x" };
-
-        DdlBuilder.TranslateCheckExpression(null, mappings).Should().BeNull();
-        DdlBuilder.TranslateCheckExpression("", mappings).Should().Be("");
-    }
-
-    [Fact]
-    public void TranslateCheckExpression_ShouldTranslateMatchesToTildeOperator()
-    {
-        var columnMappings = new Dictionary<string, string>
-        {
-            ["email"] = "col_email_hash"
-        };
-
-        var result = DdlBuilder.TranslateCheckExpression("email MATCHES '^[^@]+@[^@]+$'", columnMappings);
-
-        result.Should().Be("\"col_email_hash\" ~ '^[^@]+@[^@]+$'");
-    }
-
-    [Fact]
-    public void TranslateCheckExpression_ShouldTranslateMatchesCaseInsensitive()
-    {
-        var columnMappings = new Dictionary<string, string>
-        {
-            ["code"] = "col_code"
-        };
-
-        var result = DdlBuilder.TranslateCheckExpression("code matches '^[A-Z]+$'", columnMappings);
-
-        result.Should().Be("\"col_code\" ~ '^[A-Z]+$'");
-    }
-
-    [Fact]
-    public void BuildCreateTable_WithHashedPhysicalNameAndCheck_ShouldUsePhysicalNameInCheck()
-    {
-        // Arrange — simulates translated check expression with hashed physical names
+        // CHECK is virtual: even a column definition carrying an expression must leave DDL clean.
         var columns = new List<ColumnDefinition>
         {
             new()
@@ -498,7 +437,7 @@ public class DdlBuilderTests
         var sql = DdlBuilder.BuildCreateTable("t_test", columns);
 
         // Assert
-        sql.Should().Contain("CHECK (\"col_a1b2c3d4e5f6\" >= 0)");
+        sql.Should().NotContain("CHECK");
     }
 
     #region ALTER COLUMN TYPE Tests
@@ -654,13 +593,13 @@ public class DdlBuilderTests
     [InlineData("\"c_age\" >= 0")]
     [InlineData("status = 'a)b'")]
     [InlineData("name ~ '^[a-z]+$'")]
-    public void BuildCreateTable_ShouldAcceptOrdinaryCheckExpressions(string check)
+    public void BuildCreateTable_NeverEmitsCheck_WhateverTheExpression(string check)
     {
         // Act
         var sql = DdlBuilder.BuildCreateTable("t_people", ColumnWithCheck(check));
 
-        // Assert
-        sql.Should().Contain($"CHECK ({check})");
+        // Assert - virtual constraint: enforcement lives in the app evaluator, not in DDL.
+        sql.Should().NotContain("CHECK");
     }
 
     [Theory]
@@ -671,14 +610,11 @@ public class DdlBuilderTests
     [InlineData("age > 0 -- ")]
     [InlineData("age > 'unterminated")]
     [InlineData("(age > 0")]
-    public void BuildCreateTable_ShouldRejectEscapingCheckExpressions(string check)
+    public void An_escaping_check_expression_is_outside_the_grammar(string check)
     {
-        // Act
-        var act = () => DdlBuilder.BuildCreateTable("t_people", ColumnWithCheck(check));
-
-        // Assert
-        act.Should().Throw<SchemaException>()
-            .Which.ErrorCode.Should().Be("INVALID_EXPRESSION");
+        // CHECK no longer reaches DDL, so escape is impossible by construction; the declaration
+        // gate refuses these earlier because the evaluator cannot enforce them.
+        MorphDB.Npgsql.Infrastructure.CheckGrammar.IsSupported(check).Should().BeFalse();
     }
 
     [Fact]

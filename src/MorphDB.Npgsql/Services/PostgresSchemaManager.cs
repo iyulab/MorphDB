@@ -208,20 +208,14 @@ public sealed class PostgresSchemaManager : ISchemaManager
             }
         }
 
-        // Translate logical names in CHECK expressions to physical names for DDL
-        var logicalToPhysicalMap = columns
-            .Where(c => !c.PhysicalName.StartsWith("virtual_", StringComparison.Ordinal))
-            .ToDictionary(c => c.LogicalName, c => c.PhysicalName);
-
-        for (var i = 0; i < columnDefinitions.Count; i++)
+        // CHECK is a virtual constraint: the app-layer grammar is the single canon and nothing is
+        // emitted into DDL (§3.10-C1). The declaration gate rejects what the evaluator cannot
+        // enforce - a stored-but-unenforceable CHECK would constrain nothing, silently.
+        foreach (var definition in columnDefinitions)
         {
-            if (columnDefinitions[i].CheckExpression is not null)
+            if (definition.CheckExpression is not null)
             {
-                columnDefinitions[i] = columnDefinitions[i] with
-                {
-                    CheckExpression = DdlBuilder.TranslateCheckExpression(
-                        columnDefinitions[i].CheckExpression, logicalToPhysicalMap)
-                };
+                Infrastructure.CheckGrammar.EnsureSupported(definition.CheckExpression);
             }
         }
 
@@ -545,19 +539,10 @@ public sealed class PostgresSchemaManager : ISchemaManager
         {
             var columnDef = ColumnDefinition.FromMetadata(column);
 
-            // Translate logical names in CHECK expression to physical names
+            // Virtual constraint: declaration gate only, nothing reaches DDL (see CreateTableAsync).
             if (columnDef.CheckExpression is not null)
             {
-                var logicalToPhysicalMap = table.Columns
-                    .Where(c => c.IsActive && !c.PhysicalName.StartsWith("virtual_", StringComparison.Ordinal))
-                    .ToDictionary(c => c.LogicalName, c => c.PhysicalName);
-                logicalToPhysicalMap[column.LogicalName] = column.PhysicalName;
-
-                columnDef = columnDef with
-                {
-                    CheckExpression = DdlBuilder.TranslateCheckExpression(
-                        columnDef.CheckExpression, logicalToPhysicalMap)
-                };
+                Infrastructure.CheckGrammar.EnsureSupported(columnDef.CheckExpression);
             }
 
             await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
