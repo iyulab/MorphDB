@@ -577,7 +577,11 @@ Every error is a JSON envelope — **no path answers a 5xx with an empty body**:
 { "error": "ValidationError", "message": "what went wrong, and what is possible", "code": "VALIDATION_ERROR" }
 ```
 
-`code` is the machine-readable contract; branch on it, not on `message` text. A `4xx` means the
+`code` is the machine-readable contract; branch on it, not on `message` text. Request envelopes are
+strict: a JSON member a request body does not declare (a typo'd `filters` for `filter`, a `colums`
+for `columns`) answers `400 INVALID_ARGUMENT` naming the member and listing the supported ones —
+never a silent drop. (Row-data bodies are dictionaries — arbitrary members are the point; their
+unknown-field policy is the write pipeline's `UNKNOWN_COLUMN`.) A `4xx` means the
 request must change before retrying; a `500 INTERNAL_ERROR` is a service defect (its message is a
 fixed string — internal exception text never reaches the wire) and retrying may succeed.
 

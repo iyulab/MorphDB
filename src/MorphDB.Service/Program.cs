@@ -86,7 +86,21 @@ try
     });
 
     // Add API services
-    builder.Services.AddControllers();
+    builder.Services.AddControllers()
+        // Model-binding failures answer the standard envelope, not ProblemDetails (one error shape).
+        .ConfigureApiBehaviorOptions(options =>
+        {
+            options.InvalidModelStateResponseFactory = MorphDB.Service.ErrorHandling.StrictRequestBinding.InvalidModelStateResponse;
+        })
+        .AddJsonOptions(options =>
+        {
+            // Fail-loud request envelopes: an unmapped JSON member on an API model is a 400, never a
+            // silent drop (see StrictRequestBinding).
+            options.JsonSerializerOptions.TypeInfoResolver = new System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver
+            {
+                Modifiers = { MorphDB.Service.ErrorHandling.StrictRequestBinding.DisallowUnmappedMembers },
+            };
+        });
 
     // One authority for what an escaped exception becomes on the wire. Without it, anything a
     // controller's catch chain does not name is a framework-default 500 with an empty body.

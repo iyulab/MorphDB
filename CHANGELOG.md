@@ -4,6 +4,16 @@
 
 ### Changed
 
+- **Request envelopes are strict.** A JSON member a request DTO does not declare is refused with
+  `400 INVALID_ARGUMENT` naming the member and listing the supported ones — previously it was
+  silently dropped by default deserialization, so a typo'd `filters` against
+  `POST /api/data/{table}/query` answered 200 with every row, the filter ignored (a confidently
+  wrong answer), and a `colums` typo created a table with zero columns. Applies to every API model,
+  nested nodes included; row-data dictionary bodies are unaffected (their unknown-field policy is
+  the write pipeline's `UNKNOWN_COLUMN`). Model-binding failures now answer the standard
+  `{error, message, code}` envelope instead of the framework's ProblemDetails — one error shape on
+  every path.
+
 - **Write-failure error codes are now the documented ones.** A write refused because it named
   undeclared columns answers `400 UNKNOWN_COLUMN` (exactly what docs/API.md always promised); every
   other validation failure — and any mix of causes — answers `400 VALIDATION_ERROR`, the same code
