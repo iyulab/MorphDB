@@ -71,6 +71,10 @@ public sealed class PostgresTransactionService : ITransactionService
                 if (!result.Success)
                 {
                     await transaction.RollbackAsync(cts.Token);
+                    // The failed operation's result rides along: it carries the ValidationErrors
+                    // (field + machine-readable code) the caller branches on — dropping it would
+                    // reduce the whole failure to an opaque string.
+                    results.Add(result);
                     return TransactionResult.PartialFailed(results, result.Error ?? "Operation failed", i);
                 }
 

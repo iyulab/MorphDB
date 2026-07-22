@@ -39,6 +39,14 @@
 
 ### Fixed
 
+- **A failed transaction now tells you why.** The failed operation's result — with its
+  `validationErrors` (field + machine-readable code) — is included in the transaction response's
+  `results`; previously it was dropped, reducing the whole failure to an opaque `"Validation
+  failed"` string with a `failedOperationIndex`. The transaction door's write contract is now
+  pinned by equivalence tests (`TransactionWriteContractTests`): the same bad row is refused for
+  the same code as REST (`UNKNOWN_COLUMN`, `CHECK_VIOLATION`), a transactional row carries the same
+  pipeline-applied system columns, and the pipeline write demonstrably runs inside the
+  transaction's connection scope (removing the scope sends the rollback test red).
 - **The C# SDK now delivers the server's error contract.** Every client (`Schema`, `Data`, `Batch`,
   `Bulk`, `Transactions`, `Views`, `Webhooks`) parses the server's `{error, message, code}` envelope
   into the exception it throws: `Message` is the server's message (what went wrong and what to do),
