@@ -272,7 +272,7 @@ Webhook payload:
 ## Write Options
 
 Every write door — data CRUD, batch, seed, upsert, bulk import rows, GraphQL mutations — goes
-through the same write pipeline: virtual constraints (required / unique / FK / CHECK) are
+through the same write pipeline: constraint validation (required / unique / FK / CHECK) is
 validated and system columns (`_id`, timestamps, `_version`, audit fields) are applied uniformly.
 
 The request body of a data write is the record itself — there is no `{ "data": ..., "options": ... }`
@@ -299,7 +299,7 @@ not request-body switches.
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `validateRequired` | `true` | Validate required fields (virtual NOT NULL) |
+| `validateRequired` | `true` | Validate required fields (NOT NULL) |
 | `validateForeignKeys` | `true` | Validate foreign key references exist |
 | `validateUnique` | `true` | Validate unique constraints |
 | `validateCheck` | `true` | Validate CHECK constraints (supports AND/OR expressions) |
@@ -410,7 +410,7 @@ All fields except `version` are optional. Only provided fields are changed.
 |-------|-------------|
 | `name` | New logical column name |
 | `type` | New data type (safe type widening only: integer→biginteger→decimal, *→text) |
-| `nullable` | Whether the column allows null (virtual constraint) |
+| `nullable` | Whether the column allows null |
 | `unique` | Whether the column has a unique constraint (physical DDL) |
 | `check` | Check expression (virtual constraint) — see [Expression fields](#expression-fields) |
 | `default` | Default value — see [Expression fields](#expression-fields) |
@@ -545,7 +545,7 @@ fixed string — internal exception text never reaches the wire) and retrying ma
 
 | Status | Code | When |
 |--------|------|------|
-| 400 | `VALIDATION_ERROR` | A value failed a virtual constraint (required / unique / FK / CHECK), including physical `NOT NULL`/`UNIQUE` violations, which translate to the same code |
+| 400 | `VALIDATION_ERROR` | A value failed constraint validation (required / unique / FK / CHECK); physical `NOT NULL`/`UNIQUE` violations translate to the same code |
 | 400 | `UNKNOWN_COLUMN` | A write named a column the table does not declare (see `?ignoreUnknown=true`) |
 | 400 | `COLUMN_NOT_FOUND` | A query referenced a column the table does not have |
 | 400 | `INVALID_FILTER` | A malformed `filter` expression, or an unknown filter operator |

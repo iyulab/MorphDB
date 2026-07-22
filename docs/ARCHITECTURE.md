@@ -154,19 +154,24 @@ schema namespace via `IProjectContextAccessor`; it is not a credential.
 
 ## Virtual Constraint Architecture
 
-MorphDB uses a "Virtual DOM-like" approach for database constraints. Physical constraints are only applied when performance-critical, while most constraints are enforced at the application layer for runtime flexibility.
+Integrity constraints are physically enforced — the database is the final backstop — while the
+write pipeline validates the same rules ahead of it, so a caller's mistake answers a clean 4xx
+before it ever reaches a physical violation (and a physical violation that does surface is
+translated to the same error contract). The one deliberate exception is CHECK: its expressions
+live in the logical-name world, so it stays application-layer — materializing it physically would
+tie every rename to a constraint rebuild.
 
 ### Physical vs Virtual Constraints
 
 | Constraint Type | Physical | Virtual | Rationale |
 |-----------------|----------|---------|-----------|
-| Primary Key (PK) | ✅ | | Performance-critical for lookups |
+| Primary Key (PK) | ✅ | | Identity and lookups |
 | Index | ✅ | | Query performance |
-| Foreign Key (FK) | | ✅ | Flexibility for schema changes |
-| NOT NULL | | ✅ | Configurable per-column |
-| UNIQUE | | ✅ | Application-layer check |
-| CHECK | | ✅ | Expression evaluation |
-| DEFAULT | | ✅ | Context-based values |
+| Foreign Key (FK) | ✅ | | Referential integrity under concurrency; dropping a referenced table requires releasing the relation first (`TABLE_HAS_DEPENDENTS`) |
+| NOT NULL | ✅ | | Required values cannot depend on every writer behaving |
+| UNIQUE | ✅ | | Uniqueness is a race unless the database enforces it |
+| DEFAULT | ✅ | | Applied by DDL; pipeline transformers add context-based values on top |
+| CHECK | | ✅ | Expressions reference logical names; kept virtual for rename flexibility |
 
 ### Write Pipeline Architecture
 
@@ -187,8 +192,8 @@ MorphDB uses a "Virtual DOM-like" approach for database constraints. Physical co
 │  ├── AuditFieldApplier       (_created_by, _updated_by)     │
 │  └── SoftDeleteApplier       (_deleted_at for soft delete)  │
 │                                                             │
-│  Phase 2: VALIDATORS (virtual constraint enforcement)       │
-│  ├── RequiredValidator       (virtual NOT NULL)             │
+│  Phase 2: VALIDATORS (constraint validation, ahead of DDL)  │
+│  ├── RequiredValidator       (NOT NULL, friendly 400)       │
 │  ├── UniqueValidator         (with conditional support)     │
 │  ├── ForeignKeyValidator     (reference existence check)    │
 │  └── CheckValidator          (expression evaluation)        │
