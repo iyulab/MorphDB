@@ -83,7 +83,7 @@ const initialDialogState: DialogState = {
 }
 
 export function TableExplorer(): ReactElement {
-  const { activeConnection, getApiKey } = useConnectionStore()
+  const { activeConnection } = useConnectionStore()
   const {
     selectedTable,
     expandedNodes,
@@ -118,14 +118,8 @@ export function TableExplorer(): ReactElement {
     queryFn: async () => {
       if (!activeConnection) return []
 
-      const apiKey = await getApiKey(activeConnection.id)
-      if (!apiKey) {
-        throw new Error('No API key found for this connection')
-      }
-
       const client = new MorphDBClient({
         url: activeConnection.url,
-        apiKey,
         projectId: activeConnection.projectId
       })
 
@@ -144,11 +138,8 @@ export function TableExplorer(): ReactElement {
   // Helper to create API client
   const createClient = async (): Promise<MorphDBClient | null> => {
     if (!activeConnection) return null
-    const apiKey = await getApiKey(activeConnection.id)
-    if (!apiKey) return null
     return new MorphDBClient({
       url: activeConnection.url,
-      apiKey,
       projectId: activeConnection.projectId
     })
   }

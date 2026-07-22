@@ -71,20 +71,6 @@ export class MorphDBClient {
   }
 
   /**
-   * Sets the API key for authentication
-   */
-  setApiKey(apiKey: string): void {
-    this.http.setApiKey(apiKey);
-  }
-
-  /**
-   * Sets the JWT token for authentication
-   */
-  setJwtToken(token: string): void {
-    this.http.setJwtToken(token);
-  }
-
-  /**
    * Disconnects all real-time connections
    */
   async disconnect(): Promise<void> {

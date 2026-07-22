@@ -44,7 +44,6 @@ describe('API Scenario: Connection & Health Check', () => {
     mockFetch.mockReset()
     client = new MorphDBClient({
       url: 'http://localhost:5000',
-      apiKey: 'test-api-key',
       projectId: 'test-project',
     })
   })
@@ -59,7 +58,7 @@ describe('API Scenario: Connection & Health Check', () => {
       'http://localhost:5000/health',
       expect.objectContaining({
         headers: expect.objectContaining({
-          'X-API-Key': 'test-api-key',
+          'X-Project-Id': 'test-project',
         }),
       })
     )
@@ -95,7 +94,6 @@ describe('API Scenario: Table Lifecycle Workflow', () => {
     mockFetch.mockReset()
     client = new MorphDBClient({
       url: 'http://localhost:5000',
-      apiKey: 'test-api-key',
     })
   })
 
@@ -191,7 +189,6 @@ describe('API Scenario: Data CRUD Workflow', () => {
     mockFetch.mockReset()
     client = new MorphDBClient({
       url: 'http://localhost:5000',
-      apiKey: 'test-api-key',
     })
   })
 
@@ -308,7 +305,6 @@ describe('API Scenario: Batch Operations Workflow', () => {
     mockFetch.mockReset()
     client = new MorphDBClient({
       url: 'http://localhost:5000',
-      apiKey: 'test-api-key',
     })
   })
 
@@ -398,7 +394,6 @@ describe('API Scenario: Aggregation Workflow', () => {
     mockFetch.mockReset()
     client = new MorphDBClient({
       url: 'http://localhost:5000',
-      apiKey: 'test-api-key',
     })
   })
 
@@ -463,7 +458,6 @@ describe('API Scenario: View Management Workflow', () => {
     mockFetch.mockReset()
     client = new MorphDBClient({
       url: 'http://localhost:5000',
-      apiKey: 'test-api-key',
     })
   })
 
@@ -547,7 +541,6 @@ describe('API Scenario: Webhook Configuration Workflow', () => {
     mockFetch.mockReset()
     client = new MorphDBClient({
       url: 'http://localhost:5000',
-      apiKey: 'test-api-key',
     })
   })
 
@@ -619,7 +612,6 @@ describe('API Scenario: Import/Export Workflow', () => {
     mockFetch.mockReset()
     client = new MorphDBClient({
       url: 'http://localhost:5000',
-      apiKey: 'test-api-key',
     })
   })
 
@@ -702,7 +694,6 @@ describe('API Scenario: Project Management', () => {
     mockFetch.mockReset()
     client = new MorphDBClient({
       url: 'http://localhost:5000',
-      apiKey: 'test-api-key',
     })
   })
 
@@ -758,7 +749,6 @@ describe('API Scenario: Error Handling & Recovery', () => {
     mockFetch.mockReset()
     client = new MorphDBClient({
       url: 'http://localhost:5000',
-      apiKey: 'test-api-key',
     })
   })
 
@@ -822,32 +812,7 @@ describe('API Scenario: Security Operations', () => {
     mockFetch.mockReset()
     client = new MorphDBClient({
       url: 'http://localhost:5000',
-      apiKey: 'test-api-key',
     })
-  })
-
-  it('should manage API keys', async () => {
-    const createKeyResponse = {
-      key: {
-        id: 'key-123',
-        name: 'Production API Key',
-        keyType: 'service',
-        keyPrefix: 'sk_prod_',
-        isActive: true,
-        createdAt: new Date().toISOString(),
-      },
-      rawKey: 'sk_prod_xxxxxxxxxxxxxxxxxxxx',
-    }
-
-    mockFetch.mockResolvedValueOnce(createMockResponse(createKeyResponse))
-
-    const result = await client.createApiKey({
-      name: 'Production API Key',
-      keyType: 'service',
-    })
-
-    expect(result.rawKey).toContain('sk_prod_')
-    expect(result.key.isActive).toBe(true)
   })
 
   it('should manage RLS policies', async () => {
@@ -906,7 +871,6 @@ describe('API Scenario: Audit & Monitoring', () => {
     mockFetch.mockReset()
     client = new MorphDBClient({
       url: 'http://localhost:5000',
-      apiKey: 'test-api-key',
     })
   })
 
@@ -1030,7 +994,6 @@ describe('API Scenario: Real-time Subscription Workflow', () => {
     mockSignalRConnection = new MockSignalRConnection()
     client = new MorphDBClient({
       url: 'http://localhost:5000',
-      apiKey: 'test-api-key',
     })
     // Inject mock SignalR connection
     ;(client as any)._signalRConnection = mockSignalRConnection
@@ -1369,7 +1332,6 @@ describe('API Scenario: Concurrent Operations Workflow', () => {
     mockFetch.mockReset()
     client = new MorphDBClient({
       url: 'http://localhost:5000',
-      apiKey: 'test-api-key',
     })
   })
 

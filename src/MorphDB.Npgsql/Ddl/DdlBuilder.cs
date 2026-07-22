@@ -736,21 +736,6 @@ public static class DdlBuilder
                 performed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
 
-            CREATE TABLE IF NOT EXISTS morphdb._morph_api_keys (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                project_id UUID NOT NULL,
-                key_type INTEGER NOT NULL DEFAULT 0,
-                key_hash VARCHAR(255) NOT NULL,
-                key_prefix VARCHAR(50) NOT NULL,
-                name VARCHAR(100) NOT NULL,
-                description TEXT,
-                is_active BOOLEAN NOT NULL DEFAULT true,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                expires_at TIMESTAMPTZ,
-                last_used_at TIMESTAMPTZ,
-                UNIQUE (key_hash)
-            );
-
             CREATE TABLE IF NOT EXISTS morphdb._morph_webhooks (
                 webhook_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 project_id UUID NOT NULL,
@@ -933,8 +918,6 @@ public static class DdlBuilder
             CREATE INDEX IF NOT EXISTS idx_morph_relations_source ON morphdb._morph_relations(source_table_id);
             CREATE INDEX IF NOT EXISTS idx_morph_relations_target ON morphdb._morph_relations(target_table_id);
             CREATE INDEX IF NOT EXISTS idx_morph_changelog_table ON morphdb._morph_changelog(table_id);
-            CREATE INDEX IF NOT EXISTS idx_morph_api_keys_project ON morphdb._morph_api_keys(project_id);
-            CREATE INDEX IF NOT EXISTS idx_morph_api_keys_prefix ON morphdb._morph_api_keys(key_prefix);
             CREATE INDEX IF NOT EXISTS idx_morph_webhooks_project ON morphdb._morph_webhooks(project_id);
             CREATE INDEX IF NOT EXISTS idx_morph_webhooks_table ON morphdb._morph_webhooks(table_id);
             CREATE INDEX IF NOT EXISTS idx_morph_webhook_deliveries_webhook ON morphdb._morph_webhook_deliveries(webhook_id);

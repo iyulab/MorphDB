@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+### Removed — the authentication machinery
+
+- **The service no longer carries authentication it never enforced.** A production image had no way
+  to mint an API key — the only issuing endpoint was Development-mode-only, and the key-management
+  endpoints demanded a role only an existing key could grant — so every working deployment already
+  ran unauthenticated, and the machinery's only effect was to advertise a boundary that did not
+  exist. Removed: the `X-API-Key` / JWT `Authorization` authentication handler, the
+  `/api/security/keys` endpoints, the Development-only `POST /api/dev/bootstrap`, the
+  `_morph_api_keys` control-plane table (existing databases drop it on start), the `Jwt`
+  configuration section, and the client options and methods that carried credentials
+  (`MorphDBClientOptions.ApiKey`/`JwtToken`, `SetApiKey`, `SetJwtToken`). Access control is the
+  deployment's job: bind the service privately, or put an authenticating proxy in front.
+- **The role gates fell with it.** The security-policy, encryption-rotation and diagnostics
+  endpoints — previously `[Authorize]`-gated behind a role no production caller could hold, and so
+  unreachable — now answer like every other endpoint. Row-level security still evaluates: an HTTP
+  request runs in its project's anonymous context, so `{{is_authenticated}}` is `false` and the
+  user-bearing placeholders substitute `NULL` (fail-closed; a `{{user_id}}` policy matches no rows
+  over HTTP).
+
+### Changed — the contract is served, not shipped dark
+
+- **`/swagger` (OpenAPI document and UI) is served in every environment.** It was registered
+  unconditionally but exposed only in Development, so the deployed image answered 404 for its own
+  machine-readable contract.
+
 ### Changed — error and write contracts
 
 - **A caller's mistake now answers 4xx with a code and a hint — never a 500, and never an empty

@@ -107,8 +107,6 @@ public sealed class AuditMiddleware
     {
         var request = context.Request;
         var response = context.Response;
-        var user = context.User;
-
         // Determine action from path and method
         var action = DetermineAction(request.Method, request.Path.Value ?? "");
 
@@ -118,20 +116,10 @@ public sealed class AuditMiddleware
         // Determine severity
         var severity = DetermineSeverity(response.StatusCode, exception);
 
-        // Get actor info
+        // The service is unauthenticated by design, so a request carries no actor identity;
+        // who called is the deployment's knowledge, not this layer's.
         string? actorId = null;
         string? actorType = null;
-
-        if (user.Identity?.IsAuthenticated == true)
-        {
-            actorId = user.FindFirst("sub")?.Value ?? user.FindFirst("user_id")?.Value;
-            actorType = "user";
-        }
-        else if (context.Items.TryGetValue("ApiKeyId", out var apiKeyId))
-        {
-            actorId = apiKeyId?.ToString();
-            actorType = "apikey";
-        }
 
         // Extract resource info from path
         var (resourceType, resourceId) = ExtractResourceInfo(request.Path.Value ?? "");

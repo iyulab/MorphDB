@@ -125,12 +125,6 @@ public sealed class RateLimitMiddleware
             }
         }
 
-        // Try API key
-        if (context.Items.TryGetValue("ApiKeyId", out var apiKeyId))
-        {
-            return $"apikey:{apiKeyId}";
-        }
-
         // Fallback to IP address
         var ipAddress = GetClientIpAddress(context);
         return $"ip:{ipAddress}";

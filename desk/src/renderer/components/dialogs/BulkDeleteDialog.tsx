@@ -18,7 +18,7 @@ export function BulkDeleteDialog({
   tableName,
   columns
 }: BulkDeleteDialogProps): ReactElement | null {
-  const { activeConnection, getApiKey } = useConnectionStore()
+  const { activeConnection } = useConnectionStore()
   const queryClient = useQueryClient()
 
   const [filter, setFilter] = useState('')
@@ -30,11 +30,8 @@ export function BulkDeleteDialog({
 
   const createClient = async (): Promise<MorphDBClient | null> => {
     if (!activeConnection) return null
-    const apiKey = await getApiKey(activeConnection.id)
-    if (!apiKey) return null
     return new MorphDBClient({
       url: activeConnection.url,
-      apiKey,
       projectId: activeConnection.projectId
     })
   }

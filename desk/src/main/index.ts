@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, Menu, safeStorage, dialog } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, Menu, dialog } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import electronUpdater from 'electron-updater'
@@ -13,12 +13,6 @@ autoUpdater.logger = log
 // Auto-update configuration
 autoUpdater.autoDownload = false
 autoUpdater.autoInstallOnAppQuit = true
-
-// Initialize secure store for encrypted credentials
-const credentialStore = new Store<Record<string, string>>({
-  name: 'secure-credentials',
-  encryptionKey: 'morphdb-studio-credential-key'
-})
 
 let mainWindow: BrowserWindow | null = null
 
@@ -272,66 +266,14 @@ ipcMain.handle('window:maximize', () => {
 })
 ipcMain.handle('window:close', () => mainWindow?.close())
 
-// Secure credential storage handlers
-ipcMain.handle('credentials:save', (_event, connectionId: string, apiKey: string) => {
-  try {
-    if (safeStorage.isEncryptionAvailable()) {
-      const encrypted = safeStorage.encryptString(apiKey)
-      credentialStore.set(connectionId, encrypted.toString('base64'))
-    } else {
-      // Fallback to electron-store encryption
-      credentialStore.set(connectionId, apiKey)
-    }
-    return { success: true }
-  } catch (error) {
-    console.error('Failed to save credential:', error)
-    return { success: false, error: (error as Error).message }
-  }
-})
-
-ipcMain.handle('credentials:get', (_event, connectionId: string) => {
-  try {
-    const stored = credentialStore.get(connectionId)
-    if (!stored) return null
-
-    if (safeStorage.isEncryptionAvailable()) {
-      const buffer = Buffer.from(stored, 'base64')
-      return safeStorage.decryptString(buffer)
-    } else {
-      return stored
-    }
-  } catch (error) {
-    console.error('Failed to get credential:', error)
-    return null
-  }
-})
-
-ipcMain.handle('credentials:delete', (_event, connectionId: string) => {
-  try {
-    credentialStore.delete(connectionId)
-    return { success: true }
-  } catch (error) {
-    console.error('Failed to delete credential:', error)
-    return { success: false, error: (error as Error).message }
-  }
-})
-
-ipcMain.handle('credentials:has', (_event, connectionId: string) => {
-  return credentialStore.has(connectionId)
-})
-
 // Connection test handler
-ipcMain.handle('connection:test', async (_event, url: string, apiKey: string) => {
+ipcMain.handle('connection:test', async (_event, url: string) => {
   try {
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
 
-    // Project ID is automatically resolved from API key on the server side
     const response = await fetch(`${url}/health`, {
       method: 'GET',
-      headers: {
-        'X-API-Key': apiKey
-      },
       signal: controller.signal
     })
 

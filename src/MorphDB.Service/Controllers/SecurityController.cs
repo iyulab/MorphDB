@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MorphDB.Core.Encryption;
 using MorphDB.Core.Security;
@@ -13,102 +12,19 @@ namespace MorphDB.Service.Controllers;
 [Route("api/security")]
 public sealed class SecurityController : ControllerBase
 {
-    private readonly IApiKeyService _apiKeyService;
     private readonly ISecurityPolicyService _policyService;
     private readonly IKeyRotationService? _keyRotationService;
     private readonly IProjectContextAccessor _projectContext;
 
     public SecurityController(
-        IApiKeyService apiKeyService,
         ISecurityPolicyService policyService,
         IProjectContextAccessor projectContext,
         IKeyRotationService? keyRotationService = null)
     {
-        _apiKeyService = apiKeyService;
         _policyService = policyService;
         _projectContext = projectContext;
         _keyRotationService = keyRotationService;
     }
-
-    #region API Keys
-
-    /// <summary>
-    /// Gets all API keys for the current project.
-    /// </summary>
-    [HttpGet("keys")]
-    [Authorize(Roles = "service,admin")]
-    [ProducesResponseType<IReadOnlyList<ApiKeyResponse>>(200)]
-    public async Task<IActionResult> GetApiKeys(CancellationToken cancellationToken)
-    {
-        var keys = await _apiKeyService.GetKeysAsync(_projectContext.ProjectId, cancellationToken);
-        var response = keys.Select(MapToResponse).ToList();
-        return Ok(response);
-    }
-
-    /// <summary>
-    /// Creates a new API key.
-    /// </summary>
-    [HttpPost("keys")]
-    [Authorize(Roles = "service,admin")]
-    [ProducesResponseType<CreateApiKeyResponse>(201)]
-    public async Task<IActionResult> CreateApiKey(
-        [FromBody] CreateApiKeyRequest request,
-        CancellationToken cancellationToken)
-    {
-        var (key, rawKey) = await _apiKeyService.CreateKeyAsync(
-            _projectContext.ProjectId,
-            request.KeyType,
-            request.Name,
-            request.Description,
-            request.ExpiresAt,
-            cancellationToken);
-
-        return CreatedAtAction(
-            nameof(GetApiKeys),
-            new CreateApiKeyResponse
-            {
-                Key = MapToResponse(key),
-                RawKey = rawKey
-            });
-    }
-
-    /// <summary>
-    /// Revokes an API key.
-    /// </summary>
-    [HttpDelete("keys/{keyId:guid}")]
-    [Authorize(Roles = "service,admin")]
-    [ProducesResponseType(204)]
-    public async Task<IActionResult> RevokeApiKey(Guid keyId, CancellationToken cancellationToken)
-    {
-        await _apiKeyService.RevokeKeyAsync(_projectContext.ProjectId, keyId, cancellationToken);
-        return NoContent();
-    }
-
-    /// <summary>
-    /// Rotates an API key (creates new, optionally revokes old).
-    /// </summary>
-    [HttpPost("keys/{keyId:guid}/rotate")]
-    [Authorize(Roles = "service,admin")]
-    [ProducesResponseType<CreateApiKeyResponse>(200)]
-    public async Task<IActionResult> RotateApiKey(
-        Guid keyId,
-        [FromQuery] bool revokeOld = true,
-        CancellationToken cancellationToken = default)
-    {
-        var (key, rawKey) = await _apiKeyService.RotateKeyAsync(
-            _projectContext.ProjectId,
-            keyId,
-            revokeOld,
-            cancellationToken);
-
-        return Ok(new CreateApiKeyResponse
-        {
-            Key = MapToResponse(key),
-            RawKey = rawKey
-        });
-    }
-
-    #endregion
 
     #region Security Policies (RLS)
 
@@ -116,7 +32,6 @@ public sealed class SecurityController : ControllerBase
     /// Gets all security policies for a table.
     /// </summary>
     [HttpGet("policies/{tableName}")]
-    [Authorize(Roles = "service,admin")]
     [ProducesResponseType<IReadOnlyList<SecurityPolicyResponse>>(200)]
     public async Task<IActionResult> GetPolicies(string tableName, CancellationToken cancellationToken)
     {
@@ -133,7 +48,6 @@ public sealed class SecurityController : ControllerBase
     /// Creates a new security policy.
     /// </summary>
     [HttpPost("policies")]
-    [Authorize(Roles = "service,admin")]
     [ProducesResponseType<SecurityPolicyResponse>(201)]
     public async Task<IActionResult> CreatePolicy(
         [FromBody] CreateSecurityPolicyRequest request,
@@ -161,7 +75,6 @@ public sealed class SecurityController : ControllerBase
     /// Updates a security policy.
     /// </summary>
     [HttpPatch("policies/{policyId:guid}")]
-    [Authorize(Roles = "service,admin")]
     [ProducesResponseType<SecurityPolicyResponse>(200)]
     public async Task<IActionResult> UpdatePolicy(
         Guid policyId,
@@ -187,7 +100,6 @@ public sealed class SecurityController : ControllerBase
     /// Deletes a security policy.
     /// </summary>
     [HttpDelete("policies/{policyId:guid}")]
-    [Authorize(Roles = "service,admin")]
     [ProducesResponseType(204)]
     public async Task<IActionResult> DeletePolicy(Guid policyId, CancellationToken cancellationToken)
     {
@@ -204,7 +116,6 @@ public sealed class SecurityController : ControllerBase
     /// Re-encrypts all encrypted data with the current key version.
     /// </summary>
     [HttpPost("encryption/rotate/{tableName}")]
-    [Authorize(Roles = "service,admin")]
     [ProducesResponseType<KeyRotationResultResponse>(200)]
     [ProducesResponseType(400)]
     [ProducesResponseType(503)]
@@ -229,7 +140,6 @@ public sealed class SecurityController : ControllerBase
     /// Rotates encryption keys for all tables of the current project.
     /// </summary>
     [HttpPost("encryption/rotate")]
-    [Authorize(Roles = "service,admin")]
     [ProducesResponseType<KeyRotationResultResponse>(200)]
     [ProducesResponseType(503)]
     public async Task<IActionResult> RotateProjectKeys(CancellationToken cancellationToken)
@@ -250,7 +160,6 @@ public sealed class SecurityController : ControllerBase
     /// Gets the current key rotation status for a table.
     /// </summary>
     [HttpGet("encryption/status/{tableName}")]
-    [Authorize(Roles = "service,admin")]
     [ProducesResponseType<KeyRotationStatusResponse>(200)]
     [ProducesResponseType(503)]
     public async Task<IActionResult> GetRotationStatus(
@@ -275,7 +184,6 @@ public sealed class SecurityController : ControllerBase
     /// Checks if all data is encrypted with the current key version.
     /// </summary>
     [HttpGet("encryption/validate/{tableName}")]
-    [Authorize(Roles = "service,admin")]
     [ProducesResponseType<KeyValidationResultResponse>(200)]
     [ProducesResponseType(503)]
     public async Task<IActionResult> ValidateEncryption(
@@ -299,7 +207,6 @@ public sealed class SecurityController : ControllerBase
     /// Gets encryption configuration info (key version, status).
     /// </summary>
     [HttpGet("encryption/info")]
-    [Authorize(Roles = "service,admin")]
     [ProducesResponseType<EncryptionInfoResponse>(200)]
     [ProducesResponseType(503)]
     public IActionResult GetEncryptionInfo()
@@ -320,19 +227,6 @@ public sealed class SecurityController : ControllerBase
     #endregion
 
     #region Mapping Helpers
-
-    private static ApiKeyResponse MapToResponse(ApiKey key) => new()
-    {
-        Id = key.Id,
-        Name = key.Name,
-        KeyType = key.KeyType,
-        KeyPrefix = key.KeyPrefix,
-        Description = key.Description,
-        IsActive = key.IsActive,
-        CreatedAt = key.CreatedAt,
-        ExpiresAt = key.ExpiresAt,
-        LastUsedAt = key.LastUsedAt
-    };
 
     private static SecurityPolicyResponse MapToResponse(SecurityPolicy policy) => new()
     {
@@ -394,64 +288,6 @@ public sealed class SecurityController : ControllerBase
 }
 
 #region Request/Response DTOs
-
-/// <summary>
-/// Request to create an API key.
-/// </summary>
-public sealed class CreateApiKeyRequest
-{
-    /// <summary>
-    /// Display name for the key.
-    /// </summary>
-    public string Name { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Key type (anon or service).
-    /// </summary>
-    public ApiKeyType KeyType { get; set; }
-
-    /// <summary>
-    /// Optional description.
-    /// </summary>
-    public string? Description { get; set; }
-
-    /// <summary>
-    /// Optional expiration date.
-    /// </summary>
-    public DateTimeOffset? ExpiresAt { get; set; }
-}
-
-/// <summary>
-/// API key information (without the raw key).
-/// </summary>
-public sealed class ApiKeyResponse
-{
-    public Guid Id { get; set; }
-    public string Name { get; set; } = string.Empty;
-    public ApiKeyType KeyType { get; set; }
-    public string KeyPrefix { get; set; } = string.Empty;
-    public string? Description { get; set; }
-    public bool IsActive { get; set; }
-    public DateTimeOffset CreatedAt { get; set; }
-    public DateTimeOffset? ExpiresAt { get; set; }
-    public DateTimeOffset? LastUsedAt { get; set; }
-}
-
-/// <summary>
-/// Response when creating an API key (includes raw key).
-/// </summary>
-public sealed class CreateApiKeyResponse
-{
-    /// <summary>
-    /// The API key information.
-    /// </summary>
-    public ApiKeyResponse Key { get; set; } = null!;
-
-    /// <summary>
-    /// The raw API key value (only shown once).
-    /// </summary>
-    public string RawKey { get; set; } = string.Empty;
-}
 
 /// <summary>
 /// Request to create a security policy.

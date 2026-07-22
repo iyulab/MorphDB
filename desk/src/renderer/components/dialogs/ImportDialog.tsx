@@ -33,7 +33,7 @@ export function ImportDialog({
   onOpenChange,
   tableName
 }: ImportDialogProps): ReactElement | null {
-  const { activeConnection, getApiKey } = useConnectionStore()
+  const { activeConnection } = useConnectionStore()
   const queryClient = useQueryClient()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -54,11 +54,8 @@ export function ImportDialog({
 
   const createClient = async (): Promise<MorphDBClient | null> => {
     if (!activeConnection) return null
-    const apiKey = await getApiKey(activeConnection.id)
-    if (!apiKey) return null
     return new MorphDBClient({
       url: activeConnection.url,
-      apiKey,
       projectId: activeConnection.projectId
     })
   }

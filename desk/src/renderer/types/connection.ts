@@ -4,7 +4,6 @@ export interface Connection {
   id: string
   name: string
   url: string
-  apiKey: string // Stored securely in main process, not persisted in renderer
   projectId?: string
   createdAt: string
   lastUsedAt?: string
@@ -15,7 +14,6 @@ export interface Connection {
 export interface ConnectionFormData {
   name: string
   url: string
-  apiKey: string
 }
 
 export interface Project {

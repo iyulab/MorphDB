@@ -43,7 +43,7 @@ const initialDialogState: DialogState = {
 }
 
 export function ViewsPage(): ReactElement {
-  const { activeConnection, getApiKey } = useConnectionStore()
+  const { activeConnection } = useConnectionStore()
   const queryClient = useQueryClient()
 
   const [dialogs, setDialogs] = useState<DialogState>(initialDialogState)
@@ -53,11 +53,8 @@ export function ViewsPage(): ReactElement {
   // Helper to create API client
   const createClient = async (): Promise<MorphDBClient | null> => {
     if (!activeConnection) return null
-    const apiKey = await getApiKey(activeConnection.id)
-    if (!apiKey) return null
     return new MorphDBClient({
       url: activeConnection.url,
-      apiKey,
       projectId: activeConnection.projectId
     })
   }

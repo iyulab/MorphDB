@@ -17,7 +17,6 @@ interface ConnectionState {
   testConnection: (id: string) => Promise<boolean>
   connectToServer: (id: string) => Promise<boolean>
   disconnectFromServer: (id: string) => void
-  getApiKey: (id: string) => Promise<string | null>
   getRecentConnections: () => Connection[]
 }
 
@@ -33,13 +32,9 @@ export const useConnectionStore = create<ConnectionState>()(
           id: crypto.randomUUID(),
           name: data.name,
           url: data.url,
-          apiKey: '', // Don't store API key in state
           createdAt: new Date().toISOString(),
           status: 'disconnected'
         }
-
-        // Save API key securely via main process
-        await window.api.credentials.save(newConnection.id, data.apiKey)
 
         set((state) => ({
           connections: [...state.connections, newConnection]
@@ -49,11 +44,6 @@ export const useConnectionStore = create<ConnectionState>()(
       },
 
       updateConnection: async (id, data) => {
-        // If API key is being updated, save it securely
-        if (data.apiKey) {
-          await window.api.credentials.save(id, data.apiKey)
-        }
-
         set((state) => ({
           connections: state.connections.map((conn) =>
             conn.id === id
@@ -76,9 +66,6 @@ export const useConnectionStore = create<ConnectionState>()(
       },
 
       removeConnection: async (id) => {
-        // Delete stored credential
-        await window.api.credentials.delete(id)
-
         set((state) => ({
           connections: state.connections.filter((conn) => conn.id !== id),
           activeConnectionId: state.activeConnectionId === id ? null : state.activeConnectionId,
@@ -122,15 +109,9 @@ export const useConnectionStore = create<ConnectionState>()(
         const connection = get().connections.find((c) => c.id === id)
         if (!connection) return false
 
-        const apiKey = await window.api.credentials.get(id)
-        if (!apiKey) {
-          get().setConnectionStatus(id, 'error', 'No API key found')
-          return false
-        }
-
         get().setConnectionStatus(id, 'connecting')
 
-        const result = await window.api.testConnection(connection.url, apiKey)
+        const result = await window.api.testConnection(connection.url)
 
         if (result.success) {
           get().setConnectionStatus(id, 'connected')
@@ -153,10 +134,6 @@ export const useConnectionStore = create<ConnectionState>()(
         get().setConnectionStatus(id, 'disconnected')
       },
 
-      getApiKey: async (id) => {
-        return window.api.credentials.get(id)
-      },
-
       getRecentConnections: () => {
         return [...get().connections].sort((a, b) => {
           const aTime = a.lastUsedAt ? new Date(a.lastUsedAt).getTime() : 0
@@ -168,10 +145,7 @@ export const useConnectionStore = create<ConnectionState>()(
     {
       name: 'morphdb-connections',
       partialize: (state) => ({
-        connections: state.connections.map(({ apiKey: _, ...rest }) => ({
-          ...rest,
-          apiKey: '' // Never persist API keys
-        })),
+        connections: state.connections,
         activeConnectionId: state.activeConnectionId
       })
     }

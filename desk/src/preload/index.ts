@@ -1,11 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 
-interface CredentialResult {
-  success: boolean
-  error?: string
-}
-
 interface ConnectionTestResult {
   success: boolean
   error?: string
@@ -57,21 +52,9 @@ const api = {
   maximize: (): Promise<void> => ipcRenderer.invoke('window:maximize'),
   close: (): Promise<void> => ipcRenderer.invoke('window:close'),
 
-  // Secure credential storage
-  credentials: {
-    save: (connectionId: string, apiKey: string): Promise<CredentialResult> =>
-      ipcRenderer.invoke('credentials:save', connectionId, apiKey),
-    get: (connectionId: string): Promise<string | null> =>
-      ipcRenderer.invoke('credentials:get', connectionId),
-    delete: (connectionId: string): Promise<CredentialResult> =>
-      ipcRenderer.invoke('credentials:delete', connectionId),
-    has: (connectionId: string): Promise<boolean> =>
-      ipcRenderer.invoke('credentials:has', connectionId)
-  },
-
-  // Connection testing (project ID is automatically resolved from API key)
-  testConnection: (url: string, apiKey: string): Promise<ConnectionTestResult> =>
-    ipcRenderer.invoke('connection:test', url, apiKey),
+  // Connection testing
+  testConnection: (url: string): Promise<ConnectionTestResult> =>
+    ipcRenderer.invoke('connection:test', url),
 
   // Menu event listeners
   onMenuNewConnection: (callback: () => void): (() => void) => {

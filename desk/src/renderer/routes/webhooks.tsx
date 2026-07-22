@@ -35,17 +35,14 @@ import {
 type TabType = 'webhooks' | 'dlq'
 
 export function WebhooksPage(): ReactElement {
-  const { activeConnection, getApiKey } = useConnectionStore()
+  const { activeConnection } = useConnectionStore()
   const queryClient = useQueryClient()
 
   // Helper to create API client
   const createClient = async (): Promise<MorphDBClient | null> => {
     if (!activeConnection) return null
-    const apiKey = await getApiKey(activeConnection.id)
-    if (!apiKey) return null
     return new MorphDBClient({
       url: activeConnection.url,
-      apiKey,
       projectId: activeConnection.projectId
     })
   }

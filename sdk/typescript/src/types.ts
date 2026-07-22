@@ -4,10 +4,6 @@
 export interface MorphDBClientOptions {
   /** Project ID for multi-project operations */
   projectId?: string;
-  /** API key for authentication */
-  apiKey?: string;
-  /** JWT token for authenticated requests */
-  jwtToken?: string;
   /** Request timeout in milliseconds (default: 30000) */
   timeout?: number;
   /** Number of retry attempts (default: 3) */

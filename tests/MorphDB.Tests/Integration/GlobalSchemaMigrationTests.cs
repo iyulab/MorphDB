@@ -239,19 +239,21 @@ public class GlobalSchemaMigrationTests
     }
 
     /// <summary>
-    /// A retired API key's hash must stay claimed — its uniqueness has nothing to do with liveness.
-    /// The migration names the tables it touches so that reasoning cannot be lost by accident.
+    /// API keys went with the authentication machinery. A database that booted an older version
+    /// still carries the table; the canonical DDL cannot remove what it no longer creates, so the
+    /// migration must.
     /// </summary>
     [Fact]
-    public async Task The_migration_leaves_uniqueness_that_is_not_about_liveness_alone()
+    public async Task Bootstrapping_drops_the_api_key_table_an_older_version_created()
     {
-        await using var db = await CleanDatabase.EmptyAsync("morphdb_legacy_uniques_scope");
+        await using var db = await CleanDatabase.EmptyAsync("morphdb_legacy_api_keys");
         await db.ExecuteAsync(LegacyWholeTableUniques);
 
         await EnsureGlobalSchemaAsync(db);
 
-        var constraints = await ReadUniqueConstraintsAsync(db, "_morph_api_keys");
-        constraints.Should().NotBeEmpty("a key hash stays unique whether the key is active or not");
+        var tables = await db.ReadTablesAsync();
+        tables.Should().NotContain("_morph_api_keys",
+            "the authentication machinery was removed, and its table goes with it");
     }
 
     [Fact]

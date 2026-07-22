@@ -88,7 +88,6 @@ Benefits:
 - GraphQL (HotChocolate) with dynamic type generation
 - OData with dynamic EDM model
 - SignalR hub for real-time sync
-- API Key authentication
 
 ## Data Flow
 
@@ -143,14 +142,15 @@ project_xyz789 (project-specific)
 └── ...
 ```
 
-## Authentication
+## Request Scoping
 
 ```
-API Key Header → ApiKeyAuthenticationHandler → Claims (ProjectId) → Controllers
+X-Project-Id header → SecurityContextMiddleware → SecurityContext (ambient) → RLS / write pipeline
 ```
 
-- **API Key**: Stored in `X-API-Key` header
-- **Project Resolution**: Extracted from API key claims via `IProjectContextAccessor`
+The service carries no authentication of its own — access control belongs to the deployment
+(private binding, or an authenticating proxy in front). The project header scopes a request to a
+schema namespace via `IProjectContextAccessor`; it is not a credential.
 
 ## Virtual Constraint Architecture
 

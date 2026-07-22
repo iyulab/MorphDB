@@ -43,10 +43,6 @@ public sealed class RealtimeClient : IAsyncDisposable
                 .WithUrl(hubUrl, options =>
                 {
                     options.Headers["X-Project-Id"] = _options.ProjectId.ToString();
-                    if (!string.IsNullOrEmpty(_options.ApiKey))
-                        options.Headers["X-API-Key"] = _options.ApiKey;
-                    if (!string.IsNullOrEmpty(_options.JwtToken))
-                        options.Headers["Authorization"] = $"Bearer {_options.JwtToken}";
                 })
                 .WithAutomaticReconnect();
 

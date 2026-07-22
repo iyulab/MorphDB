@@ -107,7 +107,7 @@ function formatDuration(ms?: number): string {
 }
 
 export function AuditPage(): ReactElement {
-  const { activeConnection, getApiKey } = useConnectionStore()
+  const { activeConnection } = useConnectionStore()
 
   const [selectedProjectId, setSelectedProjectId] = useState<string>('')
   const [showFilters, setShowFilters] = useState(false)
@@ -125,11 +125,8 @@ export function AuditPage(): ReactElement {
   // Helper to create API client
   const createClient = async (): Promise<MorphDBClient | null> => {
     if (!activeConnection) return null
-    const apiKey = await getApiKey(activeConnection.id)
-    if (!apiKey) return null
     return new MorphDBClient({
       url: activeConnection.url,
-      apiKey,
       projectId: activeConnection.projectId
     })
   }

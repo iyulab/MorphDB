@@ -33,14 +33,6 @@ export class HttpClient {
       headers['X-Project-Id'] = this.options.projectId;
     }
 
-    if (this.options.apiKey) {
-      headers['X-API-Key'] = this.options.apiKey;
-    }
-
-    if (this.options.jwtToken) {
-      headers['Authorization'] = `Bearer ${this.options.jwtToken}`;
-    }
-
     return headers;
   }
 
@@ -174,13 +166,5 @@ export class HttpClient {
 
   setProjectId(projectId: string): void {
     this.options.projectId = projectId;
-  }
-
-  setApiKey(apiKey: string): void {
-    this.options.apiKey = apiKey;
-  }
-
-  setJwtToken(jwtToken: string): void {
-    this.options.jwtToken = jwtToken;
   }
 }

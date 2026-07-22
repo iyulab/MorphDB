@@ -8,11 +8,3 @@ metadata:
     app.kubernetes.io/component: config
 data:
   ASPNETCORE_ENVIRONMENT: "Production"
-  Jwt__Issuer: "MorphDB"
-  Jwt__Audience: "MorphDB"
-  Jwt__AccessTokenExpirationMinutes: "60"
-  Jwt__RefreshTokenExpirationDays: "7"
-  Jwt__ValidateIssuer: "true"
-  Jwt__ValidateAudience: "true"
-  Jwt__ValidateLifetime: "true"
-  Jwt__ClockSkewMinutes: "5"

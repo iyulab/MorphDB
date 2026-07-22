@@ -51,7 +51,6 @@ describe('Usage Scenario: E-Commerce Data Model', () => {
     mockFetch.mockReset()
     client = new MorphDBClient({
       url: 'http://localhost:5000',
-      apiKey: 'test-api-key',
     })
   })
 
@@ -643,7 +642,6 @@ describe('Usage Scenario: Project Management', () => {
     mockFetch.mockReset()
     client = new MorphDBClient({
       url: 'http://localhost:5000',
-      apiKey: 'test-api-key',
     })
   })
 
@@ -964,7 +962,6 @@ describe('Usage Scenario: Schema Evolution', () => {
     mockFetch.mockReset()
     client = new MorphDBClient({
       url: 'http://localhost:5000',
-      apiKey: 'test-api-key',
     })
   })
 
@@ -1229,7 +1226,6 @@ describe('Usage Scenario: Complex Query Patterns', () => {
     mockFetch.mockReset()
     client = new MorphDBClient({
       url: 'http://localhost:5000',
-      apiKey: 'test-api-key',
     })
   })
 
@@ -1404,7 +1400,6 @@ describe('Usage Scenario: Formula Columns', () => {
     mockFetch.mockReset()
     client = new MorphDBClient({
       url: 'http://localhost:5000',
-      apiKey: 'test-api-key',
     })
   })
 

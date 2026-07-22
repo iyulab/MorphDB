@@ -55,7 +55,7 @@ export function ViewDialog({
   view,
   onSubmit
 }: ViewDialogProps): ReactElement | null {
-  const { activeConnection, getApiKey } = useConnectionStore()
+  const { activeConnection } = useConnectionStore()
   const isEdit = !!view
 
   const [name, setName] = useState('')
@@ -76,11 +76,8 @@ export function ViewDialog({
   // Create client helper
   const createClient = async (): Promise<MorphDBClient | null> => {
     if (!activeConnection) return null
-    const apiKey = await getApiKey(activeConnection.id)
-    if (!apiKey) return null
     return new MorphDBClient({
       url: activeConnection.url,
-      apiKey,
       projectId: activeConnection.projectId
     })
   }

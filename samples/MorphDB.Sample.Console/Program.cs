@@ -9,7 +9,6 @@ Console.WriteLine();
 var options = new MorphDBClientOptions
 {
     BaseUrl = "http://localhost:8080",
-    ApiKey = "your-api-key",       // Replace with actual API key
     ProjectId = Guid.NewGuid()      // Replace with actual project ID
 };
 

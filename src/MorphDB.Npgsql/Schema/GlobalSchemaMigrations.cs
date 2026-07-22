@@ -26,6 +26,11 @@ public static class GlobalSchemaMigrations
         -- Drop the project -> organization link before the table it points at.
         ALTER TABLE IF EXISTS morphdb._morph_projects DROP COLUMN IF EXISTS org_id;
 
+        -- API keys went with the authentication machinery: the service never required
+        -- authentication, and a production image had no way to mint a key in the first place, so
+        -- the rows a Development-mode database may hold authorize nothing and identify nobody.
+        DROP TABLE IF EXISTS morphdb._morph_api_keys;
+
         DROP TABLE IF EXISTS morphdb._morph_backups;
         DROP TABLE IF EXISTS morphdb._morph_sso_configurations;
         DROP TABLE IF EXISTS morphdb._morph_organization_invitations;
@@ -99,9 +104,8 @@ public static class GlobalSchemaMigrations
         -- old shape already built, so the constraints are dropped here first.
         --
         -- Scoped to the five soft-deleted tables by name on purpose. _morph_projects (slug,
-        -- schemas) and _morph_api_keys (key_hash) are unique for reasons unrelated to liveness --
-        -- a retired key's hash must stay claimed -- so their constraints are left standing.
-        -- Idempotent: a second run selects nothing, because the constraints are gone.
+        -- schemas) is unique for reasons unrelated to liveness, so its constraints are left
+        -- standing. Idempotent: a second run selects nothing, because the constraints are gone.
         DO $$
         DECLARE
             target RECORD;

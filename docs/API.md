@@ -19,17 +19,14 @@ X-API-Key: your-api-key
 
 ### What this is not
 
-**A project is a schema namespace, not a trust boundary, and the header is not a credential.** The
-schema and data endpoints do not require authentication: a request carrying only `X-Project-Id` is
+**A project is a schema namespace, not a trust boundary, and the header is not a credential.** No
+endpoint requires authentication — the service has none: a request carrying only `X-Project-Id` is
 served. The project exists so MorphDB can operate physical schemas on its own judgement — it is an
 internal operating unit, not a multi-tenancy feature.
 
 So: run MorphDB where only your application can reach it, and decide there who may see what. Never
 forward a project id supplied by a browser or an end user — whoever picks that value picks which
 schemas they read.
-
-`SecurityController` and `DiagnosticsController` do require an authenticated caller. They are the
-exception, not the rule.
 
 ## REST API
 
@@ -513,9 +510,15 @@ DELETE /api/security/policies/{policyId}       # Delete a policy
 
 `policyType` is `Select`, `Insert`, `Update`, `Delete` or `All`. The expression is a SQL predicate
 over the table's own columns, with `{{user_id}}`, `{{email}}`, `{{role}}`, `{{project_id}}`,
-`{{is_authenticated}}` and `{{claims.<name>}}` substituted for the caller before the query runs.
-Substituted values are emitted as quoted literals — a caller's identity cannot become part of the
-predicate.
+`{{is_authenticated}}` and `{{claims.<name>}}` substituted from the request's security context
+before the query runs. Substituted values are emitted as quoted literals — a caller's identity
+cannot become part of the predicate.
+
+Because the service is unauthenticated, an HTTP request's context is the project's anonymous one:
+`{{project_id}}` carries the header's value, `{{is_authenticated}}` is `false`, and the
+user-bearing placeholders substitute `NULL` — a policy written against `{{user_id}}` therefore
+matches no rows over HTTP. That is fail-closed on purpose; there is currently no way for a caller
+to assert an end-user identity to this service.
 
 **The expression is a predicate, not a statement.** It is checked before it is stored and again
 before it is used: a statement separator, a comment opener, an unbalanced parenthesis or an

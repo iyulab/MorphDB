@@ -149,10 +149,8 @@ public static partial class ServiceCollectionExtensions
         services.AddSingleton<IBulkOperationService, PostgresBulkOperationService>();
 
         // Register security services
-        services.AddSingleton<IApiKeyService, ApiKeyService>();
         services.AddSingleton<ISecurityPolicyService, SecurityPolicyService>();
         services.AddSingleton<ISecurityContextAccessor, SecurityContextAccessor>();
-        services.AddSingleton<IJwtService, JwtService>();
 
         // Register project and schema layer services (Phase 17: Schema-based Layer Separation)
         services.AddSingleton<ISchemaNameResolver, PostgresSchemaNameResolver>();

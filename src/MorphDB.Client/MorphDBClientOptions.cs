@@ -12,16 +12,6 @@ public sealed class MorphDBClientOptions
     public Guid ProjectId { get; set; }
 
     /// <summary>
-    /// API key for authentication.
-    /// </summary>
-    public string? ApiKey { get; set; }
-
-    /// <summary>
-    /// JWT token for authenticated requests.
-    /// </summary>
-    public string? JwtToken { get; set; }
-
-    /// <summary>
     /// Request timeout. Default is 30 seconds.
     /// </summary>
     public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(30);

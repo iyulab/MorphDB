@@ -16,9 +16,6 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__MorphDB: Host=postgres;Port=5432;Database=morphdb_test;Username=morph;Password=morph
-      Jwt__SecretKey: MorphDB-Test-Secret-Key-Must-Be-At-Least-32-Characters-Long
-      Jwt__Issuer: MorphDB-Test
-      Jwt__Audience: MorphDB-Test
     depends_on:
       postgres:
         condition: service_healthy

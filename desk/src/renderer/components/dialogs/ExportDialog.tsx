@@ -37,7 +37,7 @@ export function ExportDialog({
   tableName,
   columns
 }: ExportDialogProps): ReactElement | null {
-  const { activeConnection, getApiKey } = useConnectionStore()
+  const { activeConnection } = useConnectionStore()
 
   const [format, setFormat] = useState<ExportFormat>('csv')
   const [selectedColumns, setSelectedColumns] = useState<string[]>([])
@@ -61,11 +61,8 @@ export function ExportDialog({
 
   const createClient = async (): Promise<MorphDBClient | null> => {
     if (!activeConnection) return null
-    const apiKey = await getApiKey(activeConnection.id)
-    if (!apiKey) return null
     return new MorphDBClient({
       url: activeConnection.url,
-      apiKey,
       projectId: activeConnection.projectId
     })
   }

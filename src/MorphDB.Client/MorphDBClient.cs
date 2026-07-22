@@ -113,40 +113,11 @@ public sealed class MorphDBClient : IAsyncDisposable
         _httpClient.DefaultRequestHeaders.Add("X-Project-Id", projectId.ToString());
     }
 
-    /// <summary>
-    /// Sets the API key for authentication.
-    /// </summary>
-    public void SetApiKey(string apiKey)
-    {
-        _httpClient.DefaultRequestHeaders.Remove("X-API-Key");
-        _httpClient.DefaultRequestHeaders.Add("X-API-Key", apiKey);
-    }
-
-    /// <summary>
-    /// Sets the JWT token for authentication.
-    /// </summary>
-    public void SetJwtToken(string token)
-    {
-        _httpClient.DefaultRequestHeaders.Authorization =
-            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
-    }
-
     private void ConfigureDefaultHeaders()
     {
         if (_options.ProjectId != Guid.Empty)
         {
             _httpClient.DefaultRequestHeaders.Add("X-Project-Id", _options.ProjectId.ToString());
-        }
-
-        if (!string.IsNullOrEmpty(_options.ApiKey))
-        {
-            _httpClient.DefaultRequestHeaders.Add("X-API-Key", _options.ApiKey);
-        }
-
-        if (!string.IsNullOrEmpty(_options.JwtToken))
-        {
-            _httpClient.DefaultRequestHeaders.Authorization =
-                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _options.JwtToken);
         }
 
         _httpClient.DefaultRequestHeaders.Add("Accept", "application/json");

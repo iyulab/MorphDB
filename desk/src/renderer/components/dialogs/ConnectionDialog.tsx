@@ -17,8 +17,7 @@ type TestStatus = 'idle' | 'testing' | 'success' | 'error'
 
 const initialFormData: ConnectionFormData = {
   name: '',
-  url: 'http://localhost:5000',
-  apiKey: ''
+  url: 'http://localhost:5000'
 }
 
 export function ConnectionDialog({
@@ -41,8 +40,7 @@ export function ConnectionDialog({
     if (editConnection) {
       setFormData({
         name: editConnection.name,
-        url: editConnection.url,
-        apiKey: '' // API key is stored securely, user needs to re-enter
+        url: editConnection.url
       })
     } else {
       setFormData(initialFormData)
@@ -58,10 +56,7 @@ export function ConnectionDialog({
     setTestError('')
 
     try {
-      const result = await window.api.testConnection(
-        formData.url,
-        formData.apiKey
-      )
+      const result = await window.api.testConnection(formData.url)
 
       if (result.success) {
         setTestStatus('success')
@@ -108,10 +103,7 @@ export function ConnectionDialog({
     setTestError('')
   }
 
-  const isValid =
-    formData.name.trim() &&
-    formData.url.trim() &&
-    (isEditMode || formData.apiKey.trim()) // API key required only for new connections
+  const isValid = formData.name.trim() && formData.url.trim()
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -148,20 +140,6 @@ export function ConnectionDialog({
               value={formData.url}
               onChange={(e) => setFormData({ ...formData, url: e.target.value })}
               required
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="apiKey">
-              API Key {isEditMode && <span className="text-muted-foreground">(leave empty to keep current)</span>}
-            </Label>
-            <Input
-              id="apiKey"
-              type="password"
-              placeholder={isEditMode ? '••••••••' : 'Your API key'}
-              value={formData.apiKey}
-              onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
-              required={!isEditMode}
             />
           </div>
 
@@ -202,7 +180,7 @@ export function ConnectionDialog({
               type="button"
               variant="outline"
               onClick={handleTest}
-              disabled={!formData.url.trim() || !formData.apiKey.trim() || testStatus === 'testing'}
+              disabled={!formData.url.trim() || testStatus === 'testing'}
             >
               Test Connection
             </Button>

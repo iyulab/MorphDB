@@ -104,7 +104,7 @@ Every schema and data endpoint is project-scoped, so a bare request is answered 
 
 > **A project is a schema namespace, not a trust boundary.** It exists so MorphDB can operate physical
 > schemas on its own judgement — it is an internal operating unit, not a multi-tenancy feature. The
-> service does not authenticate the data and schema endpoints, so `X-Project-Id` says *which* schemas a
+> service does not authenticate any endpoint, so `X-Project-Id` says *which* schemas a
 > request means, not *whether the caller may have them*. If you are building something multi-user, that
 > boundary is yours to stand, in front of MorphDB. Do not pass a client-supplied project id through.
 

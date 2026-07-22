@@ -131,14 +131,6 @@ export class RealtimeClient {
       headers['X-Project-Id'] = this.options.projectId;
     }
 
-    if (this.options.apiKey) {
-      headers['X-API-Key'] = this.options.apiKey;
-    }
-
-    if (this.options.jwtToken) {
-      headers['Authorization'] = `Bearer ${this.options.jwtToken}`;
-    }
-
     return headers;
   }
 

@@ -23,8 +23,6 @@ public class GlobalSchemaContractTests
         ("_morph_columns", ["column_id", "table_id", "logical_name", "physical_name", "data_type", "native_type", "is_nullable", "ordinal_position"]),
         // ProjectRepository — org_id is deliberately absent: organizations were removed as a use assumption.
         ("_morph_projects", ["project_id", "name", "slug", "system_schema", "data_schema", "settings", "status", "created_at", "updated_at"]),
-        // ApiKeyService
-        ("_morph_api_keys", ["id", "project_id", "key_type", "key_hash", "key_prefix", "name", "description", "is_active", "created_at", "expires_at", "last_used_at"]),
         // SecurityPolicyService — INSERT and SELECT column lists
         ("_morph_security_policies", ["id", "project_id", "table_id", "name", "description", "policy_type", "expression", "is_active", "ordinal_position", "created_at", "updated_at"]),
         // ViewMetadataRepository — INSERT ... RETURNING column list

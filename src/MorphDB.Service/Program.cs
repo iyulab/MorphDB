@@ -71,15 +71,6 @@ try
         }
     });
 
-    // Configure JWT options
-    builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
-
-    // Add authentication
-    builder.Services.AddAuthentication(MorphDBAuthenticationExtensions.SchemeName)
-        .AddMorphDB();
-
-    builder.Services.AddAuthorization();
-
     // Add CORS for development (allows Electron dev server and other local clients)
     builder.Services.AddCors(options =>
     {
@@ -111,28 +102,9 @@ try
             Description = "Dynamic schema database service API"
         });
 
-        // Add API Key security definition
-        options.AddSecurityDefinition("ApiKey", new OpenApiSecurityScheme
-        {
-            Description = "API Key authentication. Use 'X-API-Key' header with your API key.",
-            Name = "X-API-Key",
-            In = ParameterLocation.Header,
-            Type = SecuritySchemeType.ApiKey,
-            Scheme = "ApiKey"
-        });
-
-        // Add JWT Bearer security definition
-        options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
-        {
-            Description = "JWT Bearer authentication. Enter your token in the text input below.",
-            Name = "Authorization",
-            In = ParameterLocation.Header,
-            Type = SecuritySchemeType.Http,
-            Scheme = "bearer",
-            BearerFormat = "JWT"
-        });
-
-        // Add Project ID header
+        // The service itself is unauthenticated by design -- access control is the deployment's
+        // job (bind privately, or front with an authenticating proxy). The only cross-cutting
+        // header is the project scope.
         options.AddSecurityDefinition("ProjectId", new OpenApiSecurityScheme
         {
             Description = "The project a request is scoped to. A schema namespace, not a trust boundary.",
@@ -143,8 +115,6 @@ try
 
         options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
         {
-            [new OpenApiSecuritySchemeReference("ApiKey", document)] = [],
-            [new OpenApiSecuritySchemeReference("Bearer", document)] = [],
             [new OpenApiSecuritySchemeReference("ProjectId", document)] = []
         });
     });
@@ -250,17 +220,20 @@ try
     app.UseSerilogRequestLogging();
     app.UseRequestTracking(); // Graceful shutdown request tracking (Phase 24)
 
+    // The OpenAPI document is the service's machine-readable contract; a deployed image serves it
+    // like any other read-only surface. Gating it behind Development made the deployed contract a
+    // 404 while the code carried it all along.
+    app.UseSwagger();
+    app.UseSwaggerUI();
+
     if (app.Environment.IsDevelopment())
     {
-        app.UseSwagger();
-        app.UseSwaggerUI();
         app.UseCors("Development"); // Enable CORS for development
     }
 
     app.UseHttpsRedirection();
     app.UseWebSockets(); // Required for GraphQL subscriptions
-    app.UseAuthentication();
-    app.UseAuthorization();
+    app.UseSecurityContext();
     app.UseRateLimiting(); // Rate limiting after auth
     app.UseAuditLogging(); // Audit logging captures all requests including rate-limited ones
 
@@ -269,31 +242,6 @@ try
     {
         Tool = { Enable = app.Environment.IsDevelopment() }
     });
-
-    // Development-only bootstrap endpoint for creating initial API key
-    if (app.Environment.IsDevelopment())
-    {
-        app.MapPost("/api/dev/bootstrap", async (MorphDB.Core.Security.IApiKeyService apiKeyService) =>
-        {
-            var projectId = Guid.NewGuid();
-            var (key, rawKey) = await apiKeyService.CreateKeyAsync(
-                projectId,
-                MorphDB.Core.Security.ApiKeyType.Service,
-                "Development Key",
-                "Auto-generated development API key");
-
-            return Results.Ok(new
-            {
-                message = "Development API key created successfully",
-                projectId = projectId.ToString(),
-                apiKey = rawKey,
-                keyId = key.Id,
-                warning = "This endpoint is only available in Development mode"
-            });
-        }).AllowAnonymous();
-
-        Log.Information("Development bootstrap endpoint enabled: POST /api/dev/bootstrap");
-    }
 
     // Health check endpoints
     app.MapHealthChecks("/health", new HealthCheckOptions

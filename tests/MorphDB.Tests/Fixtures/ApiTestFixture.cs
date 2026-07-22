@@ -1,7 +1,4 @@
 using System.Net.Http.Json;
-using System.Security.Claims;
-using System.Text.Encodings.Web;
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -10,7 +7,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Audit;
 using MorphDB.Core.Models;
@@ -103,9 +99,6 @@ public sealed class ApiTestFixture : IAsyncLifetime
                     services.RemoveAll<ISecurityPolicyService>();
                     services.AddSingleton<ISecurityPolicyService, SecurityPolicyService>();
 
-                    services.RemoveAll<IApiKeyService>();
-                    services.AddSingleton<IApiKeyService, ApiKeyService>();
-
                     // Schema and data services
                     services.RemoveAll<PostgresSchemaManager>();
                     services.RemoveAll<ISchemaManager>();
@@ -167,9 +160,6 @@ public sealed class ApiTestFixture : IAsyncLifetime
                     }
 
                     // Add test authentication scheme
-                    services.AddAuthentication(TestAuthHandler.SchemeName)
-                        .AddScheme<AuthenticationSchemeOptions, TestAuthHandler>(
-                            TestAuthHandler.SchemeName, _ => { });
                 });
             });
 
@@ -183,28 +173,6 @@ public sealed class ApiTestFixture : IAsyncLifetime
     {
         var client = _factory!.CreateClient();
         client.DefaultRequestHeaders.Add("X-Project-Id", projectId.ToString());
-        return client;
-    }
-
-    /// <summary>
-    /// Creates an authenticated HttpClient for testing [Authorize] endpoints.
-    /// </summary>
-    public HttpClient CreateAuthenticatedClient()
-    {
-        var client = _factory!.CreateClient();
-        client.DefaultRequestHeaders.Add("X-Project-Id", ProjectId.ToString());
-        client.DefaultRequestHeaders.Add("X-Test-Auth", "true");
-        return client;
-    }
-
-    /// <summary>
-    /// Creates an authenticated HttpClient with a specific project ID.
-    /// </summary>
-    public HttpClient CreateAuthenticatedClientWithProject(Guid projectId)
-    {
-        var client = _factory!.CreateClient();
-        client.DefaultRequestHeaders.Add("X-Project-Id", projectId.ToString());
-        client.DefaultRequestHeaders.Add("X-Test-Auth", "true");
         return client;
     }
 
@@ -288,55 +256,4 @@ public sealed class ApiIntegrationFixture : IAsyncLifetime
 [CollectionDefinition("API")]
 public class ApiCollection : ICollectionFixture<ApiIntegrationFixture>
 {
-}
-
-/// <summary>
-/// Test authentication handler that bypasses real authentication.
-/// All requests with the TestAuth header are authenticated as a test user.
-/// </summary>
-public sealed class TestAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions>
-{
-    public const string SchemeName = "TestAuth";
-    public const string TestUserId = "test-user-id";
-    public const string TestUserEmail = "test@example.com";
-
-    public TestAuthHandler(
-        IOptionsMonitor<AuthenticationSchemeOptions> options,
-        ILoggerFactory logger,
-        UrlEncoder encoder)
-        : base(options, logger, encoder)
-    {
-    }
-
-    protected override Task<AuthenticateResult> HandleAuthenticateAsync()
-    {
-        // Check for X-Test-Auth header or Authorization header
-        var hasTestAuth = Request.Headers.ContainsKey("X-Test-Auth") ||
-                          Request.Headers.Authorization.FirstOrDefault()?.StartsWith("Bearer test-", StringComparison.OrdinalIgnoreCase) == true;
-
-        if (!hasTestAuth)
-        {
-            return Task.FromResult(AuthenticateResult.NoResult());
-        }
-
-        // Get project ID from header for context
-        var projectId = Guid.TryParse(Request.Headers["X-Project-Id"].FirstOrDefault(), out var parsedProjectId)
-            ? parsedProjectId
-            : Guid.Empty;
-
-        var claims = new List<Claim>
-        {
-            new("sub", TestUserId),
-            new("email", TestUserEmail),
-            new(ClaimTypes.Name, "Test User"),
-            new("project_id", projectId.ToString()),
-            new(ClaimTypes.Role, "admin")
-        };
-
-        var identity = new ClaimsIdentity(claims, SchemeName);
-        var principal = new ClaimsPrincipal(identity);
-        var ticket = new AuthenticationTicket(principal, SchemeName);
-
-        return Task.FromResult(AuthenticateResult.Success(ticket));
-    }
 }

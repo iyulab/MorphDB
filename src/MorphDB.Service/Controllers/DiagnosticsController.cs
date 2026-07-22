@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using MorphDB.Core.Diagnostics;
 using MorphDB.Service.Infrastructure;
@@ -12,7 +11,6 @@ namespace MorphDB.Service.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
 public partial class DiagnosticsController : ControllerBase
 {
     private readonly IQueryDiagnostics _queryDiagnostics;

@@ -13,37 +13,32 @@ public sealed class SecurityContext
     public Guid ProjectId { get; set; }
 
     /// <summary>
-    /// Gets or sets the authenticated user ID (from JWT sub claim).
+    /// Gets or sets the end-user ID, when the caller supplies one.
     /// </summary>
     public string? UserId { get; set; }
 
     /// <summary>
-    /// Gets or sets the user's email (from JWT email claim).
+    /// Gets or sets the end-user's email, when the caller supplies one.
     /// </summary>
     public string? Email { get; set; }
 
     /// <summary>
-    /// Gets or sets the user's role (from JWT role claim).
+    /// Gets or sets the end-user's role, when the caller supplies one.
     /// </summary>
     public string? Role { get; set; }
 
     /// <summary>
-    /// Gets or sets the API key type used for authentication.
-    /// </summary>
-    public ApiKeyType? KeyType { get; set; }
-
-    /// <summary>
-    /// Gets or sets whether the request is authenticated.
+    /// Gets or sets whether the context carries an identified end-user.
     /// </summary>
     public bool IsAuthenticated { get; set; }
 
     /// <summary>
-    /// Gets or sets whether RLS should be bypassed (service key).
+    /// Gets or sets whether RLS should be bypassed (trusted in-process callers).
     /// </summary>
     public bool BypassRls { get; set; }
 
     /// <summary>
-    /// Gets or sets the claims principal from JWT.
+    /// Gets or sets the claims principal, when the caller supplies one.
     /// </summary>
     public ClaimsPrincipal? Principal { get; set; }
 
@@ -60,19 +55,17 @@ public sealed class SecurityContext
         {
             ProjectId = projectId,
             IsAuthenticated = false,
-            KeyType = ApiKeyType.Anon,
             BypassRls = false
         };
 
     /// <summary>
-    /// Creates a service security context (bypasses RLS).
+    /// Creates a service security context (bypasses RLS) for trusted in-process callers.
     /// </summary>
     public static SecurityContext Service(Guid projectId) =>
         new()
         {
             ProjectId = projectId,
             IsAuthenticated = true,
-            KeyType = ApiKeyType.Service,
             BypassRls = true,
             Role = "service"
         };

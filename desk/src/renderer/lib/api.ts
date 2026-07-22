@@ -457,36 +457,6 @@ export interface AuditStatsApiResponse {
 }
 
 // ============================================================================
-// Security Types - API Keys
-// ============================================================================
-
-export type ApiKeyType = 'anon' | 'service'
-
-export interface ApiKeyApiResponse {
-  id: string
-  name: string
-  keyType: ApiKeyType
-  keyPrefix: string
-  description?: string
-  isActive: boolean
-  createdAt: string
-  expiresAt?: string
-  lastUsedAt?: string
-}
-
-export interface CreateApiKeyApiRequest {
-  name: string
-  keyType: ApiKeyType
-  description?: string
-  expiresAt?: string
-}
-
-export interface CreateApiKeyApiResponse {
-  key: ApiKeyApiResponse
-  rawKey: string
-}
-
-// ============================================================================
 // Security Types - RLS Policies
 // ============================================================================
 
@@ -659,18 +629,15 @@ export interface CreateRelationRequest {
 
 export interface ConnectionConfig {
   url: string
-  apiKey: string
   projectId?: string
 }
 
 export class MorphDBClient {
   private baseUrl: string
-  private apiKey: string
   private projectId?: string
 
   constructor(config: ConnectionConfig) {
     this.baseUrl = config.url.replace(/\/$/, '')
-    this.apiKey = config.apiKey
     this.projectId = config.projectId
   }
 
@@ -681,7 +648,6 @@ export class MorphDBClient {
     const url = `${this.baseUrl}${path}`
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      'X-API-Key': this.apiKey,
       ...(this.projectId && { 'X-Project-Id': this.projectId }),
       ...(options.headers as Record<string, string>)
     }
@@ -1037,7 +1003,6 @@ export class MorphDBClient {
       method: 'POST',
       headers: {
         'Content-Type': 'text/csv',
-        'X-API-Key': this.apiKey,
         ...(this.projectId && { 'X-Project-Id': this.projectId })
       },
       body: file
@@ -1068,7 +1033,6 @@ export class MorphDBClient {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-API-Key': this.apiKey,
         ...(this.projectId && { 'X-Project-Id': this.projectId })
       },
       body: file
@@ -1124,7 +1088,6 @@ export class MorphDBClient {
     const url = `${this.baseUrl}/api/bulk/export/${jobId}/download`
     const response = await fetch(url, {
       headers: {
-        'X-API-Key': this.apiKey,
         ...(this.projectId && { 'X-Project-Id': this.projectId })
       }
     })
@@ -1340,34 +1303,6 @@ export class MorphDBClient {
     const queryString = searchParams.toString()
     const url = `/api/projects/${projectId}/audit/stats${queryString ? `?${queryString}` : ''}`
     return this.request<AuditStatsApiResponse>(url)
-  }
-
-  // ============================================================================
-  // Security API - API Keys
-  // ============================================================================
-
-  async getApiKeys(): Promise<ApiKeyApiResponse[]> {
-    return this.request<ApiKeyApiResponse[]>('/api/security/keys')
-  }
-
-  async createApiKey(request: CreateApiKeyApiRequest): Promise<CreateApiKeyApiResponse> {
-    return this.request<CreateApiKeyApiResponse>('/api/security/keys', {
-      method: 'POST',
-      body: JSON.stringify(request)
-    })
-  }
-
-  async revokeApiKey(keyId: string): Promise<void> {
-    await this.request<void>(`/api/security/keys/${keyId}`, {
-      method: 'DELETE'
-    })
-  }
-
-  async rotateApiKey(keyId: string, revokeOld: boolean = true): Promise<CreateApiKeyApiResponse> {
-    return this.request<CreateApiKeyApiResponse>(
-      `/api/security/keys/${keyId}/rotate?revokeOld=${revokeOld}`,
-      { method: 'POST' }
-    )
   }
 
   // ============================================================================

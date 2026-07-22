@@ -21,7 +21,7 @@ interface TableViewProps {
 const PAGE_SIZE = 50
 
 export function TableView({ tableName }: TableViewProps): ReactElement {
-  const { activeConnection, getApiKey } = useConnectionStore()
+  const { activeConnection } = useConnectionStore()
   const queryClient = useQueryClient()
 
   const [currentPage, setCurrentPage] = useState(1)
@@ -39,11 +39,8 @@ export function TableView({ tableName }: TableViewProps): ReactElement {
   // Helper to create API client
   const createClient = async (): Promise<MorphDBClient | null> => {
     if (!activeConnection) return null
-    const apiKey = await getApiKey(activeConnection.id)
-    if (!apiKey) return null
     return new MorphDBClient({
       url: activeConnection.url,
-      apiKey,
       projectId: activeConnection.projectId
     })
   }
