@@ -13,9 +13,9 @@
     "build": "tsc",
     "clean": "rimraf dist",
     "prepublishOnly": "npm run clean && npm run build",
-    "test": "vitest run --exclude '**/integration/**'",
-    "test:watch": "vitest --exclude '**/integration/**'",
-    "test:coverage": "vitest run --coverage --exclude '**/integration/**'",
+    "test": "vitest run --exclude \"**/integration/**\"",
+    "test:watch": "vitest --exclude \"**/integration/**\"",
+    "test:coverage": "vitest run --coverage --exclude \"**/integration/**\"",
     "test:integration": "vitest run tests/integration",
     "test:all": "vitest run",
     "lint": "eslint src --ext .ts"
