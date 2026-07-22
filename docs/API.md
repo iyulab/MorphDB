@@ -10,13 +10,6 @@ X-Project-Id: <project id>
 
 A request that omits it is answered with `400` and the code `MISSING_PROJECT`.
 
-An API key can carry the project instead, in which case the header is optional and a header that
-disagrees with the key is rejected:
-
-```http
-X-API-Key: your-api-key
-```
-
 ### What this is not
 
 **A project is a schema namespace, not a trust boundary, and the header is not a credential.** No
@@ -231,7 +224,7 @@ DELETE /odata/Customers('id')
 
 ```javascript
 const connection = new signalR.HubConnectionBuilder()
-  .withUrl("/hubs/morph", { accessTokenFactory: () => apiKey })
+  .withUrl("/hubs/morph")
   .build();
 
 // Subscribe to table changes

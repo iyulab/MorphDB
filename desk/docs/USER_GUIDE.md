@@ -39,7 +39,6 @@ When you launch MorphDB Desk for the first time, a connection dialog will automa
    - **Host**: Server hostname or IP address (default: `localhost`)
    - **Port**: Server port (default: `5000`)
    - **Project ID**: Your project identifier
-   - **API Key** (optional): Authentication key if required
 3. Click **Test Connection** to verify settings
 4. Click **Save** to add the connection
 
@@ -193,7 +192,6 @@ For complete shortcuts reference, see [KEYBOARD_SHORTCUTS.md](./KEYBOARD_SHORTCU
 - Verify the server is running and accessible
 - Check hostname, port, and network connectivity
 - Ensure firewall allows the connection
-- Verify API key if authentication is required
 
 **Problem**: Connection times out
 - Check network stability

@@ -6,7 +6,9 @@ services:
       dockerfile: src/MorphDB.Service/Dockerfile
     container_name: morphdb-api
     ports:
-      - "8080:8080"
+      # Loopback on purpose: nothing here authenticates. To serve other machines, front the
+      # service with a reverse proxy (or your app) and bind that instead.
+      - "127.0.0.1:8080:8080"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__MorphDB: Host=postgres;Port=5432;Database=morphdb;Username=morph;Password=morph
@@ -22,7 +24,7 @@ services:
     image: postgres:16-alpine
     container_name: morphdb-postgres
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     environment:
       POSTGRES_USER: morph
       POSTGRES_PASSWORD: morph
@@ -40,7 +42,7 @@ services:
     image: redis:7-alpine
     container_name: morphdb-redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -54,7 +56,7 @@ services:
     image: dpage/pgadmin4:latest
     container_name: morphdb-pgadmin
     ports:
-      - "5050:80"
+      - "127.0.0.1:5050:80"
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@morphdb.local
       PGADMIN_DEFAULT_PASSWORD: admin

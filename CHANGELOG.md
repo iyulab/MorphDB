@@ -21,6 +21,16 @@
   user-bearing placeholders substitute `NULL` (fail-closed; a `{{user_id}}` policy matches no rows
   over HTTP).
 
+### Changed — safe defaults
+
+- **The composes bind to loopback.** The README quick-start and the repository's development
+  compose publish every port on `127.0.0.1` — an unauthenticated service must not land on all
+  interfaces by default. To serve other machines, front it with a reverse proxy (or your app) and
+  bind that.
+- **The service states its posture once per start**: a single startup log line says that nothing
+  authenticates and access control belongs to the deployment. Ghost references to `X-API-Key` in
+  the API reference, client README, desk user guide and philosophy docs left with the machinery.
+
 ### Changed — the contract is served, not shipped dark
 
 - **`/swagger` (OpenAPI document and UI) is served in every environment.** It was registered

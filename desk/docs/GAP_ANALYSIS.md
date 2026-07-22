@@ -195,7 +195,7 @@
 ### 14. Security Management (❌ 0%)
 
 **미구현:**
-- ❌ API Key management (Create, List, Revoke, Rotate)
+- ❌ API Key management (Create, List, Revoke, Rotate) — obsolete: the service sunset its authentication machinery in 0.8.0
 - ❌ Security Policies (RLS) - Create, List, Update, Delete
 - ❌ Encryption info
 - ❌ Key rotation management

@@ -264,6 +264,10 @@ try
 
     app.MapMorphHub(); // SignalR hub at /hubs/morph
 
+    // One line of posture on every start: nothing here authenticates, by design. Access control is
+    // the deployment's job — bind privately, or front with an authenticating proxy.
+    Log.Warning("MorphDB serves every endpoint to any caller that can reach it (no authentication). Bind it privately or front it with an authenticating proxy.");
+
     app.Run();
 }
 catch (Exception ex)

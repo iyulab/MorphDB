@@ -376,7 +376,7 @@ features/backups/
 /settings/sso/:id          # SSO config details
 ```
 
-### 4.2 API Key Management
+### 4.2 API Key Management (obsolete — the service sunset its authentication machinery in 0.8.0; do not build this)
 **신규 기능**
 
 **Tasks:**

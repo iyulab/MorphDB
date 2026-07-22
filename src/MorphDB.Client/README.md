@@ -16,8 +16,7 @@ using MorphDB.Client;
 // Create client
 var client = new MorphDBClient("http://localhost:5000", new MorphDBClientOptions
 {
-    ProjectId = Guid.Parse("your-project-id"),
-    ApiKey = "your-api-key"
+    ProjectId = Guid.Parse("your-project-id")
 });
 
 // Schema Management
@@ -70,7 +69,6 @@ await client.Realtime.SubscribeAsync("users", async (change) =>
 var options = new MorphDBClientOptions
 {
     ProjectId = projectId,
-    ApiKey = "your-api-key",      // API key for authentication
     Timeout = TimeSpan.FromSeconds(30),
     RetryCount = 3,
     RetryDelay = TimeSpan.FromSeconds(1)
