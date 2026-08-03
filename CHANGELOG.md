@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Dependencies
+
+- ASP.NET Core packages to 10.0.10 (JWT bearer, SignalR client, MVC testing, Redis cache),
+  the OpenTelemetry family to 1.17.0 in lockstep (Prometheus tracks it on its `-beta.1` line,
+  the only line it has ever had), plus `Npgsql` 10.0.3, `Dapper` 2.1.79, `Polly` 8.7.0,
+  `System.IdentityModel.Tokens.Jwt` 8.22.0, `BCrypt.Net-Next` 4.2.0,
+  `Microsoft.AspNetCore.OData` 9.5.0, and the test packages. Patch and minor only; no
+  vulnerability advisories were open against the previous set.
+
+### Internal
+
+- The release workflow creates the GitHub release itself instead of relying on someone doing it by
+  hand, and refuses to publish a version this changelog does not describe.
+
 ## 0.9.0
 
 ### Changed
