@@ -28,8 +28,30 @@ jobs:
         id: version
         run: |
           VERSION=$(grep -oP '<Version>\K[^<]+' Directory.Build.props)
+          if [ -z "$VERSION" ]; then
+            echo "::error::Could not read <Version> from Directory.Build.props"
+            exit 1
+          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Detected version: $VERSION"
+
+      # A release nobody wrote down is one the repository cannot answer questions about later.
+      # This gate runs *before* anything is published: a missing section fails the run while it is
+      # still free to fix. Checked after the push it could only be a warning, and a warning about
+      # an already-published version is exactly the record gap this step exists to close.
+      - name: Verify the changelog records this version
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          awk -v heading="## $VERSION" '
+            $0 == heading { capture = 1; next }
+            capture && /^## / { exit }
+            capture { print }
+          ' CHANGELOG.md > "$RUNNER_TEMP/release-notes.md"
+          if [ ! -s "$RUNNER_TEMP/release-notes.md" ]; then
+            echo "::error::CHANGELOG.md has no '## $VERSION' section. Record the release before publishing it."
+            exit 1
+          fi
+          echo "Release notes: $(wc -l < "$RUNNER_TEMP/release-notes.md") lines"
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -72,3 +94,20 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag -a "$TAG" -m "Release $TAG"
           git push origin "$TAG"
+
+      # The other half of the same record. Packages and the tag are automated while the release
+      # notes were written by hand, and a hand step is the one that eventually gets skipped —
+      # the releases here are complete only because someone remembered every time. This removes
+      # the remembering. Same workflow-ownership rule as the tag: only this one publishes.
+      - name: Publish the GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v${{ steps.version.outputs.version }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists, leaving it alone."
+            exit 0
+          fi
+          gh release create "$TAG" \
+            --title "MorphDB ${{ steps.version.outputs.version }}" \
+            --notes-file "$RUNNER_TEMP/release-notes.md"
