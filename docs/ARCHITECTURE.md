@@ -19,9 +19,9 @@ MorphDB is an abstraction layer over PostgreSQL that enables runtime schema chan
 │  GraphQL Engine      OData Provider    SignalR Hub          │
 │                                                             │
 │  ┌───────────────────────────────────────────────────────┐  │
-│  │           Dynamic Endpoint Generator                  │  │
-│  │  • Auto-enable endpoints on table creation           │  │
-│  │  • Dynamic GraphQL schema regeneration               │  │
+│  │            Table-Agnostic Endpoints                   │  │
+│  │  • A new table needs no new endpoint code            │  │
+│  │  • GraphQL needs no per-table schema change          │  │
 │  │  • Auto-refresh OData $metadata                      │  │
 │  └───────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
@@ -85,7 +85,8 @@ Benefits:
 
 ### MorphDB.Service
 - REST API controllers
-- GraphQL (HotChocolate) with dynamic type generation
+- GraphQL (HotChocolate) over a table-agnostic schema — tables and rows are served as data by
+  resolvers that read metadata per request, so creating a table changes no GraphQL type
 - OData with dynamic EDM model
 - SignalR hub for real-time sync
 

@@ -33,14 +33,14 @@ GET    /api/schema/tables/{name}               # Get table details
 PATCH  /api/schema/tables/{name}               # Update table
 DELETE /api/schema/tables/{name}               # Delete table
 
-# Columns
+# Columns — a column is addressed by its id once created, not by table and name
 POST   /api/schema/tables/{name}/columns       # Add column
-PATCH  /api/schema/tables/{name}/columns/{col} # Update column
-DELETE /api/schema/tables/{name}/columns/{col} # Delete column
+PATCH  /api/schema/columns/{columnId}          # Update column
+DELETE /api/schema/columns/{columnId}          # Delete column
 
 # Relations & Indexes
 POST   /api/schema/relations                   # Create relation
-POST   /api/schema/indexes                     # Create index
+POST   /api/schema/tables/{name}/indexes       # Create index
 POST   /api/schema/batch                       # Batch DDL operations
 
 # Schema Changelog
@@ -377,46 +377,35 @@ not request-body switches.
 { "validateRequired": false, "validateForeignKeys": false, "validateUnique": false, "validateCheck": false, "applyDefaults": false, "applyTimestamps": false, "applyVersion": false }
 ```
 
-### Dry Run (Validate Only)
-
-Validate data without writing:
-
-```http
-POST /api/data/{table}/validate
-Content-Type: application/json
-
-{
-  "data": { "name": "John", "email": "invalid-email" },
-  "options": { "validateRequired": true }
-}
-```
-
-Response:
-```json
-{
-  "success": false,
-  "errors": [
-    { "field": "email", "code": "INVALID_FORMAT", "message": "Invalid email format" }
-  ]
-}
-```
-
 ---
 
 ## Bulk Operations
 
+Bulk import and export are **asynchronous jobs**. The request returns `202 Accepted` with a job
+id; progress and results are read from the job endpoints. The format is part of the path, not a
+query parameter, because each format takes its own options.
+
 ```http
-# CSV Import
-POST /api/bulk/{table}/import
+# Import — one endpoint per format
+POST /api/bulk/{table}/import/csv
+POST /api/bulk/{table}/import/json
+POST /api/bulk/{table}/import/ndjson
 Content-Type: text/csv
 
 name,email,grade
 John Doe,john@example.com,VIP
 
-# Export
-GET /api/bulk/{table}/export?format=csv
-GET /api/bulk/{table}/export?format=json
-GET /api/bulk/{table}/export?format=xlsx
+# Export — options travel in the body
+POST /api/bulk/{table}/export/csv
+POST /api/bulk/{table}/export/json
+POST /api/bulk/{table}/export/xlsx
+
+# Following a job
+GET  /api/bulk/jobs/{jobId}/progress      # Progress while it runs
+POST /api/bulk/jobs/{jobId}/cancel        # Stop it
+GET  /api/bulk/import                     # List import jobs
+GET  /api/bulk/export                     # List export jobs
+GET  /api/bulk/export/{jobId}/download    # Fetch a finished export
 ```
 
 ---

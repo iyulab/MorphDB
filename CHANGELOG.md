@@ -2,7 +2,31 @@
 
 ## Unreleased
 
+### Docs
+
+- **`docs/API.md` no longer promises six endpoints the server does not serve.** Column update and
+  delete are addressed by column id (`/api/schema/columns/{columnId}`), not by table and column
+  name; index creation lives under its table; bulk import and export name the format in the path
+  and run as asynchronous jobs returning `202 Accepted`, which the document described as synchronous
+  single calls. A documented dry-run validation endpoint was removed — no such endpoint exists, and
+  the response example named an error code the server never answers. A route in the API document is
+  now held to the routes the controllers actually declare, so this class of drift fails the build
+  instead of a consumer's integration.
+- **The architecture document no longer describes GraphQL types being generated per table.** The
+  schema's shape is fixed and comes from CLR types; tables and rows are served as data by resolvers
+  that read metadata per request, which is why creating a table changes no GraphQL type and why
+  building the schema needs no database. The diagram also drew an endpoint-generator component that
+  does not exist — there is nothing to generate.
+
+### Removed
+
+- Two unused data-type-to-GraphQL-type mapping helpers on the schema builder. They had no callers
+  and were the only apparent evidence for the per-table type generation the docs described.
+
 ### Dependencies
+
+- `coverlet.collector` to 10.0.1, verified by collecting coverage rather than by tests passing —
+  a passing suite does not exercise the collector at all.
 
 - ASP.NET Core packages to 10.0.10 (JWT bearer, SignalR client, MVC testing, Redis cache),
   the OpenTelemetry family to 1.17.0 in lockstep (Prometheus tracks it on its `-beta.1` line,
