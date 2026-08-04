@@ -477,10 +477,10 @@ public sealed class MetadataRepository : IMetadataRepository
     {
         const string sql = """
             INSERT INTO morphdb._morph_relations
-                (relation_id, project_id, logical_name, source_table_id, source_column_id, target_table_id, target_column_id, relation_type, on_delete, on_update, descriptor)
+                (relation_id, project_id, logical_name, source_table_id, source_column_id, target_table_id, target_column_id, relation_type, on_delete, on_update, descriptor, enforce_on_write, virtual_cascade)
             VALUES
-                (@RelationId, @ProjectId, @LogicalName, @SourceTableId, @SourceColumnId, @TargetTableId, @TargetColumnId, @RelationType, @OnDelete, @OnUpdate, @Descriptor::jsonb)
-            RETURNING relation_id, project_id, logical_name, source_table_id, source_column_id, target_table_id, target_column_id, relation_type, on_delete, on_update, descriptor, is_active, created_at
+                (@RelationId, @ProjectId, @LogicalName, @SourceTableId, @SourceColumnId, @TargetTableId, @TargetColumnId, @RelationType, @OnDelete, @OnUpdate, @Descriptor::jsonb, @EnforceOnWrite, @VirtualCascade)
+            RETURNING relation_id, project_id, logical_name, source_table_id, source_column_id, target_table_id, target_column_id, relation_type, on_delete, on_update, descriptor, is_active, enforce_on_write, virtual_cascade, created_at
             """;
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
@@ -496,7 +496,9 @@ public sealed class MetadataRepository : IMetadataRepository
             RelationType = relation.RelationType.ToString(),
             OnDelete = MapOnDeleteAction(relation.OnDelete),
             OnUpdate = MapOnUpdateAction(relation.OnUpdate),
-            Descriptor = relation.Descriptor?.RootElement.GetRawText()
+            Descriptor = relation.Descriptor?.RootElement.GetRawText(),
+            relation.EnforceOnWrite,
+            relation.VirtualCascade
         });
 
         return MapToRelationMetadata(result);
@@ -507,7 +509,7 @@ public sealed class MetadataRepository : IMetadataRepository
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-            SELECT relation_id, project_id, logical_name, source_table_id, source_column_id, target_table_id, target_column_id, relation_type, on_delete, on_update, descriptor, is_active, created_at
+            SELECT relation_id, project_id, logical_name, source_table_id, source_column_id, target_table_id, target_column_id, relation_type, on_delete, on_update, descriptor, is_active, enforce_on_write, virtual_cascade, created_at
             FROM morphdb._morph_relations
             WHERE relation_id = @RelationId AND is_active = true
             """;
@@ -523,7 +525,7 @@ public sealed class MetadataRepository : IMetadataRepository
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-            SELECT relation_id, project_id, logical_name, source_table_id, source_column_id, target_table_id, target_column_id, relation_type, on_delete, on_update, descriptor, is_active, created_at
+            SELECT relation_id, project_id, logical_name, source_table_id, source_column_id, target_table_id, target_column_id, relation_type, on_delete, on_update, descriptor, is_active, enforce_on_write, virtual_cascade, created_at
             FROM morphdb._morph_relations
             WHERE (source_table_id = @TableId OR target_table_id = @TableId) AND is_active = true
             ORDER BY created_at
@@ -825,7 +827,9 @@ public sealed class MetadataRepository : IMetadataRepository
         OnDelete = ParseOnDeleteAction(row.on_delete),
         OnUpdate = ParseOnUpdateAction(row.on_update),
         Descriptor = row.descriptor is not null ? JsonDocument.Parse(row.descriptor) : null,
-        IsActive = row.is_active
+        IsActive = row.is_active,
+        EnforceOnWrite = row.enforce_on_write,
+        VirtualCascade = row.virtual_cascade
     };
 
     private static string MapOnDeleteAction(OnDeleteAction action) => action switch
@@ -943,6 +947,8 @@ public sealed class MetadataRepository : IMetadataRepository
         public string? where_clause { get; set; }
         public string? descriptor { get; set; }
         public bool is_active { get; set; }
+        public bool enforce_on_write { get; set; }
+        public bool virtual_cascade { get; set; }
         public DateTimeOffset created_at { get; set; }
     }
 
@@ -963,6 +969,8 @@ public sealed class MetadataRepository : IMetadataRepository
         public string on_update { get; set; } = "";
         public string? descriptor { get; set; }
         public bool is_active { get; set; }
+        public bool enforce_on_write { get; set; }
+        public bool virtual_cascade { get; set; }
         public DateTimeOffset created_at { get; set; }
     }
 

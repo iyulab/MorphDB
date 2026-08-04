@@ -709,6 +709,11 @@ public static class DdlBuilder
                 on_update VARCHAR(20) NOT NULL DEFAULT 'NO ACTION',
                 descriptor JSONB,
                 is_active BOOLEAN NOT NULL DEFAULT true,
+                -- Whether writes are checked against this relation. Defaults to true because that
+                -- is what every relation created before these columns existed behaved as, and a
+                -- relation that silently stops being checked is worse than one that never was.
+                enforce_on_write BOOLEAN NOT NULL DEFAULT true,
+                virtual_cascade BOOLEAN NOT NULL DEFAULT true,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
 

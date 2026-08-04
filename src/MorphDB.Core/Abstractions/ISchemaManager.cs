@@ -353,6 +353,24 @@ public sealed record CreateRelationRequest
     /// Default is 100.
     /// </summary>
     public int MaxHierarchyDepth { get; init; } = 100;
+
+    /// <summary>
+    /// Whether writes are validated against this relation. Default true.
+    /// <para>
+    /// Set false to declare the link without checking it. This is what a caller that rebuilds its
+    /// tables wholesale needs: when tables are dropped and reloaded independently, a child can be
+    /// written before its parent has been reloaded, and enforcement would reject data that is in
+    /// fact consistent at the source. The relation is still recorded, so joins and navigation see
+    /// it — it just does not gate writes.
+    /// </para>
+    /// </summary>
+    public bool EnforceOnWrite { get; init; } = true;
+
+    /// <summary>
+    /// Whether cascade behaviour is handled by the application layer (soft-delete aware).
+    /// Default true.
+    /// </summary>
+    public bool VirtualCascade { get; init; } = true;
 }
 
 #endregion

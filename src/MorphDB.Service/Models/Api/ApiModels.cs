@@ -505,6 +505,19 @@ public sealed record CreateRelationApiRequest
     public required string TargetColumn { get; init; }
     public string Type { get; init; } = "one-to-many";
     public string OnDelete { get; init; } = "no-action";
+
+    /// <summary>
+    /// Whether writes are validated against this relation. Defaults to true.
+    /// Set false to declare the link without gating writes on it — joins and navigation still see
+    /// it. Needed by callers that rebuild tables wholesale, where a child can legitimately be
+    /// written before its parent has been reloaded.
+    /// </summary>
+    public bool EnforceOnWrite { get; init; } = true;
+
+    /// <summary>
+    /// Whether cascade behaviour is handled by the application layer. Defaults to true.
+    /// </summary>
+    public bool VirtualCascade { get; init; } = true;
 }
 
 /// <summary>
@@ -851,6 +864,17 @@ public sealed record RelationApiResponse
     public required string Type { get; init; }
     public required string OnDelete { get; init; }
 
+    /// <summary>
+    /// Whether writes are validated against this relation. Echoed back so a caller can see what it
+    /// actually got rather than what it asked for.
+    /// </summary>
+    public bool EnforceOnWrite { get; init; }
+
+    /// <summary>
+    /// Whether cascade behaviour is handled by the application layer.
+    /// </summary>
+    public bool VirtualCascade { get; init; }
+
     public static RelationApiResponse FromMetadata(RelationMetadata relation) => new()
     {
         Id = relation.RelationId,
@@ -860,7 +884,9 @@ public sealed record RelationApiResponse
         TargetTableId = relation.TargetTableId,
         TargetColumnId = relation.TargetColumnId,
         Type = relation.RelationType.ToString().ToLowerInvariant(),
-        OnDelete = relation.OnDelete.ToString().ToLowerInvariant()
+        OnDelete = relation.OnDelete.ToString().ToLowerInvariant(),
+        EnforceOnWrite = relation.EnforceOnWrite,
+        VirtualCascade = relation.VirtualCascade
     };
 }
 

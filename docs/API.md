@@ -46,9 +46,35 @@ DELETE /api/schema/columns/{columnId}          # Delete column
 
 # Relations & Indexes
 POST   /api/schema/relations                   # Create relation
+DELETE /api/schema/relations/{id}              # Delete relation
 POST   /api/schema/tables/{name}/indexes       # Create index
 POST   /api/schema/batch                       # Batch DDL operations
+```
 
+A relation is a **virtual** foreign key: it is metadata this layer checks, not (by default) a
+constraint the database holds. Two flags decide how far that goes, and both default to `true`:
+
+```json
+{
+  "name": "fk_orders_customer",
+  "sourceTable": "orders", "sourceColumn": "customer_id",
+  "targetTable": "customers", "targetColumn": "_id",
+  "type": "one-to-many",
+  "enforceOnWrite": false
+}
+```
+
+- **`enforceOnWrite`** — whether writes are checked against the relation. Set `false` to declare the
+  link without gating writes on it: joins and navigation still see it, but a row referencing a
+  missing parent is accepted. This is what a caller that **rebuilds tables wholesale** needs — when
+  tables are dropped and reloaded independently, a child can be written before its parent has been
+  reloaded, and enforcing would reject data that is consistent at its source. A non-enforcing
+  relation also gets no physical constraint, so nothing rejects the write underneath either.
+- **`virtualCascade`** — whether cascade behaviour is handled at the application layer.
+
+Both are echoed back on the response, so you can see what you got rather than what you asked for.
+
+```yaml
 # Schema Changelog
 GET    /api/schema/tables/{name}/history       # Table change history
 GET    /api/schema/changelog                   # Global schema changelog
@@ -650,7 +676,7 @@ fixed string — internal exception text never reaches the wire) and retrying ma
 
 | Status | Code | When |
 |--------|------|------|
-| 400 | `VALIDATION_ERROR` | A value failed validation — a required / unique / FK / CHECK constraint, a type mismatch, or any mix of write-validation causes; physical `NOT NULL`/`UNIQUE` violations translate to the same code |
+| 400 | `VALIDATION_ERROR` | A value failed validation — a required / unique / FK / CHECK constraint, a type mismatch, or any mix of write-validation causes; physical `NOT NULL` / `UNIQUE` / foreign-key violations translate to the same code |
 | 400 | `UNKNOWN_COLUMN` | A write named a column the table does not declare (see `?ignoreUnknown=true`) — answered whenever undeclared fields are the only thing wrong with the write |
 | 400 | `COLUMN_NOT_FOUND` | A query referenced a column the table does not have |
 | 400 | `INVALID_FILTER` | A malformed `filter` expression, or an unknown filter operator |

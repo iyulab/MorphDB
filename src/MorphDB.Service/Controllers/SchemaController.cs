@@ -613,7 +613,9 @@ public sealed class SchemaController : ControllerBase
                 TargetTableId = targetTable.TableId,
                 TargetColumnId = targetColumn.ColumnId,
                 RelationType = ApiModelExtensions.ParseRelationType(request.Type),
-                OnDelete = ApiModelExtensions.ParseOnDeleteAction(request.OnDelete)
+                OnDelete = ApiModelExtensions.ParseOnDeleteAction(request.OnDelete),
+                EnforceOnWrite = request.EnforceOnWrite,
+                VirtualCascade = request.VirtualCascade
             };
 
             var relation = await _schemaManager.CreateRelationAsync(createRequest, cancellationToken);

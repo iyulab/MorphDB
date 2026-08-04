@@ -75,13 +75,27 @@ public sealed class ForeignKeyValidator : IValidator
             if (targetColumn is null)
                 continue;
 
+            // REST binding delivers values as JsonElement, which Dapper binds as jsonb -- and
+            // `uuid = jsonb` is not an operator PostgreSQL has, so the reference check threw 42883
+            // instead of answering. Every foreign key onto an id column took that path, which meant
+            // an enforced relation could not be written through the JSON API at all: the caller got
+            // an opaque 500 where a clean rejection (or an accepted write) was due. Converting to
+            // the target column's DB value is what the unique validator already does.
+            var dbValue = TypeMapper.ToDbValue(value, targetColumn.DataType);
+            if (dbValue is null)
+            {
+                // The payload carried a JSON null in a shape the earlier null check did not catch.
+                // A null foreign key references nothing, which is allowed.
+                continue;
+            }
+
             // Check if referenced record exists
             var exists = await CheckReferenceExistsAsync(
                 conn.Connection,
                 conn.Transaction,
                 targetTable,
                 targetColumn,
-                value,
+                dbValue,
                 context.CancellationToken);
 
             if (!exists)

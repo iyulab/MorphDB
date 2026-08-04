@@ -1091,16 +1091,24 @@ public sealed class PostgresSchemaManager : ISchemaManager
             MaxHierarchyDepth = request.MaxHierarchyDepth,
             JunctionTableId = junctionTableId,
             JunctionTableName = junctionTableName,
-            // Virtual FK by default - no physical constraint created
-            EnforceOnWrite = true,
-            VirtualCascade = true,
+            // Virtual FK by default - no physical constraint created. Whether the virtual one is
+            // checked on write is the caller's to say: these were pinned to true here, so the
+            // request's values were discarded and every relation enforced regardless.
+            EnforceOnWrite = request.EnforceOnWrite,
+            VirtualCascade = request.VirtualCascade,
             IsActive = true
         };
 
         // For non-ManyToMany, optionally create physical FK (configurable)
         // Note: Virtual Constraint philosophy recommends NOT creating physical FKs
         // Physical FKs are kept for backward compatibility but can be disabled
-        if (request.RelationType != RelationType.ManyToMany && _options.CreatePhysicalForeignKeys)
+        //
+        // A relation the caller asked not to enforce gets no physical constraint either. Without
+        // this clause EnforceOnWrite would only turn off the layer that answers politely: the
+        // database would still reject the write, so the option would appear to do nothing.
+        if (request.RelationType != RelationType.ManyToMany
+            && _options.CreatePhysicalForeignKeys
+            && request.EnforceOnWrite)
         {
             await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
             var constraintName = $"fk_{sourceTable.PhysicalName}_{sourceColumn.PhysicalName}";

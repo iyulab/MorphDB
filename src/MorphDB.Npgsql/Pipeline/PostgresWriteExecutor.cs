@@ -102,7 +102,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             scope.SetRowCount(affectedRows);
             return WriteResult.Ok(new Dictionary<string, object?> { ["deleted"] = true, ["id"] = context.RecordId });
         }
-        catch (PostgresException pg) when (pg.SqlState is PostgresErrorCodes.NotNullViolation or PostgresErrorCodes.UniqueViolation)
+        catch (PostgresException pg) when (pg.SqlState is PostgresErrorCodes.NotNullViolation or PostgresErrorCodes.UniqueViolation or PostgresErrorCodes.ForeignKeyViolation)
         {
             // A physical constraint the app-layer validators did not intercept is still the
             // caller's mistake, not our defect — translate it before it can surface as a 500.
@@ -151,7 +151,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             scope.SetRowCount(1);
             return WriteResult.Ok(decrypted);
         }
-        catch (PostgresException pg) when (pg.SqlState is PostgresErrorCodes.NotNullViolation or PostgresErrorCodes.UniqueViolation)
+        catch (PostgresException pg) when (pg.SqlState is PostgresErrorCodes.NotNullViolation or PostgresErrorCodes.UniqueViolation or PostgresErrorCodes.ForeignKeyViolation)
         {
             // A physical constraint the app-layer validators did not intercept is still the
             // caller's mistake, not our defect — translate it before it can surface as a 500.
@@ -219,7 +219,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             scope.SetRowCount(1);
             return WriteResult.Ok(decrypted);
         }
-        catch (PostgresException pg) when (pg.SqlState is PostgresErrorCodes.NotNullViolation or PostgresErrorCodes.UniqueViolation)
+        catch (PostgresException pg) when (pg.SqlState is PostgresErrorCodes.NotNullViolation or PostgresErrorCodes.UniqueViolation or PostgresErrorCodes.ForeignKeyViolation)
         {
             // A physical constraint the app-layer validators did not intercept is still the
             // caller's mistake, not our defect — translate it before it can surface as a 500.
@@ -294,7 +294,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             scope.SetRowCount(1);
             return WriteResult.Ok(decrypted);
         }
-        catch (PostgresException pg) when (pg.SqlState is PostgresErrorCodes.NotNullViolation or PostgresErrorCodes.UniqueViolation)
+        catch (PostgresException pg) when (pg.SqlState is PostgresErrorCodes.NotNullViolation or PostgresErrorCodes.UniqueViolation or PostgresErrorCodes.ForeignKeyViolation)
         {
             // A physical constraint the app-layer validators did not intercept is still the
             // caller's mistake, not our defect — translate it before it can surface as a 500.
@@ -358,7 +358,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             scope.SetRowCount(1);
             return WriteResult.Ok(mapped);
         }
-        catch (PostgresException pg) when (pg.SqlState is PostgresErrorCodes.NotNullViolation or PostgresErrorCodes.UniqueViolation)
+        catch (PostgresException pg) when (pg.SqlState is PostgresErrorCodes.NotNullViolation or PostgresErrorCodes.UniqueViolation or PostgresErrorCodes.ForeignKeyViolation)
         {
             // A physical constraint the app-layer validators did not intercept is still the
             // caller's mistake, not our defect — translate it before it can surface as a 500.
@@ -606,6 +606,15 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             return logical is null
                 ? new MorphDB.Core.Exceptions.ValidationException("A required column does not allow null values.")
                 : new MorphDB.Core.Exceptions.ValidationException(logical, "a value is required and cannot be null");
+        }
+
+        if (pg.SqlState == PostgresErrorCodes.ForeignKeyViolation)
+        {
+            // Reached when the app-layer foreign-key validator did not answer first -- the physical
+            // constraint is the backstop, and a backstop that surfaces as an opaque 500 tells the
+            // caller their own mistake is our defect.
+            return new MorphDB.Core.Exceptions.ValidationException(
+                "A value in this request references a row that does not exist.");
         }
 
         return new MorphDB.Core.Exceptions.ValidationException(

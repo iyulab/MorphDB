@@ -95,6 +95,14 @@ public static class GlobalSchemaMigrations
         -- EXISTS adds no column to a table that already exists. An older control plane missing the
         -- flag would therefore fail the CREATE INDEX on every start -- a boot crash loop, not a
         -- degraded feature. Whatever the column already is, this leaves it alone.
+        -- Virtual-constraint flags on relations. They existed on the model from the start and the
+        -- write pipeline already read EnforceOnWrite, but there were no columns to hold them: every
+        -- relation loaded from the database came back with the model's default of true, whatever
+        -- was asked for. The option looked settable and was not. Defaulting the columns to true
+        -- keeps every existing relation behaving exactly as it did.
+        ALTER TABLE IF EXISTS morphdb._morph_relations ADD COLUMN IF NOT EXISTS enforce_on_write BOOLEAN NOT NULL DEFAULT true;
+        ALTER TABLE IF EXISTS morphdb._morph_relations ADD COLUMN IF NOT EXISTS virtual_cascade BOOLEAN NOT NULL DEFAULT true;
+
         ALTER TABLE IF EXISTS morphdb._morph_tables ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
         ALTER TABLE IF EXISTS morphdb._morph_columns ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
         ALTER TABLE IF EXISTS morphdb._morph_indexes ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
