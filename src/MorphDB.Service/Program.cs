@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.OpenApi;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Encryption;
+using MorphDB.Core.Security;
 using MorphDB.Npgsql;
 using MorphDB.Npgsql.Security;
 using MorphDB.Service;
@@ -116,9 +117,10 @@ try
             Description = "Dynamic schema database service API"
         });
 
-        // The service itself is unauthenticated by design -- access control is the deployment's
-        // job (bind privately, or front with an authenticating proxy). The only cross-cutting
-        // header is the project scope.
+        // Two cross-cutting headers, and they answer different questions. The project scope says
+        // which schemas a request means; the secret says whether the caller may have them. The
+        // second is only required when a deployment has injected a master secret -- with none
+        // injected the service authenticates nothing, which is the default shape.
         options.AddSecurityDefinition("ProjectId", new OpenApiSecurityScheme
         {
             Description = "The project a request is scoped to. A schema namespace, not a trust boundary.",
@@ -127,9 +129,19 @@ try
             Type = SecuritySchemeType.ApiKey
         });
 
+        options.AddSecurityDefinition("Secret", new OpenApiSecurityScheme
+        {
+            Description =
+                "A connection secret, when one is required. Required on every endpoint except the " +
+                "health and metrics probes if Security__MasterSecret is injected; ignored otherwise.",
+            Scheme = "bearer",
+            Type = SecuritySchemeType.Http
+        });
+
         options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
         {
-            [new OpenApiSecuritySchemeReference("ProjectId", document)] = []
+            [new OpenApiSecuritySchemeReference("ProjectId", document)] = [],
+            [new OpenApiSecuritySchemeReference("Secret", document)] = []
         });
     });
 
@@ -168,6 +180,15 @@ try
         options.PollingInterval = TimeSpan.FromSeconds(5);
         options.BatchSize = 5;
     });
+
+    // Connection secrets. The master secret arrives the way POSTGRES_PASSWORD does — from the
+    // deployment, before anything can ask for it (Security__MasterSecret) — so the authority to
+    // issue credentials never originates inside the API. Its presence is also the switch: with
+    // nothing injected the service authenticates nothing, exactly as it did before secrets existed.
+    var secretOptions = builder.Configuration.GetSection(SecretOptions.SectionName).Get<SecretOptions>()
+        ?? new SecretOptions();
+    builder.Services.AddSingleton(secretOptions);
+    builder.Services.AddSingleton<ISecretService, SecretService>();
 
     // Add rate limiting
     builder.Services.Configure<RateLimitConfig>(builder.Configuration.GetSection("RateLimiting"));
@@ -248,6 +269,8 @@ try
     app.UseHttpsRedirection();
     app.UseWebSockets(); // Required for GraphQL subscriptions
     app.UseSecurityContext();
+    app.UseSecretAuthentication(); // Enforces secrets when one is injected; before rate limiting and
+                                   // audit logging so a denial is still counted and still recorded
     app.UseRateLimiting(); // Rate limiting after auth
     app.UseAuditLogging(); // Audit logging captures all requests including rate-limited ones
 

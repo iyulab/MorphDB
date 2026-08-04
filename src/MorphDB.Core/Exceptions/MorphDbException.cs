@@ -177,6 +177,33 @@ public class NotFoundException : MorphDbException
 }
 
 /// <summary>
+/// Thrown when a request presents no usable connection secret while authentication is enforced.
+/// <para>
+/// Distinct from <see cref="MissingProjectException"/> on purpose: that one says the request is
+/// incomplete, this one says the caller is not recognized. Collapsing them would tell a caller
+/// with a revoked secret to add a header.
+/// </para>
+/// </summary>
+public class UnauthenticatedException : MorphDbException
+{
+    public UnauthenticatedException()
+        : base("UNAUTHENTICATED", "This request presented no valid secret. Send an Authorization: Bearer <secret> header.")
+    {
+    }
+}
+
+/// <summary>
+/// Thrown when a recognized secret is not allowed to do what the request asks.
+/// </summary>
+public class ForbiddenException : MorphDbException
+{
+    public ForbiddenException(string message)
+        : base("FORBIDDEN", message)
+    {
+    }
+}
+
+/// <summary>
 /// Thrown when input validation fails.
 /// </summary>
 public class ValidationException : MorphDbException

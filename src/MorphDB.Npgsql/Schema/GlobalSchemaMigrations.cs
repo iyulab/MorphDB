@@ -29,6 +29,11 @@ public static class GlobalSchemaMigrations
         -- API keys went with the authentication machinery: the service never required
         -- authentication, and a production image had no way to mint a key in the first place, so
         -- the rows a Development-mode database may hold authorize nothing and identify nobody.
+        --
+        -- This name is retired and must not be reused. The statement below runs on every start,
+        -- before the canonical CREATE TABLE IF NOT EXISTS -- so anything given this name would be
+        -- dropped and recreated empty at each boot, silently and without an error. Connection
+        -- secrets live in _morph_secrets for exactly this reason.
         DROP TABLE IF EXISTS morphdb._morph_api_keys;
 
         DROP TABLE IF EXISTS morphdb._morph_backups;

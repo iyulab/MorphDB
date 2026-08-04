@@ -146,12 +146,22 @@ project_xyz789 (project-specific)
 ## Request Scoping
 
 ```
-X-Project-Id header → SecurityContextMiddleware → SecurityContext (ambient) → RLS / write pipeline
+X-Project-Id header → SecurityContextMiddleware ─┐
+Authorization: Bearer → SecretAuthenticationMiddleware ─┴→ SecurityContext (ambient) → RLS / write pipeline
 ```
 
-The service carries no authentication of its own — access control belongs to the deployment
-(private binding, or an authenticating proxy in front). The project header scopes a request to a
-schema namespace via `IProjectContextAccessor`; it is not a credential.
+The project header scopes a request to a schema namespace via `IProjectContextAccessor`; **it is
+never a credential.** Credentials are separate and opt-in:
+
+- **No master secret injected — the default.** The service carries no authentication of its own;
+  access control belongs to the deployment (private binding, or an authenticating proxy in front).
+- **`Security__MasterSecret` injected.** `SecretAuthenticationMiddleware` requires a secret on every
+  request but the health and metrics probes, and fills in `SecurityContext.Role` from the secret
+  that authenticated — which is what the `{{role}}` placeholder in a policy then resolves to.
+
+The two middlewares are separate deliberately. `SecurityContextMiddleware` only acts when the
+project header is present and parses, so enforcement placed inside it could be skipped by omitting
+that header; the secret check runs on every non-exempt request regardless of what it carries.
 
 ## Virtual Constraint Architecture
 

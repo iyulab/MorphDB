@@ -58,8 +58,9 @@ services:
   morphdb:
     image: ghcr.io/iyulab/morphdb:0.9.1
     ports:
-      # Bound to loopback on purpose: this quick-start compose has no authentication in front of
-      # it. To serve other machines, put a reverse proxy (or your app) in front and bind that.
+      # Bound to loopback on purpose: this quick-start injects no master secret, so nothing here
+      # authenticates. To serve other machines, either set Security__MasterSecret (see
+      # docs/API.md#connection-secrets) or put a reverse proxy in front and bind that.
       - "127.0.0.1:8080:8080"
     environment:
       ConnectionStrings__MorphDB: Host=postgres;Port=5432;Database=morphdb;Username=morph;Password=morph
@@ -103,10 +104,15 @@ Every schema and data endpoint is project-scoped, so a bare request is answered 
 `MISSING_PROJECT`. Create a project first, then send its id as `X-Project-Id` on everything else.
 
 > **A project is a schema namespace, not a trust boundary.** It exists so MorphDB can operate physical
-> schemas on its own judgement — it is an internal operating unit, not a multi-tenancy feature. The
-> service does not authenticate any endpoint, so `X-Project-Id` says *which* schemas a
-> request means, not *whether the caller may have them*. If you are building something multi-user, that
-> boundary is yours to stand, in front of MorphDB. Do not pass a client-supplied project id through.
+> schemas on its own judgement — it is an internal operating unit, not a multi-tenancy feature.
+> `X-Project-Id` says *which* schemas a request means, never *whether the caller may have them* —
+> so do not pass a client-supplied project id through.
+>
+> **Out of the box the service does not authenticate any endpoint.** Inject a master secret
+> (`Security__MasterSecret`) and it requires `Authorization: Bearer <secret>` on everything but the
+> health and metrics probes; you then issue further secrets, each carrying a role.
+> See [Connection secrets](docs/API.md#connection-secrets). If you are building something
+> multi-user, that boundary is still yours to stand, in front of MorphDB.
 
 ```bash
 # 1. Create a project. The response carries the id you will scope requests with.

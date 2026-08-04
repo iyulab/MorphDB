@@ -19,6 +19,10 @@ public partial class DocsErrorCodeParityTests
         "VALIDATION_ERROR", "MISSING_PROJECT", "TABLE_NOT_FOUND", "COLUMN_NOT_FOUND",
         "DUPLICATE_NAME", "DUPLICATE_SLUG", "PROJECT_NOT_FOUND", "SCHEMA_VERSION_CONFLICT",
         "LOCK_ACQUISITION_FAILED", "NOT_FOUND", "INVALID_ARGUMENT", "INTERNAL_ERROR",
+        "UNAUTHENTICATED", "FORBIDDEN",
+        // Secret enforcement — the middleware writes its own envelope (it denies before MVC) and
+        // the management routes decline when no master secret is injected
+        "SECRETS_NOT_CONFIGURED",
         // SchemaException codes with contract weight
         "TABLE_HAS_DEPENDENTS", "INVALID_EXPRESSION",
         // Write pipeline funnel (WriteFailure.CodeFor)

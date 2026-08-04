@@ -177,6 +177,29 @@ public sealed class ApiTestFixture : IAsyncLifetime
     }
 
     /// <summary>
+    /// Returns a factory identical to this one except that a master secret is injected, which is
+    /// what turns secret enforcement on.
+    /// <para>
+    /// It layers onto the configured factory rather than standing up a second one, so the enforced
+    /// server is the same server — same database, same service replacements — differing only in the
+    /// one option under test. A hand-built second fixture would be free to drift from this one, and
+    /// then it would be verifying itself rather than the production wiring.
+    /// </para>
+    /// </summary>
+    public WebApplicationFactory<Program> WithMasterSecret(string masterSecret) =>
+        _factory!.WithWebHostBuilder(builder =>
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<SecretOptions>();
+                services.AddSingleton(new SecretOptions { MasterSecret = masterSecret });
+            }));
+
+    /// <summary>
+    /// Gets the service provider of the configured (unenforced) server.
+    /// </summary>
+    public IServiceProvider Services => _factory!.Services;
+
+    /// <summary>
     /// Creates an HttpMessageHandler for SignalR HubConnection tests.
     /// This handler routes requests through the test server.
     /// </summary>

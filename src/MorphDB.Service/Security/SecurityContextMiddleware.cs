@@ -4,8 +4,18 @@ namespace MorphDB.Service.Security;
 
 /// <summary>
 /// Populates the ambient <see cref="SecurityContext"/> from the project-scope header.
-/// The service itself is unauthenticated by design; every caller operates in the anonymous
-/// context of the project it addresses, and row-level security evaluates against that context.
+/// <para>
+/// This establishes the anonymous context of the project a request addresses; row-level security
+/// evaluates against it. Whether the caller is anyone in particular is a separate question, decided
+/// after this by <see cref="SecretAuthenticationMiddleware"/> — which replaces this context with an
+/// authenticated one when a deployment has injected a master secret, and leaves it untouched when
+/// none is injected (the default, in which the service authenticates nothing).
+/// </para>
+/// <para>
+/// Note that the body below runs only when the header is present and parses. That is why secret
+/// enforcement is a middleware of its own rather than a branch here: a check placed inside this
+/// condition could be skipped by simply omitting the header.
+/// </para>
 /// </summary>
 public sealed class SecurityContextMiddleware
 {

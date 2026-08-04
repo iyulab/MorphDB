@@ -42,6 +42,8 @@ internal sealed class GlobalExceptionHandler : IExceptionHandler
         var (status, error, code) = exception switch
         {
             ValidationException v => (StatusCodes.Status400BadRequest, "ValidationError", v.ErrorCode),
+            UnauthenticatedException u => (StatusCodes.Status401Unauthorized, "Unauthenticated", u.ErrorCode),
+            ForbiddenException f => (StatusCodes.Status403Forbidden, "Forbidden", f.ErrorCode),
             MissingProjectException m => (StatusCodes.Status400BadRequest, "BadRequest", m.ErrorCode),
             TableNotFoundException t => (StatusCodes.Status404NotFound, "NotFound", t.ErrorCode),
             // A column is not an addressable resource of any route — an unknown column is a defect

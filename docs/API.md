@@ -12,14 +12,20 @@ A request that omits it is answered with `400` and the code `MISSING_PROJECT`.
 
 ### What this is not
 
-**A project is a schema namespace, not a trust boundary, and the header is not a credential.** No
-endpoint requires authentication — the service has none: a request carrying only `X-Project-Id` is
-served. The project exists so MorphDB can operate physical schemas on its own judgement — it is an
-internal operating unit, not a multi-tenancy feature.
+**A project is a schema namespace, not a trust boundary, and the header is not a credential.** The
+project exists so MorphDB can operate physical schemas on its own judgement — it is an internal
+operating unit, not a multi-tenancy feature.
 
-So: run MorphDB where only your application can reach it, and decide there who may see what. Never
-forward a project id supplied by a browser or an end user — whoever picks that value picks which
-schemas they read.
+Whether a request needs a credential is a separate question, and the answer depends on one thing:
+
+- **No master secret injected — the default.** No endpoint requires authentication; the service has
+  none. A request carrying only `X-Project-Id` is served.
+- **A master secret injected.** Every endpoint except the health and metrics probes requires
+  `Authorization: Bearer <secret>`. See [Connection secrets](#connection-secrets).
+
+Either way, never forward a project id supplied by a browser or an end user — whoever picks that
+value picks which schemas they read. And in the default shape, run MorphDB where only your
+application can reach it and decide there who may see what.
 
 ## REST API
 
@@ -511,6 +517,70 @@ POST /api/data/{table}
 
 ---
 
+## Connection secrets
+
+A relational database identifies whoever opens a connection with a user and a password. There is no
+connection to open here — every access is an API call — so the same position is held by a **secret**.
+A secret is not a person: it has no email, no invitation and no organization. It is issued, it
+carries a **role**, and it is revoked.
+
+### Turning it on
+
+Authentication is **off unless you inject a master secret**, and this is stated rather than implied:
+an installation that advertises a boundary it does not enforce is worse than one that says it
+enforces none.
+
+```yaml
+environment:
+  Security__MasterSecret: <a long random string>
+```
+
+The master secret arrives the way PostgreSQL is given `POSTGRES_PASSWORD` — from the deployment,
+before anything can ask for it. **No API issues it**, and it is never written to the database. That
+is what keeps the bootstrap acyclic: the authority to issue credentials never originates inside the
+API.
+
+With it injected, every endpoint requires a secret except `/health`, `/health/live`, `/health/ready`
+and `/metrics` — machine surfaces that must answer before any credential is distributed.
+
+```http
+Authorization: Bearer mdb_<secret>
+```
+
+A request with no secret or an unrecognized one is answered `401 UNAUTHENTICATED`. A recognized
+secret that may not do what was asked is answered `403 FORBIDDEN`.
+
+### Issuing secrets
+
+These routes require the **master secret**; an issued secret cannot reach them. Without a master
+secret injected they answer `503 SECRETS_NOT_CONFIGURED`.
+
+```yaml
+POST   /api/security/secrets                   # Issue a secret — the plaintext is returned once
+GET    /api/security/secrets                   # List issued secrets (never hashes or plaintexts)
+DELETE /api/security/secrets/{secretId}        # Revoke
+```
+
+```json
+{
+  "name": "reporting-service",
+  "role": "analyst",
+  "projectId": null
+}
+```
+
+- **`role`** — free-form. MorphDB does not enumerate the roles a database may have; meaning comes
+  from the policies that reference it through `{{role}}` (see below). The names `master` and
+  `service` are reserved and are refused with `400 VALIDATION_ERROR`.
+- **`projectId`** — `null` for every project, or a project id to confine the secret to it. A
+  confined secret addressing another project is answered `403 FORBIDDEN`.
+
+The response carries the plaintext **once**. It is stored only as a hash; if it is lost, issue
+another and revoke the old one. Revocation keeps the row so audit records retain a name for it.
+
+Only the master secret bypasses row-level security. An issued secret is subject to the same policies
+an anonymous caller is — with `{{role}}` now resolving to something.
+
 ## Row-Level Security Policies
 
 A policy narrows what a table's rows answer, per operation. Applicable policies are combined with
@@ -604,9 +674,12 @@ fixed string — internal exception text never reaches the wire) and retrying ma
 | 404 | `VIEW_NOT_FOUND` | The view does not exist |
 | 404 | `JOB_NOT_FOUND` | The bulk job does not exist |
 | 404 | `AUDIT_LOG_NOT_FOUND` | The audit log entry does not exist |
+| 401 | `UNAUTHENTICATED` | Authentication is enforced and the request presented no valid secret — send `Authorization: Bearer <secret>`. Only answered when a master secret is injected; see [Connection secrets](#connection-secrets) |
+| 403 | `FORBIDDEN` | The secret is recognized but may not do this — it is confined to another project, or the route requires the master secret |
 | 404 | `NOT_FOUND` | Another addressable resource (entity set, policy…) does not exist |
 | 409 | `DUPLICATE_NAME` | Creating a table/column under a name that is taken |
 | 409 | `DUPLICATE_SLUG` | Creating a project under a slug that is taken |
 | 409 | `SCHEMA_VERSION_CONFLICT` | An optimistic schema update lost the race |
 | 409 | `LOCK_ACQUISITION_FAILED` | A concurrent schema operation holds the lock — retry |
 | 500 | `INTERNAL_ERROR` | Our defect, logged on the server — never your request's fault |
+| 503 | `SECRETS_NOT_CONFIGURED` | A secret-management route was called on a service that has no master secret injected — there is no caller it could tell apart, so it declines rather than issuing credentials to anyone who reaches the port |

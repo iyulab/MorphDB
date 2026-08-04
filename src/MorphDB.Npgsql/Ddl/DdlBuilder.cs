@@ -938,6 +938,21 @@ public static class DdlBuilder
             CREATE INDEX IF NOT EXISTS idx_morph_views_project ON morphdb._morph_views(project_id);
             CREATE INDEX IF NOT EXISTS idx_morph_view_columns_view ON morphdb._morph_view_columns(view_id);
 
+            -- Connection secrets: the position a relational database fills with a user and a
+            -- password. Deliberately NOT named _morph_api_keys -- the pre-bootstrap migration drops
+            -- that name on every start, so reusing it would silently empty this table at each boot.
+            CREATE TABLE IF NOT EXISTS morphdb._morph_secrets (
+                secret_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                name VARCHAR(255) NOT NULL,
+                secret_hash CHAR(64) NOT NULL UNIQUE,
+                role VARCHAR(64) NOT NULL,
+                project_id UUID,
+                is_active BOOLEAN NOT NULL DEFAULT true,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                revoked_at TIMESTAMPTZ
+            );
+            CREATE INDEX IF NOT EXISTS idx_morph_secrets_active ON morphdb._morph_secrets(secret_hash) WHERE is_active = true;
+
             -- Functions
             CREATE OR REPLACE FUNCTION morphdb.notify_schema_change()
             RETURNS TRIGGER AS $$
