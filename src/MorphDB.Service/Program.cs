@@ -282,10 +282,8 @@ try
     app.UseAuditLogging(); // Audit logging captures all requests including rate-limited ones
 
     app.MapControllers();
-    app.MapGraphQL().WithOptions(new HotChocolate.AspNetCore.GraphQLServerOptions
-    {
-        Tool = { Enable = app.Environment.IsDevelopment() }
-    });
+    app.MapGraphQL().WithOptions(options =>
+        options.Tool.Enable = app.Environment.IsDevelopment());
 
     // Health check endpoints
     app.MapHealthChecks("/health", new HealthCheckOptions

@@ -43,8 +43,17 @@ public class GraphQlWriteContractTests
         response.StatusCode.Should().Be(HttpStatusCode.OK,
             "mutation-level failures are reported in the payload, not as transport errors");
 
-        var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        return document.RootElement.Clone();
+        var payload = await response.Content.ReadAsStringAsync();
+        var document = JsonDocument.Parse(payload);
+        var root = document.RootElement.Clone();
+
+        // A request-level failure (a schema or coercion error) leaves `data` null, and every
+        // assertion below then dies reading a property off null — which says nothing about what
+        // went wrong. Report what the server said instead.
+        root.TryGetProperty("errors", out var errors).Should().BeFalse(
+            $"the mutation must reach the resolver to say anything about the write: {errors}");
+
+        return root;
     }
 
     private const string CreateRecordMutation = """

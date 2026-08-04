@@ -11,9 +11,10 @@
     <!-- Data Access -->
     <PackageVersion Include="Dapper" Version="2.1.79" />
     <!-- API Frameworks -->
-    <!-- HotChocolate 15.1.14+ closes GHSA-qr3m-xw4c-jqw3 (transitive HotChocolate.Language) -->
-    <PackageVersion Include="HotChocolate.AspNetCore" Version="15.1.17" />
-    <PackageVersion Include="HotChocolate.Data" Version="15.1.17" />
+    <!-- 16.x: Any carries a parsed JSON value in both directions (see GraphQlAny). 15.1.14+ had
+         closed GHSA-qr3m-xw4c-jqw3 in the transitive HotChocolate.Language; 16 carries it forward. -->
+    <PackageVersion Include="HotChocolate.AspNetCore" Version="16.5.1" />
+    <PackageVersion Include="HotChocolate.Data" Version="16.5.1" />
     <PackageVersion Include="Microsoft.AspNetCore.OData" Version="9.5.0" />
     <!-- Swashbuckle 10.2.1+ pulls Microsoft.OpenApi 2.7.5, closing GHSA-v5pm-xwqc-g5wc -->
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.2.3" />

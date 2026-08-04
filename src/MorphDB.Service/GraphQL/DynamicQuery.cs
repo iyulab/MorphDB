@@ -1,3 +1,4 @@
+using System.Text.Json;
 using HotChocolate;
 using HotChocolate.Types;
 using MorphDB.Core.Abstractions;
@@ -251,13 +252,13 @@ public sealed class DynamicQuery
             {
                 Column = f.Column,
                 Operator = ParseOperator(f.Operator),
-                Value = f.Value
+                Value = GraphQlAny.ToRuntimeValue(f.Value)
             }).ToList(),
             Having = having?.Select(h => new HavingCondition
             {
                 Alias = h.Alias,
                 Operator = ParseOperator(h.Operator),
-                Value = h.Value ?? 0
+                Value = GraphQlAny.ToRuntimeValue(h.Value) ?? 0
             }).ToList(),
             OrderBy = orderBy?.Select(o => new AggregationOrderBy
             {
@@ -272,7 +273,7 @@ public sealed class DynamicQuery
 
         return new AggregateResult
         {
-            Data = result.Data,
+            Data = GraphQlAny.FromRows(result.Data),
             TotalGroups = result.TotalGroups,
             Metadata = result.Metadata != null
                 ? new AggregateMetadata
@@ -373,7 +374,7 @@ public sealed class DynamicQuery
         return new RecordNode
         {
             Id = GetRecordId(r),
-            Data = r,
+            Data = GraphQlAny.FromRow(r),
             CreatedAt = r.TryGetValue("_created_at", out var createdAt) && createdAt is DateTimeOffset ca ? ca : null,
             UpdatedAt = r.TryGetValue("_updated_at", out var updatedAt) && updatedAt is DateTimeOffset ua ? ua : null
         };
@@ -465,7 +466,7 @@ public sealed class RecordNode
     public Guid Id { get; init; }
 
     [GraphQLType(typeof(AnyType))]
-    public IDictionary<string, object?> Data { get; init; } = new Dictionary<string, object?>();
+    public JsonElement Data { get; init; }
 
     public DateTimeOffset? CreatedAt { get; init; }
     public DateTimeOffset? UpdatedAt { get; init; }
@@ -532,7 +533,7 @@ public sealed class FilterInput
     /// Value to compare against.
     /// </summary>
     [GraphQLType(typeof(AnyType))]
-    public object? Value { get; init; }
+    public JsonElement Value { get; init; }
 }
 
 /// <summary>
@@ -554,7 +555,7 @@ public sealed class HavingInput
     /// Value to compare against.
     /// </summary>
     [GraphQLType(typeof(AnyType))]
-    public object? Value { get; init; }
+    public JsonElement Value { get; init; }
 }
 
 /// <summary>
@@ -582,7 +583,7 @@ public sealed class AggregateResult
     /// Aggregated data rows.
     /// </summary>
     [GraphQLType(typeof(ListType<AnyType>))]
-    public IReadOnlyList<IDictionary<string, object?>> Data { get; init; } = [];
+    public IReadOnlyList<JsonElement> Data { get; init; } = [];
 
     /// <summary>
     /// Total number of groups (before limit/offset).

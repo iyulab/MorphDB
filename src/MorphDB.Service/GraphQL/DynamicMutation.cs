@@ -21,7 +21,7 @@ public sealed class DynamicMutation
     [GraphQLDescription("Creates a new record in the specified table")]
     public async Task<MutationResult<RecordNode>> CreateRecord(
         string table,
-        [GraphQLType(typeof(AnyType))] IDictionary<string, object?> data,
+        [GraphQLType(typeof(AnyType))] JsonElement data,
         [Service] IWritePipeline writePipeline,
         [Service] IMetadataRepository metadataRepository,
         [Service] IProjectContextAccessor projectAccessor,
@@ -43,7 +43,7 @@ public sealed class DynamicMutation
                 };
             }
 
-            var normalizedData = NormalizeData(data);
+            var normalizedData = GraphQlAny.ToRow(data);
 
             var writeResult = await writePipeline.InsertAsync(
                 projectId, tableMetadata, normalizedData, cancellationToken: cancellationToken);
@@ -91,7 +91,7 @@ public sealed class DynamicMutation
     public async Task<MutationResult<RecordNode>> UpdateRecord(
         string table,
         Guid id,
-        [GraphQLType(typeof(AnyType))] IDictionary<string, object?> data,
+        [GraphQLType(typeof(AnyType))] JsonElement data,
         [Service] IMorphDataService dataService,
         [Service] IWritePipeline writePipeline,
         [Service] IMetadataRepository metadataRepository,
@@ -126,7 +126,7 @@ public sealed class DynamicMutation
                 };
             }
 
-            var normalizedData = NormalizeData(data);
+            var normalizedData = GraphQlAny.ToRow(data);
             var writeResult = await writePipeline.UpdateAsync(
                 projectId, tableMetadata, id, normalizedData, existing, cancellationToken: cancellationToken);
 
@@ -232,7 +232,7 @@ public sealed class DynamicMutation
     [GraphQLDescription("Upserts a record (insert or update based on key columns)")]
     public async Task<MutationResult<RecordNode>> UpsertRecord(
         string table,
-        [GraphQLType(typeof(AnyType))] IDictionary<string, object?> data,
+        [GraphQLType(typeof(AnyType))] JsonElement data,
         string[] keyColumns,
         [Service] IMorphDataService dataService,
         [Service] IProjectContextAccessor projectAccessor,
@@ -242,7 +242,7 @@ public sealed class DynamicMutation
         {
             var projectId = projectAccessor.ProjectId;
 
-            var normalizedData = NormalizeData(data);
+            var normalizedData = GraphQlAny.ToRow(data);
             var result = await dataService.UpsertAsync(projectId, table, normalizedData, keyColumns, cancellationToken);
 
             return new MutationResult<RecordNode>
@@ -279,7 +279,7 @@ public sealed class DynamicMutation
     [GraphQLDescription("Inserts multiple records in a batch")]
     public async Task<MutationResult<IReadOnlyList<RecordNode>>> CreateRecords(
         string table,
-        [GraphQLType(typeof(ListType<AnyType>))] IReadOnlyList<IDictionary<string, object?>> records,
+        [GraphQLType(typeof(ListType<AnyType>))] IReadOnlyList<JsonElement> records,
         [Service] IMorphDataService dataService,
         [Service] IProjectContextAccessor projectAccessor,
         CancellationToken cancellationToken)
@@ -288,7 +288,7 @@ public sealed class DynamicMutation
         {
             var projectId = projectAccessor.ProjectId;
 
-            var normalizedRecords = records.Select(NormalizeData).ToList();
+            var normalizedRecords = records.Select(GraphQlAny.ToRow).ToList();
             var results = await dataService.InsertBatchAsync(projectId, table, normalizedRecords, cancellationToken);
 
             var nodes = results.Select(CreateRecordNode).ToList();
@@ -310,51 +310,12 @@ public sealed class DynamicMutation
         }
     }
 
-    private static IDictionary<string, object?> NormalizeData(IDictionary<string, object?> data)
-    {
-        var normalized = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var kvp in data)
-        {
-            normalized[kvp.Key] = NormalizeValue(kvp.Value);
-        }
-
-        return normalized;
-    }
-
-    private static object? NormalizeValue(object? value)
-    {
-        if (value is null)
-            return null;
-
-        if (value is JsonElement element)
-        {
-            return element.ValueKind switch
-            {
-                JsonValueKind.Null => null,
-                JsonValueKind.True => true,
-                JsonValueKind.False => false,
-                JsonValueKind.Number when element.TryGetInt32(out var intVal) => intVal,
-                JsonValueKind.Number when element.TryGetInt64(out var longVal) => longVal,
-                JsonValueKind.Number when element.TryGetDecimal(out var decVal) => decVal,
-                JsonValueKind.String when element.TryGetGuid(out var guidVal) => guidVal,
-                JsonValueKind.String when element.TryGetDateTimeOffset(out var dateVal) => dateVal,
-                JsonValueKind.String => element.GetString(),
-                JsonValueKind.Object => JsonSerializer.Serialize(element),
-                JsonValueKind.Array => JsonSerializer.Serialize(element),
-                _ => element.ToString()
-            };
-        }
-
-        return value;
-    }
-
     private static RecordNode CreateRecordNode(IDictionary<string, object?> r)
     {
         return new RecordNode
         {
             Id = GetRecordId(r),
-            Data = r,
+            Data = GraphQlAny.FromRow(r),
             CreatedAt = r.TryGetValue("_created_at", out var createdAt) && createdAt is DateTimeOffset ca ? ca : null,
             UpdatedAt = r.TryGetValue("_updated_at", out var updatedAt) && updatedAt is DateTimeOffset ua ? ua : null
         };
@@ -365,7 +326,7 @@ public sealed class DynamicMutation
         return new RecordNode
         {
             Id = id,
-            Data = r,
+            Data = GraphQlAny.FromRow(r),
             CreatedAt = r.TryGetValue("_created_at", out var createdAt) && createdAt is DateTimeOffset ca ? ca : null,
             UpdatedAt = r.TryGetValue("_updated_at", out var updatedAt) && updatedAt is DateTimeOffset ua ? ua : null
         };
