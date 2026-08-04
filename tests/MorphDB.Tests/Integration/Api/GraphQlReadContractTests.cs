@@ -48,10 +48,22 @@ public class GraphQlReadContractTests
         var data = gql.GetProperty("data").GetProperty("record");
         data.GetProperty("id").GetGuid().Should().Be(id);
 
-        FieldNames(data.GetProperty("data")).Should().BeEquivalentTo(rest!.Data.Keys,
+        var row = data.GetProperty("data");
+        FieldNames(row).Should().BeEquivalentTo(rest!.Data.Keys,
             "a row is the same row whichever door reports it — the Any scalar must not drop or " +
             "rename the caller's own columns");
-        data.GetProperty("data").GetProperty("label").GetString().Should().Be("read-me");
+        row.GetProperty("label").GetString().Should().Be("read-me");
+
+        // Names agreeing is not values agreeing. A date and a decimal are where two serializers
+        // diverge if they are going to: one writes an offset the other omits, one quotes a number
+        // the other does not. Comparing against the REST reply keeps the claim as wide as stated.
+        foreach (var field in new[] { "score", "amount", "at" })
+        {
+            row.GetProperty(field).GetRawText().Should().Be(
+                JsonSerializer.Serialize(rest.Data[field]),
+                $"both doors must report `{field}` the same way, not merely report it — the raw " +
+                "JSON is compared so a number quoted on one door does not read as a match");
+        }
     }
 
     [Fact]
@@ -109,6 +121,59 @@ public class GraphQlReadContractTests
         rows[0].GetProperty("total").GetInt32().Should().Be(14);
     }
 
+    /// <summary>
+    /// A filter value is optional in the schema — <c>isNull</c> and <c>isNotNull</c> have nothing
+    /// to compare against. The CLR type behind the field decides that nullability, so a change of
+    /// representation can quietly turn an optional input into a required one; nothing else here
+    /// notices, because every other query supplies a value.
+    /// </summary>
+    [Fact]
+    public async Task A_filter_may_omit_its_value()
+    {
+        var (table, _) = await SeedRowAsync("present", 1);
+
+        var gql = await PostGraphQlAsync(
+            """
+            query($table: String!) {
+              aggregate(
+                table: $table,
+                aggregations: [{ function: COUNT, alias: "n" }],
+                filter: [{ column: "label", operator: "isnotnull" }]
+              ) { data }
+            }
+            """,
+            new { table });
+
+        gql.GetProperty("data").GetProperty("aggregate").GetProperty("data")
+            .GetArrayLength().Should().Be(1);
+    }
+
+    /// <summary>
+    /// The schema is the contract a published image carries, and CLR nullability is what decides
+    /// an input field's. Asking the server for the type directly is the only reading that cannot be
+    /// satisfied by a query that happens to supply the field.
+    /// </summary>
+    [Fact]
+    public async Task An_optional_input_field_stays_optional_in_the_schema()
+    {
+        var gql = await PostGraphQlAsync(
+            """
+            query {
+              __type(name: "FilterInput") {
+                inputFields { name type { kind name ofType { kind name } } }
+              }
+            }
+            """,
+            new { });
+
+        var value = gql.GetProperty("data").GetProperty("__type").GetProperty("inputFields")
+            .EnumerateArray().Single(f => f.GetProperty("name").GetString() == "value");
+
+        value.GetProperty("type").GetProperty("kind").GetString().Should().NotBe("NON_NULL",
+            "a filter value is optional — isNull and isNotNull have nothing to compare against, and " +
+            "making it required would break every stored query that leaves it out");
+    }
+
     private async Task<JsonElement> PostGraphQlAsync(string query, object variables)
     {
         var response = await _client.PostAsJsonAsync("/graphql", new { query, variables });
@@ -137,7 +202,9 @@ public class GraphQlReadContractTests
             Columns =
             [
                 new CreateColumnApiRequest { Name = "label", Type = "text", Nullable = true },
-                new CreateColumnApiRequest { Name = "score", Type = "integer", Nullable = true }
+                new CreateColumnApiRequest { Name = "score", Type = "integer", Nullable = true },
+                new CreateColumnApiRequest { Name = "amount", Type = "decimal", Nullable = true },
+                new CreateColumnApiRequest { Name = "at", Type = "datetime", Nullable = true }
             ]
         });
         created.EnsureSuccessStatusCode();
@@ -147,8 +214,13 @@ public class GraphQlReadContractTests
 
     private async Task<Guid> InsertAsync(string table, string label, int score)
     {
-        var response = await _client.PostAsJsonAsync($"/api/data/{table}",
-            new Dictionary<string, object?> { ["label"] = label, ["score"] = score });
+        var response = await _client.PostAsJsonAsync($"/api/data/{table}", new Dictionary<string, object?>
+        {
+            ["label"] = label,
+            ["score"] = score,
+            ["amount"] = 12.75m,
+            ["at"] = "2026-08-04T09:30:00Z"
+        });
         response.StatusCode.Should().Be(HttpStatusCode.Created,
             await response.Content.ReadAsStringAsync());
         return (await response.Content.ReadFromJsonAsync<DataRecordResponse>())!.Id;
