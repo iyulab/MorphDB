@@ -1448,6 +1448,12 @@ public sealed record ProjectSettingsApiModel
     public string? DefaultLocale { get; init; }
     public string? Timezone { get; init; }
     public bool EnableAuditLog { get; init; } = true;
+
+    /// <summary>
+    /// Days of audit history to keep. Omit or null to keep everything.
+    /// </summary>
+    public int? AuditLogRetentionDays { get; init; }
+
     public Dictionary<string, string>? Metadata { get; init; }
 
     public static ProjectSettingsApiModel? FromModel(ProjectSettings? settings)
@@ -1459,6 +1465,7 @@ public sealed record ProjectSettingsApiModel
             DefaultLocale = settings.DefaultLocale,
             Timezone = settings.Timezone,
             EnableAuditLog = settings.EnableAuditLog,
+            AuditLogRetentionDays = settings.AuditLogRetentionDays,
             Metadata = settings.Metadata
         };
     }
@@ -1468,6 +1475,7 @@ public sealed record ProjectSettingsApiModel
         DefaultLocale = DefaultLocale,
         Timezone = Timezone,
         EnableAuditLog = EnableAuditLog,
+        AuditLogRetentionDays = AuditLogRetentionDays,
         Metadata = Metadata
     };
 }

@@ -68,6 +68,21 @@ public class ProjectSettingsCompatibilityTests
     }
 
     /// <summary>
+    /// A field added after a row was written must read as absent, not as a value. Audit retention
+    /// is the case that makes this load-bearing rather than tidy: every project provisioned before
+    /// the setting existed has no key for it, and a default that read as a window would start
+    /// deleting their history the moment the setting shipped.
+    /// </summary>
+    [Fact]
+    public void Settings_WrittenBeforeRetentionExisted_ShouldReadAsNoWindow()
+    {
+        var settings = ProjectSettingsColumn.Deserialize(SettingsWrittenBeforeQuotaRemoval)!;
+
+        settings.AuditLogRetentionDays.Should().BeNull(
+            "a project that never asked for a retention window keeps everything");
+    }
+
+    /// <summary>
     /// Reading an old row and writing it back must not carry the removed keys forward. Serialization is
     /// how the settings column is rewritten on update, so a re-save is where the stale keys drop out.
     /// </summary>

@@ -19,6 +19,7 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
     private readonly NpgsqlDataSource _dataSource;
     private readonly ISchemaNameResolver _schemaNameResolver;
     private readonly IPiiMaskingService _piiMaskingService;
+    private readonly IProjectRepository _projectRepository;
     private readonly ILogger<PostgresAuditService> _logger;
     private readonly Channel<AuditEvent> _eventQueue;
     private readonly Task _processorTask;
@@ -31,11 +32,13 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
         NpgsqlDataSource dataSource,
         ISchemaNameResolver schemaNameResolver,
         IPiiMaskingService piiMaskingService,
+        IProjectRepository projectRepository,
         ILogger<PostgresAuditService> logger)
     {
         _dataSource = dataSource;
         _schemaNameResolver = schemaNameResolver;
         _piiMaskingService = piiMaskingService;
+        _projectRepository = projectRepository;
         _logger = logger;
 
         _eventQueue = Channel.CreateBounded<AuditEvent>(new BoundedChannelOptions(MaxQueueSize)
@@ -316,6 +319,40 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
         };
     }
 
+    /// <inheritdoc />
+    public async Task<int> ApplyRetentionAsync(
+        Guid projectId,
+        CancellationToken cancellationToken = default)
+    {
+        var project = await _projectRepository.GetByIdAsync(projectId, cancellationToken);
+        var retentionDays = project?.Settings?.AuditLogRetentionDays;
+
+        // No window means keep everything. This is checked before any statement is issued so a
+        // project that never asked for retention is never touched by it.
+        if (retentionDays is not > 0)
+        {
+            return 0;
+        }
+
+        var schemaNames = _schemaNameResolver.GetSchemaNames(projectId);
+        var cutoff = DateTimeOffset.UtcNow.AddDays(-retentionDays.Value);
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        var removed = await connection.ExecuteAsync(
+            $"""
+            DELETE FROM {QuoteIdentifier(schemaNames.SystemSchema)}."_audit_logs"
+            WHERE "timestamp" < @cutoff
+            """,
+            new { cutoff });
+
+        if (removed > 0)
+        {
+            LogRetentionApplied(_logger, removed, projectId, retentionDays.Value);
+        }
+
+        return removed;
+    }
+
     private async Task ProcessEventsAsync(CancellationToken cancellationToken)
     {
         var batch = new List<AuditEvent>(MaxBatchSize);
@@ -562,4 +599,9 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
 
     [LoggerMessage(LogLevel.Error, "Failed to write {Count} audit events for project {ProjectId}")]
     private static partial void LogWriteError(ILogger logger, Guid projectId, int count, Exception exception);
+
+    [LoggerMessage(LogLevel.Information,
+        "Removed {Count} audit entries for project {ProjectId} past its {RetentionDays}-day window")]
+    private static partial void LogRetentionApplied(
+        ILogger logger, int count, Guid projectId, int retentionDays);
 }

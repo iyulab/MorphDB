@@ -57,6 +57,21 @@ public interface IAuditService
         DateTimeOffset? fromDate = null,
         DateTimeOffset? toDate = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Removes audit entries older than the project's retention window and reports how many were
+    /// removed. A project without a configured window keeps everything and nothing is removed.
+    /// </summary>
+    /// <remarks>
+    /// Retention is applied here rather than exposed as a "delete old entries" call, because a
+    /// caller cannot reach the audit table and must not have to ask for its upkeep.
+    /// </remarks>
+    /// <param name="projectId">The project ID.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The number of entries removed.</returns>
+    Task<int> ApplyRetentionAsync(
+        Guid projectId,
+        CancellationToken cancellationToken = default);
 }
 
 /// <summary>

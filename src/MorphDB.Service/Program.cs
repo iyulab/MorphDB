@@ -194,6 +194,13 @@ try
     builder.Services.Configure<RateLimitConfig>(builder.Configuration.GetSection("RateLimiting"));
     builder.Services.AddSingleton<IRateLimiter, MemoryRateLimiter>();
 
+    // Apply each project's audit retention window. Keeping the audit table within its declared
+    // size is this server's obligation — the caller has no path to that table.
+    var auditRetentionOptions = new AuditRetentionOptions();
+    builder.Configuration.GetSection("AuditRetention").Bind(auditRetentionOptions);
+    builder.Services.AddSingleton(auditRetentionOptions);
+    builder.Services.AddHostedService<AuditRetentionService>();
+
     // Add graceful shutdown with request draining (Phase 24: Production Hardening)
     builder.Services.Configure<GracefulShutdownOptions>(builder.Configuration.GetSection("GracefulShutdown"));
     builder.Services.AddSingleton<GracefulShutdownService>();

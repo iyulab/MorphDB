@@ -77,6 +77,17 @@ public sealed class ProjectSettings
     public bool EnableAuditLog { get; init; } = true;
 
     /// <summary>
+    /// How many days of audit history the project keeps. Entries older than this are removed by
+    /// the database itself — a store that grows without bound would otherwise make its own upkeep
+    /// the caller's problem, and the caller has no way to reach the table.
+    /// <para>
+    /// Null, the default, keeps everything: a project that has not asked for a retention window
+    /// must not silently start losing history when this setting is introduced.
+    /// </para>
+    /// </summary>
+    public int? AuditLogRetentionDays { get; init; }
+
+    /// <summary>
     /// Custom metadata/tags for the project.
     /// </summary>
     public Dictionary<string, string>? Metadata { get; init; }

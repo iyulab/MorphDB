@@ -660,6 +660,25 @@ applying is worse than an error.
 
 ---
 
+## Audit retention
+
+A project decides how much of its own audit history it keeps, through its settings:
+
+```http
+POST /api/projects
+{ "name": "orders", "settings": { "auditLogRetentionDays": 30 } }
+```
+
+Entries older than the window are removed by the server on a recurring sweep — the audit table is
+not reachable from the API, so keeping it within its declared size is the server's obligation
+rather than something to ask for. The sweep interval is a deployment setting
+(`AuditRetention:SweepInterval`, one hour by default); the window is per project.
+
+**Omit the field, or set it to null, and nothing is removed.** A project that has not asked for a
+window keeps everything, so introducing the setting does not start deleting history anywhere.
+
+---
+
 ## Health Checks
 
 ```http
