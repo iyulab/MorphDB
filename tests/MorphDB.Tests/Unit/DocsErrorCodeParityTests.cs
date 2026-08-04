@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+using MorphDB.Tests.Fixtures;
 
 namespace MorphDB.Tests.Unit;
 
@@ -10,8 +10,14 @@ namespace MorphDB.Tests.Unit;
 /// below is the audited inventory of every envelope-code production site: the typed exceptions
 /// (<c>MorphDbException</c> subtypes + <c>GlobalExceptionHandler</c> mappings), the write-failure
 /// funnel (<c>WriteFailure.CodeFor</c>), and the controllers' inline envelopes.
+/// <para>
+/// This half compares two written lists and can only ever say they agree. Whether a response
+/// carries a code at all — and whether the code it carries is one of these — is the other half's
+/// question, in <c>ErrorEnvelopeCodeContractTests</c>. An inventory kept by hand drifts, and a
+/// gate that only reads inventories drifts with it.
+/// </para>
 /// </summary>
-public partial class DocsErrorCodeParityTests
+public class DocsErrorCodeParityTests
 {
     private static readonly IReadOnlySet<string> ServerCodes = new HashSet<string>
     {
@@ -25,6 +31,11 @@ public partial class DocsErrorCodeParityTests
         "SECRETS_NOT_CONFIGURED",
         // SchemaException codes with contract weight
         "TABLE_HAS_DEPENDENTS", "INVALID_EXPRESSION",
+        // SchemaException / ValidationException codes the schema routes pass through unchanged —
+        // the controllers answer with ex.ErrorCode rather than flattening it, so these reach the
+        // wire whether the handler or an action's catch answers
+        "INVALID_NAME", "RESERVED_NAME", "SYSTEM_COLUMN", "UNSAFE_TYPE_CAST", "INVALID_OPERATION",
+        "DDL_EXECUTION_FAILED", "BATCH_DDL_FAILED", "INDEX_NOT_FOUND", "RELATION_NOT_FOUND",
         // Write pipeline funnel (WriteFailure.CodeFor)
         "UNKNOWN_COLUMN",
         // Controllers' inline envelopes
@@ -32,13 +43,13 @@ public partial class DocsErrorCodeParityTests
         "EMPTY_BATCH", "EMPTY_DATA", "EMPTY_TRANSACTION", "EMPTY_RECORD_IDS",
         "MISSING_KEY_COLUMNS", "FILTER_REQUIRED", "AGGREGATION_REQUIRED",
         "JOB_NOT_FOUND", "JOB_NOT_COMPLETED", "AUDIT_LOG_NOT_FOUND",
-        "VIEW_NOT_FOUND", "NOT_MATERIALIZED",
+        "VIEW_NOT_FOUND", "NOT_MATERIALIZED", "WEBHOOK_NOT_FOUND",
     };
 
     [Fact]
     public void The_docs_errors_table_matches_the_codes_the_server_answers()
     {
-        var documented = DocumentedCodes();
+        var documented = DocsErrorCodes.Documented();
 
         documented.Should().NotBeEmpty("the Errors table must exist and carry codes");
         documented.Should().BeEquivalentTo(ServerCodes,
@@ -52,37 +63,12 @@ public partial class DocsErrorCodeParityTests
     {
         // VALIDATION_FAILED appeared in no documentation and was retired for VALIDATION_ERROR /
         // UNKNOWN_COLUMN (cycle-72). Nothing may quietly reintroduce it.
-        DocumentedCodes().Should().NotContain("VALIDATION_FAILED");
+        DocsErrorCodes.Documented().Should().NotContain("VALIDATION_FAILED");
         ServerCodes.Should().NotContain("VALIDATION_FAILED");
+
+        // VIEW_EXISTS was a catch filter guarding a code nothing threw — the view manager raises
+        // DuplicateNameException, so the clause was unreachable and the code was never on the wire.
+        DocsErrorCodes.Documented().Should().NotContain("VIEW_EXISTS");
+        ServerCodes.Should().NotContain("VIEW_EXISTS");
     }
-
-    private static HashSet<string> DocumentedCodes()
-    {
-        var apiMd = File.ReadAllText(FindDocsFile("API.md"));
-        var errorsSection = apiMd[apiMd.IndexOf("## Errors", StringComparison.Ordinal)..];
-
-        return ErrorTableRow().Matches(errorsSection)
-            .Select(m => m.Groups["code"].Value)
-            .ToHashSet(StringComparer.Ordinal);
-    }
-
-    private static string FindDocsFile(string name)
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            var candidate = Path.Combine(directory.FullName, "docs", name);
-            if (File.Exists(candidate))
-            {
-                return candidate;
-            }
-
-            directory = directory.Parent;
-        }
-
-        throw new FileNotFoundException($"docs/{name} not found above {AppContext.BaseDirectory}");
-    }
-
-    [GeneratedRegex(@"^\|\s*\d{3}\s*\|\s*`(?<code>[A-Z_]+)`\s*\|", RegexOptions.Multiline)]
-    private static partial Regex ErrorTableRow();
 }

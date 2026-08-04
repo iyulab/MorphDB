@@ -67,7 +67,8 @@ public sealed class WebhookController : ControllerBase
             return NotFound(new ErrorResponse
             {
                 Error = "TableNotFound",
-                Message = $"Table '{request.Table}' not found"
+                Message = $"Table '{request.Table}' not found",
+                Code = "TABLE_NOT_FOUND"
             });
         }
 
@@ -111,7 +112,8 @@ public sealed class WebhookController : ControllerBase
             return NotFound(new ErrorResponse
             {
                 Error = "WebhookNotFound",
-                Message = $"Webhook '{webhookId}' not found"
+                Message = $"Webhook '{webhookId}' not found",
+                Code = "WEBHOOK_NOT_FOUND"
             });
         }
 
@@ -150,7 +152,8 @@ public sealed class WebhookController : ControllerBase
             return NotFound(new ErrorResponse
             {
                 Error = "WebhookNotFound",
-                Message = $"Webhook '{webhookId}' not found"
+                Message = $"Webhook '{webhookId}' not found",
+                Code = "WEBHOOK_NOT_FOUND"
             });
         }
 
@@ -185,7 +188,8 @@ public sealed class WebhookController : ControllerBase
             return NotFound(new ErrorResponse
             {
                 Error = "WebhookNotFound",
-                Message = $"Webhook '{webhookId}' not found"
+                Message = $"Webhook '{webhookId}' not found",
+                Code = "WEBHOOK_NOT_FOUND"
             });
         }
 
@@ -213,7 +217,8 @@ public sealed class WebhookController : ControllerBase
             return NotFound(new ErrorResponse
             {
                 Error = "WebhookNotFound",
-                Message = $"Webhook '{webhookId}' not found"
+                Message = $"Webhook '{webhookId}' not found",
+                Code = "WEBHOOK_NOT_FOUND"
             });
         }
 
@@ -243,7 +248,8 @@ public sealed class WebhookController : ControllerBase
             return NotFound(new ErrorResponse
             {
                 Error = "WebhookNotFound",
-                Message = $"Webhook '{webhookId}' not found"
+                Message = $"Webhook '{webhookId}' not found",
+                Code = "WEBHOOK_NOT_FOUND"
             });
         }
 
@@ -356,7 +362,8 @@ public sealed class WebhookController : ControllerBase
             return NotFound(new ErrorResponse
             {
                 Error = "NotFound",
-                Message = $"DLQ message {dlqId} not found"
+                Message = $"DLQ message {dlqId} not found",
+                Code = "NOT_FOUND"
             });
         }
 
@@ -380,7 +387,8 @@ public sealed class WebhookController : ControllerBase
             return NotFound(new ErrorResponse
             {
                 Error = "NotFound",
-                Message = $"DLQ message {dlqId} not found"
+                Message = $"DLQ message {dlqId} not found",
+                Code = "NOT_FOUND"
             });
         }
 
@@ -410,7 +418,8 @@ public sealed class WebhookController : ControllerBase
             return NotFound(new ErrorResponse
             {
                 Error = "NotFound",
-                Message = $"DLQ message {dlqId} not found"
+                Message = $"DLQ message {dlqId} not found",
+                Code = "NOT_FOUND"
             });
         }
 

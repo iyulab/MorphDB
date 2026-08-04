@@ -756,7 +756,17 @@ fixed string — internal exception text never reaches the wire) and retrying ma
 | 400 | `ROW_STATE_NOT_ENABLED` | A row-state operation on a table whose `systemColumns.rowState` is off |
 | 400 | `JOB_NOT_COMPLETED` | Reading the result of a bulk job that has not finished |
 | 400 | `NOT_MATERIALIZED` | Refreshing or reading a view that is not materialized |
+| 400 | `INVALID_NAME` | A table or column name that is empty or over the length limit |
+| 400 | `RESERVED_NAME` | A name in the space the system reserves for itself (a leading underscore on a column, the system prefix on a table) |
+| 400 | `SYSTEM_COLUMN` | An attempt to alter or drop a column the table owns rather than the caller |
+| 400 | `UNSAFE_TYPE_CAST` | A column type change whose existing values cannot be converted — export, reload, and change the declaration instead |
+| 400 | `INVALID_OPERATION` | A schema operation that is well-formed but cannot apply to this target |
+| 400 | `DDL_EXECUTION_FAILED` | The database refused the schema statement — the message carries what it said |
+| 400 | `BATCH_DDL_FAILED` | One operation in a batch DDL request failed; the batch is not applied |
 | 404 | `TABLE_NOT_FOUND` | The table (or the project the request scoped it to) does not exist |
+| 404 | `INDEX_NOT_FOUND` | The index id does not exist |
+| 404 | `RELATION_NOT_FOUND` | The relation id does not exist |
+| 404 | `WEBHOOK_NOT_FOUND` | The webhook id does not exist |
 | 404 | `RECORD_NOT_FOUND` | The record id does not exist in the table |
 | 404 | `PROJECT_NOT_FOUND` | The project id does not exist |
 | 404 | `VIEW_NOT_FOUND` | The view does not exist |

@@ -117,7 +117,8 @@ public sealed class SchemaController : ControllerBase
             return Conflict(new ErrorResponse
             {
                 Error = "DuplicateTable",
-                Message = ex.Message
+                Message = ex.Message,
+                Code = ex.ErrorCode
             });
         }
         catch (ValidationException ex)
@@ -125,7 +126,8 @@ public sealed class SchemaController : ControllerBase
             return BadRequest(new ErrorResponse
             {
                 Error = "ValidationError",
-                Message = ex.Message
+                Message = ex.Message,
+                Code = ex.ErrorCode
             });
         }
         catch (MorphDB.Core.Exceptions.SchemaException ex)
@@ -133,7 +135,8 @@ public sealed class SchemaController : ControllerBase
             return BadRequest(new ErrorResponse
             {
                 Error = "SchemaError",
-                Message = ex.Message
+                Message = ex.Message,
+                Code = ex.ErrorCode
             });
         }
     }
@@ -171,7 +174,8 @@ public sealed class SchemaController : ControllerBase
             return NotFound(new ErrorResponse
             {
                 Error = "TableNotFound",
-                Message = $"Table '{name}' not found"
+                Message = $"Table '{name}' not found",
+                Code = "TABLE_NOT_FOUND"
             });
         }
 
@@ -199,7 +203,8 @@ public sealed class SchemaController : ControllerBase
                 return NotFound(new ErrorResponse
                 {
                     Error = "TableNotFound",
-                    Message = $"Table '{name}' not found"
+                    Message = $"Table '{name}' not found",
+                    Code = "TABLE_NOT_FOUND"
                 });
             }
 
@@ -222,7 +227,8 @@ public sealed class SchemaController : ControllerBase
             return Conflict(new ErrorResponse
             {
                 Error = "ConcurrencyConflict",
-                Message = ex.Message
+                Message = ex.Message,
+                Code = ex.ErrorCode
             });
         }
         catch (NotFoundException ex)
@@ -230,7 +236,8 @@ public sealed class SchemaController : ControllerBase
             return NotFound(new ErrorResponse
             {
                 Error = "TableNotFound",
-                Message = ex.Message
+                Message = ex.Message,
+                Code = ex.ErrorCode
             });
         }
     }
@@ -254,7 +261,8 @@ public sealed class SchemaController : ControllerBase
                 return NotFound(new ErrorResponse
                 {
                     Error = "TableNotFound",
-                    Message = $"Table '{name}' not found"
+                    Message = $"Table '{name}' not found",
+                    Code = "TABLE_NOT_FOUND"
                 });
             }
 
@@ -272,7 +280,8 @@ public sealed class SchemaController : ControllerBase
             return NotFound(new ErrorResponse
             {
                 Error = "TableNotFound",
-                Message = ex.Message
+                Message = ex.Message,
+                Code = ex.ErrorCode
             });
         }
     }
@@ -302,7 +311,8 @@ public sealed class SchemaController : ControllerBase
                 return NotFound(new ErrorResponse
                 {
                     Error = "TableNotFound",
-                    Message = $"Table '{tableName}' not found"
+                    Message = $"Table '{tableName}' not found",
+                    Code = "TABLE_NOT_FOUND"
                 });
             }
 
@@ -337,7 +347,8 @@ public sealed class SchemaController : ControllerBase
             return BadRequest(new ErrorResponse
             {
                 Error = "ValidationError",
-                Message = ex.Message
+                Message = ex.Message,
+                Code = ex.ErrorCode
             });
         }
         catch (DuplicateNameException ex)
@@ -345,7 +356,8 @@ public sealed class SchemaController : ControllerBase
             return Conflict(new ErrorResponse
             {
                 Error = "DuplicateColumn",
-                Message = ex.Message
+                Message = ex.Message,
+                Code = ex.ErrorCode
             });
         }
         catch (MorphDB.Core.Exceptions.SchemaException ex)
@@ -353,7 +365,8 @@ public sealed class SchemaController : ControllerBase
             return BadRequest(new ErrorResponse
             {
                 Error = "SchemaError",
-                Message = ex.Message
+                Message = ex.Message,
+                Code = ex.ErrorCode
             });
         }
     }
@@ -396,7 +409,8 @@ public sealed class SchemaController : ControllerBase
             return NotFound(new ErrorResponse
             {
                 Error = "ColumnNotFound",
-                Message = ex.Message
+                Message = ex.Message,
+                Code = ex.ErrorCode
             });
         }
         catch (ValidationException ex)
@@ -404,7 +418,8 @@ public sealed class SchemaController : ControllerBase
             return BadRequest(new ErrorResponse
             {
                 Error = "ValidationError",
-                Message = ex.Message
+                Message = ex.Message,
+                Code = ex.ErrorCode
             });
         }
         catch (SchemaVersionConflictException ex)
@@ -412,7 +427,8 @@ public sealed class SchemaController : ControllerBase
             return Conflict(new ErrorResponse
             {
                 Error = "ConcurrencyConflict",
-                Message = ex.Message
+                Message = ex.Message,
+                Code = ex.ErrorCode
             });
         }
     }
@@ -439,7 +455,8 @@ public sealed class SchemaController : ControllerBase
             return NotFound(new ErrorResponse
             {
                 Error = "ColumnNotFound",
-                Message = ex.Message
+                Message = ex.Message,
+                Code = ex.ErrorCode
             });
         }
     }
@@ -469,7 +486,8 @@ public sealed class SchemaController : ControllerBase
                 return NotFound(new ErrorResponse
                 {
                     Error = "TableNotFound",
-                    Message = $"Table '{tableName}' not found"
+                    Message = $"Table '{tableName}' not found",
+                    Code = "TABLE_NOT_FOUND"
                 });
             }
 
@@ -483,7 +501,8 @@ public sealed class SchemaController : ControllerBase
                     return BadRequest(new ErrorResponse
                     {
                         Error = "ColumnNotFound",
-                        Message = $"Column '{columnName}' not found in table '{tableName}'"
+                        Message = $"Column '{columnName}' not found in table '{tableName}'",
+                        Code = "COLUMN_NOT_FOUND"
                     });
                 }
                 columnIds.Add(column.ColumnId);
@@ -514,7 +533,8 @@ public sealed class SchemaController : ControllerBase
             return BadRequest(new ErrorResponse
             {
                 Error = "ValidationError",
-                Message = ex.Message
+                Message = ex.Message,
+                Code = ex.ErrorCode
             });
         }
     }
@@ -541,7 +561,8 @@ public sealed class SchemaController : ControllerBase
             return NotFound(new ErrorResponse
             {
                 Error = "IndexNotFound",
-                Message = ex.Message
+                Message = ex.Message,
+                Code = ex.ErrorCode
             });
         }
     }
@@ -570,7 +591,8 @@ public sealed class SchemaController : ControllerBase
                 return BadRequest(new ErrorResponse
                 {
                     Error = "TableNotFound",
-                    Message = $"Source table '{request.SourceTable}' not found"
+                    Message = $"Source table '{request.SourceTable}' not found",
+                    Code = "TABLE_NOT_FOUND"
                 });
             }
 
@@ -580,7 +602,8 @@ public sealed class SchemaController : ControllerBase
                 return BadRequest(new ErrorResponse
                 {
                     Error = "TableNotFound",
-                    Message = $"Target table '{request.TargetTable}' not found"
+                    Message = $"Target table '{request.TargetTable}' not found",
+                    Code = "TABLE_NOT_FOUND"
                 });
             }
 
@@ -590,7 +613,8 @@ public sealed class SchemaController : ControllerBase
                 return BadRequest(new ErrorResponse
                 {
                     Error = "ColumnNotFound",
-                    Message = $"Source column '{request.SourceColumn}' not found in table '{request.SourceTable}'"
+                    Message = $"Source column '{request.SourceColumn}' not found in table '{request.SourceTable}'",
+                    Code = "COLUMN_NOT_FOUND"
                 });
             }
 
@@ -600,7 +624,8 @@ public sealed class SchemaController : ControllerBase
                 return BadRequest(new ErrorResponse
                 {
                     Error = "ColumnNotFound",
-                    Message = $"Target column '{request.TargetColumn}' not found in table '{request.TargetTable}'"
+                    Message = $"Target column '{request.TargetColumn}' not found in table '{request.TargetTable}'",
+                    Code = "COLUMN_NOT_FOUND"
                 });
             }
 
@@ -633,7 +658,8 @@ public sealed class SchemaController : ControllerBase
             return BadRequest(new ErrorResponse
             {
                 Error = "ValidationError",
-                Message = ex.Message
+                Message = ex.Message,
+                Code = ex.ErrorCode
             });
         }
     }
@@ -660,7 +686,8 @@ public sealed class SchemaController : ControllerBase
             return NotFound(new ErrorResponse
             {
                 Error = "RelationNotFound",
-                Message = ex.Message
+                Message = ex.Message,
+                Code = ex.ErrorCode
             });
         }
     }
@@ -697,19 +724,19 @@ public sealed class SchemaController : ControllerBase
         }
         catch (NotFoundException ex)
         {
-            return NotFound(new ErrorResponse { Error = "TableNotFound", Message = ex.Message });
+            return NotFound(new ErrorResponse { Error = "TableNotFound", Message = ex.Message, Code = ex.ErrorCode });
         }
         catch (ValidationException ex)
         {
-            return BadRequest(new ErrorResponse { Error = "ValidationError", Message = ex.Message });
+            return BadRequest(new ErrorResponse { Error = "ValidationError", Message = ex.Message, Code = ex.ErrorCode });
         }
         catch (SchemaVersionConflictException ex)
         {
-            return Conflict(new ErrorResponse { Error = "ConcurrencyConflict", Message = ex.Message });
+            return Conflict(new ErrorResponse { Error = "ConcurrencyConflict", Message = ex.Message, Code = ex.ErrorCode });
         }
         catch (Core.Exceptions.SchemaException ex)
         {
-            return BadRequest(new ErrorResponse { Error = "BatchDdlFailed", Message = ex.Message });
+            return BadRequest(new ErrorResponse { Error = "BatchDdlFailed", Message = ex.Message, Code = ex.ErrorCode });
         }
     }
 
@@ -784,7 +811,8 @@ public sealed class SchemaController : ControllerBase
             return NotFound(new ErrorResponse
             {
                 Error = "TableNotFound",
-                Message = ex.Message
+                Message = ex.Message,
+                Code = ex.ErrorCode
             });
         }
     }

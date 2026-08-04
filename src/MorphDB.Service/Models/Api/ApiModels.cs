@@ -13,7 +13,14 @@ public sealed record ErrorResponse
 {
     public required string Error { get; init; }
     public string? Message { get; init; }
-    public string? Code { get; init; }
+
+    /// <summary>
+    /// The stable identifier documented in <c>docs/API.md</c>. Required, because that document tells
+    /// callers to branch on it: an envelope that leaves it out reads as a code the caller does not
+    /// recognise, and their fallback branch runs for an error the API does document.
+    /// <c>Error</c> is prose that may be reworded; this is the part that may not.
+    /// </summary>
+    public required string Code { get; init; }
     public IDictionary<string, string[]>? Details { get; init; }
 }
 

@@ -80,15 +80,6 @@ public sealed class ViewController : ControllerBase
                 Code = ex.ErrorCode
             });
         }
-        catch (CoreExceptions.SchemaException ex) when (ex.ErrorCode == "VIEW_EXISTS")
-        {
-            return Conflict(new ErrorResponse
-            {
-                Error = "Conflict",
-                Message = ex.Message,
-                Code = ex.ErrorCode
-            });
-        }
         catch (CoreExceptions.NotFoundException ex)
         {
             return NotFound(new ErrorResponse
