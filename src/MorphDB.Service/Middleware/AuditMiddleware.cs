@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using MorphDB.Core.Abstractions;
+using MorphDB.Core.Security;
 
 namespace MorphDB.Service.Middleware;
 
@@ -28,7 +29,10 @@ public sealed class AuditMiddleware
         _logger = logger;
     }
 
-    public async Task InvokeAsync(HttpContext context, IAuditService auditService)
+    public async Task InvokeAsync(
+        HttpContext context,
+        IAuditService auditService,
+        ISecurityContextAccessor securityContextAccessor)
     {
         var path = context.Request.Path.Value ?? "";
 
@@ -60,7 +64,9 @@ public sealed class AuditMiddleware
 
             if (projectId.HasValue)
             {
-                var auditEvent = CreateAuditEvent(context, projectId.Value, sw.ElapsedMilliseconds, exception);
+                var auditEvent = CreateAuditEvent(
+                    context, projectId.Value, sw.ElapsedMilliseconds, exception,
+                    securityContextAccessor.ContextOrNull);
                 await auditService.LogAsync(auditEvent);
             }
         }
@@ -103,7 +109,8 @@ public sealed class AuditMiddleware
         HttpContext context,
         Guid projectId,
         long durationMs,
-        Exception? exception)
+        Exception? exception,
+        SecurityContext? securityContext)
     {
         var request = context.Request;
         var response = context.Response;
@@ -116,10 +123,13 @@ public sealed class AuditMiddleware
         // Determine severity
         var severity = DetermineSeverity(response.StatusCode, exception);
 
-        // The service is unauthenticated by design, so a request carries no actor identity;
-        // who called is the deployment's knowledge, not this layer's.
-        string? actorId = null;
-        string? actorType = null;
+        // Who called is knowable only when a deployment has injected a master secret; without one
+        // the service authenticates nothing and the actor stays the deployment's knowledge, not
+        // this layer's. When it is knowable, what gets recorded is the secret's *id* and its role --
+        // never the secret itself, which exists only as a hash and must not re-enter the database
+        // in readable form through the audit trail.
+        var actorId = securityContext?.IsAuthenticated == true ? securityContext.UserId : null;
+        var actorType = securityContext?.IsAuthenticated == true ? securityContext.Role : null;
 
         // Extract resource info from path
         var (resourceType, resourceId) = ExtractResourceInfo(request.Path.Value ?? "");

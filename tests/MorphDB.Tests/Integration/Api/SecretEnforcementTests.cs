@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -303,5 +305,54 @@ public class SecretEnforcementTests
         var issued = await response.Content.ReadFromJsonAsync<IssuedSecretResponse>();
         issued!.Secret.Should().StartWith("mdb_");
         return issued.Secret;
+    }
+
+    // (5b) The exemption list is only meaningful if the *non*-exempt surfaces are actually covered.
+    // This service is not only controllers: GraphQL and the SignalR hub are mapped separately, and
+    // a middleware that happened to sit in the wrong place could leave either wide open while every
+    // REST test above still passed. The docs now tell consumers that every endpoint but the probes
+    // requires a secret -- these hold that sentence to the two surfaces it is easiest to forget.
+    [Theory]
+    [InlineData("/graphql")]
+    [InlineData("/hubs/morph/negotiate")]
+    public async Task Non_rest_surfaces_are_covered_too(string route)
+    {
+        var response = await EnforcedClient().PostAsync(route, new StringContent("{}", Encoding.UTF8, "application/json"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized,
+            $"{route} is not on the exemption list, so it must answer like every other endpoint -- " +
+            "a boundary that holds on REST and not on GraphQL is not a boundary");
+    }
+
+    // The plaintext is promised to exist "exactly once, in the response that issues it", and only a
+    // hash is stored. Audit logging runs one middleware after authentication and records every
+    // request, so that promise is only true for as long as the audit record stays clear of the
+    // Authorization header and the issuance response body.
+    [Fact]
+    public async Task The_audit_trail_records_who_acted_without_recording_the_credential()
+    {
+        var master = EnforcedClient(MasterSecret);
+        var issued = await IssueAsync(master, "audit-subject", "reader");
+
+        await EnforcedClient(issued).GetAsync("/api/schema/tables");
+
+        var auditService = _fixture.Api.Services.GetRequiredService<IAuditService>();
+        var entries = await auditService.QueryAsync(_fixture.Api.ProjectId, new AuditLogQuery());
+
+        var serialized = JsonSerializer.Serialize(entries);
+
+        serialized.Should().NotContain(issued,
+            "an issued secret written into the audit trail is a credential stored in cleartext, " +
+            "which is the whole thing hashing it at rest was for");
+        serialized.Should().NotContain(MasterSecret,
+            "the master secret rides on every authenticated request as a header");
+
+        // The other half: an audit trail that cannot say who acted is worth less than one that can,
+        // and now that the caller is identified there is no reason to keep recording nobody.
+        var listed = await master.GetFromJsonAsync<List<SecretResponse>>("/api/security/secrets");
+        var subject = listed!.First(s => s.Name == "audit-subject");
+
+        serialized.Should().Contain(subject.SecretId.ToString(),
+            "the secret's id names the actor without being the credential");
     }
 }

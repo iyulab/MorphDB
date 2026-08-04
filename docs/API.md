@@ -576,6 +576,18 @@ Authorization: Bearer mdb_<secret>
 A request with no secret or an unrecognized one is answered `401 UNAUTHENTICATED`. A recognized
 secret that may not do what was asked is answered `403 FORBIDDEN`.
 
+**This includes `/graphql` and `/hubs/morph`** — a boundary that held on REST and not on the other
+two would not be a boundary. It has a consequence worth knowing before you turn enforcement on:
+
+> ⚠️ **Browser WebSocket clients cannot authenticate.** The browser WebSocket API cannot set an
+> `Authorization` header, so a SignalR or GraphQL-subscription client running in a page is refused
+> at `/hubs/morph/negotiate` once a master secret is injected. Server-side and desktop clients set
+> the header normally. If you need browser real-time today, terminate authentication in a proxy in
+> front and leave MorphDB's own enforcement off.
+
+Once a caller is identified, the audit trail records **which secret acted** — its id and role, never
+the secret itself.
+
 ### Issuing secrets
 
 These routes require the **master secret**; an issued secret cannot reach them. Without a master
