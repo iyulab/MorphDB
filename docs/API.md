@@ -686,6 +686,10 @@ PATCH /api/projects/{id}
 { "settings": { "auditLogRetentionDays": 30 } }
 ```
 
+> **`settings` replaces the whole object, it does not merge.** Fields you omit go back to their
+> defaults rather than keeping their stored values, so send the settings you want the project to
+> end up with — read the project first if you are changing one field of several.
+
 ---
 
 ## Health Checks
