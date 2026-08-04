@@ -74,6 +74,53 @@ public class AuditRetentionContractTests
             "a setting the caller cannot read back is one they cannot verify was applied");
     }
 
+    /// <summary>
+    /// The move an operator actually makes: a project has been running without a window, its audit
+    /// history has grown, and they turn retention on afterwards. Nothing about that path is
+    /// exercised by declaring the window up front.
+    /// </summary>
+    [Fact]
+    public async Task Turning_the_window_on_later_applies_to_history_already_written()
+    {
+        var projectId = await CreateProjectAsync(retentionDays: null);
+        await SeedAuditEntryAsync(projectId, age: TimeSpan.FromDays(90));
+        (await ApplyRetentionAsync(projectId)).Should().Be(0, "no window is configured yet");
+
+        var patched = await _client.PatchAsJsonAsync($"/api/projects/{projectId}", new
+        {
+            Settings = new ProjectSettingsApiModel { AuditLogRetentionDays = 30 },
+        });
+
+        patched.StatusCode.Should().Be(HttpStatusCode.OK, await patched.Content.ReadAsStringAsync());
+        (await patched.Content.ReadFromJsonAsync<ProjectApiResponse>())!
+            .Settings!.AuditLogRetentionDays.Should().Be(30);
+
+        (await ApplyRetentionAsync(projectId)).Should().Be(1,
+            "a window set after the fact still governs the history that is already there");
+    }
+
+    /// <summary>
+    /// A window of zero or less cannot be applied, so accepting it would store a value the caller
+    /// reads back while nothing acts on it. Refusing at declaration keeps "absent" as the only way
+    /// to mean keep everything, rather than having two spellings where one is silently inert.
+    /// </summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public async Task A_window_that_cannot_be_applied_is_refused_rather_than_stored(int days)
+    {
+        var response = await _client.PostAsJsonAsync("/api/projects", new
+        {
+            Name = $"ret_{Guid.NewGuid():N}"[..28],
+            Settings = new ProjectSettingsApiModel { AuditLogRetentionDays = days },
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        body!.Code.Should().Be("INVALID_ARGUMENT");
+        body.Message.Should().Contain("auditLogRetentionDays");
+    }
+
     private async Task<Guid> CreateProjectAsync(int? retentionDays)
     {
         var response = await _client.PostAsJsonAsync("/api/projects", new

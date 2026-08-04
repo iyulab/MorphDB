@@ -31,6 +31,7 @@ public sealed partial class ProjectService : IProjectService
         CancellationToken cancellationToken = default)
     {
         LogCreatingProject(_logger, request.Name);
+        ValidateSettings(request.Settings);
 
         // Step 1: Create project record in Provisioning status
         var project = await _projectRepository.CreateAsync(request, cancellationToken);
@@ -105,7 +106,25 @@ public sealed partial class ProjectService : IProjectService
         UpdateProjectRequest request,
         CancellationToken cancellationToken = default)
     {
+        ValidateSettings(request.Settings);
         return await _projectRepository.UpdateAsync(request, cancellationToken);
+    }
+
+    /// <summary>
+    /// Refuses settings the server would otherwise accept and then ignore. A retention window of
+    /// zero or less cannot be applied, so storing it would leave the caller reading back a value
+    /// that governs nothing — the same shape as an option wired to nothing. Absent stays legal and
+    /// means keep everything.
+    /// </summary>
+    private static void ValidateSettings(ProjectSettings? settings)
+    {
+        if (settings?.AuditLogRetentionDays is { } days && days <= 0)
+        {
+            throw new ArgumentException(
+                $"auditLogRetentionDays must be a positive number of days; got {days}. " +
+                "Omit the field to keep audit history indefinitely.",
+                nameof(settings));
+        }
     }
 
     /// <inheritdoc/>

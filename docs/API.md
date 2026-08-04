@@ -676,6 +676,15 @@ rather than something to ask for. The sweep interval is a deployment setting
 
 **Omit the field, or set it to null, and nothing is removed.** A project that has not asked for a
 window keeps everything, so introducing the setting does not start deleting history anywhere.
+Zero or a negative number is refused with `INVALID_ARGUMENT` rather than stored — a window that
+cannot be applied would read back as configured while governing nothing.
+
+The window can be turned on after the fact and governs history already written:
+
+```http
+PATCH /api/projects/{id}
+{ "settings": { "auditLogRetentionDays": 30 } }
+```
 
 ---
 
