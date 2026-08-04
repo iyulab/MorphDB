@@ -3,6 +3,7 @@ using MorphDB.Core.Abstractions;
 using MorphDB.Core.Models;
 using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Repositories;
+using MorphDB.Npgsql.Schema;
 using MorphDB.Npgsql.Security;
 using MorphDB.Npgsql.Services;
 using MorphDB.Tests.Fixtures;
@@ -38,6 +39,7 @@ public class AggregationServiceTests
             lockManager,
             nameHasher,
             changeLogger,
+            new ProjectRepository(fixture.DataSource, new PostgresSchemaNameResolver()),
             schemaOptions);
 
         var securityPolicyService = new SecurityPolicyService(fixture.DataSource);

@@ -20,6 +20,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
     private readonly IAdvisoryLockManager _lockManager;
     private readonly INameHasher _nameHasher;
     private readonly IChangeLogger _changeLogger;
+    private readonly IProjectRepository _projectRepository;
     private readonly SchemaManagerOptions _options;
 
     public PostgresSchemaManager(
@@ -28,6 +29,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         IAdvisoryLockManager lockManager,
         INameHasher nameHasher,
         IChangeLogger changeLogger,
+        IProjectRepository projectRepository,
         SchemaManagerOptions? options = null)
     {
         _dataSource = dataSource;
@@ -35,6 +37,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         _lockManager = lockManager;
         _nameHasher = nameHasher;
         _changeLogger = changeLogger;
+        _projectRepository = projectRepository;
         _options = options ?? new SchemaManagerOptions();
     }
 
@@ -1042,6 +1045,13 @@ public sealed class PostgresSchemaManager : ISchemaManager
         var targetColumn = targetTable.Columns.FirstOrDefault(c => c.ColumnId == request.TargetColumnId)
             ?? throw new ColumnNotFoundException(targetTable.LogicalName, request.TargetColumnId.ToString());
 
+        // A request that does not state enforcement takes the project's standing answer. This is
+        // resolved once, here, and stored on the relation: the physical constraint below is decided
+        // from the same value, and a project that changes its default later must not leave existing
+        // relations claiming an enforcement the database no longer backs.
+        var enforceOnWrite = request.EnforceOnWrite ?? await GetDefaultEnforceOnWriteAsync(
+            request.ProjectId, cancellationToken);
+
         // Acquire advisory lock for both tables
         await using var sourceLock = await _lockManager.AcquireDdlLockAsync(
             $"table:{request.SourceTableId}",
@@ -1094,7 +1104,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
             // Whether the relation is checked on write is the caller's to say: these were pinned
             // to true here, so the request's values were discarded and every relation enforced
             // regardless.
-            EnforceOnWrite = request.EnforceOnWrite,
+            EnforceOnWrite = enforceOnWrite,
             VirtualCascade = request.VirtualCascade,
             IsActive = true
         };
@@ -1104,12 +1114,14 @@ public sealed class PostgresSchemaManager : ISchemaManager
         // 4xx, not to replace the backstop. The option below exists for deployments that manage
         // constraints out of band, not as the recommended shape.
         //
-        // A relation the caller asked not to enforce gets no physical constraint either. Without
+        // A relation that resolves to non-enforcing gets no physical constraint either. Without
         // this clause EnforceOnWrite would only turn off the layer that answers politely: the
-        // database would still reject the write, so the option would appear to do nothing.
+        // database would still reject the write, so the option would appear to do nothing. It reads
+        // the resolved value rather than the request, so a project default reaches both layers or
+        // neither — the same switch that is otherwise only half thrown.
         if (request.RelationType != RelationType.ManyToMany
             && _options.CreatePhysicalForeignKeys
-            && request.EnforceOnWrite)
+            && enforceOnWrite)
         {
             await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
             var constraintName = $"fk_{sourceTable.PhysicalName}_{sourceColumn.PhysicalName}";
@@ -1216,6 +1228,19 @@ public sealed class PostgresSchemaManager : ISchemaManager
         }, cancellationToken);
 
         return junctionTable;
+    }
+
+    /// <summary>
+    /// The project's standing answer for relations that do not declare their own enforcement.
+    /// A project row that does not exist, or has no settings, enforces — the constitution's default
+    /// applies to a project that never said anything, not just to one that said "enforce".
+    /// </summary>
+    private async Task<bool> GetDefaultEnforceOnWriteAsync(
+        Guid projectId,
+        CancellationToken cancellationToken)
+    {
+        var project = await _projectRepository.GetByIdAsync(projectId, cancellationToken);
+        return project?.Settings?.DefaultEnforceOnWrite ?? true;
     }
 
     public async Task DeleteRelationAsync(

@@ -324,7 +324,8 @@ public sealed class CreateRelationRequest
     public string OnDelete { get; init; } = "no-action";
 
     /// <summary>
-    /// Whether writes are validated against this relation. Default: true.
+    /// Whether writes are validated against this relation. Null, the default, takes the project's
+    /// <c>defaultEnforceOnWrite</c> setting, which is true unless the project says otherwise.
     /// <para>
     /// Set false to declare the link without gating writes on it: joins and navigation still see
     /// it, but a row referencing a missing parent is accepted, and no physical constraint is
@@ -333,7 +334,7 @@ public sealed class CreateRelationRequest
     /// reloaded, and enforcing would reject data that is consistent at its source.
     /// </para>
     /// </summary>
-    public bool EnforceOnWrite { get; init; } = true;
+    public bool? EnforceOnWrite { get; init; }
 
     /// <summary>
     /// Whether cascade behaviour is handled by the application layer. Default: true.

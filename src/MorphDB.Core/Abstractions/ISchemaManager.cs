@@ -355,7 +355,9 @@ public sealed record CreateRelationRequest
     public int MaxHierarchyDepth { get; init; } = 100;
 
     /// <summary>
-    /// Whether writes are validated against this relation. Default true.
+    /// Whether writes are validated against this relation. Null, the default, defers to the
+    /// project's <see cref="ProjectSettings.DefaultEnforceOnWrite"/>, which is itself true unless
+    /// the project says otherwise.
     /// <para>
     /// Set false to declare the link without checking it. This is what a caller that rebuilds its
     /// tables wholesale needs: when tables are dropped and reloaded independently, a child can be
@@ -363,8 +365,12 @@ public sealed record CreateRelationRequest
     /// fact consistent at the source. The relation is still recorded, so joins and navigation see
     /// it — it just does not gate writes.
     /// </para>
+    /// <para>
+    /// Whatever this resolves to is stored on the relation and echoed back, so the answer is
+    /// readable afterwards rather than having to be recomputed from settings.
+    /// </para>
     /// </summary>
-    public bool EnforceOnWrite { get; init; } = true;
+    public bool? EnforceOnWrite { get; init; }
 
     /// <summary>
     /// Whether cascade behaviour is handled by the application layer (soft-delete aware).

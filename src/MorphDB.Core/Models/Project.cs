@@ -88,6 +88,19 @@ public sealed class ProjectSettings
     public int? AuditLogRetentionDays { get; init; }
 
     /// <summary>
+    /// Whether relations created without saying so are checked on write. True, the default, keeps
+    /// enforcement as the project's standing answer; a project that rebuilds its tables wholesale
+    /// sets it false once instead of repeating that declaration on every relation.
+    /// <para>
+    /// A relation that states its own <c>EnforceOnWrite</c> overrides this. The value is resolved
+    /// when the relation is created and stored on it, so changing this later leaves existing
+    /// relations as they were — a stored relation must not start or stop claiming enforcement that
+    /// its physical constraints no longer match.
+    /// </para>
+    /// </summary>
+    public bool DefaultEnforceOnWrite { get; init; } = true;
+
+    /// <summary>
     /// Custom metadata/tags for the project.
     /// </summary>
     public Dictionary<string, string>? Metadata { get; init; }

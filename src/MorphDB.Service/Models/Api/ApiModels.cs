@@ -507,12 +507,13 @@ public sealed record CreateRelationApiRequest
     public string OnDelete { get; init; } = "no-action";
 
     /// <summary>
-    /// Whether writes are validated against this relation. Defaults to true.
+    /// Whether writes are validated against this relation. Omit it to take the project's
+    /// <c>defaultEnforceOnWrite</c>, which is true unless the project says otherwise.
     /// Set false to declare the link without gating writes on it — joins and navigation still see
     /// it. Needed by callers that rebuild tables wholesale, where a child can legitimately be
     /// written before its parent has been reloaded.
     /// </summary>
-    public bool EnforceOnWrite { get; init; } = true;
+    public bool? EnforceOnWrite { get; init; }
 
     /// <summary>
     /// Whether cascade behaviour is handled by the application layer. Defaults to true.
@@ -1454,6 +1455,12 @@ public sealed record ProjectSettingsApiModel
     /// </summary>
     public int? AuditLogRetentionDays { get; init; }
 
+    /// <summary>
+    /// Whether relations created without stating <c>enforceOnWrite</c> are checked on write.
+    /// True unless the project says otherwise; a relation that states its own value overrides it.
+    /// </summary>
+    public bool DefaultEnforceOnWrite { get; init; } = true;
+
     public Dictionary<string, string>? Metadata { get; init; }
 
     public static ProjectSettingsApiModel? FromModel(ProjectSettings? settings)
@@ -1466,6 +1473,7 @@ public sealed record ProjectSettingsApiModel
             Timezone = settings.Timezone,
             EnableAuditLog = settings.EnableAuditLog,
             AuditLogRetentionDays = settings.AuditLogRetentionDays,
+            DefaultEnforceOnWrite = settings.DefaultEnforceOnWrite,
             Metadata = settings.Metadata
         };
     }
@@ -1476,6 +1484,7 @@ public sealed record ProjectSettingsApiModel
         Timezone = Timezone,
         EnableAuditLog = EnableAuditLog,
         AuditLogRetentionDays = AuditLogRetentionDays,
+        DefaultEnforceOnWrite = DefaultEnforceOnWrite,
         Metadata = Metadata
     };
 }

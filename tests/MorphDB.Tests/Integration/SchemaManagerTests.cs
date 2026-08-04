@@ -3,6 +3,7 @@ using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
 using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Repositories;
+using MorphDB.Npgsql.Schema;
 using MorphDB.Npgsql.Services;
 using MorphDB.Tests.Fixtures;
 
@@ -37,6 +38,7 @@ public class SchemaManagerTests
             lockManager,
             nameHasher,
             changeLogger,
+            new ProjectRepository(fixture.DataSource, new PostgresSchemaNameResolver()),
             schemaOptions);
     }
 

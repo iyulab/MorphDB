@@ -74,6 +74,24 @@ constraint the database holds. Two flags decide how far that goes, and both defa
 
 Both are echoed back on the response, so you can see what you got rather than what you asked for.
 
+**Omit `enforceOnWrite` and the project answers.** A deployment that rebuilds its tables wholesale
+would otherwise have to repeat `"enforceOnWrite": false` on every relation, and the first one that
+forgets enforces:
+
+```http
+PATCH /api/projects/{id}
+{ "settings": { "defaultEnforceOnWrite": false } }
+```
+
+The default is `true`, so a project that says nothing enforces. A relation that states its own value
+overrides it in either direction. The answer is resolved **when the relation is created** and stored
+on it, so changing the project default later leaves existing relations as they are — the physical
+constraint was decided at the same moment, and a relation cannot start claiming enforcement that
+nothing behind it holds.
+
+> `settings` replaces the whole object rather than merging, so send every setting the project should
+> end up with — see [Audit retention](#audit-retention).
+
 ```yaml
 # Schema Changelog
 GET    /api/schema/tables/{name}/history       # Table change history

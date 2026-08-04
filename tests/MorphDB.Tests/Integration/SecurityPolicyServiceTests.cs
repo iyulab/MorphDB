@@ -5,6 +5,7 @@ using MorphDB.Core.Models;
 using MorphDB.Core.Security;
 using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Repositories;
+using MorphDB.Npgsql.Schema;
 using MorphDB.Npgsql.Security;
 using MorphDB.Npgsql.Services;
 using MorphDB.Tests.Fixtures;
@@ -36,6 +37,7 @@ public class SecurityPolicyServiceTests
             new PostgresAdvisoryLockManager(fixture.DataSource, new AdvisoryLockOptions()),
             new Sha256NameHasher(),
             new ChangeLogger(fixture.DataSource),
+            new ProjectRepository(fixture.DataSource, new PostgresSchemaNameResolver()),
             new SchemaManagerOptions());
     }
 
