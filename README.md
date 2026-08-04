@@ -29,7 +29,7 @@ MorphDB: [Developer] → [Logical Schema] → [Physical DB]
 | Principle | Effect |
 |-----------|--------|
 | **Logical-Physical Separation** | Rename tables/columns without data migration |
-| **Virtual Constraints** | FK, UNIQUE, CHECK at app layer; only PK/Index physical |
+| **Physical Integrity, Logical Names** | Integrity constraints are enforced by the database; only CHECK stays app-layer, because its expressions reference logical names |
 | **Blocked Access = Security** | No direct SQL = No SQL injection, full audit trail |
 | **Encapsulated Complexity** | Simple API, complex internals hidden |
 

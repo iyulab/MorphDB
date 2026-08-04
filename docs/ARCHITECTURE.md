@@ -178,7 +178,7 @@ tie every rename to a constraint rebuild.
 |-----------------|----------|---------|-----------|
 | Primary Key (PK) | ✅ | | Identity and lookups |
 | Index | ✅ | | Query performance |
-| Foreign Key (FK) | ✅ | | Referential integrity under concurrency; dropping a referenced table requires releasing the relation first (`TABLE_HAS_DEPENDENTS`) |
+| Foreign Key (FK) | ✅ | | Referential integrity under concurrency; dropping a referenced table requires releasing the relation first (`TABLE_HAS_DEPENDENTS`). A relation created with `enforceOnWrite=false` gets no physical constraint either — turning off only one of the two layers would leave the database still rejecting the write |
 | NOT NULL | ✅ | | Required values cannot depend on every writer behaving |
 | UNIQUE | ✅ | | Uniqueness is a race unless the database enforces it |
 | DEFAULT | ✅ | | Applied by DDL; pipeline transformers add context-based values on top |

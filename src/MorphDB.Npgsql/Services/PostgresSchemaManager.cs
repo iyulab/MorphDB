@@ -1091,17 +1091,18 @@ public sealed class PostgresSchemaManager : ISchemaManager
             MaxHierarchyDepth = request.MaxHierarchyDepth,
             JunctionTableId = junctionTableId,
             JunctionTableName = junctionTableName,
-            // Virtual FK by default - no physical constraint created. Whether the virtual one is
-            // checked on write is the caller's to say: these were pinned to true here, so the
-            // request's values were discarded and every relation enforced regardless.
+            // Whether the relation is checked on write is the caller's to say: these were pinned
+            // to true here, so the request's values were discarded and every relation enforced
+            // regardless.
             EnforceOnWrite = request.EnforceOnWrite,
             VirtualCascade = request.VirtualCascade,
             IsActive = true
         };
 
-        // For non-ManyToMany, optionally create physical FK (configurable)
-        // Note: Virtual Constraint philosophy recommends NOT creating physical FKs
-        // Physical FKs are kept for backward compatibility but can be disabled
+        // For non-ManyToMany, create the physical FK. Referential integrity is enforced by the
+        // database — app-layer validation runs ahead of it to translate a caller's mistake into a
+        // 4xx, not to replace the backstop. The option below exists for deployments that manage
+        // constraints out of band, not as the recommended shape.
         //
         // A relation the caller asked not to enforce gets no physical constraint either. Without
         // this clause EnforceOnWrite would only turn off the layer that answers politely: the
@@ -1403,9 +1404,12 @@ public sealed class SchemaManagerOptions
     public TimeSpan LockTimeout { get; init; } = TimeSpan.FromSeconds(30);
 
     /// <summary>
-    /// When true, creates physical FK constraints in the database.
-    /// When false (recommended), uses Virtual FK enforcement at application layer.
-    /// Default: true for backward compatibility, but Virtual FK is recommended.
+    /// When true (the default, and the supported shape), referential integrity is enforced by
+    /// physical FK constraints, with app-layer validation ahead of them for clean error reporting.
+    /// Setting this to false leaves only the app-layer check, which cannot hold under concurrency.
+    /// Reachable only when embedding the library — configured through the AddMorphDbNpgsql
+    /// callback; the server does not bind it from configuration, so a hosted instance always
+    /// creates them.
     /// </summary>
     public bool CreatePhysicalForeignKeys { get; init; } = true;
 }

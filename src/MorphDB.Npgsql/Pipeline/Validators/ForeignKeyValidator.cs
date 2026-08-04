@@ -8,8 +8,9 @@ using Npgsql;
 namespace MorphDB.Npgsql.Pipeline.Validators;
 
 /// <summary>
-/// Validates foreign key references at application layer (Virtual FK).
-/// Checks that referenced records exist in target tables.
+/// Checks that referenced records exist in target tables, ahead of the physical FK constraint.
+/// This is the layer that answers a caller's mistake with a clean 4xx; the database constraint
+/// behind it is what actually holds the invariant under concurrency.
 /// </summary>
 public sealed class ForeignKeyValidator : IValidator
 {
