@@ -279,3 +279,100 @@ public sealed class ColumnInfo
     /// </summary>
     public bool IsDerived { get; init; }
 }
+
+/// <summary>
+/// Request to create a relation between two tables (mirrors the server's
+/// <c>CreateRelationApiRequest</c>).
+/// </summary>
+public sealed class CreateRelationRequest
+{
+    /// <summary>
+    /// Relation name.
+    /// </summary>
+    public required string Name { get; init; }
+
+    /// <summary>
+    /// Logical name of the table holding the referencing column.
+    /// </summary>
+    public required string SourceTable { get; init; }
+
+    /// <summary>
+    /// Logical name of the referencing column.
+    /// </summary>
+    public required string SourceColumn { get; init; }
+
+    /// <summary>
+    /// Logical name of the referenced table.
+    /// </summary>
+    public required string TargetTable { get; init; }
+
+    /// <summary>
+    /// Logical name of the referenced column, usually <c>_id</c>.
+    /// </summary>
+    public required string TargetColumn { get; init; }
+
+    /// <summary>
+    /// Relation type: <c>one-to-one</c>, <c>one-to-many</c> or <c>many-to-many</c>.
+    /// Default: <c>one-to-many</c>.
+    /// </summary>
+    public string Type { get; init; } = "one-to-many";
+
+    /// <summary>
+    /// Delete behaviour: <c>no-action</c>, <c>cascade</c>, <c>set-null</c>, <c>set-default</c>
+    /// or <c>restrict</c>. Default: <c>no-action</c>.
+    /// </summary>
+    public string OnDelete { get; init; } = "no-action";
+
+    /// <summary>
+    /// Whether writes are validated against this relation. Default: true.
+    /// <para>
+    /// Set false to declare the link without gating writes on it: joins and navigation still see
+    /// it, but a row referencing a missing parent is accepted, and no physical constraint is
+    /// created either. This is what a caller that rebuilds tables wholesale needs — when tables are
+    /// dropped and reloaded independently, a child can be written before its parent has been
+    /// reloaded, and enforcing would reject data that is consistent at its source.
+    /// </para>
+    /// </summary>
+    public bool EnforceOnWrite { get; init; } = true;
+
+    /// <summary>
+    /// Whether cascade behaviour is handled by the application layer. Default: true.
+    /// </summary>
+    public bool VirtualCascade { get; init; } = true;
+}
+
+/// <summary>
+/// A relation as the server reports it (mirrors the server's <c>RelationApiResponse</c>).
+/// </summary>
+public sealed class RelationInfo
+{
+    /// <summary>
+    /// Relation identifier — what <c>DeleteRelationAsync</c> takes.
+    /// </summary>
+    public Guid Id { get; init; }
+
+    /// <summary>
+    /// Relation name.
+    /// </summary>
+    public required string Name { get; init; }
+
+    /// <summary>
+    /// Relation type.
+    /// </summary>
+    public required string Type { get; init; }
+
+    /// <summary>
+    /// Delete behaviour.
+    /// </summary>
+    public required string OnDelete { get; init; }
+
+    /// <summary>
+    /// Whether writes are validated against this relation, as stored.
+    /// </summary>
+    public bool EnforceOnWrite { get; init; }
+
+    /// <summary>
+    /// Whether cascade behaviour is handled by the application layer, as stored.
+    /// </summary>
+    public bool VirtualCascade { get; init; }
+}

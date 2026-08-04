@@ -96,4 +96,31 @@ public sealed class SchemaClient
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
     }
 
+    /// <summary>
+    /// Creates a relation between two tables.
+    /// </summary>
+    /// <remarks>
+    /// Tables and columns are named logically; the server resolves them, so a caller never handles
+    /// internal identifiers. Set <see cref="CreateRelationRequest.EnforceOnWrite"/> to false to
+    /// declare the link without gating writes on it — what a caller that rebuilds its tables
+    /// wholesale needs, since a child can be written before its parent has been reloaded.
+    /// </remarks>
+    public async Task<RelationInfo> CreateRelationAsync(
+        CreateRelationRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.PostAsJsonAsync("/api/schema/relations", request, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<RelationInfo>(MorphDBJson.Options, cancellationToken)
+            ?? throw new MorphDBException("Failed to deserialize relation response");
+    }
+
+    /// <summary>
+    /// Deletes a relation.
+    /// </summary>
+    public async Task DeleteRelationAsync(Guid relationId, CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.DeleteAsync($"/api/schema/relations/{relationId}", cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
+    }
 }

@@ -168,4 +168,66 @@ public class ClientWireContractTests
         server.Version.Should().Be(5);
         server.ForceCast.Should().BeTrue();
     }
+
+    [Fact]
+    public void ClientCreateRelationRequest_DeserializesInto_ServerRequest()
+    {
+        // The whole point of the non-enforcing option is that it survives the wire. A default-true
+        // bool that silently fails to serialize would round-trip as "enforce", which is the value
+        // a caller rebuilding its tables wholesale specifically cannot use.
+        var client = new ClientModels.CreateRelationRequest
+        {
+            Name = "fk_orders_customer",
+            SourceTable = "orders",
+            SourceColumn = "customer_id",
+            TargetTable = "customers",
+            TargetColumn = "_id",
+            Type = "one-to-many",
+            EnforceOnWrite = false,
+            VirtualCascade = false
+        };
+        var wire = JsonSerializer.Serialize(client, WebOptions);
+
+        var server = JsonSerializer.Deserialize<ServerModels.CreateRelationApiRequest>(wire, WebOptions);
+
+        server.Should().NotBeNull();
+        server!.Name.Should().Be("fk_orders_customer");
+        server.SourceTable.Should().Be("orders");
+        server.SourceColumn.Should().Be("customer_id");
+        server.TargetTable.Should().Be("customers");
+        server.TargetColumn.Should().Be("_id");
+        server.Type.Should().Be("one-to-many");
+        server.EnforceOnWrite.Should().BeFalse();
+        server.VirtualCascade.Should().BeFalse();
+    }
+
+    [Fact]
+    public void ServerRelationResponse_DeserializesInto_ClientRelationInfo()
+    {
+        var server = new ServerModels.RelationApiResponse
+        {
+            Id = Guid.NewGuid(),
+            Name = "fk_orders_customer",
+            SourceTableId = Guid.NewGuid(),
+            SourceColumnId = Guid.NewGuid(),
+            TargetTableId = Guid.NewGuid(),
+            TargetColumnId = Guid.NewGuid(),
+            Type = "one-to-many",
+            OnDelete = "no-action",
+            EnforceOnWrite = false,
+            VirtualCascade = false
+        };
+        var wire = JsonSerializer.Serialize(server, WebOptions);
+
+        var client = JsonSerializer.Deserialize<ClientModels.RelationInfo>(wire, WebOptions);
+
+        client.Should().NotBeNull();
+        client!.Id.Should().Be(server.Id);
+        client.Name.Should().Be("fk_orders_customer");
+        client.Type.Should().Be("one-to-many");
+        client.OnDelete.Should().Be("no-action");
+        client.EnforceOnWrite.Should().BeFalse(
+            "a caller must be able to see the enforcement it actually got, not the one it asked for");
+        client.VirtualCascade.Should().BeFalse();
+    }
 }
