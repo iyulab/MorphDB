@@ -50,6 +50,24 @@ NuGet packages `X.Y.Z` together, so a client and a server that share a version a
 Pin that number rather than `latest` — this is a 0.x line and a minor release may break you. The
 newest one is the newest [tag](https://github.com/iyulab/MorphDB/tags).
 
+### Which package
+
+Three are published, and they answer different questions. **`MorphDB.Client` is the supported entry
+point** — if you are talking to a running server, it is the only one you need.
+
+| Package | For | |
+|---|---|---|
+| **`MorphDB.Client`** | Talking to a MorphDB server over HTTP | **Start here** |
+| `MorphDB.Core` | Embedding MorphDB in your own process — the abstractions, models and exceptions, with no provider | Advanced |
+| `MorphDB.Npgsql` | The PostgreSQL implementation of those abstractions, for the same embedded use | Advanced |
+
+The last two exist because the engine is a library before it is a service: they let a .NET host run
+schema and data operations in-process against its own database, without a server in front. That is a
+narrower path than the client and it is not what the API documentation describes — `docs/API.md` is
+the wire contract, which an embedded host does not use.
+
+All three move together on one version, so an embedded host upgrades as one unit.
+
 Run with PostgreSQL using docker-compose:
 
 ```yaml
@@ -138,6 +156,12 @@ The .NET client takes the same id once, at construction:
 ```csharp
 var client = new MorphDBClient("http://localhost:8080", new MorphDBClientOptions { ProjectId = projectId });
 ```
+
+> **A project's settings are replaced, not merged.** `PATCH /api/projects/{id}` with a `settings`
+> object writes that object whole — anything you leave out goes back to its default rather than
+> keeping its stored value. Read the project first and send the settings you want it to end up with.
+> The client has no project surface, so these calls are made over HTTP either way; the trap is the
+> same one described in [the API reference](docs/API.md#audit-retention).
 
 ### From Source
 
