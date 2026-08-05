@@ -7,9 +7,18 @@ using Microsoft.Extensions.DependencyInjection;
 namespace MorphDB.Service.GraphQL;
 
 /// <summary>
-/// Dynamic GraphQL subscription type for MorphDB real-time updates.
+/// The change-notification half of the GraphQL surface: record created, updated, deleted, and all
+/// three at once. The table is a subscription argument, so this class does not change when a table
+/// does.
+/// <para>
+/// Unlike its query and mutation counterparts this class is registered as a <em>root operation
+/// type</em>, and a root type's CLR name is served in the schema. Hence the explicit name: the
+/// served schema says <c>Query</c>, <c>Mutation</c> and <c>Subscription</c>, and renaming the class
+/// is not allowed to change that.
+/// </para>
 /// </summary>
-public sealed class DynamicSubscription
+[GraphQLName("Subscription")]
+public sealed class MorphDbSubscription
 {
     /// <summary>
     /// Subscribes to record creation events for a specific table.

@@ -16,7 +16,14 @@ public sealed class EdmModelBuildResult
 }
 
 /// <summary>
-/// Builds OData EDM models dynamically from MorphDB table metadata.
+/// Builds OData EDM models from MorphDB table metadata.
+/// <para>
+/// The "dynamic" in the name is literal, and is the difference between this and the GraphQL side:
+/// there the served types are fixed and the table is an argument, whereas here every table becomes
+/// an entity type of its own, so creating a table changes the model this returns. A reader tidying
+/// names for symmetry should leave this one alone — it is the only place where the served shape
+/// actually varies.
+/// </para>
 /// </summary>
 public static class DynamicEdmModelBuilder
 {

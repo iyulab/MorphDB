@@ -14,10 +14,16 @@ using HavingCondition = MorphDB.Core.Abstractions.HavingCondition;
 namespace MorphDB.Service.GraphQL;
 
 /// <summary>
-/// Dynamic GraphQL query type for MorphDB tables.
+/// The read half of the GraphQL surface: schema reads (which tables exist, what one looks like)
+/// and data reads (query, get by id, aggregate).
+/// <para>
+/// Every operation here names its table in an argument rather than in a type, so this class does
+/// not change when a table is created — see <see cref="MorphDbSchemaBuilder"/> for why the schema
+/// is fixed even though what it serves is not.
+/// </para>
 /// </summary>
 [ExtendObjectType(typeof(Query))]
-public sealed class DynamicQuery
+public sealed class MorphDbQuery
 {
     /// <summary>
     /// Lists all tables for the current project.

@@ -41,7 +41,12 @@ public sealed class ProjectClient
     }
 
     /// <summary>
-    /// Lists projects, newest page first.
+    /// Lists projects.
+    /// <para>
+    /// The pagination block's total is the size of the page returned, not the number of projects
+    /// that exist — the server does not count them. Page until a page comes back short rather than
+    /// dividing the total by the page size.
+    /// </para>
     /// </summary>
     /// <param name="status">Lifecycle status to filter by. Null lists every status.</param>
     /// <param name="page">Page number, 1-based.</param>

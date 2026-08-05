@@ -62,7 +62,9 @@ public partial class DocsRouteParityTests
 
     private static IReadOnlyList<string> ServedRoutes()
     {
-        var controllers = typeof(MorphDB.Service.GraphQL.DynamicSchemaBuilder).Assembly
+        // Any public type in the service assembly would do -- this one is only a handle on the
+        // assembly, not a thing the test is about.
+        var controllers = typeof(MorphDB.Service.GraphQL.MorphDbSchemaBuilder).Assembly
             .GetTypes()
             .Where(t => typeof(ControllerBase).IsAssignableFrom(t) && !t.IsAbstract);
 

@@ -10,10 +10,12 @@ using MorphDB.Service.Services;
 namespace MorphDB.Service.GraphQL;
 
 /// <summary>
-/// Dynamic GraphQL mutation type for MorphDB tables.
+/// The write half of the GraphQL surface: create, update, delete, upsert and batch insert of
+/// records. Each operation names its table in an argument, so this class does not change when a
+/// table does.
 /// </summary>
 [ExtendObjectType(typeof(Mutation))]
-public sealed class DynamicMutation
+public sealed class MorphDbMutation
 {
     /// <summary>
     /// Creates a new record in the specified table.
