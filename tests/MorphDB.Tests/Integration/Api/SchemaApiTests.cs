@@ -7,7 +7,6 @@ namespace MorphDB.Tests.Integration.Api;
 
 /// <summary>
 /// Integration tests for Schema API endpoints.
-/// Note: Tests are skipped due to .NET 10 preview PipeWriter.UnflushedBytes compatibility issue.
 /// </summary>
 [Collection("API")]
 [Trait("Category", "ApiIntegration")]
