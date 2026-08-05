@@ -17,6 +17,14 @@ namespace MorphDB.Tests.Integration.Api;
 /// Pinning the empty body also means adopting a catch-all later cannot happen silently: it would be
 /// a change to what callers can assume, and this is where that shows up.
 /// </para>
+/// <para>
+/// This runs in process while the claim is about a deployed service, so it is worth saying why the
+/// two cannot differ here: nothing on this path is conditioned on the environment. There is no
+/// <c>UseStatusCodePages</c> at all — which is why the body is empty — and the exception handler,
+/// though registered unconditionally, never runs because no endpoint threw. What the environment
+/// does decide (CORS, the GraphQL tool) sits elsewhere in the pipeline. Add a status-code-pages
+/// middleware and this fails, which is the point.
+/// </para>
 /// </summary>
 [Collection("API")]
 [Trait("Category", "ApiIntegration")]
