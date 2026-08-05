@@ -30,6 +30,7 @@ public sealed class MorphDBClient : IAsyncDisposable
 
         ConfigureDefaultHeaders();
 
+        Projects = new ProjectClient(_httpClient);
         Schema = new SchemaClient(_httpClient);
         Data = new DataClient(_httpClient);
         Batch = new BatchClient(_httpClient);
@@ -54,6 +55,7 @@ public sealed class MorphDBClient : IAsyncDisposable
 
         ConfigureDefaultHeaders();
 
+        Projects = new ProjectClient(_httpClient);
         Schema = new SchemaClient(_httpClient);
         Data = new DataClient(_httpClient);
         Batch = new BatchClient(_httpClient);
@@ -63,6 +65,16 @@ public sealed class MorphDBClient : IAsyncDisposable
         Views = new ViewClient(_httpClient);
         Realtime = new RealtimeClient(_baseUrl, _options);
     }
+
+    /// <summary>
+    /// Project lifecycle operations.
+    /// <para>
+    /// The one client here that is not scoped to a project: these calls name the project in the
+    /// route and work with or without <see cref="MorphDBClientOptions.ProjectId"/> being set —
+    /// creating the first project necessarily happens before there is an id to send.
+    /// </para>
+    /// </summary>
+    public ProjectClient Projects { get; }
 
     /// <summary>
     /// Schema management operations.

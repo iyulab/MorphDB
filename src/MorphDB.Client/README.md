@@ -19,6 +19,11 @@ var client = new MorphDBClient("http://localhost:5000", new MorphDBClientOptions
     ProjectId = Guid.Parse("your-project-id")
 });
 
+// Projects. Everything else works inside one, so this is where a first run starts —
+// `client.Projects` is the one surface that does not need a project id to have been set.
+var project = await client.Projects.CreateAsync(new CreateProjectRequest { Name = "Catalogue" });
+client.SetProjectId(project.Id);
+
 // Schema Management
 await client.Schema.CreateTableAsync(new CreateTableRequest
 {
@@ -56,6 +61,7 @@ await client.Realtime.SubscribeAsync("users", async (change) =>
 
 ## Features
 
+- **Projects**: Create, read, update and delete projects, and read their storage and health reports
 - **Schema Management**: Create, alter, and drop tables dynamically
 - **Relations**: Declare links between tables, enforced on write or declared only
 - **Data Operations**: CRUD operations with filtering, pagination, and ordering
