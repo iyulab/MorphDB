@@ -27,6 +27,25 @@ Either way, never forward a project id supplied by a browser or an end user — 
 value picks which schemas they read. And in the default shape, run MorphDB where only your
 application can reach it and decide there who may see what.
 
+### Choosing the project id
+
+Creating a project answers with the id it generated, and a caller that can read that answer needs
+nothing else. A deployment often cannot: the manifest that creates the project and the manifest
+that scopes requests to it are written before either runs, so an id that only exists after startup
+has nowhere to be written down.
+
+Say which id instead:
+
+```http
+POST /api/projects
+{ "projectId": "0197c0de-0000-4000-8000-000000000001", "name": "orders" }
+```
+
+The id is then a constant of the deployment rather than something discovered at runtime, and
+re-running the same request answers `409 DUPLICATE_PROJECT_ID` — enough for a start-up step to
+treat "already created" as success. Omit the field and MorphDB generates one, which is what an
+application creating projects on the fly should keep doing.
+
 ## REST API
 
 ### Schema Management (DDL)
@@ -777,6 +796,7 @@ fixed string — internal exception text never reaches the wire) and retrying ma
 | 404 | `NOT_FOUND` | Another addressable resource (entity set, policy…) does not exist |
 | 409 | `DUPLICATE_NAME` | Creating a table/column under a name that is taken |
 | 409 | `DUPLICATE_SLUG` | Creating a project under a slug that is taken |
+| 409 | `DUPLICATE_PROJECT_ID` | Creating a project under an id that is taken — only reachable when the request chooses the id. A deleted project still holds its id |
 | 409 | `SCHEMA_VERSION_CONFLICT` | An optimistic schema update lost the race |
 | 409 | `LOCK_ACQUISITION_FAILED` | A concurrent schema operation holds the lock — retry |
 | 500 | `INTERNAL_ERROR` | Our defect, logged on the server — never your request's fault |

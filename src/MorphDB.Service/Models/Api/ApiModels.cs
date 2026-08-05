@@ -1417,6 +1417,16 @@ public sealed record JobProgressApiResponse
 public sealed record CreateProjectApiRequest
 {
     /// <summary>
+    /// Optional pre-defined project ID. If null, a new GUID is generated.
+    /// <para>
+    /// Supplying it lets a deployment name the project in its own configuration instead of
+    /// discovering the id at runtime: the same value can be written into the manifest that
+    /// creates the project and into the one that scopes requests to it.
+    /// </para>
+    /// </summary>
+    public Guid? ProjectId { get; init; }
+
+    /// <summary>
     /// Human-readable project name.
     /// </summary>
     public required string Name { get; init; }

@@ -84,6 +84,7 @@ public sealed class ProjectController : ControllerBase
         {
             var coreRequest = new CreateProjectRequest
             {
+                ProjectId = request.ProjectId,
                 Name = request.Name,
                 Slug = request.Slug,
                 Settings = request.Settings?.ToModel()
@@ -100,6 +101,15 @@ public sealed class ProjectController : ControllerBase
                 response);
         }
         catch (DuplicateSlugException ex)
+        {
+            return Conflict(new ErrorResponse
+            {
+                Error = ex.ErrorCode,
+                Message = ex.Message,
+                Code = ex.ErrorCode
+            });
+        }
+        catch (DuplicateProjectIdException ex)
         {
             return Conflict(new ErrorResponse
             {

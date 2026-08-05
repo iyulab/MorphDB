@@ -33,6 +33,14 @@ public sealed partial class ProjectRepository : IProjectRepository
         var slug = request.Slug ?? GenerateSlug(request.Name);
         var schemaNames = _schemaNameResolver.GetSchemaNames(projectId);
 
+        // Only a caller that chose the id can collide here. A generated one cannot, so this costs a
+        // query nobody needed until the id became something a request can carry — and without it the
+        // collision surfaces as a primary key violation, which is an internal error to the caller.
+        if (request.ProjectId is not null && await ProjectIdExistsAsync(projectId, cancellationToken))
+        {
+            throw new DuplicateProjectIdException(projectId);
+        }
+
         // Check slug availability
         if (!await IsSlugAvailableAsync(slug, cancellationToken))
         {
@@ -206,6 +214,24 @@ public sealed partial class ProjectRepository : IProjectRepository
         CancellationToken cancellationToken = default)
     {
         await UpdateStatusAsync(projectId, ProjectStatus.Deleted, cancellationToken);
+    }
+
+    /// <summary>
+    /// Whether the id is taken, deleted projects included. Deleting a project sets its status
+    /// rather than removing the row, so an id freed by a delete is still held by the primary key —
+    /// reading availability the way slugs read it would let the insert fail underneath.
+    /// </summary>
+    private async Task<bool> ProjectIdExistsAsync(
+        Guid projectId,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            SELECT EXISTS(SELECT 1 FROM morphdb._morph_projects WHERE project_id = @ProjectId)
+            """;
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+
+        return await connection.ExecuteScalarAsync<bool>(sql, new { ProjectId = projectId });
     }
 
     /// <inheritdoc/>

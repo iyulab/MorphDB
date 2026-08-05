@@ -161,6 +161,25 @@ public class DuplicateSlugException : MorphDbException
 }
 
 /// <summary>
+/// Thrown when a project is created under an id that is already taken.
+/// <para>
+/// Only a caller that chooses the id can reach this. It is a conflict rather than a failed insert
+/// because a deployment that pins its project id will re-run the same creation request, and the
+/// answer it needs is "that one already exists", not an internal error.
+/// </para>
+/// </summary>
+public class DuplicateProjectIdException : MorphDbException
+{
+    public Guid ProjectId { get; }
+
+    public DuplicateProjectIdException(Guid projectId)
+        : base("DUPLICATE_PROJECT_ID", $"Project id '{projectId}' is already in use.")
+    {
+        ProjectId = projectId;
+    }
+}
+
+/// <summary>
 /// Thrown when a resource is not found.
 /// </summary>
 public class NotFoundException : MorphDbException
