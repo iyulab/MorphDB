@@ -325,6 +325,20 @@ DELETE /odata/Customers('id')
 
 **Supported operators**: `$filter`, `$orderby`, `$top`, `$skip`, `$select`, `$expand`, `$count`
 
+**Connecting from a BI tool.** These requests are scoped like every other one — by the
+`X-Project-Id` header, or by the secret the caller authenticates with. Both travel as headers, and
+a tool that offers only a URL and a choice of built-in credential has nowhere to put either. In
+Power Query that means the point-and-click OData dialog cannot reach this surface; its query
+language can, because `OData.Feed` takes a record of headers as its second argument:
+
+```text
+OData.Feed("https://<host>/odata", [#"X-Project-Id" = "<project id>"])
+```
+
+The entity set names in the metadata document are the PascalCase forms of the table names —
+`order_items` is served as `OrderItems` — while the columns keep the names they were declared
+with. Rows carry `_id`, `_created_at` and `_updated_at` alongside them.
+
 ---
 
 ## WebSocket (Real-time)
