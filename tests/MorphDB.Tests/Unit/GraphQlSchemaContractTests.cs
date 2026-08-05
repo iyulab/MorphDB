@@ -53,6 +53,8 @@ public class GraphQlSchemaContractTests
         // once; naming the shape of the mistake is cheaper than rediscovering it.
         sdl.Should().NotContain("MorphDb", "internal class names are not part of the published schema");
         sdl.Should().NotContain("Dynamic", "nor are the ones they replaced");
+        sdl.Should().NotContain("MutationResultOf", "nor are closed generics named after their CLR shape");
+        sdl.Should().NotContain("IReadOnlyList", "and least of all a .NET interface name");
     }
 
     [Fact]
@@ -76,5 +78,18 @@ public class GraphQlSchemaContractTests
         {
             sdl.Should().Contain(field);
         }
+    }
+
+    [Fact]
+    public async Task Every_mutation_answers_with_a_named_envelope()
+    {
+        var sdl = await ServedSchemaAsync();
+
+        // One envelope shape, three payloads. The names are stated at registration rather than
+        // derived from the closed generic, so changing the CLR type that carries them changes
+        // nothing a client sees.
+        sdl.Should().Contain("type RecordMutationResult {");
+        sdl.Should().Contain("type RecordListMutationResult {");
+        sdl.Should().Contain("type BooleanMutationResult {");
     }
 }

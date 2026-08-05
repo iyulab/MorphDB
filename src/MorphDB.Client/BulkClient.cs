@@ -145,6 +145,7 @@ public sealed class BulkClient
         var response = await _httpClient.PostAsJsonAsync(
             $"/api/bulk/{Uri.EscapeDataString(tableName)}/export/csv",
             options ?? new CsvExportOptions(),
+            MorphDBJson.Options,
             cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<ExportJobStatus>(MorphDBJson.Options, cancellationToken)
@@ -162,6 +163,7 @@ public sealed class BulkClient
         var response = await _httpClient.PostAsJsonAsync(
             $"/api/bulk/{Uri.EscapeDataString(tableName)}/export/json",
             options ?? new JsonExportOptions(),
+            MorphDBJson.Options,
             cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<ExportJobStatus>(MorphDBJson.Options, cancellationToken)
@@ -179,6 +181,7 @@ public sealed class BulkClient
         var response = await _httpClient.PostAsJsonAsync(
             $"/api/bulk/{Uri.EscapeDataString(tableName)}/export/xlsx",
             options ?? new XlsxExportOptions(),
+            MorphDBJson.Options,
             cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<ExportJobStatus>(MorphDBJson.Options, cancellationToken)

@@ -24,7 +24,7 @@ public sealed class BatchClient
         BatchRequest request,
         CancellationToken cancellationToken = default)
     {
-        var response = await _httpClient.PostAsJsonAsync("/api/batch/data", request, cancellationToken);
+        var response = await _httpClient.PostAsJsonAsync("/api/batch/data", request, MorphDBJson.Options, cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<BatchResponse>(MorphDBJson.Options, cancellationToken)
             ?? new BatchResponse();
@@ -41,6 +41,7 @@ public sealed class BatchClient
         var response = await _httpClient.PostAsJsonAsync(
             $"/api/batch/data/{Uri.EscapeDataString(tableName)}/insert",
             records,
+            MorphDBJson.Options,
             cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<BatchResponse>(MorphDBJson.Options, cancellationToken)

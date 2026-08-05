@@ -42,7 +42,7 @@ public sealed class SchemaClient
     /// </summary>
     public async Task<TableInfo> CreateTableAsync(CreateTableRequest request, CancellationToken cancellationToken = default)
     {
-        var response = await _httpClient.PostAsJsonAsync("/api/schema/tables", request, cancellationToken);
+        var response = await _httpClient.PostAsJsonAsync("/api/schema/tables", request, MorphDBJson.Options, cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<TableInfo>(MorphDBJson.Options, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize table response");
@@ -65,6 +65,7 @@ public sealed class SchemaClient
         var response = await _httpClient.PostAsJsonAsync(
             $"/api/schema/tables/{Uri.EscapeDataString(tableName)}/columns",
             request,
+            MorphDBJson.Options,
             cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<ColumnInfo>(MorphDBJson.Options, cancellationToken)
@@ -79,6 +80,7 @@ public sealed class SchemaClient
         var response = await _httpClient.PatchAsJsonAsync(
             $"/api/schema/tables/{Uri.EscapeDataString(tableName)}/columns/{Uri.EscapeDataString(columnName)}",
             request,
+            MorphDBJson.Options,
             cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<ColumnInfo>(MorphDBJson.Options, cancellationToken)
@@ -109,7 +111,7 @@ public sealed class SchemaClient
         CreateRelationRequest request,
         CancellationToken cancellationToken = default)
     {
-        var response = await _httpClient.PostAsJsonAsync("/api/schema/relations", request, cancellationToken);
+        var response = await _httpClient.PostAsJsonAsync("/api/schema/relations", request, MorphDBJson.Options, cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<RelationInfo>(MorphDBJson.Options, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize relation response");

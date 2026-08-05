@@ -50,7 +50,7 @@ public sealed class ViewClient
         CreateViewRequest request,
         CancellationToken cancellationToken = default)
     {
-        var response = await _httpClient.PostAsJsonAsync("/api/views", request, cancellationToken);
+        var response = await _httpClient.PostAsJsonAsync("/api/views", request, MorphDBJson.Options, cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<ViewInfo>(MorphDBJson.Options, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize view response");

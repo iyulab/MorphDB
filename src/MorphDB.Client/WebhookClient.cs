@@ -53,7 +53,7 @@ public sealed class WebhookClient
     /// </summary>
     public async Task<WebhookInfo> CreateAsync(CreateWebhookRequest request, CancellationToken cancellationToken = default)
     {
-        var response = await _httpClient.PostAsJsonAsync("/api/webhooks", request, cancellationToken);
+        var response = await _httpClient.PostAsJsonAsync("/api/webhooks", request, MorphDBJson.Options, cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<WebhookInfo>(MorphDBJson.Options, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize webhook response");

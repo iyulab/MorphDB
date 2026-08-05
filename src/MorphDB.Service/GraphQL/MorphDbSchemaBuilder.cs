@@ -1,4 +1,5 @@
 using HotChocolate.Execution.Configuration;
+using HotChocolate.Types;
 
 namespace MorphDB.Service.GraphQL;
 
@@ -27,6 +28,14 @@ public static class MorphDbSchemaBuilder
             // Type extensions (extend root Query and Mutation)
             .AddTypeExtension<MorphDbQuery>()
             .AddTypeExtension<MorphDbMutation>()
+            // Every mutation answers with the same envelope, and left to itself the schema names
+            // each closed generic after its CLR shape -- MutationResultOfRecordNode, and worse,
+            // MutationResultOfIReadOnlyListOfRecordNode, which puts a .NET interface name in a
+            // published schema. Naming them here keeps the wire independent of the CLR types that
+            // happen to implement it, the same way the subscription root does.
+            .AddType(new ObjectType<MutationResult<RecordNode>>(d => d.Name("RecordMutationResult")))
+            .AddType(new ObjectType<MutationResult<IReadOnlyList<RecordNode>>>(d => d.Name("RecordListMutationResult")))
+            .AddType(new ObjectType<MutationResult<bool>>(d => d.Name("BooleanMutationResult")))
             // DataLoaders
             .AddDataLoader<TableByNameDataLoader>()
             .AddDataLoader<TableByIdDataLoader>()

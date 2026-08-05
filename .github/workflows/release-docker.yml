@@ -7,6 +7,12 @@ on:
       - 'Directory.Build.props'
   workflow_dispatch:
 
+# Two runs of this workflow publish the same three tags, and `latest` is whichever finishes last.
+# Serialising them means a re-run cannot overtake the run it was meant to replace.
+concurrency:
+  group: release-docker
+  cancel-in-progress: false
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}

@@ -63,6 +63,7 @@ public sealed class DataClient
         var response = await _httpClient.PostAsJsonAsync(
             $"/api/data/{Uri.EscapeDataString(tableName)}",
             data,
+            MorphDBJson.Options,
             cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<DataRecord>(MorphDBJson.Options, cancellationToken)
@@ -81,6 +82,7 @@ public sealed class DataClient
         var response = await _httpClient.PatchAsJsonAsync(
             $"/api/data/{Uri.EscapeDataString(tableName)}/{id}",
             data,
+            MorphDBJson.Options,
             cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<DataRecord>(MorphDBJson.Options, cancellationToken)
@@ -112,6 +114,7 @@ public sealed class DataClient
         var response = await _httpClient.PutAsJsonAsync(
             $"/api/data/{Uri.EscapeDataString(tableName)}",
             data,
+            MorphDBJson.Options,
             cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<DataRecord>(MorphDBJson.Options, cancellationToken)
@@ -134,6 +137,7 @@ public sealed class DataClient
         var response = await _httpClient.PostAsJsonAsync(
             $"/api/data/{Uri.EscapeDataString(tableName)}/aggregate",
             apiRequest,
+            MorphDBJson.Options,
             cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync<AggregationResponse>(MorphDBJson.Options, cancellationToken)
