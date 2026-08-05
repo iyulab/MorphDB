@@ -100,6 +100,28 @@ public class ProjectIdSelectionTests
         (await again.Content.ReadFromJsonAsync<ErrorResponse>())!.Code.Should().Be("DUPLICATE_PROJECT_ID");
     }
 
+    /// <summary>
+    /// The availability check is a check-then-insert, so concurrent callers can both pass it and one
+    /// of them meets the primary key instead. Answering that one differently would make the contract
+    /// depend on timing — and a start-up step that re-runs is precisely the caller who races.
+    /// </summary>
+    [Fact]
+    public async Task Racing_callers_are_both_answered_in_terms_of_the_id()
+    {
+        var chosen = Guid.NewGuid();
+
+        var responses = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => CreateAsync(chosen)));
+
+        responses.Count(r => r.StatusCode == HttpStatusCode.Created).Should().Be(1,
+            "the id names one project, however many callers asked for it");
+
+        foreach (var refused in responses.Where(r => r.StatusCode != HttpStatusCode.Created))
+        {
+            refused.StatusCode.Should().Be(HttpStatusCode.Conflict, await refused.Content.ReadAsStringAsync());
+            (await refused.Content.ReadFromJsonAsync<ErrorResponse>())!.Code.Should().Be("DUPLICATE_PROJECT_ID");
+        }
+    }
+
     private Task<HttpResponseMessage> CreateAsync(Guid projectId) =>
         _client.PostAsJsonAsync("/api/projects", new { ProjectId = projectId, Name = UniqueName() });
 

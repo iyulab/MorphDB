@@ -43,8 +43,10 @@ POST /api/projects
 
 The id is then a constant of the deployment rather than something discovered at runtime, and
 re-running the same request answers `409 DUPLICATE_PROJECT_ID` — enough for a start-up step to
-treat "already created" as success. Omit the field and MorphDB generates one, which is what an
-application creating projects on the fly should keep doing.
+treat "already created" as success. Two start-up steps racing for the same id get the same answer:
+one is created and every other is a conflict, so the reply does not depend on which of them arrived
+first. Omit the field and MorphDB generates one, which is what an application creating projects on
+the fly should keep doing.
 
 ## REST API
 

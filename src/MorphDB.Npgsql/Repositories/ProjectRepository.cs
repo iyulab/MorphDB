@@ -33,9 +33,10 @@ public sealed partial class ProjectRepository : IProjectRepository
         var slug = request.Slug ?? GenerateSlug(request.Name);
         var schemaNames = _schemaNameResolver.GetSchemaNames(projectId);
 
-        // Only a caller that chose the id can collide here. A generated one cannot, so this costs a
-        // query nobody needed until the id became something a request can carry — and without it the
-        // collision surfaces as a primary key violation, which is an internal error to the caller.
+        // Only a caller that chose the id can collide here — a generated one cannot, so this costs a
+        // query nobody needed until the id became something a request can carry. The catch below
+        // answers the same collision when two callers race for it; this answers the ordinary case
+        // without depending on what the primary key constraint is named.
         if (request.ProjectId is not null && await ProjectIdExistsAsync(projectId, cancellationToken))
         {
             throw new DuplicateProjectIdException(projectId);
@@ -61,18 +62,33 @@ public sealed partial class ProjectRepository : IProjectRepository
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
 
-        var entity = await connection.QuerySingleAsync<ProjectEntity>(sql, new
+        try
         {
-            ProjectId = projectId,
-            request.Name,
-            Slug = slug,
-            schemaNames.SystemSchema,
-            schemaNames.DataSchema,
-            Settings = ProjectSettingsColumn.Serialize(request.Settings),
-            Status = (int)ProjectStatus.Provisioning
-        });
+            var entity = await connection.QuerySingleAsync<ProjectEntity>(sql, new
+            {
+                ProjectId = projectId,
+                request.Name,
+                Slug = slug,
+                schemaNames.SystemSchema,
+                schemaNames.DataSchema,
+                Settings = ProjectSettingsColumn.Serialize(request.Settings),
+                Status = (int)ProjectStatus.Provisioning
+            });
 
-        return MapToProject(entity);
+            return MapToProject(entity);
+        }
+        catch (PostgresException ex) when (IsProjectIdCollision(ex))
+        {
+            // The check above is a check-then-insert, so two callers choosing the same id can both
+            // pass it. The key is what actually decides, and the caller's answer must not depend on
+            // which of the two paths refused them — a start-up step that re-runs is exactly the
+            // caller who can meet the race.
+            //
+            // Only the primary key is read this way. The table is unique on slug and on both schema
+            // names as well, and answering "that id is taken" to a slug collision would name the
+            // wrong field as the one to change.
+            throw new DuplicateProjectIdException(projectId);
+        }
     }
 
     /// <inheritdoc/>
@@ -215,6 +231,16 @@ public sealed partial class ProjectRepository : IProjectRepository
     {
         await UpdateStatusAsync(projectId, ProjectStatus.Deleted, cancellationToken);
     }
+
+    /// <summary>
+    /// Whether a unique violation came from the project id rather than one of the table's other
+    /// unique columns. The constraint name is the only thing that distinguishes them, so a server
+    /// whose primary key was created under a different name would fall through to the generic
+    /// answer — wrong, but not misleading.
+    /// </summary>
+    private static bool IsProjectIdCollision(PostgresException ex) =>
+        ex.SqlState == PostgresErrorCodes.UniqueViolation
+        && ex.ConstraintName?.EndsWith("_pkey", StringComparison.Ordinal) == true;
 
     /// <summary>
     /// Whether the id is taken, deleted projects included. Deleting a project sets its status
