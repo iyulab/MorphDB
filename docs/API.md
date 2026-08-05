@@ -749,6 +749,12 @@ Every error is a JSON envelope — **no path answers a 5xx with an empty body**:
 { "error": "ValidationError", "message": "what went wrong, and what is possible", "code": "VALIDATION_ERROR" }
 ```
 
+**The envelope belongs to routes this API serves.** A URL that matches no route is answered by the
+framework, with `404` and no body at all — there is no code to branch on because nothing here
+handled it. A client that parses every non-2xx as an envelope should treat an empty body as "this
+address is not part of the API", which is a different mistake from any error listed below: the
+others say a request was understood and refused.
+
 `code` is the machine-readable contract; branch on it, not on `message` text. Request envelopes are
 strict: a JSON member a request body does not declare (a typo'd `filters` for `filter`, a `colums`
 for `columns`) answers `400 INVALID_ARGUMENT` naming the member and listing the supported ones —
