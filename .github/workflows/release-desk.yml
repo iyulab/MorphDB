@@ -1,16 +1,13 @@
 name: Release Desktop App
 
+# Only a `desk-v*` tag publishes a release; a manual run builds the installers and leaves them as
+# artifacts. That is decided by the ref, below, so the dispatch takes no input — it used to offer a
+# `publish` toggle that nothing ever read, which is a switch that reports a setting it does not have.
 on:
   push:
     tags:
       - 'desk-v*.*.*'
   workflow_dispatch:
-    inputs:
-      publish:
-        description: 'Publish to GitHub Releases'
-        required: false
-        default: false
-        type: boolean
 
 env:
   NODE_VERSION: '22'
