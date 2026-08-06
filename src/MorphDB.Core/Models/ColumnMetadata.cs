@@ -169,10 +169,25 @@ public enum MorphDataType
     SingleSelect,
     MultiSelect,
     Relation,
+
+    /// <summary>
+    /// Declared, not implemented: no column can be created with this type. A lookup column is built
+    /// through its own configuration rather than by naming a type here, and that path does not use
+    /// this member. Declaring it is refused rather than mapped to something that would store the
+    /// wrong thing.
+    /// </summary>
     Lookup,
+
     Rollup,
     Formula,
+
+    /// <summary>
+    /// Declared, not implemented: no column can be created with this type, and nothing else in the
+    /// service reads it. Unlike <see cref="Lookup"/> there is no other path either. Declaring it is
+    /// refused rather than mapped to something that would store the wrong thing.
+    /// </summary>
     Computed,
+
     Attachment,
     CreatedTime,
     ModifiedTime,

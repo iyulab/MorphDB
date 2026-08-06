@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Models;
+using MorphDB.Npgsql.Infrastructure;
 
 namespace MorphDB.Service.Models.Api;
 
@@ -2063,9 +2064,34 @@ public static class ApiModelExtensions
             _ => Enum.TryParse<MorphDataType>(type, ignoreCase: true, out var result)
                 ? result
                 : throw new ArgumentException(
-                    $"Unknown data type '{type}'. Supported types: text, longtext, integer, biginteger, " +
-                    "decimal, boolean, date, datetime, time, uuid, json, array, email, url, phone.")
+                    $"Unknown data type '{type}'. Supported types: {SupportedDataTypes}.")
         };
+    }
+
+    /// <summary>
+    /// Built by asking the store rather than written out. The hand-written list named fifteen of the
+    /// thirty members the vocabulary has, so a caller who read it and picked from it was reading half
+    /// the answer and every type added since had to be found some other way. Asking also keeps the
+    /// two declared-but-unimplemented members out of it: naming a type here that is refused at
+    /// column creation would send the caller down a path that cannot end.
+    /// </summary>
+    private static readonly string SupportedDataTypes = string.Join(
+        ", ",
+        Enum.GetValues<MorphDataType>()
+            .Where(HasNativeType)
+            .Select(type => type.ToString().ToLowerInvariant()));
+
+    private static bool HasNativeType(MorphDataType type)
+    {
+        try
+        {
+            TypeMapper.ToNativeType(type);
+            return true;
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return false;
+        }
     }
 
     public static IndexType ParseIndexType(string type)

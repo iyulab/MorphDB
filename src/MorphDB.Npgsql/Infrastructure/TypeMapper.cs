@@ -38,6 +38,16 @@ public static class TypeMapper
         MorphDataType.ModifiedTime => "timestamptz",
         MorphDataType.CreatedBy => "uuid",
         MorphDataType.ModifiedBy => "uuid",
+        // Named, and still refused. Calling these unknown told the caller to check for a typo in a
+        // value that is spelled correctly and parses: the vocabulary has these members and the store
+        // has no type to give them. Saying which of the two it is costs one arm and saves the caller
+        // a search that cannot end.
+        MorphDataType.Lookup or MorphDataType.Computed => throw new ArgumentOutOfRangeException(
+            nameof(dataType),
+            dataType,
+            $"'{dataType}' is a declared but unimplemented data type: no column can be created with " +
+            "it. Choose a type the store can materialize."),
+
         _ => throw new ArgumentOutOfRangeException(nameof(dataType), dataType, "Unknown data type")
     };
 
