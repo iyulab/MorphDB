@@ -1,0 +1,234 @@
+schema {
+  query: Query
+  mutation: Mutation
+  subscription: Subscription
+}
+
+type Query {
+  health: String!
+  "Lists all tables for the current project"
+  tables: [TableGraphType!]! @cost(weight: "10")
+  "Gets a specific table by name"
+  table(name: String!): TableGraphType @cost(weight: "10")
+  "Queries records from a table with pagination and filtering"
+  records(
+    table: String!
+    first: Int
+    after: String
+    filter: String
+    orderBy: String
+  ): RecordConnection! @cost(weight: "10")
+  "Gets a single record by ID"
+  record(table: String!, id: UUID!): RecordNode @cost(weight: "10")
+  "Performs aggregation on a table with optional grouping"
+  aggregate(
+    table: String!
+    aggregations: [AggregationInput!]!
+    groupBy: [String!]
+    filter: [FilterInput!]
+    having: [HavingInput!]
+    orderBy: [OrderByInput!]
+    limit: Int
+    offset: Int
+  ): AggregateResult! @cost(weight: "10")
+}
+
+type Mutation {
+  ping: Boolean!
+  "Creates a new record in the specified table"
+  createRecord(table: String!, data: Any): RecordMutationResult!
+    @cost(weight: "10")
+  "Updates an existing record"
+  updateRecord(table: String!, id: UUID!, data: Any): RecordMutationResult!
+    @cost(weight: "10")
+  "Deletes a record"
+  deleteRecord(table: String!, id: UUID!): BooleanMutationResult!
+    @cost(weight: "10")
+  "Upserts a record (insert or update based on key columns)"
+  upsertRecord(table: String!, data: Any, keyColumns: [String!]!): RecordMutationResult!
+    @cost(weight: "10")
+  "Inserts multiple records in a batch"
+  createRecords(table: String!, records: [Any]): RecordListMutationResult!
+    @cost(weight: "10")
+}
+
+type Subscription {
+  "Subscribes to record creation events for a specific table"
+  onRecordCreated(table: String!): RecordChangeEvent!
+  "Subscribes to record update events for a specific table"
+  onRecordUpdated(table: String!): RecordChangeEvent!
+  "Subscribes to record deletion events for a specific table"
+  onRecordDeleted(table: String!): RecordDeleteEvent!
+  "Subscribes to all record changes for a specific table"
+  onRecordChanged(table: String!): RecordChangeEvent!
+}
+
+type AggregateMetadata {
+  rowsScanned: Long!
+  executionTimeMs: Float!
+}
+
+type AggregateResult {
+  data: [Any]
+  totalGroups: Long
+  metadata: AggregateMetadata
+}
+
+type BooleanMutationResult {
+  success: Boolean!
+  data: Boolean!
+  error: String
+  errorCode: String
+}
+
+type ColumnGraphType {
+  name: String!
+  type: String!
+  nullable: Boolean!
+  unique: Boolean!
+  indexed: Boolean!
+}
+
+type IndexGraphType {
+  name: String!
+  type: String!
+  unique: Boolean!
+  columns: [String!]!
+}
+
+type PageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+  totalCount: Int!
+}
+
+type RecordChangeEvent {
+  table: String!
+  changeType: ChangeType!
+  record: RecordNode!
+  timestamp: DateTime!
+}
+
+type RecordConnection {
+  edges: [RecordEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type RecordDeleteEvent {
+  table: String!
+  recordId: UUID!
+  timestamp: DateTime!
+}
+
+type RecordEdge {
+  node: RecordNode!
+  cursor: String!
+}
+
+type RecordListMutationResult {
+  success: Boolean!
+  data: [RecordNode]
+  error: String
+  errorCode: String
+}
+
+type RecordMutationResult {
+  success: Boolean!
+  data: RecordNode
+  error: String
+  errorCode: String
+}
+
+type RecordNode {
+  id: UUID!
+  data: Any
+  createdAt: DateTime
+  updatedAt: DateTime
+}
+
+type RelationGraphType {
+  name: String!
+  type: String!
+  sourceColumn: String!
+  targetTableId: UUID!
+  targetColumnId: UUID!
+}
+
+type TableGraphType {
+  name: String!
+  version: Int!
+  columns: [ColumnGraphType!]!
+  indexes: [IndexGraphType!]!
+  relations: [RelationGraphType!]!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+input AggregationInput {
+  function: AggregateFunction!
+  column: String
+  alias: String!
+  distinct: Boolean
+}
+
+input FilterInput {
+  column: String!
+  operator: String!
+  value: Any
+}
+
+input HavingInput {
+  alias: String!
+  operator: String!
+  value: Any
+}
+
+input OrderByInput {
+  column: String!
+  direction: String
+}
+
+enum AggregateFunction {
+  COUNT
+  SUM
+  AVG
+  MIN
+  MAX
+  COUNT_DISTINCT
+}
+
+enum ChangeType {
+  CREATED
+  UPDATED
+  DELETED
+}
+
+"The `Any` scalar type represents any valid GraphQL value."
+scalar Any @specifiedBy(url: "https://scalars.graphql.org/chillicream/any.html")
+
+"The `DateTime` scalar type represents a date and time with time zone offset information."
+scalar DateTime
+  @specifiedBy(url: "https://scalars.graphql.org/chillicream/date-time.html")
+
+"The `Long` scalar type represents a signed 64-bit integer."
+scalar Long
+  @specifiedBy(url: "https://scalars.graphql.org/chillicream/long.html")
+
+"The `UUID` scalar type represents a Universally Unique Identifier (UUID) as defined by RFC 9562."
+scalar UUID
+  @specifiedBy(url: "https://scalars.graphql.org/chillicream/uuid.html")
+
+"The purpose of the `cost` directive is to define a `weight` for GraphQL types, fields, and arguments. Static analysis can use these weights when calculating the overall cost of a query or response."
+directive @cost(
+  "The `weight` argument defines what value to add to the overall cost for every appearance, or possible appearance, of a type, field, argument, etc."
+  weight: String!
+) on
+  | SCALAR
+  | OBJECT
+  | FIELD_DEFINITION
+  | ARGUMENT_DEFINITION
+  | ENUM
+  | INPUT_FIELD_DEFINITION
