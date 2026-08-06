@@ -76,10 +76,18 @@ jobs:
       - name: Pack
         run: dotnet pack --no-build --configuration Release --output ./nupkgs /p:PackageVersion=${{ steps.version.outputs.version }}
 
+      # A manual run stops publishing here: it builds, tests and packs, but pushes nothing. Every
+      # step from here on writes something that cannot be taken back, against whatever version the
+      # file happens to hold, so without this condition "try it once" and "release it" are the same
+      # act. What otherwise holds a manual run back is --skip-duplicate, and that is idempotence,
+      # not a guard: it means "do not publish the same thing twice", not "do not publish". The day
+      # a new package joins the solution, idempotence has nothing to say about it.
       - name: Push to NuGet.org
+        if: github.event_name == 'push'
         run: dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
 
       - name: Push to GitHub Packages
+        if: github.event_name == 'push'
         run: dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.GITHUB_TOKEN }} --source https://nuget.pkg.github.com/iyulab/index.json --skip-duplicate
 
       # Without this the repository has no record of what was released: packages and images carried
@@ -87,6 +95,7 @@ jobs:
       # a version to pin found one that was several minor releases old. Only this workflow tags —
       # release-docker.yml runs on the same trigger and would race for the same name.
       - name: Tag the released version
+        if: github.event_name == 'push'
         run: |
           TAG="v${{ steps.version.outputs.version }}"
           if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
@@ -103,6 +112,7 @@ jobs:
       # the releases here are complete only because someone remembered every time. This removes
       # the remembering. Same workflow-ownership rule as the tag: only this one publishes.
       - name: Publish the GitHub Release
+        if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
