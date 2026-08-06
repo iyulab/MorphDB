@@ -227,7 +227,7 @@ MorphDB/
 ├── sdk/                    # reference clients, not published -- see each README
 │   ├── typescript/         # TypeScript
 │   └── python/             # Python
-├── desk/                   # Electron desktop app
+├── desk/                   # Electron desktop app -- parked, see desk/README.md
 └── tests/
 ```
 

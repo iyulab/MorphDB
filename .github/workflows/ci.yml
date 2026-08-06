@@ -42,41 +42,12 @@ jobs:
           directory: ./coverage
           fail_ci_if_error: false
 
-  # release-desk.yml runs the same checks, but only on desk-v* tags and manual dispatch — which
-  # meant a red typecheck sat unnoticed at HEAD until the moment someone tried to release (52
-  # errors did exactly that). This job makes every push answer the question the release would ask.
-  desk:
-    runs-on: ubuntu-latest
-
-    defaults:
-      run:
-        working-directory: desk
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-          cache-dependency-path: desk/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      # Critical-level only, deliberately: the remaining highs need major bumps of the electron
-      # toolchain (electron 33→43, vite 5→8) that electron-vite does not yet support — a gate that
-      # is red on day one teaches everyone to ignore it. Tighten to high when those land.
-      - name: Audit production-severity vulnerabilities
-        run: npm audit --audit-level=critical
-
-      - name: TypeScript check
-        run: npm run typecheck
-
-      - name: Test
-        run: npm test
+  # The desktop client's checks live in ci-desk.yml, which runs on changes under desk/ rather than
+  # on every push. They were here so a red typecheck could not sit unnoticed at HEAD, and that is
+  # still what they are for — but the client is parked (desk/README.md), so on a push that does not
+  # touch it these checks were re-answering a question about code nobody changed, and their upkeep
+  # was landing on whoever pushed next. Tying them to desk/ means they cost nothing while it is
+  # parked and are back the moment it is touched.
 
   lint:
     runs-on: ubuntu-latest

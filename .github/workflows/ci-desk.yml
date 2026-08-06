@@ -1,0 +1,55 @@
+name: CI (desktop client)
+
+# Scoped to desk/ on purpose. These checks used to run in ci.yml on every push, which is right for
+# a component under active development and wrong for a parked one: the client ships nothing today
+# (desk/README.md), so a push that never touched it was still paying for a full npm ci — and any
+# drift in the lockfile or the toolchain became the next unrelated push's problem to fix.
+#
+# Tying the trigger to the path makes the cost follow the work. While the client is parked nothing
+# here runs; the first commit that touches desk/ brings the same gate back, unchanged, before that
+# change can land. Reviving the client needs no edit to this file.
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'desk/**'
+      - '.github/workflows/ci-desk.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'desk/**'
+      - '.github/workflows/ci-desk.yml'
+
+jobs:
+  desk:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: desk
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: desk/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Critical-level only, deliberately: the remaining highs need major bumps of the electron
+      # toolchain (electron 33→43, vite 5→8) that electron-vite does not yet support — a gate that
+      # is red on day one teaches everyone to ignore it. Tighten to high when those land.
+      - name: Audit production-severity vulnerabilities
+        run: npm audit --audit-level=critical
+
+      - name: TypeScript check
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test

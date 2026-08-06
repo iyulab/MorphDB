@@ -1,12 +1,22 @@
 name: Release Desktop App
 
-# Only a `desk-v*` tag publishes a release; a manual run builds the installers and leaves them as
-# artifacts. That is decided by the ref, below, so the dispatch takes no input — it used to offer a
-# `publish` toggle that nothing ever read, which is a switch that reports a setting it does not have.
+# The desktop client is parked and this workflow is parked with it (desk/README.md). It kept a
+# `desk-v*` tag trigger for a release that was never cut, which left the repository holding the
+# client as if it were on its way out the door — a workflow that is armed and a component that is
+# not shipping say two different things, and readers believe the workflow.
+#
+# What remains is a manual build: it produces installers as artifacts and publishes nothing, since
+# the publish step below is still gated on a `desk-v*` ref and no such tag exists. Reviving the
+# client means restoring the trigger these four lines replaced:
+#
+#     push:
+#       tags:
+#         - 'desk-v*.*.*'
+#
+# Only a `desk-v*` ref publishes; that is decided by the ref, so the dispatch takes no input — it
+# used to offer a `publish` toggle that nothing ever read, which is a switch that reports a setting
+# it does not have.
 on:
-  push:
-    tags:
-      - 'desk-v*.*.*'
   workflow_dispatch:
 
 env:
