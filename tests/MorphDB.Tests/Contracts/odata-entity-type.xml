@@ -1,0 +1,33 @@
+<EntityType Name="TypeCoverage" xmlns="http://docs.oasis-open.org/odata/ns/edm">
+  <Key>
+    <PropertyRef Name="_id" />
+  </Key>
+  <Property Name="_id" Type="Edm.Guid" Nullable="false" />
+  <Property Name="_created_at" Type="Edm.DateTimeOffset" />
+  <Property Name="_updated_at" Type="Edm.DateTimeOffset" />
+  <Property Name="c_text" Type="Edm.String" Nullable="false" />
+  <Property Name="c_longtext" Type="Edm.String" />
+  <Property Name="c_integer" Type="Edm.Int32" />
+  <Property Name="c_biginteger" Type="Edm.Int64" />
+  <Property Name="c_decimal" Type="Edm.Decimal" Scale="variable" />
+  <Property Name="c_boolean" Type="Edm.Boolean" />
+  <Property Name="c_date" Type="Edm.Date" />
+  <Property Name="c_datetime" Type="Edm.DateTimeOffset" />
+  <Property Name="c_time" Type="Edm.TimeOfDay" />
+  <Property Name="c_uuid" Type="Edm.Guid" />
+  <Property Name="c_json" Type="Edm.String" />
+  <Property Name="c_array" Type="Edm.String" />
+  <Property Name="c_email" Type="Edm.String" />
+  <Property Name="c_url" Type="Edm.String" />
+  <Property Name="c_phone" Type="Edm.String" />
+  <Property Name="c_singleselect" Type="Edm.String" />
+  <Property Name="c_multiselect" Type="Edm.String" />
+  <Property Name="c_relation" Type="Edm.Guid" />
+  <Property Name="c_rollup" Type="Edm.String" />
+  <Property Name="c_formula" Type="Edm.String" />
+  <Property Name="c_attachment" Type="Edm.String" />
+  <Property Name="c_createdtime" Type="Edm.DateTimeOffset" />
+  <Property Name="c_modifiedtime" Type="Edm.DateTimeOffset" />
+  <Property Name="c_createdby" Type="Edm.Guid" />
+  <Property Name="c_modifiedby" Type="Edm.Guid" />
+</EntityType>
