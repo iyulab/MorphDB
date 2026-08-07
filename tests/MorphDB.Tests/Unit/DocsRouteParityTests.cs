@@ -17,6 +17,13 @@ namespace MorphDB.Tests.Unit;
 /// product decision about what belongs in the public surface, and diagnostics endpoints are
 /// deliberately not in <c>API.md</c>.
 /// </para>
+/// <para>
+/// This once read <c>/api</c> only, and a comment here said so. That was accurate about how the
+/// routes are served and wrong about what the gate should cover: the OData controller is a
+/// controller like any other, and while nothing looked at it the documentation acquired a
+/// <c>/$count</c> path segment no route answers. Query options and key syntax are a different
+/// question and are held by <see cref="ODataDocsParityTests"/>.
+/// </para>
 /// </summary>
 public partial class DocsRouteParityTests
 {
@@ -126,7 +133,11 @@ public partial class DocsRouteParityTests
     [GeneratedRegex(@"\{([A-Za-z0-9_]+):[^}]+\}")]
     private static partial Regex RouteConstraint();
 
-    // Only /api routes: /odata and /graphql are served by their own providers, not by controllers.
-    [GeneratedRegex(@"(?<verb>GET|POST|PUT|PATCH|DELETE)\s+(?<path>/api/[A-Za-z0-9{}/_-]*)")]
+    // /api and /odata are both served by controllers, so reflection reaches both. They need
+    // separate character classes rather than one permissive alternative: an OData path carries
+    // '$', '(' and ')', and letting an /api path take those would make the pattern swallow
+    // punctuation from the prose a route is quoted in. /graphql and /hubs are served by their own
+    // providers and have their own gates.
+    [GeneratedRegex(@"(?<verb>GET|POST|PUT|PATCH|DELETE)\s+(?<path>/api/[A-Za-z0-9{}/_-]*|/odata/[A-Za-z0-9{}()$'/_-]*)")]
     private static partial Regex DocumentedRoute();
 }

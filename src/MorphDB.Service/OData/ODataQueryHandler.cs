@@ -315,7 +315,6 @@ public sealed class ODataQueryOptions
     public string? Filter { get; init; }
     public string? OrderBy { get; init; }
     public string? Select { get; init; }
-    public string? Expand { get; init; }
     public int Top { get; init; }
     public int Skip { get; init; }
     public bool Count { get; init; }

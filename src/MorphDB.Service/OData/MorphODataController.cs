@@ -80,7 +80,6 @@ public sealed partial class MorphODataController : ControllerBase
         [FromQuery(Name = "$top")] int? top,
         [FromQuery(Name = "$skip")] int? skip,
         [FromQuery(Name = "$select")] string? select,
-        [FromQuery(Name = "$expand")] string? expand,
         [FromQuery(Name = "$count")] bool count,
         CancellationToken cancellationToken)
     {
@@ -94,7 +93,6 @@ public sealed partial class MorphODataController : ControllerBase
             Top = top ?? 0,
             Skip = skip ?? 0,
             Select = select,
-            Expand = expand,
             Count = count
         };
 
@@ -130,7 +128,6 @@ public sealed partial class MorphODataController : ControllerBase
         string entitySet,
         Guid key,
         [FromQuery(Name = "$select")] string? select,
-        [FromQuery(Name = "$expand")] string? expand,
         CancellationToken cancellationToken)
     {
         var projectId = _projectAccessor.ProjectId;
@@ -138,8 +135,7 @@ public sealed partial class MorphODataController : ControllerBase
 
         var options = new ODataQueryOptions
         {
-            Select = select,
-            Expand = expand
+            Select = select
         };
 
         var entity = await _queryHandler.GetByIdAsync(

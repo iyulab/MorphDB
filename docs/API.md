@@ -512,17 +512,27 @@ Standard OData v4 protocol for enterprise tool integration (Excel, Power BI).
 GET /odata/$metadata
 
 # Queries
-GET /odata/Customers?$filter=grade eq 'VIP'&$orderby=createdAt desc&$top=10
-GET /odata/Customers?$expand=orders&$select=name,email
-GET /odata/Customers/$count
+GET /odata/Customers?$filter=grade eq 'VIP'&$orderby=name desc&$top=10
+GET /odata/Customers?$select=name,email&$skip=20
+GET /odata/Customers?$count=true
 
-# CRUD
+# CRUD — the key is the row's _id, and the metadata document types it as Edm.Guid,
+# so it is written bare rather than quoted
+GET    /odata/Customers(00000000-0000-0000-0000-000000000000)
 POST   /odata/Customers
-PATCH  /odata/Customers('id')
-DELETE /odata/Customers('id')
+PATCH  /odata/Customers(00000000-0000-0000-0000-000000000000)
+DELETE /odata/Customers(00000000-0000-0000-0000-000000000000)
+
+# Batch
+POST /odata/$batch
 ```
 
-**Supported operators**: `$filter`, `$orderby`, `$top`, `$skip`, `$select`, `$expand`, `$count`
+**Supported query options**: `$filter`, `$orderby`, `$top`, `$skip`, `$select`, `$count`
+
+`$count` is a query option, not a path segment: `?$count=true` puts `@odata.count` on the
+collection response, and `/odata/Customers/$count` is not a route. Relations are not navigable
+from this surface — the metadata document declares no navigation properties, so there is nothing
+for `$expand` to reach. Read a related table as its own entity set instead.
 
 **Connecting from a BI tool.** These requests are scoped like every other one — by the
 `X-Project-Id` header, or by the secret the caller authenticates with. Both travel as headers, and
