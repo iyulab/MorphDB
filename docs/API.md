@@ -266,39 +266,238 @@ POST /api/batch/data/customers/insert
 
 **Endpoint**: `/graphql`
 
-Tables automatically generate GraphQL types:
+**The schema is fixed and does not grow a type per table.** A table is named in an *argument* —
+`records(table: "customers")` — and a row travels as the `Any` scalar under `data`, keyed by the
+logical column names the table was declared with. Creating, altering or dropping a table changes
+no part of this schema, which is why a client written against the operations below keeps working
+as the tables beneath it change. There is no `customers` field, no generated `Customer` type, and
+no per-table mutation or subscription.
+
+**Introspection is refused outside the Development environment.** The published image runs with
+`ASPNETCORE_ENVIRONMENT=Production`, so a `__schema` query there answers with `HC0046`
+(`Introspection is not allowed for the current request`) rather than the schema. For those
+deployments this section *is* the schema reference: the operations below are the whole root
+surface, and a contract test holds them to what the server actually serves in both directions.
+
+### Reading the schema
 
 ```graphql
-# Auto-generated from table definition
-type Customer {
-  id: ID!
-  name: String!
-  email: String
-  createdAt: DateTime!
-  orders: [Order!]!  # Relations auto-resolved
-}
-
-# Queries
 query {
-  customer(id: "123") { name, email }
-  customers(filter: { grade: "VIP" }, first: 10) {
-    nodes { id, name }
-    pageInfo { hasNextPage }
+  health
+  tables {
+    name
+    version
+    columns { name type nullable unique indexed }
   }
-}
-
-# Mutations
-mutation {
-  createCustomer(input: { name: "John", email: "john@example.com" }) {
-    id
-  }
-}
-
-# Subscriptions
-subscription {
-  customerChanged { operation, data { id, name } }
 }
 ```
+
+```graphql
+query {
+  table(name: "customers") {
+    name
+    version
+    columns { name type nullable unique indexed }
+    indexes { name type unique columns }
+    relations { name type sourceColumn targetTableId targetColumnId }
+    createdAt
+    updatedAt
+  }
+}
+```
+
+`table` answers `null` for a name the current project does not have. Physical names are never part
+of either answer — see [SYSTEM_COLUMNS.md](SYSTEM_COLUMNS.md).
+
+### Reading rows
+
+```graphql
+query {
+  records(table: "customers", first: 10, filter: "grade:eq:VIP", orderBy: "name:asc") {
+    edges {
+      node { id data createdAt updatedAt }
+      cursor
+    }
+    pageInfo { hasNextPage hasPreviousPage startCursor endCursor totalCount }
+    totalCount
+  }
+}
+```
+
+`filter` and `orderBy` are compact strings here, not input objects:
+
+| Argument | Grammar | Notes |
+|---|---|---|
+| `filter` | `column:operator:value`, comma-separated | The operators are [the same set as on REST](#filter-operators); `ne`, `ge` and `le` are accepted here as spellings of `neq`, `gte` and `lte`. The value is read as null, boolean, number, UUID, timestamp or string, in that order |
+| `orderBy` | `column` or `column:asc`/`column:desc`, comma-separated | Defaults to newest first when omitted |
+| `first` | page size | Defaults to 20, capped at 100 |
+| `after` | a `cursor` from a previous page | Take it from `pageInfo.endCursor` — the value is opaque |
+
+A single row is fetched by id:
+
+```graphql
+query {
+  record(table: "customers", id: "00000000-0000-0000-0000-000000000000") {
+    id
+    data
+    createdAt
+    updatedAt
+  }
+}
+```
+
+### Aggregating
+
+```graphql
+query {
+  aggregate(
+    table: "orders"
+    aggregations: [
+      { function: COUNT, alias: "orders" }
+      { function: SUM, column: "amount", alias: "revenue" }
+    ]
+    groupBy: ["status"]
+    filter: [{ column: "shipped", operator: "eq", value: true }]
+    having: [{ alias: "revenue", operator: "gt", value: 1000 }]
+    orderBy: [{ column: "revenue", direction: "desc" }]
+    limit: 10
+    offset: 0
+  ) {
+    data
+    totalGroups
+    metadata { rowsScanned executionTimeMs }
+  }
+}
+```
+
+Note that `aggregate` takes *structured* `filter` and `orderBy` inputs while `records` takes
+strings. The two are not interchangeable. Functions are `COUNT`, `SUM`, `AVG`, `MIN`, `MAX` and
+`COUNT_DISTINCT`; `column` is omitted for a plain count.
+
+### Writing rows
+
+Every mutation answers with the same envelope — `success`, `data`, `error`, `errorCode` — so a
+failure is read from the payload rather than from a transport status.
+
+```graphql
+mutation {
+  ping
+  createRecord(table: "customers", data: { name: "Acme", grade: "VIP" }) {
+    success
+    data { id data createdAt updatedAt }
+    error
+    errorCode
+  }
+}
+```
+
+```graphql
+mutation {
+  updateRecord(
+    table: "customers"
+    id: "00000000-0000-0000-0000-000000000000"
+    data: { grade: "GOLD" }
+  ) {
+    success
+    data { id data }
+    error
+    errorCode
+  }
+}
+```
+
+```graphql
+mutation {
+  upsertRecord(
+    table: "customers"
+    data: { email: "a@example.com", grade: "VIP" }
+    keyColumns: ["email"]
+  ) {
+    success
+    data { id data }
+    error
+    errorCode
+  }
+}
+```
+
+```graphql
+mutation {
+  createRecords(
+    table: "customers"
+    records: [{ name: "Acme" }, { name: "Globex" }]
+  ) {
+    success
+    data { id data }
+    error
+    errorCode
+  }
+}
+```
+
+```graphql
+mutation {
+  deleteRecord(table: "customers", id: "00000000-0000-0000-0000-000000000000") {
+    success
+    data
+    error
+    errorCode
+  }
+}
+```
+
+### Subscribing
+
+Subscriptions are per table and per event kind, and the table is again an argument.
+
+```graphql
+subscription {
+  onRecordCreated(table: "customers") {
+    table
+    changeType
+    record { id data createdAt updatedAt }
+    timestamp
+  }
+}
+```
+
+```graphql
+subscription {
+  onRecordUpdated(table: "customers") {
+    table
+    changeType
+    record { id data }
+    timestamp
+  }
+}
+```
+
+```graphql
+subscription {
+  onRecordChanged(table: "customers") {
+    table
+    changeType
+    record { id data }
+    timestamp
+  }
+}
+```
+
+Deletions carry the id of the row that is gone rather than its contents:
+
+```graphql
+subscription {
+  onRecordDeleted(table: "customers") {
+    table
+    recordId
+    timestamp
+  }
+}
+```
+
+`changeType` is `CREATED`, `UPDATED` or `DELETED`. The SignalR hub described under
+[WebSocket (Real-time)](#websocket-real-time) is a separate surface with its own payload shape;
+the two are not the same wire.
 
 ---
 
