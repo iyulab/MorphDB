@@ -63,7 +63,14 @@ public partial class ODataDocsParityTests
 
         keyType.Should().Be<Guid>();
 
-        var wrong = DocumentedKeys()
+        var documented = DocumentedKeys();
+
+        // Without this the check passes on a document that stopped showing keyed routes at all --
+        // green because there was nothing to look at, which reads exactly like green because
+        // everything was right.
+        documented.Should().NotBeEmpty("API.md must show how a keyed OData route is addressed");
+
+        var wrong = documented
             .Where(key => !Guid.TryParse(key, out _))
             .Distinct(StringComparer.Ordinal)
             .OrderBy(key => key, StringComparer.Ordinal)

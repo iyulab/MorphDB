@@ -33,7 +33,15 @@ public partial class DocsRouteParityTests
         var served = ServedRoutes();
         var documented = DocumentedRoutes();
 
-        documented.Should().NotBeEmpty("API.md must carry routes for this gate to mean anything");
+        // Per prefix, not in total. The pattern reads two of them, and /api alone carries enough
+        // routes to keep the whole list non-empty -- so a change that stopped the /odata half from
+        // matching would leave this gate green while covering half of what it claims to.
+        foreach (var prefix in new[] { "/api/", "/odata/" })
+        {
+            documented.Should().Contain(
+                route => route.Contains(prefix, StringComparison.Ordinal),
+                $"API.md must carry {prefix} routes for this gate to cover them");
+        }
 
         var ghosts = documented
             .Where(d => !served.Any(s => Matches(d, s)))
