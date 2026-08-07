@@ -105,15 +105,15 @@ public sealed partial class PostgresChangeListener : BackgroundService
 
         switch (changeEvent.Operation.ToUpperInvariant())
         {
-            case "INSERT":
+            case ChangeOperation.Insert:
                 await BroadcastRecordCreatedAsync(groupName, changeEvent);
                 break;
 
-            case "UPDATE":
+            case ChangeOperation.Update:
                 await BroadcastRecordUpdatedAsync(groupName, changeEvent);
                 break;
 
-            case "DELETE":
+            case ChangeOperation.Delete:
                 await BroadcastRecordDeletedAsync(groupName, changeEvent);
                 break;
         }
@@ -125,7 +125,7 @@ public sealed partial class PostgresChangeListener : BackgroundService
         {
             Table = changeEvent.Table,
             RecordId = changeEvent.RecordId,
-            Operation = "INSERT",
+            Operation = ChangeOperation.Insert,
             Data = changeEvent.Data ?? new Dictionary<string, object?>(),
             Timestamp = changeEvent.Timestamp
         };
@@ -139,7 +139,7 @@ public sealed partial class PostgresChangeListener : BackgroundService
         {
             Table = changeEvent.Table,
             RecordId = changeEvent.RecordId,
-            Operation = "UPDATE",
+            Operation = ChangeOperation.Update,
             Data = changeEvent.Data ?? new Dictionary<string, object?>(),
             Timestamp = changeEvent.Timestamp
         };
@@ -182,6 +182,25 @@ public sealed partial class PostgresChangeListener : BackgroundService
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Change received: {Operation} on {Table}, record {RecordId}")]
     private static partial void LogChangeReceived(ILogger logger, string operation, string table, Guid? recordId);
+}
+
+/// <summary>
+/// The operation values a change event carries on the wire.
+/// <para>
+/// They are the names PostgreSQL gives the triggering statement, kept upper case, and a client
+/// branches on them — so they are a published contract rather than an internal detail. Having one
+/// home instead of six literals is what keeps the vocabulary from drifting between the switch that
+/// reads it and the messages that send it, and gives the documentation something to be checked
+/// against.
+/// </para>
+/// </summary>
+internal static class ChangeOperation
+{
+    public const string Insert = "INSERT";
+    public const string Update = "UPDATE";
+    public const string Delete = "DELETE";
+
+    public static readonly IReadOnlyList<string> All = [Insert, Update, Delete];
 }
 
 /// <summary>

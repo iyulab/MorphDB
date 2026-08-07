@@ -554,19 +554,61 @@ with. Rows carry `_id`, `_created_at` and `_updated_at` alongside them.
 
 **Endpoint**: `/hubs/morph` (SignalR)
 
+The connection is scoped the same way every other request is, by `X-Project-Id` — and it is scoped
+at *connect* time, not per subscription. A connection that names no project is refused rather than
+served a stream that would stay empty forever.
+
+That header has to ride the HTTP request that establishes the connection, which a browser cannot
+do on the WebSocket transport. Ask for a transport that carries headers:
+
 ```javascript
 const connection = new signalR.HubConnectionBuilder()
-  .withUrl("/hubs/morph")
+  .withUrl("/hubs/morph", {
+    headers: { "X-Project-Id": "<project id>" },
+    transport: signalR.HttpTransportType.LongPolling
+  })
   .build();
 
-// Subscribe to table changes
-await connection.invoke("Subscribe", "customers", { grade: "VIP" });
+await connection.start();
+await connection.invoke("Subscribe", "customers");
 
-// Receive events
-connection.on("DataChanged", (event) => {
-  // event: { table, operation: "insert"|"update"|"delete", data, previous }
-});
+connection.on("RecordCreated", (message) => { /* message.table, message.data, … */ });
+connection.on("RecordUpdated", (message) => { /* … */ });
+connection.on("RecordDeleted", (message) => { /* … */ });
 ```
+
+#### Hub methods
+
+| Method | Arguments |
+|---|---|
+| `Subscribe` | table name |
+| `Unsubscribe` | table name |
+| `SubscribeMany` | table names |
+| `UnsubscribeMany` | table names |
+| `GetSubscriptions` | none — answers the table names this connection is subscribed to |
+
+**A subscription is per table and nothing narrower.** `Subscribe` accepts a second options argument
+carrying a filter, a field list and an include-data flag; none of them reach the broadcast, so every
+subscriber to a table receives every change to it. Filter on the receiving side.
+
+#### Client events
+
+| Event | Payload |
+|---|---|
+| `RecordCreated` | `table` `recordId` `operation` `data` `timestamp` |
+| `RecordUpdated` | `table` `recordId` `operation` `data` `timestamp` |
+| `RecordDeleted` | `table` `recordId` `timestamp` |
+| `Subscribed` | `tableName` |
+| `Unsubscribed` | `tableName` |
+| `OnError` | `code` `message` |
+
+`operation` is `INSERT`, `UPDATE` or `DELETE` — upper case, and not the same vocabulary as the
+GraphQL subscription's `changeType`. A deletion carries the id of the row that is gone and no
+`data`. There is no before-image on any event.
+
+> ⚠️ `data` currently arrives keyed by **physical** column names (`col_…`) rather than the names the
+> table was declared with, and no surface maps one to the other. Read the row back over REST or
+> GraphQL using `recordId` until that is corrected.
 
 ---
 
