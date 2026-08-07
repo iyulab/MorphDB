@@ -37,7 +37,15 @@ public static partial class ConstraintBoundaryDoc
     /// Reads a repository file by its path relative to the repository root, walking up from the
     /// test assembly's location so the tests do not depend on the working directory.
     /// </summary>
-    public static string ReadRepoFile(string relativePath)
+    public static string ReadRepoFile(string relativePath) => File.ReadAllText(RepoFilePath(relativePath));
+
+    /// <summary>
+    /// Resolves a repository file to its absolute path the same way. A gate whose subject is a
+    /// <em>set</em> of files — every document under a directory, rather than one named document —
+    /// needs the location rather than the contents, and asking it for the contents of a file it
+    /// already knows only to then find its siblings is how a hand-kept list creeps back in.
+    /// </summary>
+    public static string RepoFilePath(string relativePath)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null)
@@ -46,7 +54,7 @@ public static partial class ConstraintBoundaryDoc
                 directory.FullName, relativePath.Replace('/', Path.DirectorySeparatorChar));
             if (File.Exists(candidate))
             {
-                return File.ReadAllText(candidate);
+                return candidate;
             }
 
             directory = directory.Parent;

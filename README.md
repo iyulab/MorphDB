@@ -50,6 +50,11 @@ NuGet packages `X.Y.Z` together, so a client and a server that share a version a
 Pin that number rather than `latest` — this is a 0.x line and a minor release may break you. The
 newest one is the newest [tag](https://github.com/iyulab/MorphDB/tags).
 
+**The documents in this repository describe `main`, which is ahead of that image.** Anything they
+describe that the published version does not serve yet is marked `Since x.y.z`. To read a
+reference that matches what you are running, open it at its tag instead of on the default branch —
+the tag carries the documents as they were when that version shipped.
+
 ### Which package
 
 Three are published, and they answer different questions. **`MorphDB.Client` is the supported entry
