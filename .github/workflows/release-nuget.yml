@@ -7,6 +7,13 @@ on:
       - 'Directory.Build.props'
   workflow_dispatch:
 
+# Never cancelled, unlike CI: publishing is not something to interrupt halfway. The group serialises
+# runs instead, so two pushes in quick succession publish one after the other rather than racing for
+# the same version. The image workflow beside this one already reads this way.
+concurrency:
+  group: release-nuget
+  cancel-in-progress: false
+
 env:
   DOTNET_VERSION: '10.0.x'
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true

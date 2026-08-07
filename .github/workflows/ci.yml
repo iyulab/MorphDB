@@ -6,6 +6,13 @@ on:
   pull_request:
     branches: [main, develop]
 
+# A newer push to the same ref supersedes an in-flight run. This suite is the expensive one — it
+# starts its own containers and runs the whole of it — so a superseded run left going is minutes
+# spent on a commit nobody is waiting for, out of a budget every pushed pipeline shares.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   DOTNET_VERSION: '10.0.x'
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
