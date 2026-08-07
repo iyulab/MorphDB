@@ -18,20 +18,31 @@ namespace MorphDB.Tests.Unit;
 /// yet, and it is one-directional by nature: nothing can find a behaviour someone forgot to mark.
 /// What is held here is the half that can be — a marker names a version the published one has not
 /// reached, and the version the documentation calls published is the one the README actually pins.
-/// The published version is read from that pin rather than named here, so a release moves all
-/// three together or fails.
+/// The published version is read from that pin rather than named here, and the pin is held to the
+/// version property a push publishes — so the chain runs from the one value that cannot be
+/// forgotten down to every marker, and a release moves all of it or fails.
 /// </para>
 /// </summary>
 public partial class DocsVersionMarkerTests
 {
     [Fact]
-    public void The_published_version_is_pinned_once_and_the_same_everywhere()
-        => PublishedVersion().Should().NotBeNull();
+    public void The_version_the_README_pins_is_the_version_a_push_publishes()
+    {
+        // Without this the chain has a hole at its head. Everything below reads the published
+        // version from the README pin, and the pin is edited by hand at release time -- so a
+        // release that bumps the version and forgets the pin leaves this whole gate comparing
+        // markers against a version that is no longer the published one, green and wrong. The
+        // build property is what the release workflow acts on, so it cannot be forgotten: pushing
+        // it is the release.
+        BuildVersion().Should().Be(PublishedVersion(),
+            "a push of the version property publishes that image, so the number the README tells a "
+            + "reader to pull is the same number or one of them is lying");
+    }
 
     [Fact]
     public void No_marker_names_a_version_the_published_one_has_already_reached()
     {
-        var published = PublishedVersion()!;
+        var published = PublishedVersion();
 
         var stale = DocFiles()
             .SelectMany(file => SinceMarker().Matches(File.ReadAllText(file))
@@ -54,12 +65,12 @@ public partial class DocsVersionMarkerTests
         var reference = ConstraintBoundaryDoc.ReadRepoFile("docs/API.md");
 
         PublishedClaim().Match(reference).Groups["version"].Value
-            .Should().Be(PublishedVersion()!.ToString(),
+            .Should().Be(PublishedVersion().ToString(),
                 "a reader takes that sentence as the answer to \"which server is this\", and it is "
                 + "the one statement in the document no parity gate can check against the server");
 
         TagPointer().Match(reference).Groups["version"].Value
-            .Should().Be(PublishedVersion()!.ToString(),
+            .Should().Be(PublishedVersion().ToString(),
                 "the tag it sends a reader to for released documentation has to be the released one");
     }
 
@@ -67,7 +78,7 @@ public partial class DocsVersionMarkerTests
     /// The published version, read from the image the README tells a reader to pull. Every pin in
     /// the README must agree — two of them saying different things is the same defect one level up.
     /// </summary>
-    private static Version? PublishedVersion()
+    private static Version PublishedVersion()
     {
         var pins = ImagePin().Matches(ConstraintBoundaryDoc.ReadRepoFile("README.md"))
             .Select(m => m.Groups["version"].Value)
@@ -79,11 +90,23 @@ public partial class DocsVersionMarkerTests
         return Version.Parse(pins[0]);
     }
 
+    /// <summary>
+    /// The version a push publishes — the head of the chain, and the only link in it that cannot be
+    /// forgotten, because pushing it <em>is</em> the release.
+    /// </summary>
+    private static Version BuildVersion()
+        => Version.Parse(VersionProperty()
+            .Match(ConstraintBoundaryDoc.ReadRepoFile("Directory.Build.props"))
+            .Groups["version"].Value);
+
     private static IEnumerable<string> DocFiles()
     {
         var directory = new DirectoryInfo(Path.GetDirectoryName(ConstraintBoundaryDoc.RepoFilePath("docs/API.md"))!);
         return directory.GetFiles("*.md").Select(f => f.FullName);
     }
+
+    [GeneratedRegex(@"<Version>(?<version>\d+\.\d+\.\d+)</Version>")]
+    private static partial Regex VersionProperty();
 
     [GeneratedRegex(@"ghcr\.io/iyulab/morphdb:(?<version>\d+\.\d+\.\d+)")]
     private static partial Regex ImagePin();
