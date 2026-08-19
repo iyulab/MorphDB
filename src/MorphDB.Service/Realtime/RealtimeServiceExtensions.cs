@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.SignalR;
 using MorphDB.Core.Abstractions;
 
 namespace MorphDB.Service.Realtime;
@@ -13,10 +14,12 @@ public static class RealtimeServiceExtensions
     public static IServiceCollection AddMorphDbRealtime(this IServiceCollection services)
     {
         // Add SignalR
+        services.AddSingleton<HubRateLimitFilter>();
         services.AddSignalR(options =>
         {
             options.EnableDetailedErrors = true;
             options.MaximumReceiveMessageSize = 1024 * 1024; // 1MB
+            options.AddFilter<HubRateLimitFilter>();
         });
 
         // Add subscription manager (singleton for shared state across connections)
