@@ -69,6 +69,7 @@ public sealed partial class ChangeNotificationSetup : ITableNotificationTriggerM
                     END IF;
                     payload := jsonb_build_object(
                         'project_id', project_id,
+                        'table_id', table_id_val,
                         'table', table_name,
                         'operation', TG_OP,
                         'record_id', record_id,
@@ -81,6 +82,7 @@ public sealed partial class ChangeNotificationSetup : ITableNotificationTriggerM
                     END IF;
                     payload := jsonb_build_object(
                         'project_id', project_id,
+                        'table_id', table_id_val,
                         'table', table_name,
                         'operation', TG_OP,
                         'record_id', record_id,

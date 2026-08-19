@@ -1,5 +1,7 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.SignalR;
+using MorphDB.Core.Abstractions;
+using MorphDB.Core.Models;
 using Npgsql;
 
 namespace MorphDB.Service.Realtime;
@@ -107,15 +109,61 @@ public sealed partial class PostgresChangeListener : BackgroundService
         {
             case ChangeOperation.Insert:
                 await BroadcastRecordCreatedAsync(groupName, changeEvent);
+                await DeliverWebhooksAsync(changeEvent, WebhookEvent.Insert);
                 break;
 
             case ChangeOperation.Update:
                 await BroadcastRecordUpdatedAsync(groupName, changeEvent);
+                await DeliverWebhooksAsync(changeEvent, WebhookEvent.Update);
                 break;
 
             case ChangeOperation.Delete:
                 await BroadcastRecordDeletedAsync(groupName, changeEvent);
+                await DeliverWebhooksAsync(changeEvent, WebhookEvent.Delete);
                 break;
+        }
+    }
+
+    /// <summary>
+    /// The same change event SignalR just broadcast, offered to a second consumer: any webhook
+    /// subscribed to this table and event. Matching is table+event only (what
+    /// <see cref="IWebhookManager.GetSubscribedWebhooksAsync"/> supports today) — a webhook's
+    /// <c>Filter</c> is not yet evaluated here, so a subscription with a filter fires for every
+    /// row on its table and event, not only the ones the filter would admit.
+    /// </summary>
+    private async Task DeliverWebhooksAsync(DatabaseChangeEvent changeEvent, WebhookEvent webhookEvent)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var webhookManager = scope.ServiceProvider.GetRequiredService<IWebhookManager>();
+
+        var webhooks = await webhookManager.GetSubscribedWebhooksAsync(
+            changeEvent.ProjectId, changeEvent.TableId, webhookEvent);
+
+        if (webhooks.Count == 0)
+        {
+            return;
+        }
+
+        var payload = new WebhookPayload
+        {
+            Event = webhookEvent.ToString().ToLowerInvariant(),
+            Table = changeEvent.Table,
+            RecordId = changeEvent.RecordId,
+            Timestamp = changeEvent.Timestamp,
+            Data = changeEvent.Data,
+        };
+
+        var deliveryService = scope.ServiceProvider.GetRequiredService<IWebhookDeliveryService>();
+        foreach (var webhook in webhooks)
+        {
+            try
+            {
+                await deliveryService.QueueDeliveryAsync(webhook, payload);
+            }
+            catch (Exception ex)
+            {
+                LogWebhookQueueError(_logger, webhook.WebhookId, ex);
+            }
         }
     }
 
@@ -182,6 +230,9 @@ public sealed partial class PostgresChangeListener : BackgroundService
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Change received: {Operation} on {Table}, record {RecordId}")]
     private static partial void LogChangeReceived(ILogger logger, string operation, string table, Guid? recordId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to queue webhook delivery for webhook {WebhookId}")]
+    private static partial void LogWebhookQueueError(ILogger logger, Guid webhookId, Exception exception);
 }
 
 /// <summary>
@@ -209,6 +260,7 @@ internal static class ChangeOperation
 internal sealed class DatabaseChangeEvent
 {
     public Guid ProjectId { get; init; }
+    public Guid TableId { get; init; }
     public required string Table { get; init; }
     public required string Operation { get; init; }
     public Guid? RecordId { get; init; }

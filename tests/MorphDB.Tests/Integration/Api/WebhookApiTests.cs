@@ -410,6 +410,84 @@ public class WebhookApiTests
 
     #endregion
 
+    #region Delivery Triggering
+
+    /// <summary>
+    /// The registration, listing and history endpoints above all answer correctly on their own,
+    /// which is exactly what let a webhook that never fires look healthy. This drives an actual
+    /// data change through the API and checks the one place that could not lie about it: whether
+    /// a delivery record exists afterward.
+    /// </summary>
+    [Fact]
+    public async Task DataChange_WithSubscribedWebhook_ShouldQueueADelivery()
+    {
+        // Arrange
+        var tableName = await CreateTestTableAsync();
+        var createResponse = await _client.PostAsJsonAsync("/api/webhooks", new CreateWebhookApiRequest
+        {
+            Name = $"trigger_test_{Guid.NewGuid():N}"[..30],
+            Table = tableName,
+            Url = "https://example.invalid/webhook",
+            Events = ["insert"]
+        });
+        var created = await createResponse.Content.ReadFromJsonAsync<WebhookApiResponse>();
+
+        // Act
+        await _client.PostAsJsonAsync($"/api/data/{tableName}", new Dictionary<string, object?>
+        {
+            ["name"] = "Test",
+            ["email"] = "test@example.com"
+        });
+
+        // The change listener reacts to a PostgreSQL NOTIFY asynchronously, same as the SignalR
+        // broadcast tests above poll for their message to arrive.
+        IReadOnlyList<DeliveryApiResponse>? deliveries = null;
+        var timeout = Task.Delay(TimeSpan.FromSeconds(5));
+        while ((deliveries is null || deliveries.Count == 0) && !timeout.IsCompleted)
+        {
+            await Task.Delay(100);
+            var response = await _client.GetAsync($"/api/webhooks/{created!.Id}/deliveries");
+            deliveries = await response.Content.ReadFromJsonAsync<IReadOnlyList<DeliveryApiResponse>>();
+        }
+
+        // Assert
+        deliveries.Should().NotBeNullOrEmpty(
+            "a matching data change must queue a delivery, not just broadcast one over SignalR");
+        deliveries![0].Event.Should().Be("insert");
+    }
+
+    [Fact]
+    public async Task DataChange_ForAnUnsubscribedTable_ShouldNotQueueADelivery()
+    {
+        // Arrange — a webhook on a *different* table must not react to this one.
+        var watchedTable = await CreateTestTableAsync();
+        var otherTable = await CreateTestTableAsync();
+        var createResponse = await _client.PostAsJsonAsync("/api/webhooks", new CreateWebhookApiRequest
+        {
+            Name = $"unrelated_test_{Guid.NewGuid():N}"[..30],
+            Table = watchedTable,
+            Url = "https://example.invalid/webhook",
+            Events = ["insert"]
+        });
+        var created = await createResponse.Content.ReadFromJsonAsync<WebhookApiResponse>();
+
+        // Act
+        var response = await _client.PostAsJsonAsync($"/api/data/{otherTable}", new Dictionary<string, object?>
+        {
+            ["name"] = "Test",
+            ["email"] = "test@example.com"
+        });
+        response.EnsureSuccessStatusCode();
+        await Task.Delay(TimeSpan.FromSeconds(1)); // give the listener a chance to (wrongly) react
+
+        // Assert
+        var deliveriesResponse = await _client.GetAsync($"/api/webhooks/{created!.Id}/deliveries");
+        var deliveries = await deliveriesResponse.Content.ReadFromJsonAsync<IReadOnlyList<DeliveryApiResponse>>();
+        deliveries.Should().BeEmpty();
+    }
+
+    #endregion
+
     #region Project Isolation
 
     [Fact]
