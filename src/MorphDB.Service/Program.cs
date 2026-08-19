@@ -194,6 +194,10 @@ try
     builder.Services.Configure<RateLimitConfig>(builder.Configuration.GetSection("RateLimiting"));
     builder.Services.AddSingleton<IRateLimiter, MemoryRateLimiter>();
 
+    // Trusted reverse proxy allowlist for X-Forwarded-For/-Proto. Unconfigured (default) means
+    // the headers are never consulted — see TrustedProxyOptions for the fail-safe contract.
+    builder.Services.Configure<TrustedProxyOptions>(builder.Configuration.GetSection("TrustedProxies"));
+
     // Apply each project's audit retention window. Keeping the audit table within its declared
     // size is this server's obligation — the caller has no path to that table.
     var auditRetentionOptions = new AuditRetentionOptions();
@@ -273,6 +277,10 @@ try
         app.UseCors("Development"); // Enable CORS for development
     }
 
+    // Resolves X-Forwarded-Proto too, so it belongs before HTTPS redirection; resolves
+    // X-Forwarded-For, so it must run before anything reads RemoteIpAddress (rate limiting,
+    // audit logging). A no-op with no trusted proxies configured (TrustedProxyOptions).
+    app.UseConfiguredForwardedHeaders();
     app.UseHttpsRedirection();
     app.UseWebSockets(); // Required for GraphQL subscriptions
     app.UseSecurityContext();

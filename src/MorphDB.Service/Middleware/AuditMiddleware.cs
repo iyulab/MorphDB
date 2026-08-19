@@ -245,14 +245,9 @@ public sealed class AuditMiddleware
 
     private static string? GetClientIpAddress(HttpContext context)
     {
-        // Check for forwarded header first
-        var forwardedFor = context.Request.Headers["X-Forwarded-For"].FirstOrDefault();
-        if (!string.IsNullOrEmpty(forwardedFor))
-        {
-            // Take the first IP if there are multiple
-            return forwardedFor.Split(',')[0].Trim();
-        }
-
+        // RemoteIpAddress already reflects a trusted X-Forwarded-For when one applies —
+        // UseConfiguredForwardedHeaders() resolves it earlier in the pipeline. Reading the
+        // header here directly would mean trusting it unconditionally, bypassing that allowlist.
         return context.Connection.RemoteIpAddress?.ToString();
     }
 }
