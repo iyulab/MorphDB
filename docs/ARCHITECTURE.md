@@ -90,6 +90,16 @@ Benefits:
 - OData with dynamic EDM model
 - SignalR hub for real-time sync
 
+### Backup & Disaster Recovery — deliberately out of scope
+
+MorphDB owns schema and data operations, not the PostgreSQL instance's persistence lifecycle.
+Backup, point-in-time recovery, and disaster-recovery tooling sit below `MorphDB.Npgsql`, in the
+PostgreSQL deployment itself — the engine assumes a managed provider (bootstrap requires no
+`CREATE EXTENSION`, so any PostgreSQL that satisfies that constraint works) and treats
+provisioning, including backup/restore policy, as the deployer's responsibility. None of the
+reference deployment manifests in this repository configure backups; that absence is the boundary,
+not an omission.
+
 ## Data Flow
 
 ### Schema Creation
