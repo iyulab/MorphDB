@@ -651,9 +651,12 @@ field. The create response carries it once:
 Read it back later and it is gone — only the id and role are recorded, the same as
 [Connection secrets](#connection-secrets).
 
-> ⚠️ `filter` is stored and returned, but delivery matching is table+event only right now — a
-> webhook with a `filter` fires for every row on its table and event, not only the ones the filter
-> would admit.
+`filter` narrows delivery to rows matching every key — flat, AND-combined scalar-literal equality
+(`{"status": "completed", "priority": "high"}` fires only when both hold). There is no operator
+syntax and no nesting; registering a `filter` whose value is an object or array is rejected with
+`400 INVALID_WEBHOOK_FILTER`. A `filter` never matches a `delete` event — a delete carries no row
+data to compare against, so a webhook that needs to see deletions must subscribe without a filter
+on that event.
 
 Webhook payload:
 ```json
@@ -1058,6 +1061,7 @@ fixed string — internal exception text never reaches the wire) and retrying ma
 | 400 | `UNKNOWN_COLUMN` | A write named a column the table does not declare (see `?ignoreUnknown=true`) — answered whenever undeclared fields are the only thing wrong with the write |
 | 400 | `COLUMN_NOT_FOUND` | A query referenced a column the table does not have |
 | 400 | `INVALID_FILTER` | A malformed `filter` expression, or an unknown filter operator |
+| 400 | `INVALID_WEBHOOK_FILTER` | A webhook `filter` value that is not a scalar literal — object and array values are not supported (see [Webhook](#webhook)) |
 | 400 | `INVALID_ARGUMENT` | A malformed value elsewhere in the request (e.g. an unknown column type — the message lists the supported set) |
 | 400 | `MISSING_PROJECT` | The request did not say which project it applies to — send `X-Project-Id` |
 | 400 | `INVALID_EXPRESSION` | A CHECK predicate, index predicate or policy expression that could escape the clause it is written into |

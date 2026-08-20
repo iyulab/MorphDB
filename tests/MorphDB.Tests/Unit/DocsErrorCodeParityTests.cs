@@ -40,7 +40,7 @@ public class DocsErrorCodeParityTests
         // Write pipeline funnel (WriteFailure.CodeFor)
         "UNKNOWN_COLUMN",
         // Controllers' inline envelopes
-        "INVALID_FILTER", "RECORD_NOT_FOUND", "ROW_STATE_NOT_ENABLED",
+        "INVALID_FILTER", "INVALID_WEBHOOK_FILTER", "RECORD_NOT_FOUND", "ROW_STATE_NOT_ENABLED",
         "EMPTY_BATCH", "EMPTY_DATA", "EMPTY_TRANSACTION", "EMPTY_RECORD_IDS",
         "MISSING_KEY_COLUMNS", "FILTER_REQUIRED", "AGGREGATION_REQUIRED",
         "JOB_NOT_FOUND", "JOB_NOT_COMPLETED", "AUDIT_LOG_NOT_FOUND",

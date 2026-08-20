@@ -126,10 +126,8 @@ public sealed partial class PostgresChangeListener : BackgroundService
 
     /// <summary>
     /// The same change event SignalR just broadcast, offered to a second consumer: any webhook
-    /// subscribed to this table and event. Matching is table+event only (what
-    /// <see cref="IWebhookManager.GetSubscribedWebhooksAsync"/> supports today) — a webhook's
-    /// <c>Filter</c> is not yet evaluated here, so a subscription with a filter fires for every
-    /// row on its table and event, not only the ones the filter would admit.
+    /// subscribed to this table and event, narrowed by <see cref="WebhookFilterMatcher"/> to the
+    /// rows its <c>Filter</c> admits.
     /// </summary>
     private async Task DeliverWebhooksAsync(DatabaseChangeEvent changeEvent, WebhookEvent webhookEvent)
     {
@@ -156,6 +154,11 @@ public sealed partial class PostgresChangeListener : BackgroundService
         var deliveryService = scope.ServiceProvider.GetRequiredService<IWebhookDeliveryService>();
         foreach (var webhook in webhooks)
         {
+            if (!WebhookFilterMatcher.Matches(webhook.Filter, changeEvent.Data))
+            {
+                continue;
+            }
+
             try
             {
                 await deliveryService.QueueDeliveryAsync(webhook, payload);

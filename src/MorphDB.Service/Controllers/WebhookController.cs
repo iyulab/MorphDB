@@ -3,6 +3,7 @@ using MorphDB.Core.Abstractions;
 using MorphDB.Core.Models;
 using MorphDB.Service.Filters;
 using MorphDB.Service.Models.Api;
+using MorphDB.Service.Realtime;
 using MorphDB.Service.Services;
 
 namespace MorphDB.Service.Controllers;
@@ -72,6 +73,11 @@ public sealed class WebhookController : ControllerBase
             });
         }
 
+        if (!WebhookFilterMatcher.IsSupported(request.Filter))
+        {
+            return BadRequest(InvalidFilterResponse());
+        }
+
         var events = request.Events?.Select(ParseEvent).ToList() ?? [WebhookEvent.Insert, WebhookEvent.Update, WebhookEvent.Delete];
 
         var createRequest = new CreateWebhookRequest
@@ -139,6 +145,7 @@ public sealed class WebhookController : ControllerBase
     /// </summary>
     [HttpPatch("{webhookId:guid}")]
     [ProducesResponseType(typeof(WebhookApiResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateWebhook(
         Guid webhookId,
@@ -155,6 +162,11 @@ public sealed class WebhookController : ControllerBase
                 Message = $"Webhook '{webhookId}' not found",
                 Code = "WEBHOOK_NOT_FOUND"
             });
+        }
+
+        if (!WebhookFilterMatcher.IsSupported(request.Filter))
+        {
+            return BadRequest(InvalidFilterResponse());
         }
 
         var updateRequest = new UpdateWebhookRequest
@@ -255,6 +267,17 @@ public sealed class WebhookController : ControllerBase
 
         var deliveries = await _webhookManager.GetDeliveryHistoryAsync(webhookId, limit, offset, cancellationToken);
         return Ok(deliveries.Select(MapToDeliveryResponse));
+    }
+
+    private static ErrorResponse InvalidFilterResponse()
+    {
+        return new ErrorResponse
+        {
+            Error = "InvalidWebhookFilter",
+            Message = "'filter' supports flat, AND-combined scalar-literal equality only " +
+                "(e.g. {\"status\": \"completed\"}) — an object or array value is not supported.",
+            Code = "INVALID_WEBHOOK_FILTER"
+        };
     }
 
     private static WebhookEvent ParseEvent(string eventName)
