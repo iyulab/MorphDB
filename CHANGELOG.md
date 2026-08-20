@@ -1,5 +1,133 @@
 # Changelog
 
+## 0.10.0
+
+### Breaking
+
+- **Three kinds of GraphQL type change names in the served schema, and nothing about the change
+  reaches a compiler.** The subscription root is now served as `Subscription`; it had taken its name
+  from the class carrying the resolvers and read as `DynamicSubscription`. The three mutation
+  envelopes are now `RecordMutationResult`, `RecordListMutationResult` and `BooleanMutationResult`;
+  each had been named after its closed CLR generic — `MutationResultOfRecordNode`,
+  `MutationResultOfIReadOnlyListOfRecordNode`, and the same construction for the boolean one —
+  which put .NET shapes, including an interface name, into a published schema. A schema is a
+  contract even though it does not travel through NuGet, so introspection output, generated
+  clients and any document naming these types have to be regenerated; a client that only names
+  fields is unaffected. The names are now stated by the schema rather than inherited from whatever
+  class implements it, so renaming a class can no longer move them, and a test holds the served
+  schema to them.
+
+### Changed
+
+- **The GraphQL server runs on HotChocolate 16, and a row written over GraphQL is now read by this
+  service rather than by the server.** No package references HotChocolate, so a package consumer's
+  restore graph does not move, and the schema still says `Any` for a row — which is why this change
+  is invisible to introspection and to a schema diff. What moved is underneath: a mutation used to
+  receive the row already materialised by the GraphQL server, and now receives the JSON the caller
+  sent and narrows it here, in one place. The rules are stated once and apply in both directions:
+  a number takes the smallest integer type that holds it and otherwise a decimal; a string that
+  reads as a UUID or a timestamp becomes one; an object or array is kept as JSON text rather than
+  re-materialised, since that is what the column stores. The reason to do it here is that the HTTP
+  door reads the same JSON by the same rules — two doors that coerce differently are two contracts,
+  and they now agree. **A client that wrote rows over GraphQL and depended on the previous
+  coercion should check values that are numeric, UUID-shaped or timestamp-shaped**; a client that
+  wrote over HTTP is unaffected, and one that used both gets the same row from either. The mapping
+  is now held by a test, which it was not before.
+  The 16.x line also carries forward the fix for the advisory that had been closed in the
+  transitive `HotChocolate.Language`.
+- **Four scalars carry the descriptions and specification links their current definitions give
+  them.** `Any` now states a specification URL where it previously stated none, `UUID` points at
+  the scalar specification rather than at RFC 4122 and describes itself against RFC 9562, and
+  `DateTime`, `Long` and `UUID` read differently in generated documentation. Nothing about their
+  shape or their use changes — a document that was valid stays valid — but a tool that reads
+  `@specifiedBy` to pick a client-side representation sees new values, and generated docs change
+  wording. The whole served schema is now recorded in the repository and compared on every build,
+  so a difference of this kind is a release note rather than a discovery.
+- **A relation states whether it is enforced, and a project can state it once for all of them.**
+  Enforcement is no longer implied: a relation that says nothing resolves against the project's
+  `defaultEnforceOnWrite`, which is true unless the project says otherwise, and a relation that
+  states its own value overrides it. A non-enforced relation gets no physical constraint either —
+  turning one of the two off while leaving the other on leaves the database still refusing writes,
+  which is an option that only pretends to be off.
+
+### Added
+
+- **Connection secrets, with roles, and a boundary that is enforced before it is advertised.**
+  A project can issue secrets that carry a role, and the surface refuses what the role does not
+  cover rather than documenting a restriction it does not apply.
+- **A client can declare relations.** `SchemaClient.CreateRelationAsync` creates a relation by
+  logical names rather than internal identifiers, and takes the optional `EnforceOnWrite` described
+  above.
+- **A client can manage projects, not only work inside one.** `MorphDBClient.Projects` answers the
+  eight project endpoints the server already served — create, list, get, get-by-slug, update,
+  delete, stats and health — one to one, with no convenience method composing several of them.
+  Until now the SDK could work inside a project but could not create, read or configure one, so
+  that half of the API required dropping to HTTP.
+- **A caller can choose the id a project is created under.** Creating the same project twice
+  answers `409 DUPLICATE_PROJECT_ID`, which is enough for a start-up step to be safe to re-run.
+- **A project decides how much of its own audit history it keeps** through
+  `auditLogRetentionDays`.
+- **A reverse proxy can be named as trusted**, through `TrustedProxies` configuration
+  (`KnownProxies`/`KnownNetworks`). Unconfigured is a deliberate no-op — see Fixed.
+
+### Fixed
+
+- **`EnforceOnWrite` was a switch wired to nothing** — the value was accepted and then had no
+  effect on whether writes were checked.
+- **An error response always carries the code callers are told to branch on.** The envelope
+  documented a `code` for every failure, and a large number of throw sites were leaving it null,
+  so a client following the documented shape saw `null` where it had been promised a string. The
+  field is now required, which makes the compiler the gate, and a test reads real responses rather
+  than the type that produces them.
+- **A retention window that cannot be applied is refused rather than stored**, so a project's
+  settings cannot record a promise the service will not keep.
+- **A race for a chosen project id answers as a conflict rather than an internal error.**
+- **A data type that is declared but not implemented is refused as such, not as unknown.** Two
+  members of the type vocabulary have no storage behind them; naming one produced "Unknown data
+  type", which sent the caller looking for a spelling mistake in a value that is spelled correctly
+  and parses. The refusal now says the type is unimplemented and what to do instead.
+- **The list of types a caller is offered is the set a column can actually be created with.** It
+  was written by hand and named fifteen of the thirty members the vocabulary has — worse than
+  naming none, because a reader takes it for the whole answer — and it is now derived, which also
+  keeps the two unimplemented members out of it.
+- **A registered webhook was never triggered.** Every management endpoint for webhooks worked —
+  register, list, delete, replay from the dead-letter queue — but no code path ever called the one
+  method that queues a delivery, so a webhook could be created and inspected while nothing was ever
+  sent to it. The realtime listener that already turns a row change into a broadcast now offers the
+  same event to subscribed webhooks, matched by table and event. A webhook's `filter` is still not
+  evaluated at delivery time — a subscription with a filter fires for every row on its table and
+  event, not only the ones the filter would admit — which is tracked separately.
+- **A held-open realtime connection could call `Subscribe`/`Unsubscribe` without limit.** The rate
+  limiter only ever saw the HTTP handshake that opened the connection; every message after that
+  travelled the open WebSocket and never re-entered the pipeline the limit was checked against. The
+  same limiter, keyed the same way (`project:{id}`) HTTP requests already are, now runs on hub
+  method calls too, so a caller cannot outrun its quota by switching transport. A denied call fails
+  the caller's `invoke()` with a `HubException`.
+- **`X-Forwarded-For` was trusted unconditionally for the IP used in rate-limit keys and audit
+  entries**, with no reverse-proxy allowlist anywhere in the service — a caller could set and
+  rotate an arbitrary value to defeat rate limiting or forge the IP its own actions were recorded
+  under. The header is now consulted only when at least one proxy or network is named under
+  `TrustedProxies`; an unconfigured deployment (the default) never reads the header and always uses
+  the raw TCP peer address.
+
+### Docs
+
+- The API document says where the error envelope stops: it covers routed requests, and a request
+  that matches no route gets the framework's own empty 404. Held to that by a test.
+- The constraint boundary said the application layer enforces what the database enforces.
+- The package document says which of the three packages to reach for, and the settings contract is
+  held to a test rather than to prose.
+- The OData surface says which clients can reach it and which cannot: a project is addressed by
+  header, and a connector dialog that offers only a URL and an authentication kind cannot send one,
+  so that path needs the advanced editor. The document now says so, and says what to write there.
+- The constitution records that relations declare their own enforcement, and that matching an
+  already-shipped surface is not the same as proposing a new primitive.
+- The architecture document says who owns backup and disaster recovery: MorphDB covers schema and
+  data operations, not the PostgreSQL instance's persistence lifecycle. Backup, point-in-time
+  recovery and DR tooling sit below the storage layer, in the deployment itself — none of the
+  reference deployment manifests in this repository configure backups, which is the boundary
+  rather than a gap.
+
 ## 0.9.1
 
 ### Docs

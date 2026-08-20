@@ -2,9 +2,9 @@
 
 > **This document describes `main`, which is ahead of what you can run.** Anything here the
 > published image does not serve yet carries a **Since x.y.z** marker naming the release that will
-> bring it. Everything else is in the published version, **0.9.1** — the one the README pins.
+> bring it. Everything else is in the published version, **0.10.0** — the one the README pins.
 > To read the reference for a release rather than for `main`, open this file at its tag:
-> `docs/API.md` at `v0.9.1`.
+> `docs/API.md` at `v0.10.0`.
 >
 > The marker is one-directional by nature: it can say that a documented behaviour is unreleased,
 > and no check can find a behaviour someone forgot to mark. What is held is that a marker names a
@@ -44,9 +44,6 @@ Creating a project answers with the id it generated, and a caller that can read 
 nothing else. A deployment often cannot: the manifest that creates the project and the manifest
 that scopes requests to it are written before either runs, so an id that only exists after startup
 has nowhere to be written down.
-
-> **Since 0.10.0** — `0.9.1` generates the id and refuses a request that names one, answering
-> `400 INVALID_ARGUMENT`. On that version, read the id out of the create response.
 
 Say which id instead:
 
@@ -1055,10 +1052,6 @@ unknown-field policy is the write pipeline's `UNKNOWN_COLUMN`.) A `4xx` means th
 request must change before retrying; a `500 INTERNAL_ERROR` is a service defect (its message is a
 fixed string — internal exception text never reaches the wire) and retrying may succeed.
 
-> **Since 0.10.0** on the schema routes — `0.9.1` answers `/api/schema/*` errors with the
-> envelope's `code` set to `null`, so a client on that version has to branch on the status and
-> `error` instead. Every other route carried its code already.
-
 | Status | Code | When |
 |--------|------|------|
 | 400 | `VALIDATION_ERROR` | A value failed validation — a required / unique / FK / CHECK constraint, a type mismatch, or any mix of write-validation causes; physical `NOT NULL` / `UNIQUE` / foreign-key violations translate to the same code |
@@ -1100,7 +1093,7 @@ fixed string — internal exception text never reaches the wire) and retrying ma
 | 404 | `NOT_FOUND` | Another addressable resource (entity set, policy…) does not exist |
 | 409 | `DUPLICATE_NAME` | Creating a table/column under a name that is taken |
 | 409 | `DUPLICATE_SLUG` | Creating a project under a slug that is taken |
-| 409 | `DUPLICATE_PROJECT_ID` | **Since 0.10.0.** Creating a project under an id that is taken — only reachable when the request chooses the id. A deleted project still holds its id |
+| 409 | `DUPLICATE_PROJECT_ID` | Creating a project under an id that is taken — only reachable when the request chooses the id. A deleted project still holds its id |
 | 409 | `SCHEMA_VERSION_CONFLICT` | An optimistic schema update lost the race |
 | 409 | `LOCK_ACQUISITION_FAILED` | A concurrent schema operation holds the lock — retry |
 | 500 | `INTERNAL_ERROR` | Our defect, logged on the server — never your request's fault |
