@@ -18,10 +18,38 @@ public sealed class BulkImportJob
     public long SuccessCount { get; init; }
     public long ErrorCount { get; init; }
     public string? ErrorMessage { get; init; }
+
+    /// <summary>
+    /// Per-row failure reasons, capped at <see cref="MaxErrorDetails"/> entries. A row that failed
+    /// contributes its own <see cref="ImportRowResult.Error"/> here instead of it being discarded
+    /// once the aggregate <see cref="ErrorCount"/> is tallied.
+    /// </summary>
+    public IReadOnlyList<ImportRowError>? ErrorDetails { get; init; }
+
+    /// <summary>
+    /// True when <see cref="ErrorCount"/> exceeds <see cref="MaxErrorDetails"/> and <see cref="ErrorDetails"/>
+    /// holds only the first <see cref="MaxErrorDetails"/> failures.
+    /// </summary>
+    public bool ErrorDetailsTruncated { get; init; }
+
+    /// <summary>
+    /// How many per-row failures a job persists before truncating.
+    /// </summary>
+    public const int MaxErrorDetails = 100;
+
     public JsonDocument? Options { get; init; }
     public DateTimeOffset CreatedAt { get; init; }
     public DateTimeOffset? StartedAt { get; init; }
     public DateTimeOffset? CompletedAt { get; init; }
+}
+
+/// <summary>
+/// Why a single row failed during a bulk import.
+/// </summary>
+public sealed record ImportRowError
+{
+    public required long RowNumber { get; init; }
+    public required string Error { get; init; }
 }
 
 /// <summary>

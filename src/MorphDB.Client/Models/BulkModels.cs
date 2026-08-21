@@ -216,6 +216,16 @@ public sealed class ImportJobStatus
     public string? ErrorMessage { get; init; }
 
     /// <summary>
+    /// Per-row failure reasons, capped at the first 100 failures.
+    /// </summary>
+    public IReadOnlyList<ImportRowError>? ErrorDetails { get; init; }
+
+    /// <summary>
+    /// True when <see cref="ErrorCount"/> exceeds the number of entries kept in <see cref="ErrorDetails"/>.
+    /// </summary>
+    public bool ErrorDetailsTruncated { get; init; }
+
+    /// <summary>
     /// Creation timestamp.
     /// </summary>
     public DateTimeOffset CreatedAt { get; init; }
@@ -234,6 +244,22 @@ public sealed class ImportJobStatus
     /// Progress percentage.
     /// </summary>
     public double PercentComplete => TotalRows > 0 ? (double)ProcessedRows / TotalRows * 100 : 0;
+}
+
+/// <summary>
+/// Why a single row failed during a bulk import.
+/// </summary>
+public sealed class ImportRowError
+{
+    /// <summary>
+    /// 1-based row number within the imported file.
+    /// </summary>
+    public long RowNumber { get; init; }
+
+    /// <summary>
+    /// The write pipeline's error message for this row.
+    /// </summary>
+    public required string Error { get; init; }
 }
 
 /// <summary>

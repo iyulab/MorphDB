@@ -804,6 +804,7 @@ public static class DdlBuilder
                 success_count BIGINT NOT NULL DEFAULT 0,
                 error_count BIGINT NOT NULL DEFAULT 0,
                 error_message TEXT,
+                error_details JSONB,
                 options JSONB,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 started_at TIMESTAMPTZ,

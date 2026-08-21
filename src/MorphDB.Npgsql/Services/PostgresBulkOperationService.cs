@@ -169,17 +169,18 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
             var rowNumber = 0L;
             var successCount = 0L;
             var errorCount = 0L;
+            var errorDetails = new List<ImportRowError>();
+
+            // Get table metadata for pipeline usage and, for CSV, for typed value coercion.
+            var table = await _schemaManager.GetTableAsync(job.ProjectId, job.TableName, cancellationToken);
 
             var rows = job.Format switch
             {
-                ImportFormat.Csv => ParseCsvAsync(dataStream, job, cancellationToken),
+                ImportFormat.Csv => ParseCsvAsync(dataStream, job, table, cancellationToken),
                 ImportFormat.Json => ParseJsonArrayAsync(dataStream, cancellationToken),
                 ImportFormat.Ndjson => ParseNdjsonAsync(dataStream, cancellationToken),
                 _ => throw new NotSupportedException($"Format {job.Format} not supported")
             };
-
-            // Get table metadata for pipeline usage
-            var table = await _schemaManager.GetTableAsync(job.ProjectId, job.TableName, cancellationToken);
 
             await foreach (var row in rows.WithCancellation(cancellationToken))
             {
@@ -193,6 +194,10 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
                 else
                 {
                     errorCount++;
+                    if (errorDetails.Count < BulkImportJob.MaxErrorDetails && result.Error is not null)
+                    {
+                        errorDetails.Add(new ImportRowError { RowNumber = rowNumber, Error = result.Error });
+                    }
                 }
 
                 // Update progress periodically
@@ -205,7 +210,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
             }
 
             // Final update
-            await UpdateImportJobCompletedAsync(jobId, rowNumber, successCount, errorCount, cancellationToken);
+            await UpdateImportJobCompletedAsync(jobId, rowNumber, successCount, errorCount, errorDetails, cancellationToken);
         }
 
         // Cleanup stored data
@@ -369,7 +374,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         const string sql = """
             SELECT job_id, project_id, table_id, table_name, format, status,
                    total_rows, processed_rows, success_count, error_count,
-                   error_message, options, created_at, started_at, completed_at
+                   error_message, error_details, options, created_at, started_at, completed_at
             FROM morphdb._morph_import_jobs
             WHERE job_id = @JobId
             """;
@@ -405,7 +410,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         const string sql = """
             SELECT job_id, project_id, table_id, table_name, format, status,
                    total_rows, processed_rows, success_count, error_count,
-                   error_message, options, created_at, started_at, completed_at
+                   error_message, error_details, options, created_at, started_at, completed_at
             FROM morphdb._morph_import_jobs
             WHERE project_id = @ProjectId
             ORDER BY created_at DESC
@@ -504,7 +509,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         const string sql = """
             SELECT job_id, project_id, table_id, table_name, format, status,
                    total_rows, processed_rows, success_count, error_count,
-                   error_message, options, created_at, started_at, completed_at
+                   error_message, error_details, options, created_at, started_at, completed_at
             FROM morphdb._morph_import_jobs
             WHERE status = 'pending'
             ORDER BY created_at ASC
@@ -653,10 +658,13 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
     private static async IAsyncEnumerable<IDictionary<string, object?>> ParseCsvAsync(
         Stream stream,
         BulkImportJob job,
+        TableMetadata? table,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var options = job.Options?.Deserialize<CsvImportOptions>() ?? new CsvImportOptions();
         using var reader = new StreamReader(stream, Encoding.UTF8);
+
+        var columnTypes = table?.Columns.ToDictionary(c => c.LogicalName, c => c.DataType, StringComparer.OrdinalIgnoreCase);
 
         string[]? headers = null;
         var lineNumber = 0;
@@ -684,7 +692,9 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
             for (var i = 0; i < Math.Min(headers.Length, values.Length); i++)
             {
                 var value = options.TrimWhitespace ? values[i].Trim() : values[i];
-                row[headers[i]] = ConvertCsvValue(value, options.NullHandling);
+                var header = headers[i];
+                var dataType = columnTypes is not null && columnTypes.TryGetValue(header, out var t) ? t : (MorphDataType?)null;
+                row[header] = ConvertCsvValue(value, options.NullHandling, dataType);
             }
 
             yield return row;
@@ -773,14 +783,52 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         return [.. values];
     }
 
-    private static string? ConvertCsvValue(string value, NullHandling nullHandling)
+    /// <summary>
+    /// CSV has one representation for every value: text. Everything the pipeline writes downstream
+    /// (<see cref="Infrastructure.TypeMapper.ToDbValue"/>) expects a value already shaped for its
+    /// column — a JSON parser hands that shape over for free (a JSON number deserializes to a
+    /// number), but a CSV cell never does. This is the one place that gap needs closing: without it,
+    /// every non-text column is handed a raw string and the write fails with a Postgres type-mismatch
+    /// the row-level <c>Error</c> already carries but nothing before this fix ever surfaced.
+    /// A value the declared type cannot parse is left as a string; the write pipeline then rejects
+    /// that specific row instead of this parser silently guessing or the whole job dying mid-stream.
+    /// </summary>
+    private static object? ConvertCsvValue(string value, NullHandling nullHandling, MorphDataType? dataType)
     {
-        return nullHandling switch
+        var normalized = nullHandling switch
         {
             NullHandling.EmptyAsNull when string.IsNullOrEmpty(value) => null,
             NullHandling.NullStringAsNull when value.Equals("null", StringComparison.OrdinalIgnoreCase) => null,
             _ => value
         };
+
+        if (normalized is null || dataType is null)
+            return normalized;
+
+        try
+        {
+            return dataType switch
+            {
+                MorphDataType.Integer => int.Parse(normalized, CultureInfo.InvariantCulture),
+                MorphDataType.BigInteger => long.Parse(normalized, CultureInfo.InvariantCulture),
+                MorphDataType.Decimal => decimal.Parse(normalized, CultureInfo.InvariantCulture),
+                MorphDataType.Boolean => bool.Parse(normalized),
+                MorphDataType.Date or MorphDataType.DateTime or MorphDataType.Time
+                    or MorphDataType.CreatedTime or MorphDataType.ModifiedTime
+                    => DateTime.Parse(normalized, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal),
+                MorphDataType.Uuid or MorphDataType.Relation or MorphDataType.CreatedBy or MorphDataType.ModifiedBy
+                    => Guid.Parse(normalized),
+                _ => normalized
+            };
+        }
+        catch (FormatException)
+        {
+            return normalized;
+        }
+        catch (OverflowException)
+        {
+            return normalized;
+        }
     }
 
     private static Dictionary<string, object?> JsonElementToDictionary(JsonElement element)
@@ -1212,12 +1260,14 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         long totalRows,
         long successCount,
         long errorCount,
+        List<ImportRowError> errorDetails,
         CancellationToken cancellationToken)
     {
         const string sql = """
             UPDATE morphdb._morph_import_jobs
             SET status = @Status, total_rows = @TotalRows, processed_rows = @TotalRows,
-                success_count = @SuccessCount, error_count = @ErrorCount, completed_at = @Now
+                success_count = @SuccessCount, error_count = @ErrorCount,
+                error_details = @ErrorDetails::jsonb, completed_at = @Now
             WHERE job_id = @JobId
             """;
 
@@ -1229,6 +1279,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
             TotalRows = totalRows,
             SuccessCount = successCount,
             ErrorCount = errorCount,
+            ErrorDetails = errorDetails.Count == 0 ? null : JsonSerializer.Serialize(errorDetails),
             Now = DateTimeOffset.UtcNow
         });
     }
@@ -1269,6 +1320,10 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
 
     private static BulkImportJob MapToImportJob(ImportJobRow row)
     {
+        var errorDetails = row.error_details is null
+            ? null
+            : JsonSerializer.Deserialize<List<ImportRowError>>(row.error_details);
+
         return new BulkImportJob
         {
             JobId = row.job_id,
@@ -1282,6 +1337,8 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
             SuccessCount = row.success_count,
             ErrorCount = row.error_count,
             ErrorMessage = row.error_message,
+            ErrorDetails = errorDetails,
+            ErrorDetailsTruncated = row.error_count > BulkImportJob.MaxErrorDetails,
             Options = row.options is null ? null : JsonDocument.Parse(row.options),
             CreatedAt = row.created_at,
             StartedAt = row.started_at,
@@ -1329,6 +1386,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         public long success_count { get; init; }
         public long error_count { get; init; }
         public string? error_message { get; init; }
+        public string? error_details { get; init; }
         public string? options { get; init; }
         public DateTimeOffset created_at { get; init; }
         public DateTimeOffset? started_at { get; init; }

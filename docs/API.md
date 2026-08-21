@@ -771,6 +771,12 @@ GET  /api/bulk/export                     # List export jobs
 GET  /api/bulk/export/{jobId}/download    # Fetch a finished export
 ```
 
+An import job that finishes with `errorCount > 0` carries `errorDetails` — up to the first 100
+per-row failures, each `{ "rowNumber": <1-based>, "error": "<message>" }` — so a row-level failure
+is diagnosable without re-sending the file. `errorDetailsTruncated` is `true` once `errorCount`
+exceeds 100. `errorMessage` (singular) is unrelated: it is set only when the whole job died from an
+unhandled exception, not on a per-row basis.
+
 ---
 
 ## Schema Evolution

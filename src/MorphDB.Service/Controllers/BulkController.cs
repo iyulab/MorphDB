@@ -450,6 +450,10 @@ public sealed class BulkController : ControllerBase
         SuccessCount = job.SuccessCount,
         ErrorCount = job.ErrorCount,
         ErrorMessage = job.ErrorMessage,
+        ErrorDetails = job.ErrorDetails?
+            .Select(e => new ImportRowErrorApiResponse { RowNumber = e.RowNumber, Error = e.Error })
+            .ToList(),
+        ErrorDetailsTruncated = job.ErrorDetailsTruncated,
         CreatedAt = job.CreatedAt,
         StartedAt = job.StartedAt,
         CompletedAt = job.CompletedAt

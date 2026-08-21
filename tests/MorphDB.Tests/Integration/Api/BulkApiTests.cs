@@ -2,6 +2,9 @@ using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
+using Microsoft.Extensions.DependencyInjection;
+using MorphDB.Core.Abstractions;
+using MorphDB.Core.Models;
 using MorphDB.Service.Models.Api;
 using MorphDB.Tests.Fixtures;
 
@@ -91,6 +94,94 @@ public class BulkApiTests
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);
+    }
+
+    [Fact]
+    public async Task ImportCsv_ExportedTypedColumns_RoundTripsWithoutRowFailures()
+    {
+        // Arrange — the exact shape of the original bug report: export a table with non-text
+        // columns (integer, boolean) to CSV, then re-import that CSV into the same table. Every
+        // row used to fail (CSV values arrive as raw strings; only JSON/NDJSON produced typed
+        // values), with no reason recorded anywhere.
+        //
+        // The test host removes the BulkJobProcessor background service (it polls tables that
+        // don't exist yet at fixture start-up — see ApiTestFixture), so job processing is driven
+        // directly through IBulkOperationService here instead of waiting on HTTP polling for a
+        // background pass that will never run.
+        var tableName = await SetupTestTableAsync();
+        await InsertTestDataAsync(tableName, 3);
+
+        using var scope = _fixture.Api.Services.CreateScope();
+        var bulkService = scope.ServiceProvider.GetRequiredService<IBulkOperationService>();
+
+        // Export only the user-declared columns — re-importing the row's own primary key
+        // alongside it would collide on uniqueness, which is a real conflict unrelated to the
+        // type-coercion bug under test (see the issue's own repro, which drops system columns
+        // for exactly this reason).
+        var exportJob = await bulkService.StartCsvExportAsync(
+            _fixture.Api.ProjectId, tableName, new CsvExportOptions
+            {
+                Delimiter = ',',
+                IncludeHeader = true,
+                Columns = ["name", "email", "age", "is_active"]
+            });
+
+        using var exportStream = new MemoryStream();
+        await bulkService.StreamExportAsync(exportJob.JobId, exportStream);
+        exportStream.Position = 0;
+        var csvContent = await new StreamReader(exportStream, Encoding.UTF8).ReadToEndAsync();
+
+        // Act — re-import the exported CSV into the same table.
+        using var importStream = new MemoryStream(Encoding.UTF8.GetBytes(csvContent));
+        var importJob = await bulkService.StartCsvImportAsync(
+            _fixture.Api.ProjectId, tableName, importStream, new CsvImportOptions { Delimiter = ',', HasHeader = true });
+
+        long successCount = 0, errorCount = 0;
+        await foreach (var result in bulkService.ProcessImportAsync(importJob.JobId))
+        {
+            if (result.Success)
+                successCount++;
+            else
+                errorCount++;
+        }
+
+        // Assert
+        errorCount.Should().Be(0, "typed CSV values (integer, boolean) must round-trip like JSON/NDJSON does");
+        successCount.Should().Be(3);
+
+        var finalJob = await bulkService.GetImportJobAsync(importJob.JobId);
+        finalJob!.ErrorCount.Should().Be(0);
+        finalJob.SuccessCount.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task ImportCsv_WithARowThatFailsToWrite_PersistsPerRowErrorDetails()
+    {
+        // Arrange — "age" is declared integer; a value the column cannot hold must fail that row
+        // (not the whole parse), and the reason must survive to the job record instead of being
+        // discarded once error_count is tallied.
+        var tableName = await SetupTestTableAsync();
+        var csvContent = "name,email,age,is_active\nAlice,alice@test.com,not-a-number,true";
+
+        using var scope = _fixture.Api.Services.CreateScope();
+        var bulkService = scope.ServiceProvider.GetRequiredService<IBulkOperationService>();
+
+        using var importStream = new MemoryStream(Encoding.UTF8.GetBytes(csvContent));
+        var importJob = await bulkService.StartCsvImportAsync(
+            _fixture.Api.ProjectId, tableName, importStream, new CsvImportOptions { Delimiter = ',', HasHeader = true });
+
+        // Act
+        await foreach (var _ in bulkService.ProcessImportAsync(importJob.JobId))
+        {
+            // Drain — the job record is what's under test, not the per-row stream.
+        }
+
+        // Assert
+        var finalJob = await bulkService.GetImportJobAsync(importJob.JobId);
+        finalJob!.ErrorCount.Should().Be(1);
+        finalJob.ErrorDetails.Should().NotBeNullOrEmpty();
+        finalJob.ErrorDetails![0].RowNumber.Should().Be(1);
+        finalJob.ErrorDetails![0].Error.Should().NotBeNullOrWhiteSpace();
     }
 
     [Fact]

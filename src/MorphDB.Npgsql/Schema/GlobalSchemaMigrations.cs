@@ -103,6 +103,14 @@ public static class GlobalSchemaMigrations
         ALTER TABLE IF EXISTS morphdb._morph_relations ADD COLUMN IF NOT EXISTS enforce_on_write BOOLEAN NOT NULL DEFAULT true;
         ALTER TABLE IF EXISTS morphdb._morph_relations ADD COLUMN IF NOT EXISTS virtual_cascade BOOLEAN NOT NULL DEFAULT true;
 
+        -- Per-row import failures were computed (WritePipeline returns the real error per row) and
+        -- then discarded: the streaming loop only tallied error_count, and this table had no column
+        -- to hold the reasons. A caller with errorCount > 0 and errorMessage = NULL (the job only
+        -- ever failed as a whole, in the catch block) had no way to ask "which rows, and why" short
+        -- of reading the source. NULL on every existing row is correct: no historical job has
+        -- reasons to backfill, because the reasons were never kept anywhere.
+        ALTER TABLE IF EXISTS morphdb._morph_import_jobs ADD COLUMN IF NOT EXISTS error_details JSONB;
+
         ALTER TABLE IF EXISTS morphdb._morph_tables ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
         ALTER TABLE IF EXISTS morphdb._morph_columns ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
         ALTER TABLE IF EXISTS morphdb._morph_indexes ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;

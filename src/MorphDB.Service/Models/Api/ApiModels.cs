@@ -1367,10 +1367,21 @@ public sealed record ImportJobApiResponse
     public long SuccessCount { get; init; }
     public long ErrorCount { get; init; }
     public string? ErrorMessage { get; init; }
+    public IReadOnlyList<ImportRowErrorApiResponse>? ErrorDetails { get; init; }
+    public bool ErrorDetailsTruncated { get; init; }
     public DateTimeOffset CreatedAt { get; init; }
     public DateTimeOffset? StartedAt { get; init; }
     public DateTimeOffset? CompletedAt { get; init; }
     public double PercentComplete => TotalRows > 0 ? (double)ProcessedRows / TotalRows * 100 : 0;
+}
+
+/// <summary>
+/// Why a single row failed during a bulk import.
+/// </summary>
+public sealed record ImportRowErrorApiResponse
+{
+    public long RowNumber { get; init; }
+    public required string Error { get; init; }
 }
 
 /// <summary>
