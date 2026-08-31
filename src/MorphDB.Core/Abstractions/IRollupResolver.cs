@@ -9,22 +9,6 @@ using MorphDB.Core.Models;
 public interface IRollupResolver
 {
     /// <summary>
-    /// Resolves rollup values for a set of records.
-    /// </summary>
-    /// <param name="projectId">The project ID.</param>
-    /// <param name="sourceTable">The source table metadata.</param>
-    /// <param name="records">Records containing the primary key values.</param>
-    /// <param name="rollupColumns">Rollup column configurations to resolve.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Records enriched with resolved rollup values.</returns>
-    Task<IReadOnlyList<IDictionary<string, object?>>> ResolveRollupValuesAsync(
-        Guid projectId,
-        TableMetadata sourceTable,
-        IReadOnlyList<IDictionary<string, object?>> records,
-        IReadOnlyList<RollupColumnInfo> rollupColumns,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Builds SQL subquery for rollup columns to include in a query.
     /// </summary>
     /// <param name="projectId">The project ID.</param>

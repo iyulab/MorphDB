@@ -18,22 +18,6 @@ public sealed class PostgresRollupResolver : IRollupResolver
         _metadataRepository = metadataRepository;
     }
 
-    public async Task<IReadOnlyList<IDictionary<string, object?>>> ResolveRollupValuesAsync(
-        Guid projectId,
-        TableMetadata sourceTable,
-        IReadOnlyList<IDictionary<string, object?>> records,
-        IReadOnlyList<RollupColumnInfo> rollupColumns,
-        CancellationToken cancellationToken = default)
-    {
-        if (records.Count == 0 || rollupColumns.Count == 0)
-            return records;
-
-        // Rollup values are resolved via SQL subqueries in the query builder
-        // This method can be used for post-processing or in-memory resolution
-        // For now, return records as-is since resolution happens at query time
-        return records;
-    }
-
     public async Task<RollupQueryExpansion> BuildRollupExpansionAsync(
         Guid projectId,
         TableMetadata sourceTable,

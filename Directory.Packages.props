@@ -64,6 +64,7 @@
     <!-- AwesomeAssertions: Apache-2.0 community fork of FluentAssertions (FA 8.x is commercial). API-compatible; namespace is AwesomeAssertions (not FluentAssertions). -->
     <PackageVersion Include="AwesomeAssertions" Version="9.5.0" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.14.0" />
+    <PackageVersion Include="Testcontainers.Redis" Version="4.14.0" />
     <PackageVersion Include="Bogus" Version="35.6.5" />
   </ItemGroup>
 </Project>

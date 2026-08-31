@@ -9,20 +9,6 @@ using MorphDB.Core.Models;
 public interface ILookupResolver
 {
     /// <summary>
-    /// Resolves lookup values for a set of records.
-    /// </summary>
-    /// <param name="projectId">The project ID.</param>
-    /// <param name="records">Records containing the relation key values.</param>
-    /// <param name="lookupColumns">Lookup column configurations to resolve.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Records enriched with resolved lookup values.</returns>
-    Task<IReadOnlyList<IDictionary<string, object?>>> ResolveLookupValuesAsync(
-        Guid projectId,
-        IReadOnlyList<IDictionary<string, object?>> records,
-        IReadOnlyList<LookupColumnInfo> lookupColumns,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// Builds SQL JOIN clauses for lookup columns to include in a query.
     /// </summary>
     /// <param name="projectId">The project ID.</param>

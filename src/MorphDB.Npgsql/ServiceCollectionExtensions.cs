@@ -22,6 +22,7 @@ using MorphDB.Npgsql.Schema;
 using MorphDB.Npgsql.Security;
 using MorphDB.Npgsql.Services;
 using Npgsql;
+using StackExchange.Redis;
 
 namespace MorphDB.Npgsql;
 
@@ -109,6 +110,11 @@ public static partial class ServiceCollectionExtensions
                 redisOptions.Configuration = options.RedisConnectionString;
                 redisOptions.InstanceName = options.SchemaCacheOptions.KeyPrefix + ":";
             });
+
+            // Raw multiplexer for SCAN-based bulk invalidation, which IDistributedCache's
+            // key-at-a-time contract cannot express.
+            services.AddSingleton<IConnectionMultiplexer>(
+                _ => ConnectionMultiplexer.Connect(options.RedisConnectionString));
 
             // Configure schema cache options
             services.Configure<SchemaCacheOptions>(cacheOpts =>

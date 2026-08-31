@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Models;
+using StackExchange.Redis;
 
 namespace MorphDB.Npgsql.Caching;
 
@@ -13,6 +14,7 @@ namespace MorphDB.Npgsql.Caching;
 public sealed class RedisSchemaCache : ISchemaCache
 {
     private readonly IDistributedCache _cache;
+    private readonly IConnectionMultiplexer _multiplexer;
     private readonly SchemaCacheOptions _options;
     private readonly ILogger<RedisSchemaCache> _logger;
 
@@ -24,10 +26,12 @@ public sealed class RedisSchemaCache : ISchemaCache
 
     public RedisSchemaCache(
         IDistributedCache cache,
+        IConnectionMultiplexer multiplexer,
         IOptions<SchemaCacheOptions> options,
         ILogger<RedisSchemaCache> logger)
     {
         _cache = cache;
+        _multiplexer = multiplexer;
         _options = options.Value;
         _logger = logger;
     }
@@ -159,11 +163,40 @@ public sealed class RedisSchemaCache : ISchemaCache
 
     public async Task InvalidateAllAsync(CancellationToken cancellationToken = default)
     {
-        // Note: Redis doesn't have a simple "clear by prefix" operation
-        // This would require using Redis SCAN + DEL or using a separate tracking mechanism
-        // For now, we log that this operation is limited
-        SchemaCacheLogs.InvalidateAllRequested(_logger);
-        await Task.CompletedTask;
+        if (!_options.Enabled)
+            return;
+
+        // IDistributedCache has no "clear by prefix" primitive, so this drops to the raw
+        // multiplexer and SCANs (via IServer.Keys, which is cursor-based under the hood, not
+        // a blocking KEYS call) for every key under this cache's namespace, then deletes them
+        // in one batch. The wildcard is on both sides because AddStackExchangeRedisCache
+        // prepends its own InstanceName ahead of the KeyPrefix we already embed in each key
+        // (see Build*Key below), so the on-the-wire key is not anchored at KeyPrefix.
+        var pattern = (RedisValue)$"*{_options.KeyPrefix}*";
+        var deletedCount = 0;
+
+        foreach (var endpoint in _multiplexer.GetEndPoints())
+        {
+            var server = _multiplexer.GetServer(endpoint);
+            if (server.IsReplica)
+                continue;
+
+            var db = _multiplexer.GetDatabase();
+            var keys = server.KeysAsync(pattern: pattern);
+
+            var batch = new List<RedisKey>();
+            await foreach (var key in keys.WithCancellation(cancellationToken))
+            {
+                batch.Add(key);
+            }
+
+            if (batch.Count > 0)
+            {
+                deletedCount += (int)await db.KeyDeleteAsync([.. batch]);
+            }
+        }
+
+        SchemaCacheLogs.InvalidateAllCompleted(_logger, deletedCount);
     }
 
     private string BuildTableKey(Guid projectId, string logicalName) =>
@@ -227,8 +260,8 @@ internal static partial class SchemaCacheLogs
     [LoggerMessage(LogLevel.Debug, "Invalidated all tables for project {ProjectId}")]
     public static partial void ProjectTablesInvalidated(ILogger logger, Guid projectId);
 
-    [LoggerMessage(LogLevel.Warning, "InvalidateAll requested but not fully supported with Redis")]
-    public static partial void InvalidateAllRequested(ILogger logger);
+    [LoggerMessage(LogLevel.Information, "InvalidateAll removed {DeletedCount} schema cache keys")]
+    public static partial void InvalidateAllCompleted(ILogger logger, int deletedCount);
 
     [LoggerMessage(LogLevel.Warning, "Failed to read from cache key '{Key}'")]
     public static partial void CacheReadError(ILogger logger, string key, Exception exception);

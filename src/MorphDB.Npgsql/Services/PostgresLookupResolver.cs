@@ -19,69 +19,6 @@ public sealed class PostgresLookupResolver : ILookupResolver
         _metadataRepository = metadataRepository;
     }
 
-    public async Task<IReadOnlyList<IDictionary<string, object?>>> ResolveLookupValuesAsync(
-        Guid projectId,
-        IReadOnlyList<IDictionary<string, object?>> records,
-        IReadOnlyList<LookupColumnInfo> lookupColumns,
-        CancellationToken cancellationToken = default)
-    {
-        if (records.Count == 0 || lookupColumns.Count == 0)
-            return records;
-
-        // Group lookups by target table for efficient batch resolution
-        var lookupsByTarget = lookupColumns
-            .GroupBy(l => l.Config.TargetTable)
-            .ToDictionary(g => g.Key, g => g.ToList());
-
-        var enrichedRecords = records
-            .Select(r => new Dictionary<string, object?>(r))
-            .ToList();
-
-        foreach (var (targetTableName, lookups) in lookupsByTarget)
-        {
-            var targetTable = await _metadataRepository.GetTableByNameAsync(
-                projectId, targetTableName, includeColumns: true, cancellationToken);
-
-            if (targetTable == null)
-                continue;
-
-            // Collect all foreign key values to look up
-            foreach (var lookup in lookups)
-            {
-                var fkValues = new HashSet<object>();
-                foreach (var record in records)
-                {
-                    if (record.TryGetValue(lookup.Config.RelationColumn, out var fkValue) && fkValue != null)
-                    {
-                        fkValues.Add(fkValue);
-                    }
-                }
-
-                if (fkValues.Count == 0)
-                    continue;
-
-                // Query target table for lookup values
-                var targetColumn = targetTable.Columns
-                    .FirstOrDefault(c => c.LogicalName == lookup.Config.TargetColumn);
-
-                if (targetColumn == null)
-                    continue;
-
-                var pkColumn = targetTable.Columns
-                    .FirstOrDefault(c => c.IsPrimaryKey);
-
-                if (pkColumn == null)
-                    continue;
-
-                // Build lookup map: FK value -> target column value
-                // This would typically query the database, but for now we mark it for JOIN expansion
-                // The actual resolution happens in the query builder via JOINs
-            }
-        }
-
-        return enrichedRecords;
-    }
-
     public async Task<LookupQueryExpansion> BuildLookupExpansionAsync(
         Guid projectId,
         TableMetadata sourceTable,
