@@ -1,5 +1,50 @@
 # Changelog
 
+## 0.11.0
+
+### Breaking
+
+- **`ILookupResolver.ResolveLookupValuesAsync` and `IRollupResolver.ResolveRollupValuesAsync` are
+  removed.** Lookup and rollup values resolve through JOINs and correlated subqueries built at
+  query time; these two methods queried target-table metadata, built the enriched records, and
+  then discarded the result, returning their input unchanged — nothing called them. An
+  implementation of either interface that still overrides these methods needs to drop them;
+  nothing else in the public surface changes.
+
+### Fixed
+
+- **`/export/xlsx` produced a corrupted file.** The endpoint wrote tab-separated text into a file
+  declared as `.xlsx` with the OOXML spreadsheet content type — Excel, `openpyxl`, and the client
+  SDKs all failed to open the result. It now writes a real workbook.
+- **A project list's `TotalCount` reported the current page's row count, not the true total.** A
+  caller computing page count from it saw exactly one page as soon as the project count passed the
+  page size; a real count query now backs the field, matching every other paginated endpoint in
+  the service.
+- **A computed default only matched a bare field name.** Its own documentation and the schema both
+  describe arithmetic expressions (`field1 + field2`, `field1 * 0.1`), but only an exact match
+  against a single field name ever resolved — any expression containing an operator silently
+  returned null. A minimal evaluator now covers one binary `+ - * /` between two operands, each a
+  field reference or a numeric literal; anything outside that grammar still returns null, as
+  before.
+- **A view's join conditions and computed expressions passed logical column and table names
+  straight through into SQL**, unlike the rest of a view definition, which already translated them
+  to physical names. Fixing that surfaced a second, deeper bug shared with the parts that already
+  translated: a dotted `table.column` reference resolved its SQL qualifier to the table's *logical*
+  name rather than the alias or physical name the query's `FROM`/`JOIN` clause actually introduces
+  — correct only by coincidence when a join's alias matched its logical name, and a Postgres
+  "missing FROM-clause entry" error otherwise. Every translated surface of a view now resolves
+  through one logical-name-to-SQL-qualifier map built from the view's base table and joins.
+- **`RedisSchemaCache`'s invalidate-all operation logged a warning and deleted nothing** —
+  `IDistributedCache` has no clear-by-prefix primitive. It now scans and deletes every key under
+  the cache's namespace through the underlying connection.
+
+### Changed
+
+- Dependencies brought current across the board, including `StackExchange.Redis` 2.8.16 → 3.1.31
+  (major — verified against its only direct consumer's tests and the full suite, both green).
+- A published package's license, tags, and project URL are now set consistently for every package;
+  one package was previously missing a project URL.
+
 ## 0.10.0
 
 ### Breaking
