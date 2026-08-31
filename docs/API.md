@@ -2,9 +2,9 @@
 
 > **This document describes `main`, which is ahead of what you can run.** Anything here the
 > published image does not serve yet carries a **Since x.y.z** marker naming the release that will
-> bring it. Everything else is in the published version, **0.10.0** — the one the README pins.
+> bring it. Everything else is in the published version, **0.11.0** — the one the README pins.
 > To read the reference for a release rather than for `main`, open this file at its tag:
-> `docs/API.md` at `v0.10.0`.
+> `docs/API.md` at `v0.11.0`.
 >
 > The marker is one-directional by nature: it can say that a documented behaviour is unreleased,
 > and no check can find a behaviour someone forgot to mark. What is held is that a marker names a
