@@ -40,6 +40,13 @@ public interface IProjectService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Gets the total count of projects, optionally filtered by status.
+    /// </summary>
+    Task<int> CountProjectsAsync(
+        ProjectStatus? status = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Updates a project's settings or name.
     /// </summary>
     Task<Project> UpdateProjectAsync(

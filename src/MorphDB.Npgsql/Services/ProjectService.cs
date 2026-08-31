@@ -102,6 +102,14 @@ public sealed partial class ProjectService : IProjectService
     }
 
     /// <inheritdoc/>
+    public async Task<int> CountProjectsAsync(
+        ProjectStatus? status = null,
+        CancellationToken cancellationToken = default)
+    {
+        return await _projectRepository.CountAsync(status, cancellationToken);
+    }
+
+    /// <inheritdoc/>
     public async Task<Project> UpdateProjectAsync(
         UpdateProjectRequest request,
         CancellationToken cancellationToken = default)

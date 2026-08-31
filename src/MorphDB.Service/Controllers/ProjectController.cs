@@ -162,7 +162,8 @@ public sealed class ProjectController : ControllerBase
             pageSize,
             cancellationToken);
 
-        // Note: Total count would require a separate query; for now, we provide page info
+        var totalCount = await _projectService.CountProjectsAsync(status, cancellationToken);
+
         var response = new PagedResponse<ProjectApiResponse>
         {
             Data = projects.Select(ProjectApiResponse.FromModel).ToList(),
@@ -170,7 +171,7 @@ public sealed class ProjectController : ControllerBase
             {
                 Page = page,
                 PageSize = pageSize,
-                TotalCount = projects.Count, // This is approximate; full count requires additional query
+                TotalCount = totalCount,
             }
         };
 
