@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
+using ClosedXML.Excel;
 using Dapper;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Exceptions;
@@ -949,29 +950,39 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         Action<long> progressCallback,
         CancellationToken cancellationToken)
     {
-        // Note: For production use, this would use a library like ClosedXML or EPPlus
-        // For now, we'll create a simple CSV-compatible output (tab-delimited for Excel)
-        // A full XLSX implementation would require adding the appropriate NuGet package
-
-        await using var writer = new StreamWriter(outputStream, Encoding.UTF8, leaveOpen: true);
-
+        // Builds the workbook in memory via ClosedXML, then serializes once at the end. OOXML is a
+        // ZIP container over several XML parts, so — unlike the row-at-a-time CSV/JSON writers above
+        // — there is no way to hand PostgresBulkOperationService's caller a partially-written valid
+        // file; the whole part has to be assembled before it can be zipped. This bounds export size
+        // by available memory, which is an accepted trade-off for now (P2-o fixed the format lie —
+        // "consumer sees text pretending to be a spreadsheet" — not export scale; a streaming OOXML
+        // writer is a separate, larger change if a real dataset ever needs it).
         var table = await _schemaManager.GetTableAsync(job.ProjectId, job.TableName, cancellationToken)
             ?? throw new TableNotFoundException(job.TableName);
 
         var columns = options.Columns?.ToList() ?? table.Columns.Select(c => c.LogicalName).ToList();
 
-        // Write header
+        using var workbook = new XLWorkbook();
+        var worksheet = workbook.Worksheets.Add(SanitizeSheetName(job.TableName));
+
+        var rowIndex = 1;
         if (options.IncludeHeader)
         {
-            await writer.WriteLineAsync(string.Join('\t', columns));
+            for (var i = 0; i < columns.Count; i++)
+            {
+                worksheet.Cell(rowIndex, i + 1).Value = columns[i];
+            }
+            rowIndex++;
         }
 
-        // Stream data as tab-separated for Excel compatibility
         var processedRows = 0L;
         await foreach (var row in StreamTableDataAsync(job.ProjectId, job.TableName, columns, options.Filter, options.OrderBy, cancellationToken))
         {
-            var values = columns.Select(col => FormatCsvValue(row.TryGetValue(col, out var v) ? v : null, null));
-            await writer.WriteLineAsync(string.Join('\t', values));
+            for (var i = 0; i < columns.Count; i++)
+            {
+                SetXlsxCellValue(worksheet.Cell(rowIndex, i + 1), row.TryGetValue(columns[i], out var v) ? v : null);
+            }
+            rowIndex++;
 
             processedRows++;
             if (processedRows % _options.ProgressUpdateInterval == 0)
@@ -980,8 +991,49 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
             }
         }
 
-        await writer.FlushAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        workbook.SaveAs(outputStream);
         progressCallback(processedRows);
+    }
+
+    private static void SetXlsxCellValue(IXLCell cell, object? value)
+    {
+        switch (value)
+        {
+            case null:
+                break;
+            case bool b:
+                cell.Value = b;
+                break;
+            case int i:
+                cell.Value = i;
+                break;
+            case long l:
+                cell.Value = l;
+                break;
+            case decimal dec:
+                cell.Value = dec;
+                break;
+            case double dbl:
+                cell.Value = dbl;
+                break;
+            case DateTime dt:
+                cell.Value = dt;
+                break;
+            case DateTimeOffset dto:
+                cell.Value = dto.UtcDateTime;
+                break;
+            default:
+                cell.Value = value.ToString() ?? "";
+                break;
+        }
+    }
+
+    private static string SanitizeSheetName(string tableName)
+    {
+        // Excel worksheet names: max 31 chars, and none of : \ / ? * [ ]
+        var sanitized = new string(tableName.Select(c => ":\\/?*[]".Contains(c) ? '_' : c).ToArray());
+        return sanitized.Length > 31 ? sanitized[..31] : sanitized;
     }
 
     private static string FormatCsvValue(object? value, string? dateFormat)
