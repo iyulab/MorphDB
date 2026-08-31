@@ -11,8 +11,21 @@
   implementation of either interface that still overrides these methods needs to drop them;
   nothing else in the public surface changes.
 
+### Added
+
+- **A failed bulk CSV import row now says why.** The import job response carries `errorDetails` —
+  up to 100 per-row failure messages, with `errorDetailsTruncated` past the cap. Previously a
+  job's `errorCount` was the only signal; the write pipeline already computed a real per-row
+  error, but the import loop tallied it and threw it away.
+
 ### Fixed
 
+- **A bulk CSV import failed on every non-text column.** CSV cells are text-only, and the value
+  coercion that already handled JSON/NDJSON input never ran for CSV-parsed rows — so an integer,
+  decimal, boolean, date, or UUID column failed a database type check on every row; only an
+  all-text table's import ever fully succeeded. Values now convert to the declared column type
+  before insert; a value that still can't parse is left as-is so only that row is rejected instead
+  of the whole import.
 - **`/export/xlsx` produced a corrupted file.** The endpoint wrote tab-separated text into a file
   declared as `.xlsx` with the OOXML spreadsheet content type — Excel, `openpyxl`, and the client
   SDKs all failed to open the result. It now writes a real workbook.
