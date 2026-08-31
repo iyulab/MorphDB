@@ -172,4 +172,83 @@ public class DefaultValueApplierTests
 
         context.Data.Should().NotContainKey("optional");
     }
+
+    [Fact]
+    public async Task ExecuteAsync_Computed_BareFieldReference_CopiesTheReferencedValue()
+    {
+        var columns = new List<ColumnMetadata>
+        {
+            CreateColumn("total", MorphDataType.Decimal, DefaultValueType.Computed, "field1")
+        };
+        var context = CreateContext(columns: columns);
+        context.Data["field1"] = 7m;
+
+        await _sut.ExecuteAsync(context);
+
+        context.Data["total"].Should().Be(7m);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_Computed_SumOfTwoFields_ComputesTheArithmeticExpression()
+    {
+        // This is the P2-o regression: the pre-fix implementation only did the bare-field-reference
+        // case above and returned null for anything with an operator in it.
+        var columns = new List<ColumnMetadata>
+        {
+            CreateColumn("total", MorphDataType.Decimal, DefaultValueType.Computed, "field1 + field2")
+        };
+        var context = CreateContext(columns: columns);
+        context.Data["field1"] = 3m;
+        context.Data["field2"] = 4m;
+
+        await _sut.ExecuteAsync(context);
+
+        context.Data["total"].Should().Be(7m);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_Computed_FieldTimesLiteral_ComputesAndConvertsToColumnType()
+    {
+        var columns = new List<ColumnMetadata>
+        {
+            CreateColumn("bonus", MorphDataType.Integer, DefaultValueType.Computed, "field1 * 0.1")
+        };
+        var context = CreateContext(columns: columns);
+        context.Data["field1"] = 50;
+
+        await _sut.ExecuteAsync(context);
+
+        context.Data["bonus"].Should().Be(5);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_Computed_DivisionByZero_ReturnsNullInsteadOfThrowing()
+    {
+        var columns = new List<ColumnMetadata>
+        {
+            CreateColumn("ratio", MorphDataType.Decimal, DefaultValueType.Computed, "field1 / field2")
+        };
+        var context = CreateContext(columns: columns);
+        context.Data["field1"] = 10m;
+        context.Data["field2"] = 0m;
+
+        await _sut.ExecuteAsync(context);
+
+        context.Data.Should().NotContainKey("ratio");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_Computed_UnresolvableOperand_StaysSilentLikeAnUnparsableStaticDefault()
+    {
+        var columns = new List<ColumnMetadata>
+        {
+            CreateColumn("total", MorphDataType.Decimal, DefaultValueType.Computed, "field1 + missing_field")
+        };
+        var context = CreateContext(columns: columns);
+        context.Data["field1"] = 3m;
+
+        await _sut.ExecuteAsync(context);
+
+        context.Data.Should().NotContainKey("total");
+    }
 }

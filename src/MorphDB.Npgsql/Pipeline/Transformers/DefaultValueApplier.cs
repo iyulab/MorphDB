@@ -89,18 +89,85 @@ public sealed class DefaultValueApplier : ITransformer
 
     private static object? GetComputedDefault(ColumnMetadata column, IWriteContext context)
     {
-        // Simple computed expressions: "field1 + field2", "field1 * 0.1", etc.
-        var expression = column.DefaultValue;
+        // Supported grammar: a bare field reference ("field1"), or exactly one binary arithmetic
+        // operation between two operands ("field1 + field2", "field1 * 0.1"), each operand being
+        // either a field reference or a numeric literal. Anything outside this grammar (nested
+        // expressions, functions, multiple operators) is not attempted — same "can't compute, stay
+        // silent" contract ParseStaticDefault already has for an unparsable static value.
+        var expression = column.DefaultValue?.Trim();
         if (string.IsNullOrEmpty(expression))
             return null;
 
-        // For now, just handle simple field references
-        // More complex expressions would need a proper expression parser
-        if (context.Data.TryGetValue(expression, out var value))
+        if (context.Data.TryGetValue(expression, out var directValue))
         {
-            return value;
+            return directValue;
+        }
+
+        var result = EvaluateArithmeticExpression(expression, context.Data);
+        if (result is null)
+            return null;
+
+        return column.DataType switch
+        {
+            MorphDataType.Integer => (int)result.Value,
+            MorphDataType.BigInteger => (long)result.Value,
+            _ => result.Value
+        };
+    }
+
+    private static readonly char[] ComputedOperators = ['+', '-', '*', '/'];
+
+    private static decimal? EvaluateArithmeticExpression(string expression, IDictionary<string, object?> data)
+    {
+        foreach (var op in ComputedOperators)
+        {
+            var opIndex = expression.IndexOf(op);
+            if (opIndex <= 0 || opIndex == expression.Length - 1)
+                continue;
+
+            var leftText = expression[..opIndex].Trim();
+            var rightText = expression[(opIndex + 1)..].Trim();
+
+            if (leftText.Length == 0 || rightText.Length == 0)
+                continue;
+
+            if (!TryResolveOperand(leftText, data, out var left) || !TryResolveOperand(rightText, data, out var right))
+                continue;
+
+            return op switch
+            {
+                '+' => left + right,
+                '-' => left - right,
+                '*' => left * right,
+                '/' => right == 0m ? null : left / right,
+                _ => null
+            };
         }
 
         return null;
+    }
+
+    private static bool TryResolveOperand(string operand, IDictionary<string, object?> data, out decimal value)
+    {
+        if (decimal.TryParse(operand, System.Globalization.CultureInfo.InvariantCulture, out value))
+        {
+            return true;
+        }
+
+        if (data.TryGetValue(operand, out var fieldValue) && fieldValue is not null)
+        {
+            try
+            {
+                value = Convert.ToDecimal(fieldValue, System.Globalization.CultureInfo.InvariantCulture);
+                return true;
+            }
+            catch (Exception ex) when (ex is InvalidCastException or FormatException or OverflowException)
+            {
+                return false;
+            }
+        }
+
+        value = default;
+        return false;
     }
 }
