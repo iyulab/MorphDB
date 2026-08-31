@@ -90,4 +90,4 @@ jobs:
         run: dotnet restore
 
       - name: Run security scan
-        uses: iyulab/dotnet-ci-actions/vulnerability-scan@main
+        uses: iyulab/dotnet-ci-actions/vulnerability-scan@00faf7ff62b88e11fbf88edfedcf73bdc5f2eebe # main, 2026-08-31
