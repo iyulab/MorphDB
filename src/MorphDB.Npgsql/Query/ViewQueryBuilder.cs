@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Models;
 using MorphDB.Npgsql.Ddl;
@@ -40,6 +41,27 @@ public sealed class ViewQueryBuilder
             throw new MorphDB.Core.Exceptions.TableNotFoundException(definition.BaseTable);
         }
 
+        // Maps each join's *logical* table name to the SQL qualifier it is actually reachable
+        // under in this statement's FROM/JOIN clauses -- "base_table" for the base table, the
+        // declared alias for an aliased join, or the join table's physical name when unaliased
+        // (matching exactly what the FROM/JOIN loop below emits). Built up front so a condition's
+        // "orders.customer_id" resolves to the same table the query can actually see, rather than
+        // a logical name no FROM/JOIN clause ever introduces.
+        var tableQualifiers = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [definition.BaseTable] = "base_table"
+        };
+        foreach (var join in definition.Joins)
+        {
+            var joinTable = await GetTableMetadataAsync(join.Table, cancellationToken);
+            if (joinTable != null)
+            {
+                tableQualifiers[join.Table] = !string.IsNullOrEmpty(join.Alias)
+                    ? DdlBuilder.QuoteIdentifier(join.Alias)
+                    : DdlBuilder.QuoteIdentifier(joinTable.PhysicalName);
+            }
+        }
+
         // Build SELECT clause
         sb.Append("SELECT ");
         if (definition.Distinct)
@@ -56,7 +78,7 @@ public sealed class ViewQueryBuilder
             var columnExpressions = new List<string>();
             foreach (var col in definition.Columns)
             {
-                columnExpressions.Add(await BuildColumnExpressionAsync(col, baseTable, cancellationToken));
+                columnExpressions.Add(await BuildColumnExpressionAsync(col, baseTable, tableQualifiers, cancellationToken));
             }
             sb.Append(string.Join(", ", columnExpressions));
         }
@@ -85,7 +107,7 @@ public sealed class ViewQueryBuilder
                 sb.Append(DdlBuilder.QuoteIdentifier(join.Alias));
             }
             sb.Append(" ON ");
-            sb.Append(await TranslateConditionAsync(join.Condition, cancellationToken));
+            sb.Append(await TranslateConditionAsync(join.Condition, baseTable, tableQualifiers, cancellationToken));
         }
 
         // Build WHERE clause
@@ -96,7 +118,7 @@ public sealed class ViewQueryBuilder
             for (int i = 0; i < definition.Filters.Count; i++)
             {
                 var filter = definition.Filters[i];
-                var condition = await BuildFilterConditionAsync(filter, baseTable, cancellationToken);
+                var condition = await BuildFilterConditionAsync(filter, baseTable, tableQualifiers, cancellationToken);
                 if (i > 0)
                 {
                     sb.Append(filter.LogicalOp == LogicalOperator.And ? " AND " : " OR ");
@@ -126,7 +148,7 @@ public sealed class ViewQueryBuilder
             var groupByColumns = new List<string>();
             foreach (var col in definition.GroupBy)
             {
-                var physicalName = await TranslateColumnNameAsync(col, baseTable, cancellationToken);
+                var physicalName = await TranslateColumnNameAsync(col, baseTable, tableQualifiers, cancellationToken);
                 groupByColumns.Add(physicalName);
             }
             sb.Append(string.Join(", ", groupByColumns));
@@ -139,7 +161,7 @@ public sealed class ViewQueryBuilder
             var orderClauses = new List<string>();
             foreach (var order in definition.OrderBy)
             {
-                var physicalName = await TranslateColumnNameAsync(order.Column, baseTable, cancellationToken);
+                var physicalName = await TranslateColumnNameAsync(order.Column, baseTable, tableQualifiers, cancellationToken);
                 var direction = order.Descending ? " DESC" : " ASC";
                 var nulls = order.NullOrdering == NullOrdering.First ? " NULLS FIRST" : " NULLS LAST";
                 orderClauses.Add($"{physicalName}{direction}{nulls}");
@@ -159,6 +181,7 @@ public sealed class ViewQueryBuilder
     private async Task<string> BuildColumnExpressionAsync(
         ViewColumnSpec col,
         TableMetadata baseTable,
+        IReadOnlyDictionary<string, string> tableQualifiers,
         CancellationToken cancellationToken)
     {
         var sb = new StringBuilder();
@@ -171,12 +194,12 @@ public sealed class ViewQueryBuilder
 
         if (!string.IsNullOrEmpty(col.Source))
         {
-            var physicalName = await TranslateColumnNameAsync(col.Source, baseTable, cancellationToken);
+            var physicalName = await TranslateColumnNameAsync(col.Source, baseTable, tableQualifiers, cancellationToken);
             sb.Append(physicalName);
         }
         else if (!string.IsNullOrEmpty(col.Expression))
         {
-            sb.Append(await TranslateExpressionAsync(col.Expression, cancellationToken));
+            sb.Append(await TranslateExpressionAsync(col.Expression, baseTable, tableQualifiers, cancellationToken));
         }
         else
         {
@@ -197,9 +220,10 @@ public sealed class ViewQueryBuilder
     private async Task<string> BuildFilterConditionAsync(
         ViewFilterSpec filter,
         TableMetadata baseTable,
+        IReadOnlyDictionary<string, string> tableQualifiers,
         CancellationToken cancellationToken)
     {
-        var fieldPhysical = await TranslateColumnNameAsync(filter.Field, baseTable, cancellationToken);
+        var fieldPhysical = await TranslateColumnNameAsync(filter.Field, baseTable, tableQualifiers, cancellationToken);
         var valueExpr = FormatFilterValue(filter.Value, filter.Operator);
 
         return filter.Operator switch
@@ -254,6 +278,7 @@ public sealed class ViewQueryBuilder
     private async Task<string> TranslateColumnNameAsync(
         string logicalName,
         TableMetadata baseTable,
+        IReadOnlyDictionary<string, string> tableQualifiers,
         CancellationToken cancellationToken)
     {
         // Check for table prefix (e.g., "orders.customer_id")
@@ -262,16 +287,19 @@ public sealed class ViewQueryBuilder
         {
             var tableName = parts[0];
             var columnName = parts[1];
+            var qualifier = tableQualifiers.TryGetValue(tableName, out var mapped)
+                ? mapped
+                : DdlBuilder.QuoteIdentifier(tableName);
             var table = await GetTableMetadataAsync(tableName, cancellationToken);
             if (table != null)
             {
                 var column = table.Columns.FirstOrDefault(c => c.LogicalName == columnName);
                 if (column != null)
                 {
-                    return $"{DdlBuilder.QuoteIdentifier(tableName)}.{DdlBuilder.QuoteIdentifier(column.PhysicalName)}";
+                    return $"{qualifier}.{DdlBuilder.QuoteIdentifier(column.PhysicalName)}";
                 }
             }
-            return $"{DdlBuilder.QuoteIdentifier(tableName)}.{DdlBuilder.QuoteIdentifier(columnName)}";
+            return $"{qualifier}.{DdlBuilder.QuoteIdentifier(columnName)}";
         }
 
         // Look in base table
@@ -290,19 +318,89 @@ public sealed class ViewQueryBuilder
         return DdlBuilder.QuoteIdentifier(logicalName);
     }
 
-    private static Task<string> TranslateConditionAsync(string condition, CancellationToken cancellationToken)
+    private Task<string> TranslateConditionAsync(
+        string condition,
+        TableMetadata baseTable,
+        IReadOnlyDictionary<string, string> tableQualifiers,
+        CancellationToken cancellationToken) =>
+        TranslateIdentifiersAsync(condition, baseTable, tableQualifiers, cancellationToken);
+
+    private Task<string> TranslateExpressionAsync(
+        string expression,
+        TableMetadata baseTable,
+        IReadOnlyDictionary<string, string> tableQualifiers,
+        CancellationToken cancellationToken) =>
+        TranslateIdentifiersAsync(expression, baseTable, tableQualifiers, cancellationToken);
+
+    // Matches either a single-quoted SQL string literal (copied verbatim, never treated as a
+    // column reference) or a bare/dotted identifier ("customer_id", "orders.customer_id").
+    private static readonly Regex IdentifierOrStringLiteral = new(
+        @"'(?:[^']|'')*'|\b[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?\b",
+        RegexOptions.Compiled);
+
+    /// <summary>
+    /// Translates logical column references embedded in a free-form condition or expression
+    /// string (e.g. "orders.customer_id = customers._id", "price * quantity") to their physical
+    /// equivalents, leaving everything else (operators, literals, SQL keywords, function names)
+    /// untouched. Unlike <see cref="TranslateColumnNameAsync"/> -- which is only ever called with
+    /// text already known to be a column reference (Source/GroupBy/OrderBy) and so can safely
+    /// quote-and-assume on a miss -- a token here that fails to resolve is left as-is, since it
+    /// may well be a keyword or function name rather than an unknown column.
+    /// </summary>
+    private async Task<string> TranslateIdentifiersAsync(
+        string text,
+        TableMetadata baseTable,
+        IReadOnlyDictionary<string, string> tableQualifiers,
+        CancellationToken cancellationToken)
     {
-        // Simple translation - in a production system, this would be more sophisticated
-        // For now, assume conditions use physical names or table.column format
-        _ = cancellationToken; // Suppress unused parameter warning
-        return Task.FromResult(condition);
+        var result = new StringBuilder();
+        var lastIndex = 0;
+
+        foreach (Match match in IdentifierOrStringLiteral.Matches(text))
+        {
+            result.Append(text, lastIndex, match.Index - lastIndex);
+
+            result.Append(match.Value.StartsWith('\'')
+                ? match.Value
+                : await TryTranslateColumnReferenceAsync(match.Value, baseTable, tableQualifiers, cancellationToken));
+
+            lastIndex = match.Index + match.Length;
+        }
+
+        result.Append(text, lastIndex, text.Length - lastIndex);
+        return result.ToString();
     }
 
-    private static Task<string> TranslateExpressionAsync(string expression, CancellationToken cancellationToken)
+    private async Task<string> TryTranslateColumnReferenceAsync(
+        string token,
+        TableMetadata baseTable,
+        IReadOnlyDictionary<string, string> tableQualifiers,
+        CancellationToken cancellationToken)
     {
-        // Simple translation - in a production system, this would parse and translate
-        _ = cancellationToken; // Suppress unused parameter warning
-        return Task.FromResult(expression);
+        var parts = token.Split('.', 2);
+        if (parts.Length == 2)
+        {
+            var table = await GetTableMetadataAsync(parts[0], cancellationToken);
+            var column = table?.Columns.FirstOrDefault(c => c.LogicalName == parts[1]);
+            if (column == null)
+            {
+                return token;
+            }
+
+            var qualifier = tableQualifiers.TryGetValue(parts[0], out var mapped)
+                ? mapped
+                : DdlBuilder.QuoteIdentifier(parts[0]);
+            return $"{qualifier}.{DdlBuilder.QuoteIdentifier(column.PhysicalName)}";
+        }
+
+        var baseColumn = baseTable.Columns.FirstOrDefault(c => c.LogicalName == token);
+        if (baseColumn != null)
+        {
+            return $"base_table.{DdlBuilder.QuoteIdentifier(baseColumn.PhysicalName)}";
+        }
+
+        // System columns use logical = physical, same rule TranslateColumnNameAsync applies.
+        return token.StartsWith('_') ? $"base_table.{DdlBuilder.QuoteIdentifier(token)}" : token;
     }
 
     private async Task<TableMetadata?> GetTableMetadataAsync(string tableName, CancellationToken cancellationToken)
