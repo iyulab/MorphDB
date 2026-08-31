@@ -218,7 +218,7 @@ await dataService.InsertAsync(projectId, "customers", new Dictionary<string, obj
 | [Philosophy](docs/PHILOSOPHY.md) | Project vision, principles, and scope |
 | [Architecture](docs/ARCHITECTURE.md) | System design and layer structure |
 | [API Reference](docs/API.md) | REST, GraphQL, OData, WebSocket endpoints |
-| [Roadmap](docs/ROADMAP.md) | Development phases and progress |
+| [Changelog](CHANGELOG.md) | Release history |
 
 ## Project Structure
 
