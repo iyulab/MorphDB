@@ -16,12 +16,23 @@
     <Company>iyulab</Company>
     <Product>MorphDB</Product>
     <Description>PostgreSQL-based dynamic schema database service layer</Description>
-    <Copyright>Copyright (c) iyulab 2024-2025</Copyright>
+    <Copyright>Copyright (c) iyulab 2024-2026</Copyright>
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/iyulab/morphdb</RepositoryUrl>
 
     <!-- Central Package Management -->
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <!--
+    NuGet packaging metadata shared by every packable project (only MorphDB.Client today; inert
+    otherwise). PackageReadmeFile/the README item itself stay per-project (MorphDB.Client.csproj)
+    since its published package documents the SDK, not the server this repo-root README covers.
+  -->
+  <PropertyGroup>
+    <PackageProjectUrl>https://github.com/iyulab/morphdb</PackageProjectUrl>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageTags>morphdb;database;sdk;client;postgresql;dynamic-schema</PackageTags>
   </PropertyGroup>
 
   <!-- Debug configuration -->

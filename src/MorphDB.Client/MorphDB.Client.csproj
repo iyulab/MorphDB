@@ -6,10 +6,8 @@
     <PackageId>MorphDB.Client</PackageId>
     <Title>MorphDB .NET Client SDK</Title>
     <Description>Official .NET client SDK for MorphDB - a PostgreSQL-based dynamic schema database service</Description>
-    <PackageTags>morphdb;database;sdk;client;postgresql;dynamic-schema</PackageTags>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
   </PropertyGroup>
 
   <ItemGroup>
