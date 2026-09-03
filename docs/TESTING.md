@@ -28,6 +28,36 @@ dotnet test --filter "ClassName=SchemaManagerTests"    # Single test class
 - **`PostgresFixture`**: Shared container for integration tests (use `[Collection("PostgreSQL")]`)
 - **`ApiTestFixture`**: WebApplicationFactory for API tests
 
+### Contract tests: when a write or exposure rule crosses more than one door
+
+A **contract test** (`tests/MorphDB.Tests/Integration/Api/*ContractTests.cs`) pins something that
+must hold *the same way* across REST, GraphQL, OData, realtime and export — not one door's
+behavior in isolation. Two shapes so far:
+
+- **Write convergence** (`GraphQlWriteContractTests`, `TransactionWriteContractTests`, ...): the
+  same bad row is refused through every door for the same reason, and a row accepted through one
+  door carries the same pipeline-applied system columns as one accepted through another.
+- **Non-exposure** (`ProjectIdExposureTests`, `PhysicalNameExposureContractTests`): something the
+  server knows internally (`project_id`, a physical column name) must never reach a caller, on any
+  surface a row's shape reaches one through.
+
+Add a contract test — not just a per-door unit test — when a PR does either of these:
+
+1. **Adds a new write door**, or a new way an existing door accepts data. Per-door unit coverage
+   cannot catch two doors drifting apart, which is exactly how the pre-existing defects this
+   pattern was built to catch lived (a bad row silently dropped on one door, enforced on another).
+2. **Adds a new surface a row's data reaches a caller through** (a REST field, a GraphQL type, a
+   new export format, a realtime event, ...). Use `PhysicalNameGuard` (`tests/MorphDB.Tests/
+   Fixtures/PhysicalNameGuard.cs`) to scan that surface's live response for a leaked physical name
+   or `project_id`, the same way `PhysicalNameExposureContractTests` does for REST/GraphQL/export/
+   view — this is what caught the real-time broadcast never having had a translation step at all.
+
+A contract test runs the real thing (a live request against `ApiIntegrationFixture`, or a real
+NOTIFY through `PostgresChangeListener`) — a test that only inspects a generated string or a
+hand-built object cannot tell "looks translated" from "actually resolves," which is how the view
+builder's join-translation defect and the SQL trigger's untranslated broadcast both shipped
+unnoticed.
+
 ---
 
 ## Desk Tests (TypeScript/Vitest)
@@ -163,4 +193,4 @@ cd desk && npx playwright test e2e/integration
 
 ---
 
-*Last Updated: 2025-01-05*
+*Last Updated: 2026-09-03*
