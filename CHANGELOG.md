@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Real-time change events carried physical column names and `project_id`.** Every other surface
+  (REST, GraphQL, export, views) speaks logical column names only; the SignalR broadcast and
+  webhook payload/filter matching used the trigger's raw row (`to_jsonb(NEW)`, physical names) with
+  no translation step. A subscriber had no way to map `col_e9d8c7b6` back to the column it declared,
+  and a webhook `Filter` written in the same logical vocabulary the registration API itself uses
+  could never match anything, so a filtered webhook silently never fired. Both paths now translate
+  through the same table metadata every other surface already reads. **Wire change**: `data` in
+  `RecordCreated`/`RecordUpdated` and a webhook payload's `data` are now keyed by logical column
+  name and no longer carry `project_id`; no known consumer relied on the physical keys.
+
 ## 0.11.0
 
 ### Breaking

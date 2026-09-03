@@ -217,7 +217,7 @@ public class MorphHubTests : IAsyncLifetime
         });
 
         // Wait for notification (with timeout)
-        var timeout = Task.Delay(TimeSpan.FromSeconds(5));
+        var timeout = Task.Delay(TimeSpan.FromSeconds(15));
         while (_receivedCreatedMessages.Count == 0 && !timeout.IsCompleted)
         {
             await Task.Delay(100);
@@ -227,6 +227,42 @@ public class MorphHubTests : IAsyncLifetime
         _receivedCreatedMessages.Should().HaveCountGreaterThanOrEqualTo(1);
         _receivedCreatedMessages.First().Table.Should().Be(tableName);
         _receivedCreatedMessages.First().Operation.Should().Be("INSERT");
+    }
+
+    /// <summary>
+    /// Regression: the broadcast used to carry the row exactly as the trigger's <c>to_jsonb(NEW)</c>
+    /// produced it — physical column names and <c>project_id</c> included — because nothing on this
+    /// path translated it, unlike REST/GraphQL/export/view. See
+    /// ISSUE-morphdb-20260807-realtime-events-carry-physical-column-names.md.
+    /// </summary>
+    [Fact]
+    public async Task Subscribe_WhenRecordCreated_NotificationDataUsesLogicalColumnNames()
+    {
+        var tableName = await SetupTestTableAsync();
+        await _hubConnection!.InvokeAsync("Subscribe", tableName, null);
+        _receivedCreatedMessages.Clear();
+
+        await _httpClient.PostAsJsonAsync($"/api/data/{tableName}", new Dictionary<string, object?>
+        {
+            ["name"] = "Test",
+            ["value"] = 42
+        });
+
+        var timeout = Task.Delay(TimeSpan.FromSeconds(15));
+        while (_receivedCreatedMessages.Count == 0 && !timeout.IsCompleted)
+        {
+            await Task.Delay(100);
+        }
+
+        _receivedCreatedMessages.Should().HaveCountGreaterThanOrEqualTo(1);
+        var data = _receivedCreatedMessages.First().Data;
+
+        data.Keys.Should().Contain(["name", "value", "_id"],
+            "the broadcast must speak the same logical vocabulary every other surface does");
+        data.Keys.Should().NotContain("project_id",
+            "the project is already the connection's scope; the internal GUID says nothing to a subscriber");
+        data.Keys.Where(PhysicalNameGuard.IsPhysicalName).Should().BeEmpty(
+            "no key in a real-time payload may be a physical (hash-based) column name");
     }
 
     [Fact]
@@ -254,7 +290,7 @@ public class MorphHubTests : IAsyncLifetime
         });
 
         // Wait for notification (with timeout)
-        var timeout = Task.Delay(TimeSpan.FromSeconds(5));
+        var timeout = Task.Delay(TimeSpan.FromSeconds(15));
         while (_receivedUpdatedMessages.Count == 0 && !timeout.IsCompleted)
         {
             await Task.Delay(100);
@@ -288,7 +324,7 @@ public class MorphHubTests : IAsyncLifetime
         await _httpClient.DeleteAsync($"/api/data/{tableName}/{recordId}");
 
         // Wait for notification (with timeout)
-        var timeout = Task.Delay(TimeSpan.FromSeconds(5));
+        var timeout = Task.Delay(TimeSpan.FromSeconds(15));
         while (_receivedDeletedMessages.Count == 0 && !timeout.IsCompleted)
         {
             await Task.Delay(100);

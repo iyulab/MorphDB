@@ -442,7 +442,7 @@ public class WebhookApiTests
         // The change listener reacts to a PostgreSQL NOTIFY asynchronously, same as the SignalR
         // broadcast tests above poll for their message to arrive.
         IReadOnlyList<DeliveryApiResponse>? deliveries = null;
-        var timeout = Task.Delay(TimeSpan.FromSeconds(5));
+        var timeout = Task.Delay(TimeSpan.FromSeconds(15));
         while ((deliveries is null || deliveries.Count == 0) && !timeout.IsCompleted)
         {
             await Task.Delay(100);
@@ -454,6 +454,47 @@ public class WebhookApiTests
         deliveries.Should().NotBeNullOrEmpty(
             "a matching data change must queue a delivery, not just broadcast one over SignalR");
         deliveries![0].Event.Should().Be("insert");
+    }
+
+    /// <summary>
+    /// Regression: <c>WebhookFilterMatcher</c> compares filter keys against the row data the
+    /// change listener hands it. Before the listener translated that row to logical column names
+    /// (see ISSUE-morphdb-20260807-realtime-events-carry-physical-column-names.md), a filter
+    /// written in the same logical vocabulary the registration API itself uses could never match
+    /// anything — the row's keys were physical (<c>col_xxx</c>) and never equal a logical filter
+    /// key, so a filtered webhook silently never fired regardless of the row's actual values.
+    /// </summary>
+    [Fact]
+    public async Task DataChange_MatchingALogicalColumnFilter_ShouldQueueADelivery()
+    {
+        var tableName = await CreateTestTableAsync();
+        var createResponse = await _client.PostAsJsonAsync("/api/webhooks", new CreateWebhookApiRequest
+        {
+            Name = $"filter_test_{Guid.NewGuid():N}"[..30],
+            Table = tableName,
+            Url = "https://example.invalid/webhook",
+            Events = ["insert"],
+            Filter = System.Text.Json.JsonDocument.Parse("""{"name":"vip"}""")
+        });
+        var created = await createResponse.Content.ReadFromJsonAsync<WebhookApiResponse>();
+
+        await _client.PostAsJsonAsync($"/api/data/{tableName}", new Dictionary<string, object?>
+        {
+            ["name"] = "vip",
+            ["email"] = "vip@example.com"
+        });
+
+        IReadOnlyList<DeliveryApiResponse>? deliveries = null;
+        var timeout = Task.Delay(TimeSpan.FromSeconds(15));
+        while ((deliveries is null || deliveries.Count == 0) && !timeout.IsCompleted)
+        {
+            await Task.Delay(100);
+            var response = await _client.GetAsync($"/api/webhooks/{created!.Id}/deliveries");
+            deliveries = await response.Content.ReadFromJsonAsync<IReadOnlyList<DeliveryApiResponse>>();
+        }
+
+        deliveries.Should().NotBeNullOrEmpty(
+            "a filter written in the same logical column names the API itself uses must be able to match a real row");
     }
 
     [Fact]

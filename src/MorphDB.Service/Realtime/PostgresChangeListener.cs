@@ -17,6 +17,7 @@ public sealed partial class PostgresChangeListener : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IHubContext<MorphHub, IMorphHubClient> _hubContext;
     private readonly SubscriptionManager _subscriptionManager;
+    private readonly ISchemaManager _schemaManager;
     private readonly string _connectionString;
 
     public PostgresChangeListener(
@@ -24,12 +25,14 @@ public sealed partial class PostgresChangeListener : BackgroundService
         IServiceScopeFactory scopeFactory,
         IHubContext<MorphHub, IMorphHubClient> hubContext,
         SubscriptionManager subscriptionManager,
+        ISchemaManager schemaManager,
         IConfiguration configuration)
     {
         _logger = logger;
         _scopeFactory = scopeFactory;
         _hubContext = hubContext;
         _subscriptionManager = subscriptionManager;
+        _schemaManager = schemaManager;
         _connectionString = configuration.GetConnectionString("MorphDB")
             ?? throw new InvalidOperationException("Connection string 'MorphDB' not found.");
     }
@@ -103,25 +106,72 @@ public sealed partial class PostgresChangeListener : BackgroundService
 
         LogChangeReceived(_logger, changeEvent.Operation, changeEvent.Table, changeEvent.RecordId);
 
+        // Translated once here so every consumer downstream (the SignalR broadcast and the
+        // webhook filter/payload) sees the same logical-only vocabulary every other surface
+        // uses -- see TranslateToLogicalAsync.
+        var logicalData = await TranslateToLogicalAsync(changeEvent);
+
         var groupName = MorphHub.GetTableGroupName(changeEvent.ProjectId, changeEvent.Table);
 
         switch (changeEvent.Operation.ToUpperInvariant())
         {
             case ChangeOperation.Insert:
-                await BroadcastRecordCreatedAsync(groupName, changeEvent);
-                await DeliverWebhooksAsync(changeEvent, WebhookEvent.Insert);
+                await BroadcastRecordCreatedAsync(groupName, changeEvent, logicalData);
+                await DeliverWebhooksAsync(changeEvent, logicalData, WebhookEvent.Insert);
                 break;
 
             case ChangeOperation.Update:
-                await BroadcastRecordUpdatedAsync(groupName, changeEvent);
-                await DeliverWebhooksAsync(changeEvent, WebhookEvent.Update);
+                await BroadcastRecordUpdatedAsync(groupName, changeEvent, logicalData);
+                await DeliverWebhooksAsync(changeEvent, logicalData, WebhookEvent.Update);
                 break;
 
             case ChangeOperation.Delete:
                 await BroadcastRecordDeletedAsync(groupName, changeEvent);
-                await DeliverWebhooksAsync(changeEvent, WebhookEvent.Delete);
+                await DeliverWebhooksAsync(changeEvent, logicalData, WebhookEvent.Delete);
                 break;
         }
+    }
+
+    /// <summary>
+    /// Translates the trigger's physical row (<c>to_jsonb(NEW)</c> — see
+    /// <c>ChangeNotificationSetup.cs</c>) into the logical vocabulary every other surface (REST,
+    /// GraphQL, export, view) already speaks, and drops <c>project_id</c> the same way
+    /// <c>RowMapper</c> does for those surfaces. Unlike <c>RowMapper</c>, this does not convert
+    /// value *types* -- the values are already <see cref="JsonElement"/>s from deserializing the
+    /// NOTIFY payload, and go back out as JSON over SignalR/webhooks unchanged, so only the keys
+    /// need translating.
+    /// </summary>
+    private async Task<IDictionary<string, object?>?> TranslateToLogicalAsync(DatabaseChangeEvent changeEvent)
+    {
+        if (changeEvent.Data is null)
+            return null;
+
+        var table = await _schemaManager.GetTableByIdAsync(changeEvent.TableId);
+        if (table is null)
+        {
+            // The table a just-committed write's trigger fired for should always resolve; if it
+            // doesn't (dropped between commit and notify), fail closed rather than let physical
+            // column names reach a consumer with no way to translate them itself.
+            LogTranslationTableMissing(_logger, changeEvent.TableId, changeEvent.Table);
+            return null;
+        }
+
+        var physicalToLogical = table.Columns.ToDictionary(c => c.PhysicalName, c => c.LogicalName, StringComparer.Ordinal);
+        var logical = new Dictionary<string, object?>();
+        foreach (var (key, value) in changeEvent.Data)
+        {
+            if (string.Equals(key, SystemColumns.ProjectId, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            // A key absent from the table's declared columns is already logical -- every system
+            // column (_id, _created_at, ...) has physical name == logical name, so it never
+            // appears in physicalToLogical and passes through here unchanged.
+            logical[physicalToLogical.TryGetValue(key, out var logicalName) ? logicalName : key] = value;
+        }
+
+        return logical;
     }
 
     /// <summary>
@@ -129,7 +179,8 @@ public sealed partial class PostgresChangeListener : BackgroundService
     /// subscribed to this table and event, narrowed by <see cref="WebhookFilterMatcher"/> to the
     /// rows its <c>Filter</c> admits.
     /// </summary>
-    private async Task DeliverWebhooksAsync(DatabaseChangeEvent changeEvent, WebhookEvent webhookEvent)
+    private async Task DeliverWebhooksAsync(
+        DatabaseChangeEvent changeEvent, IDictionary<string, object?>? logicalData, WebhookEvent webhookEvent)
     {
         using var scope = _scopeFactory.CreateScope();
         var webhookManager = scope.ServiceProvider.GetRequiredService<IWebhookManager>();
@@ -148,13 +199,13 @@ public sealed partial class PostgresChangeListener : BackgroundService
             Table = changeEvent.Table,
             RecordId = changeEvent.RecordId,
             Timestamp = changeEvent.Timestamp,
-            Data = changeEvent.Data,
+            Data = logicalData,
         };
 
         var deliveryService = scope.ServiceProvider.GetRequiredService<IWebhookDeliveryService>();
         foreach (var webhook in webhooks)
         {
-            if (!WebhookFilterMatcher.Matches(webhook.Filter, changeEvent.Data))
+            if (!WebhookFilterMatcher.Matches(webhook.Filter, logicalData))
             {
                 continue;
             }
@@ -170,28 +221,30 @@ public sealed partial class PostgresChangeListener : BackgroundService
         }
     }
 
-    private async Task BroadcastRecordCreatedAsync(string groupName, DatabaseChangeEvent changeEvent)
+    private async Task BroadcastRecordCreatedAsync(
+        string groupName, DatabaseChangeEvent changeEvent, IDictionary<string, object?>? logicalData)
     {
         var message = new RecordChangedMessage
         {
             Table = changeEvent.Table,
             RecordId = changeEvent.RecordId,
             Operation = ChangeOperation.Insert,
-            Data = changeEvent.Data ?? new Dictionary<string, object?>(),
+            Data = logicalData ?? new Dictionary<string, object?>(),
             Timestamp = changeEvent.Timestamp
         };
 
         await _hubContext.Clients.Group(groupName).RecordCreated(message);
     }
 
-    private async Task BroadcastRecordUpdatedAsync(string groupName, DatabaseChangeEvent changeEvent)
+    private async Task BroadcastRecordUpdatedAsync(
+        string groupName, DatabaseChangeEvent changeEvent, IDictionary<string, object?>? logicalData)
     {
         var message = new RecordChangedMessage
         {
             Table = changeEvent.Table,
             RecordId = changeEvent.RecordId,
             Operation = ChangeOperation.Update,
-            Data = changeEvent.Data ?? new Dictionary<string, object?>(),
+            Data = logicalData ?? new Dictionary<string, object?>(),
             Timestamp = changeEvent.Timestamp
         };
 
@@ -236,6 +289,9 @@ public sealed partial class PostgresChangeListener : BackgroundService
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to queue webhook delivery for webhook {WebhookId}")]
     private static partial void LogWebhookQueueError(ILogger logger, Guid webhookId, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Change notification for table {TableId} ({Table}) referenced a table that no longer resolves; dropping its row data rather than broadcasting it untranslated")]
+    private static partial void LogTranslationTableMissing(ILogger logger, Guid tableId, string table);
 }
 
 /// <summary>
