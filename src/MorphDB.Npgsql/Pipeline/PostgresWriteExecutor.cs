@@ -100,7 +100,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             }
 
             scope.SetRowCount(affectedRows);
-            return WriteResult.Ok(new Dictionary<string, object?> { ["deleted"] = true, ["id"] = context.RecordId });
+            return WriteResult.Ok(new Dictionary<string, object?> { ["deleted"] = true, [SystemColumns.Id] = context.RecordId });
         }
         catch (PostgresException pg) when (pg.SqlState is PostgresErrorCodes.NotNullViolation or PostgresErrorCodes.UniqueViolation or PostgresErrorCodes.ForeignKeyViolation)
         {

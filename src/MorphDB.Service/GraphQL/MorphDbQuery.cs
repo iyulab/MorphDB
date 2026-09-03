@@ -159,7 +159,7 @@ public sealed class MorphDbQuery
         var edges = records.Select(r => new RecordEdge
         {
             Node = CreateRecordNode(r),
-            Cursor = EncodeCursor(GetRecordId(r))
+            Cursor = EncodeCursor(SystemColumns.GetRecordId(r) ?? Guid.Empty)
         }).ToList();
 
         return new RecordConnection
@@ -379,16 +379,11 @@ public sealed class MorphDbQuery
     {
         return new RecordNode
         {
-            Id = GetRecordId(r),
+            Id = SystemColumns.GetRecordId(r) ?? Guid.Empty,
             Data = GraphQlAny.FromRow(r),
             CreatedAt = r.TryGetValue("_created_at", out var createdAt) && createdAt is DateTimeOffset ca ? ca : null,
             UpdatedAt = r.TryGetValue("_updated_at", out var updatedAt) && updatedAt is DateTimeOffset ua ? ua : null
         };
-    }
-
-    private static Guid GetRecordId(IDictionary<string, object?> r)
-    {
-        return r.TryGetValue("_id", out var idValue) && idValue is Guid id ? id : Guid.Empty;
     }
 }
 

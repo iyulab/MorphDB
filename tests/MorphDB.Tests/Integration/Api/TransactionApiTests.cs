@@ -475,6 +475,8 @@ public class TransactionApiTests
         var result = await response.Content.ReadFromJsonAsync<TransactionApiResponse>();
         result!.Success.Should().BeTrue();
         result.Results[0].Success.Should().BeTrue();
+        result.Results[0].Id.Should().Be(inserted.Id,
+            "the deleted record's own id, not Guid.Empty or null, must ride back on the result");
 
         // Verify the record is gone
         var getResponse = await _client.GetAsync($"/api/data/{tableName}/{inserted.Id}");

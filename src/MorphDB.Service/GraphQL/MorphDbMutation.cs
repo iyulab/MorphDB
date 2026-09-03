@@ -3,6 +3,7 @@ using HotChocolate;
 using HotChocolate.Types;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Exceptions;
+using MorphDB.Core.Models;
 using MorphDB.Core.Pipeline;
 using MorphDB.Npgsql.Repositories;
 using MorphDB.Service.Services;
@@ -316,7 +317,7 @@ public sealed class MorphDbMutation
     {
         return new RecordNode
         {
-            Id = GetRecordId(r),
+            Id = SystemColumns.GetRecordId(r) ?? Guid.Empty,
             Data = GraphQlAny.FromRow(r),
             CreatedAt = r.TryGetValue("_created_at", out var createdAt) && createdAt is DateTimeOffset ca ? ca : null,
             UpdatedAt = r.TryGetValue("_updated_at", out var updatedAt) && updatedAt is DateTimeOffset ua ? ua : null
@@ -332,11 +333,6 @@ public sealed class MorphDbMutation
             CreatedAt = r.TryGetValue("_created_at", out var createdAt) && createdAt is DateTimeOffset ca ? ca : null,
             UpdatedAt = r.TryGetValue("_updated_at", out var updatedAt) && updatedAt is DateTimeOffset ua ? ua : null
         };
-    }
-
-    private static Guid GetRecordId(IDictionary<string, object?> r)
-    {
-        return r.TryGetValue("_id", out var idValue) && idValue is Guid id ? id : Guid.Empty;
     }
 }
 

@@ -274,7 +274,7 @@ public sealed class PostgresTransactionService : ITransactionService
                 error: "Validation failed");
         }
 
-        var recordId = GetRecordId(result.Data);
+        var recordId = SystemColumns.GetRecordId(result.Data);
         return TransactionOperationResult(index, operation.Ref, true,
             id: recordId,
             data: returnFullRecords ? result.Data : null,
@@ -424,7 +424,7 @@ public sealed class PostgresTransactionService : ITransactionService
                 error: "Validation failed");
         }
 
-        var recordId = GetRecordId(result.Data);
+        var recordId = SystemColumns.GetRecordId(result.Data);
         return TransactionOperationResult(index, operation.Ref, true,
             id: recordId,
             data: returnFullRecords ? result.Data : null,
@@ -452,34 +452,6 @@ public sealed class PostgresTransactionService : ITransactionService
             Error = error,
             ValidationErrors = validationErrors
         };
-    }
-
-    private static Guid? GetRecordId(IDictionary<string, object?>? data)
-    {
-        if (data is null)
-            return null;
-
-        if (data.TryGetValue("_id", out var id))
-        {
-            return id switch
-            {
-                Guid g => g,
-                string s when Guid.TryParse(s, out var parsed) => parsed,
-                _ => null
-            };
-        }
-
-        if (data.TryGetValue("id", out var legacyId))
-        {
-            return legacyId switch
-            {
-                Guid g => g,
-                string s when Guid.TryParse(s, out var parsed) => parsed,
-                _ => null
-            };
-        }
-
-        return null;
     }
 
     private async Task<TableMetadata> GetTableWithColumnsAsync(

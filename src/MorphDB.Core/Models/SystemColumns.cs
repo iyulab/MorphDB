@@ -74,6 +74,28 @@ public static class SystemColumns
         columnName.StartsWith('_') || columnName == ProjectId;
 
     /// <summary>
+    /// Extracts the record id from a logical row dictionary via the <see cref="Id"/> column.
+    /// Every write-result and query-row dictionary in this codebase is keyed by <see cref="Id"/> —
+    /// this is the single, canonical read of it. Returns <c>null</c> when the row has no
+    /// <see cref="Id"/> entry or its value cannot be read as a GUID; callers must not fall back to
+    /// any other key, since tolerating one masks the row producer's bug instead of surfacing it.
+    /// </summary>
+    public static Guid? GetRecordId(IDictionary<string, object?>? data)
+    {
+        if (data is not null && data.TryGetValue(Id, out var value))
+        {
+            return value switch
+            {
+                Guid guid => guid,
+                string text when Guid.TryParse(text, out var parsed) => parsed,
+                _ => null
+            };
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Returns all core column names that are always present.
     /// </summary>
     public static IReadOnlyList<string> CoreColumns =>

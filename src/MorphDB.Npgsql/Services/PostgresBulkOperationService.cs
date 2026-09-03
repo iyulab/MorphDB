@@ -634,9 +634,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
                     CancellationToken.None);
             }
 
-            var recordId = insertResult.TryGetValue("id", out var idValue) && idValue is Guid guid
-                ? guid
-                : (Guid?)null;
+            var recordId = SystemColumns.GetRecordId(insertResult);
 
             return new ImportRowResult
             {
