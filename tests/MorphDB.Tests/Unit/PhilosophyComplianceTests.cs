@@ -4,6 +4,7 @@ using MorphDB.Core.Abstractions;
 using MorphDB.Core.Models;
 using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Service.Models.Api;
+using MorphDB.Tests.Fixtures;
 
 namespace MorphDB.Tests.Unit;
 
@@ -33,7 +34,7 @@ public class PhilosophyComplianceTests
     public void PhysicalNamePattern_ShouldBeDetectedCorrectly(string name, bool isPhysical)
     {
         // Physical names are hash-based: tbl_[hash], col_[hash], i_[hash], r_[hash]
-        var isPhysicalName = IsPhysicalName(name);
+        var isPhysicalName = PhysicalNameGuard.IsPhysicalName(name);
         isPhysicalName.Should().Be(isPhysical, $"'{name}' physical detection should be {isPhysical}");
     }
 
@@ -209,37 +210,8 @@ public class PhilosophyComplianceTests
     {
         // System columns are user-facing (logical names with underscore prefix)
         // They should NOT be confused with physical names
-        var isPhysical = IsPhysicalName(columnName);
+        var isPhysical = PhysicalNameGuard.IsPhysicalName(columnName);
         isPhysical.Should().BeFalse($"System column '{columnName}' should not be detected as physical name");
-    }
-
-    /// <summary>
-    /// Helper method to detect physical name patterns.
-    /// Physical names follow: prefix_[hexadecimal hash]
-    /// Prefixes: tbl_, col_, idx_, fk_, pk_, uq_, chk_, view_
-    /// </summary>
-    private static bool IsPhysicalName(string name)
-    {
-        if (string.IsNullOrEmpty(name))
-            return false;
-
-        // Physical name patterns with hash suffixes
-        var prefixes = new[] { "tbl_", "col_", "idx_", "fk_", "pk_", "uq_", "chk_", "view_" };
-
-        foreach (var prefix in prefixes)
-        {
-            if (name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            {
-                var suffix = name[prefix.Length..];
-                // Check if suffix is hexadecimal (at least 8 chars)
-                return suffix.Length >= 8 && suffix.All(c =>
-                    (c >= '0' && c <= '9') ||
-                    (c >= 'a' && c <= 'f') ||
-                    (c >= 'A' && c <= 'F'));
-            }
-        }
-
-        return false;
     }
 
     private static TableMetadata CreateTestTable()
