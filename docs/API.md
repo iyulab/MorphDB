@@ -615,11 +615,8 @@ subscriber to a table receives every change to it. Filter on the receiving side.
 
 `operation` is `INSERT`, `UPDATE` or `DELETE` — upper case, and not the same vocabulary as the
 GraphQL subscription's `changeType`. A deletion carries the id of the row that is gone and no
-`data`. There is no before-image on any event.
-
-> ⚠️ `data` currently arrives keyed by **physical** column names (`col_…`) rather than the names the
-> table was declared with, and no surface maps one to the other. Read the row back over REST or
-> GraphQL using `recordId` until that is corrected.
+`data`. There is no before-image on any event. `data` is keyed by the same logical column names
+REST and GraphQL use — not the physical (`col_…`) names the trigger payload carries internally.
 
 ---
 
