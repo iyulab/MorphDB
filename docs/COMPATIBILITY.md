@@ -23,11 +23,15 @@ API from those ecosystems, carry version `0.0.0`, and are hard-gated against acc
 
 | Server | `MorphDB.Client` | Notes |
 |--------|------------------|-------|
+| 0.9.x – 0.11.x | 0.11.x | Verified compatible range — Docker-tested against the full live contract suite (2026-09-03). No wire-breaking change since 0.7.0 has narrowed this span; pin a version anyway, since a future minor may. |
 | 0.7.x | 0.7.x | Project scoping via `X-Project-Id`. `X-Tenant-Id` is gone — 0.6.x clients cannot talk to a 0.7.x server. |
 | 0.6.x | 0.6.x | Last version speaking `X-Tenant-Id`. |
 
-Known downstream pairs: `Formbase.* 0.3.0` ↔ MorphDB `0.7.x`, `Formbase.* 0.2.0` ↔ MorphDB
-`0.6.x`. Mixing across that line fails at the first request.
+Current downstream pair: `Formbase.* 0.9.0` ↔ MorphDB `0.11.x`. Formbase's own
+[CHANGELOG](https://github.com/iyulab/formbase/blob/main/CHANGELOG.md) is the source of truth for
+its full pairing history — this file states MorphDB's own compatibility contract, not a mirror of a
+downstream project's release notes (an earlier drift here was exactly two documents holding the
+same fact and disagreeing). Mixing across the `0.7.x`/`0.6.x` line fails at the first request.
 
 ## Reference SDK coverage
 
