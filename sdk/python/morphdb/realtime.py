@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from signalrcore.hub_connection_builder import HubConnectionBuilder
 
-from morphdb.models import ChangeNotification, SubscriptionOptions
+from morphdb.models import ChangeNotification
 
 
 class Subscription:
@@ -130,7 +130,6 @@ class RealtimeClient:
         self,
         table_name: str,
         callback: ChangeCallback,
-        options: SubscriptionOptions | None = None,
     ) -> Subscription:
         """Subscribe to table changes."""
         await self.connect()
@@ -140,13 +139,7 @@ class RealtimeClient:
 
         # Subscribe on the server
         if self._connection:
-            subscribe_args = [table_name]
-            if options:
-                subscribe_args.append(options.model_dump(by_alias=True, exclude_none=True))
-            else:
-                subscribe_args.append({})
-
-            self._connection.send("Subscribe", subscribe_args)
+            self._connection.send("Subscribe", [table_name])
 
         async def unsubscribe() -> None:
             if subscription_id in self._subscriptions:

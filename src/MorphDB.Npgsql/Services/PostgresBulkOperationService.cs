@@ -952,9 +952,9 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         // ZIP container over several XML parts, so — unlike the row-at-a-time CSV/JSON writers above
         // — there is no way to hand PostgresBulkOperationService's caller a partially-written valid
         // file; the whole part has to be assembled before it can be zipped. This bounds export size
-        // by available memory, which is an accepted trade-off for now (P2-o fixed the format lie —
-        // "consumer sees text pretending to be a spreadsheet" — not export scale; a streaming OOXML
-        // writer is a separate, larger change if a real dataset ever needs it).
+        // by available memory, which is an accepted trade-off for now: what was fixed here is the
+        // format lie — a consumer seeing text pretending to be a spreadsheet — not export scale. A
+        // streaming OOXML writer is a separate, larger change if a real dataset ever needs it.
         var table = await _schemaManager.GetTableAsync(job.ProjectId, job.TableName, cancellationToken)
             ?? throw new TableNotFoundException(job.TableName);
 

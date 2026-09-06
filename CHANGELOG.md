@@ -2,7 +2,25 @@
 
 ## Unreleased
 
+### Breaking
+
+- **The `Subscribe` hub method takes one argument.** It declared a second, optional
+  `SubscriptionOptions` — a filter, a field list and an include-data flag — that every subscribe
+  call stored and no broadcast ever read. SignalR binds an invocation by argument *count*, and no
+  wire protocol carries a C# default, so the only effect the parameter ever had was to make the
+  one-argument call every client SDK and this project's own documentation describe fail at the
+  binder. The parameter and the options type are gone from the hub and from the .NET, TypeScript
+  and Python clients; `subscribe` there now takes a table name and a callback. A subscription was
+  already per table and nothing narrower — no filtering behaviour is lost, because none existed.
+
 ### Fixed
+
+- **The documented real-time subscribe call was refused by the server.** `docs/API.md` opens the
+  WebSocket section with `connection.invoke("Subscribe", "customers")`, and running it as written
+  answered `Invocation provides 1 argument(s) but target expects 2` — the first thing a real-time
+  consumer does, and it could not be done. Two gates now hold that path: one compares the argument
+  count of every invocation in the documented example to the parameters the named hub method binds,
+  and one makes the documented call itself, as written, against a live hub.
 
 - **Real-time change events carried physical column names and `project_id`.** Every other surface
   (REST, GraphQL, export, views) speaks logical column names only; the SignalR broadcast and
@@ -13,6 +31,17 @@
   through the same table metadata every other surface already reads. **Wire change**: `data` in
   `RecordCreated`/`RecordUpdated` and a webhook payload's `data` are now keyed by logical column
   name and no longer carry `project_id`; no known consumer relied on the physical keys.
+- **A webhook delivery carried a `previous` field that nothing ever populated.** No code path set
+  it, so every delivery ever sent carried `"previous": null` — a field a receiver could branch on
+  and never see a value from. It is gone. **Wire change**: `previous` no longer appears in a
+  delivery body.
+- **The delivered payload's `record_id` was not documented.** The Webhook section showed a
+  four-field example while a delivery carries five, and the field it left out is the one naming the
+  row an event is about — a receiver had to inspect a live delivery to find it. The example now
+  shows what is actually sent, states that a delivery is `snake_case` unlike the rest of this API,
+  and names the values `events` accepts. A parity gate now derives all three — request fields,
+  event vocabulary, payload fields — from the binding model, the enum, and the delivery
+  serializer, so the documentation cannot drift from them again.
 
 ## 0.11.0
 
@@ -64,6 +93,14 @@
 - **`RedisSchemaCache`'s invalidate-all operation logged a warning and deleted nothing** —
   `IDistributedCache` has no clear-by-prefix primitive. It now scans and deletes every key under
   the cache's namespace through the underlying connection.
+- **A webhook's `filter` was stored and returned but never applied.** Every registered webhook fired
+  on every change to its table and event, whatever the filter said — the delivery path read the
+  subscription list without ever consulting the field, so the 0.10.0 note that a filter "is still
+  not evaluated" no longer holds from this release on. Deliveries are now matched against the filter
+  before they are queued. The grammar is flat, AND-combined equality against scalar literals; a
+  filter value that is an object or an array is rejected at registration with
+  `400 INVALID_WEBHOOK_FILTER` instead of silently never matching; and a filter never matches a
+  `delete` event, which carries no row data to compare against.
 
 ### Changed
 

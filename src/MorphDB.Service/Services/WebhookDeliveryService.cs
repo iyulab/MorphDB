@@ -17,7 +17,6 @@ public sealed class WebhookDeliveryService : IWebhookDeliveryService
     private readonly IWebhookManager _webhookManager;
     private readonly WebhookSignatureService _signatureService;
     private readonly ILogger<WebhookDeliveryService> _logger;
-    private readonly JsonSerializerOptions _jsonOptions;
 
     private const string SignatureHeader = "X-MorphDB-Signature";
     private const string TimestampHeader = "X-MorphDB-Timestamp";
@@ -34,11 +33,6 @@ public sealed class WebhookDeliveryService : IWebhookDeliveryService
         _webhookManager = webhookManager;
         _signatureService = signatureService;
         _logger = logger;
-        _jsonOptions = new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-            WriteIndented = false
-        };
     }
 
     public async Task QueueDeliveryAsync(
@@ -46,7 +40,8 @@ public sealed class WebhookDeliveryService : IWebhookDeliveryService
         WebhookPayload payload,
         CancellationToken cancellationToken = default)
     {
-        var payloadJson = JsonDocument.Parse(JsonSerializer.Serialize(payload, _jsonOptions));
+        var payloadJson = JsonDocument.Parse(
+            JsonSerializer.Serialize(payload, WebhookPayloadSerialization.Options));
 
         var request = new CreateDeliveryRequest
         {

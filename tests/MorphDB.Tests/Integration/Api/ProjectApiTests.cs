@@ -5,7 +5,7 @@ using MorphDB.Tests.Fixtures;
 namespace MorphDB.Tests.Integration.Api;
 
 /// <summary>
-/// Pins <c>GET /api/projects</c> pagination against the P2-o defect: <c>Pagination.TotalCount</c>
+/// Pins <c>GET /api/projects</c> pagination against a fixed defect: <c>Pagination.TotalCount</c>
 /// used to report the current page's row count instead of a real total (every other paginated
 /// controller in this codebase runs an actual count query).
 /// </summary>

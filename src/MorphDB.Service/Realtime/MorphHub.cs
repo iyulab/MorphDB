@@ -51,13 +51,21 @@ public sealed partial class MorphHub : Hub<IMorphHubClient>
     /// Subscribe to changes for a specific table.
     /// </summary>
     /// <param name="tableName">The logical table name to subscribe to.</param>
-    /// <param name="options">Optional subscription options for filtering.</param>
-    public async Task Subscribe(string tableName, SubscriptionOptions? options = null)
+    /// <remarks>
+    /// One parameter, and a C# default would not have made it optional. SignalR binds an
+    /// invocation by argument *count* — a caller sending one argument to a two-parameter method is
+    /// refused at the binder with <c>Invocation provides 1 argument(s) but target expects 2</c>,
+    /// whatever default the declaration carries, because no wire protocol conveys a C# default. A
+    /// second <c>options</c> parameter used to sit here for a filter, a field list and an
+    /// include-data flag that nothing ever read, which meant the only reachable effect of the
+    /// argument was to decide whether the documented one-argument call worked.
+    /// </remarks>
+    public async Task Subscribe(string tableName)
     {
         var projectId = GetProjectId();
         var groupName = GetTableGroupName(projectId, tableName);
 
-        _subscriptionManager.AddSubscription(Context.ConnectionId, projectId, tableName, options);
+        _subscriptionManager.AddSubscription(Context.ConnectionId, projectId, tableName);
         await Groups.AddToGroupAsync(Context.ConnectionId, groupName);
 
         LogSubscribed(_logger, Context.ConnectionId, tableName, projectId);
@@ -220,37 +228,23 @@ public sealed class ErrorMessage
 }
 
 /// <summary>
-/// Options for table subscriptions.
-/// </summary>
-public sealed class SubscriptionOptions
-{
-    /// <summary>
-    /// Filter expression for the subscription (e.g., "status:eq:active").
-    /// </summary>
-    public string? Filter { get; init; }
-
-    /// <summary>
-    /// Fields to include in change notifications. If null, all fields are included.
-    /// </summary>
-    public IReadOnlyList<string>? Fields { get; init; }
-
-    /// <summary>
-    /// Whether to include the full record data in notifications.
-    /// </summary>
-    public bool IncludeData { get; init; } = true;
-}
-
-/// <summary>
 /// Manages subscription state for connected clients.
 /// </summary>
+/// <remarks>
+/// A subscription is a table name and nothing else. It used to also carry a
+/// <c>SubscriptionOptions</c> — a filter, a field list, an include-data flag — which every
+/// subscribe call stored and no broadcast ever read; the two accessors that could have read it
+/// had no callers at all. Keeping it would have meant either documenting an option that does
+/// nothing or leaving the documentation to say so, which it did.
+/// </remarks>
 public sealed class SubscriptionManager
 {
     private readonly ConcurrentDictionary<string, ConnectionSubscriptions> _connections = new();
 
-    public void AddSubscription(string connectionId, Guid projectId, string tableName, SubscriptionOptions? options)
+    public void AddSubscription(string connectionId, Guid projectId, string tableName)
     {
         var subscriptions = _connections.GetOrAdd(connectionId, _ => new ConnectionSubscriptions(projectId));
-        subscriptions.Tables[tableName] = options ?? new SubscriptionOptions();
+        subscriptions.Tables[tableName] = 0;
     }
 
     public void RemoveSubscription(string connectionId, string tableName)
@@ -275,32 +269,12 @@ public sealed class SubscriptionManager
         return [];
     }
 
-    public SubscriptionOptions? GetSubscriptionOptions(string connectionId, string tableName)
-    {
-        if (_connections.TryGetValue(connectionId, out var subscriptions) &&
-            subscriptions.Tables.TryGetValue(tableName, out var options))
-        {
-            return options;
-        }
-        return null;
-    }
-
-    public IEnumerable<(string ConnectionId, SubscriptionOptions Options)> GetSubscribersForTable(Guid projectId, string tableName)
-    {
-        foreach (var (connectionId, subscriptions) in _connections)
-        {
-            if (subscriptions.ProjectId == projectId &&
-                subscriptions.Tables.TryGetValue(tableName, out var options))
-            {
-                yield return (connectionId, options);
-            }
-        }
-    }
-
     private sealed class ConnectionSubscriptions
     {
         public Guid ProjectId { get; }
-        public ConcurrentDictionary<string, SubscriptionOptions> Tables { get; } = new();
+
+        /// <summary>The tables this connection is subscribed to; the value carries nothing.</summary>
+        public ConcurrentDictionary<string, byte> Tables { get; } = new();
 
         public ConnectionSubscriptions(Guid projectId)
         {

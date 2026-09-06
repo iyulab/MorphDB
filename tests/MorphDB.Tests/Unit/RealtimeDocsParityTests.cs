@@ -4,6 +4,9 @@ using Microsoft.AspNetCore.SignalR;
 using MorphDB.Service.Realtime;
 using MorphDB.Tests.Fixtures;
 
+// Moq is in scope here through the test project's global usings and also defines a `Match`.
+using RegexMatch = System.Text.RegularExpressions.Match;
+
 namespace MorphDB.Tests.Unit;
 
 /// <summary>
@@ -101,6 +104,48 @@ public partial class RealtimeDocsParityTests
     }
 
     /// <summary>
+    /// The example is the first thing a real-time consumer runs, and it is executable text: the
+    /// number of arguments it passes is a claim about the hub, not prose about it. SignalR binds an
+    /// invocation by argument count alone, so an example one argument short of its target is
+    /// refused at the binder — and a C# default parameter does not close the gap, because no wire
+    /// protocol carries one. That is exactly how the documented `Subscribe` call came to fail for
+    /// every client that followed it while every other gate here stayed green: they compare names,
+    /// and the names were right.
+    /// </summary>
+    [Fact]
+    public void The_documented_example_calls_each_hub_method_with_the_arguments_it_binds()
+    {
+        var complaints = new List<string>();
+
+        foreach (RegexMatch invocation in ExampleInvocation().Matches(DocsText()))
+        {
+            var method = invocation.Groups["method"].Value;
+
+            // Everything after the method name, comma-separated. The example's calls pass literals,
+            // so counting separators is enough and keeps the gate from needing a JS parser.
+            var arguments = invocation.Groups["args"].Value
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Length;
+
+            var bound = typeof(MorphHub).GetMethod(method)?.GetParameters().Length;
+
+            if (bound is null)
+            {
+                complaints.Add($"{method}: the example invokes a method the hub does not have");
+            }
+            else if (bound != arguments)
+            {
+                complaints.Add($"{method}: the example passes {arguments} argument(s), the hub binds {bound}");
+            }
+        }
+
+        string.Join(Environment.NewLine, complaints).Should().BeEmpty(
+            "a reader runs the example as written, and SignalR refuses an invocation whose argument "
+            + "count does not match the target — an example that is one short fails before the hub "
+            + "method is ever entered");
+    }
+
+    /// <summary>
     /// The field names a callback's payload arrives with. A message class contributes its
     /// properties; a callback that takes a bare value contributes the parameter's own name. Both
     /// are camel-cased, which is what the JSON hub protocol puts on the wire.
@@ -149,6 +194,10 @@ public partial class RealtimeDocsParityTests
 
     [GeneratedRegex(@"`(?<token>[A-Za-z]+)`")]
     private static partial Regex Token();
+
+    /// <summary>A `connection.invoke("Method", …)` line from the JavaScript example.</summary>
+    [GeneratedRegex(@"invoke\(\s*""(?<method>[A-Za-z]+)""(?<args>[^)]*)\)")]
+    private static partial Regex ExampleInvocation();
 
     /// <summary>The clause that states the operation vocabulary, up to the dash that explains it.</summary>
     [GeneratedRegex(@"`operation` is (?<values>[^—\r\n]*)")]

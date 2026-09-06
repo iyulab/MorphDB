@@ -397,12 +397,3 @@ class ChangeNotification(BaseModel):
 
     model_config = {"populate_by_name": True}
 
-
-class SubscriptionOptions(BaseModel):
-    """Subscription options."""
-
-    filter: str | None = None
-    columns: list[str] | None = None
-    include_old_data: bool = Field(False, alias="includeOldData")
-
-    model_config = {"populate_by_name": True}

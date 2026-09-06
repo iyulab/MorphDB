@@ -206,13 +206,9 @@ await client.webhooks.retryDelivery(deliveryId);
 
 ```typescript
 // Subscribe to table changes
-const subscription = await client.realtime.subscribe(
-  'users',
-  (change) => {
-    console.log(`${change.operation}: ${change.recordId}`);
-  },
-  { filter: 'is_active:eq:true' }
-);
+const subscription = await client.realtime.subscribe('users', (change) => {
+  console.log(`${change.operation}: ${change.recordId}`);
+});
 
 // Unsubscribe
 await subscription.unsubscribe();

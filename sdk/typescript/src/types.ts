@@ -299,12 +299,6 @@ export interface ChangeNotification {
 
 export type ChangeOperation = 'insert' | 'update' | 'delete';
 
-export interface SubscriptionOptions {
-  filter?: string;
-  columns?: string[];
-  includeOldData?: boolean;
-}
-
 export interface Subscription {
   subscriptionId: string;
   tableName: string;

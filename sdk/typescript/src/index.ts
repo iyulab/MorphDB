@@ -68,6 +68,5 @@ export type {
   // Realtime types
   ChangeNotification,
   ChangeOperation,
-  SubscriptionOptions,
   Subscription,
 } from './types.js';

@@ -238,11 +238,7 @@ def on_change(notification):
     print(f"{notification.operation}: {notification.record_id}")
     print(f"Data: {notification.data}")
 
-subscription = await client.realtime.subscribe(
-    "users",
-    on_change,
-    SubscriptionOptions(filter="is_active:eq:true"),
-)
+subscription = await client.realtime.subscribe("users", on_change)
 
 # Keep connection alive...
 await asyncio.sleep(60)

@@ -28,6 +28,7 @@ namespace MorphDB.Tests.Fixtures;
 public sealed class ApiTestFixture : IAsyncLifetime
 {
     private readonly PostgresFixture _postgresFixture;
+    private readonly Dictionary<string, WebApplicationFactory<Program>> _secretFactories = new(StringComparer.Ordinal);
     private WebApplicationFactory<Program>? _factory;
 
     public ApiTestFixture(PostgresFixture postgresFixture)
@@ -57,6 +58,15 @@ public sealed class ApiTestFixture : IAsyncLifetime
                         ["ConnectionStrings:MorphDB"] = _postgresFixture.ConnectionString
                     });
                 });
+
+                // The change listener is the one subsystem whose failure a test can only observe as
+                // absence — a notification that never arrives looks exactly like one the server
+                // chose not to send. Its own account of what it received is logged at Debug, which
+                // the default configuration drops, so a red realtime test carried no evidence of
+                // where the path broke. Raising just this category keeps that evidence in the run
+                // output without turning the whole suite's logging up.
+                builder.ConfigureLogging(logging =>
+                    logging.AddFilter("MorphDB.Service.Realtime", LogLevel.Debug));
 
                 builder.ConfigureServices(services =>
                 {
@@ -186,13 +196,32 @@ public sealed class ApiTestFixture : IAsyncLifetime
     /// then it would be verifying itself rather than the production wiring.
     /// </para>
     /// </summary>
-    public WebApplicationFactory<Program> WithMasterSecret(string masterSecret) =>
-        _factory!.WithWebHostBuilder(builder =>
-            builder.ConfigureTestServices(services =>
-            {
-                services.RemoveAll<SecretOptions>();
-                services.AddSingleton(new SecretOptions { MasterSecret = masterSecret });
-            }));
+    /// <remarks>
+    /// Kept per secret rather than built per call. <see cref="WebApplicationFactory{T}.WithWebHostBuilder"/>
+    /// returns a *new* factory, and a client taken from it boots a *separate* application — with
+    /// its own <c>PostgresChangeListener</c>, holding its own connection and LISTENing on the same
+    /// channel of the one database this collection shares. Building one per call leaked a host per
+    /// test (measured: 14 tests in this class started 23 of them), so every change committed
+    /// anywhere in the run was afterwards fanned out to every leaked listener, and the realtime
+    /// tests — the only ones that wait on a broadcast — timed out once enough had accumulated.
+    /// One host per distinct secret is all the enforcement tests need.
+    /// </remarks>
+    public WebApplicationFactory<Program> WithMasterSecret(string masterSecret)
+    {
+        if (!_secretFactories.TryGetValue(masterSecret, out var factory))
+        {
+            factory = _factory!.WithWebHostBuilder(builder =>
+                builder.ConfigureTestServices(services =>
+                {
+                    services.RemoveAll<SecretOptions>();
+                    services.AddSingleton(new SecretOptions { MasterSecret = masterSecret });
+                }));
+
+            _secretFactories[masterSecret] = factory;
+        }
+
+        return factory;
+    }
 
     /// <summary>
     /// Gets the service provider of the configured (unenforced) server.
@@ -248,6 +277,12 @@ public sealed class ApiTestFixture : IAsyncLifetime
 
     public Task DisposeAsync()
     {
+        foreach (var factory in _secretFactories.Values)
+        {
+            factory.Dispose();
+        }
+
+        _secretFactories.Clear();
         Client?.Dispose();
         _factory?.Dispose();
         return Task.CompletedTask;

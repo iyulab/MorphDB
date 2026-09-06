@@ -159,7 +159,7 @@ public class MorphHubTests : IAsyncLifetime
         var tableName = await SetupTestTableAsync();
 
         // Act
-        await _hubConnection!.InvokeAsync("Subscribe", tableName, null);
+        await _hubConnection!.InvokeAsync("Subscribe", tableName);
         var subscriptions = await _hubConnection!.InvokeAsync<IReadOnlyList<string>>("GetSubscriptions");
 
         // Assert
@@ -171,7 +171,7 @@ public class MorphHubTests : IAsyncLifetime
     {
         // Arrange
         var tableName = await SetupTestTableAsync();
-        await _hubConnection!.InvokeAsync("Subscribe", tableName, null);
+        await _hubConnection!.InvokeAsync("Subscribe", tableName);
 
         // Act
         await _hubConnection!.InvokeAsync("Unsubscribe", tableName);
@@ -199,6 +199,38 @@ public class MorphHubTests : IAsyncLifetime
 
     #endregion
 
+    #region Documented-call Tests
+
+    /// <summary>
+    /// The execution half of the real-time doc gate. Every other check on this surface compares one
+    /// description to another — the documented method names to the hub's, the documented payload
+    /// fields to the message's — and all of them stayed green while the one call the documentation
+    /// tells a consumer to make was refused by the server before it reached the hub at all
+    /// (<c>Invocation provides 1 argument(s) but target expects 2</c>: SignalR binds by argument
+    /// count, and a C# default parameter is invisible on the wire).
+    /// <para>
+    /// The tests around this one did not catch it because they were written against the
+    /// two-argument shape that works rather than the one-argument shape that is documented — the
+    /// workaround got encoded as the expectation. This one invokes it exactly as
+    /// <c>docs/API.md</c> writes it, so the documented path is the path under test.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task The_subscribe_call_documented_for_clients_is_accepted_as_written()
+    {
+        var tableName = await SetupTestTableAsync();
+
+        // Exactly `await connection.invoke("Subscribe", "customers");` — one argument, no options.
+        await _hubConnection!.InvokeAsync("Subscribe", tableName);
+
+        var subscriptions = await _hubConnection!.InvokeAsync<IReadOnlyList<string>>("GetSubscriptions");
+
+        subscriptions.Should().Contain(tableName,
+            "the documented call must not merely be accepted — it must actually subscribe");
+    }
+
+    #endregion
+
     #region Notification Tests
 
     [Fact]
@@ -206,7 +238,7 @@ public class MorphHubTests : IAsyncLifetime
     {
         // Arrange
         var tableName = await SetupTestTableAsync();
-        await _hubConnection!.InvokeAsync("Subscribe", tableName, null);
+        await _hubConnection!.InvokeAsync("Subscribe", tableName);
         _receivedCreatedMessages.Clear();
 
         // Act
@@ -232,14 +264,13 @@ public class MorphHubTests : IAsyncLifetime
     /// <summary>
     /// Regression: the broadcast used to carry the row exactly as the trigger's <c>to_jsonb(NEW)</c>
     /// produced it — physical column names and <c>project_id</c> included — because nothing on this
-    /// path translated it, unlike REST/GraphQL/export/view. See
-    /// ISSUE-morphdb-20260807-realtime-events-carry-physical-column-names.md.
+    /// path translated it, unlike REST/GraphQL/export/view.
     /// </summary>
     [Fact]
     public async Task Subscribe_WhenRecordCreated_NotificationDataUsesLogicalColumnNames()
     {
         var tableName = await SetupTestTableAsync();
-        await _hubConnection!.InvokeAsync("Subscribe", tableName, null);
+        await _hubConnection!.InvokeAsync("Subscribe", tableName);
         _receivedCreatedMessages.Clear();
 
         await _httpClient.PostAsJsonAsync($"/api/data/{tableName}", new Dictionary<string, object?>
@@ -280,7 +311,7 @@ public class MorphHubTests : IAsyncLifetime
         var createResult = await createResponse.Content.ReadFromJsonAsync<DataRecordResponse>();
         var recordId = createResult!.Id;
 
-        await _hubConnection!.InvokeAsync("Subscribe", tableName, null);
+        await _hubConnection!.InvokeAsync("Subscribe", tableName);
         _receivedUpdatedMessages.Clear();
 
         // Act
@@ -317,7 +348,7 @@ public class MorphHubTests : IAsyncLifetime
         var createResult = await createResponse.Content.ReadFromJsonAsync<DataRecordResponse>();
         var recordId = createResult!.Id;
 
-        await _hubConnection!.InvokeAsync("Subscribe", tableName, null);
+        await _hubConnection!.InvokeAsync("Subscribe", tableName);
         _receivedDeletedMessages.Clear();
 
         // Act
@@ -347,7 +378,7 @@ public class MorphHubTests : IAsyncLifetime
         var subscribedTable = await SetupTestTableAsync();
         var otherTable = await SetupTestTableAsync();
 
-        await _hubConnection!.InvokeAsync("Subscribe", subscribedTable, null);
+        await _hubConnection!.InvokeAsync("Subscribe", subscribedTable);
         _receivedCreatedMessages.Clear();
 
         // Act - Insert into other table

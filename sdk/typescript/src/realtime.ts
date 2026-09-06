@@ -4,7 +4,6 @@ import type {
   MorphDBClientOptions,
   ChangeNotification,
   ChangeOperation,
-  SubscriptionOptions,
   Subscription,
 } from './types.js';
 
@@ -70,8 +69,7 @@ export class RealtimeClient {
    */
   async subscribe(
     tableName: string,
-    callback: (change: ChangeNotification) => void,
-    options?: SubscriptionOptions
+    callback: (change: ChangeNotification) => void
   ): Promise<Subscription> {
     await this.connect();
 
@@ -89,7 +87,7 @@ export class RealtimeClient {
 
     this.subscriptions.set(tableName, handler);
 
-    await this.connection.invoke('Subscribe', tableName, options?.filter ?? null);
+    await this.connection.invoke('Subscribe', tableName);
 
     return {
       subscriptionId,

@@ -8,9 +8,9 @@ namespace MorphDB.Service.Realtime;
 /// </summary>
 /// <remarks>
 /// The whole grammar is flat, AND-combined scalar-literal equality — <c>{"col": "val", ...}</c>.
-/// There is no operator syntax and no nesting (design: HD-12, 2026-08-21); a filter whose value is
-/// an object or array is rejected at registration by <see cref="IsSupported"/> rather than
-/// silently failing to match at delivery time.
+/// There is deliberately no operator syntax and no nesting; a filter whose value is an object or
+/// array is rejected at registration by <see cref="IsSupported"/> rather than silently failing to
+/// match at delivery time.
 /// </remarks>
 internal static class WebhookFilterMatcher
 {

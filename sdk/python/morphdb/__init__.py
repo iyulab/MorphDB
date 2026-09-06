@@ -46,7 +46,6 @@ from morphdb.models import (
     OrderBy,
     PagedResponse,
     QueryRequest,
-    SubscriptionOptions,
     TableInfo,
     WebhookDelivery,
     WebhookInfo,
@@ -101,6 +100,5 @@ __all__ = [
     # Realtime models
     "ChangeNotification",
     "ChangeOperation",
-    "SubscriptionOptions",
     "Subscription",
 ]

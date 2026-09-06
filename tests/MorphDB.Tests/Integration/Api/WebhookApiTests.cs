@@ -458,8 +458,8 @@ public class WebhookApiTests
 
     /// <summary>
     /// Regression: <c>WebhookFilterMatcher</c> compares filter keys against the row data the
-    /// change listener hands it. Before the listener translated that row to logical column names
-    /// (see ISSUE-morphdb-20260807-realtime-events-carry-physical-column-names.md), a filter
+    /// change listener hands it. Before the listener translated that row to logical column names,
+    /// a filter
     /// written in the same logical vocabulary the registration API itself uses could never match
     /// anything — the row's keys were physical (<c>col_xxx</c>) and never equal a logical filter
     /// key, so a filtered webhook silently never fired regardless of the row's actual values.

@@ -93,7 +93,6 @@ public sealed class RealtimeClient : IAsyncDisposable
     public async Task<ISubscription> SubscribeAsync(
         string tableName,
         Action<ChangeNotification> onChangeHandler,
-        SubscriptionOptions? options = null,
         CancellationToken cancellationToken = default)
     {
         await ConnectAsync(cancellationToken);
@@ -106,7 +105,7 @@ public sealed class RealtimeClient : IAsyncDisposable
 
         _subscriptions[tableName] = subscription;
 
-        await _connection.InvokeAsync("Subscribe", tableName, options?.Filter, cancellationToken);
+        await _connection.InvokeAsync("Subscribe", tableName, cancellationToken);
 
         return subscription;
     }

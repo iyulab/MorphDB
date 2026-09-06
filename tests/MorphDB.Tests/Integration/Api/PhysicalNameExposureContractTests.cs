@@ -117,9 +117,8 @@ public class PhysicalNameExposureContractTests
     [Fact]
     public async Task View_query_results_carry_no_physical_names_across_a_join()
     {
-        // A join without an alias is exactly the shape that once leaked (the view builder quoted
-        // the *logical* table name into the FROM/JOIN clause instead of its physical one) — see
-        // ISSUE-morphdb-20260830-view-builder-skips-column-translation.md.
+        // A join without an alias is exactly the shape that once leaked: the view builder quoted
+        // the *logical* table name into the FROM/JOIN clause instead of its physical one.
         var customersTable = $"physview_customers_{Guid.NewGuid():N}"[..30];
         var createCustomers = await _client.PostAsJsonAsync("/api/schema/tables", new CreateTableApiRequest
         {

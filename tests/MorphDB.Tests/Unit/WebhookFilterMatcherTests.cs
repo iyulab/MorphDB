@@ -5,7 +5,7 @@ namespace MorphDB.Tests.Unit;
 
 /// <summary>
 /// Unit tests for WebhookFilterMatcher — the flat, AND-combined scalar-literal equality
-/// evaluator (design: HD-12, 2026-08-21).
+/// evaluator. There is deliberately no operator syntax and no nesting.
 /// </summary>
 [Trait("Category", "Unit")]
 public class WebhookFilterMatcherTests

@@ -598,9 +598,8 @@ connection.on("RecordDeleted", (message) => { /* … */ });
 | `UnsubscribeMany` | table names |
 | `GetSubscriptions` | none — answers the table names this connection is subscribed to |
 
-**A subscription is per table and nothing narrower.** `Subscribe` accepts a second options argument
-carrying a filter, a field list and an include-data flag; none of them reach the broadcast, so every
-subscriber to a table receives every change to it. Filter on the receiving side.
+**A subscription is per table and nothing narrower.** `Subscribe` takes the table name and nothing
+else, and every subscriber to a table receives every change to it. Filter on the receiving side.
 
 #### Client events
 
@@ -655,11 +654,17 @@ syntax and no nesting; registering a `filter` whose value is an object or array 
 data to compare against, so a webhook that needs to see deletions must subscribe without a filter
 on that event.
 
-Webhook payload:
+`events` accepts `insert`, `update`, and `delete`; a webhook subscribes to one or more of them.
+
+Webhook payload. Unlike every other surface in this document, a delivery's fields are `snake_case`
+— the payload is signed and posted to a third-party endpoint rather than returned to a client of
+this API, and it has kept its own naming since it was introduced:
+
 ```json
 {
   "event": "insert",
   "table": "orders",
+  "record_id": "0f3c1e2a-…",
   "data": { "id": "123", "status": "completed" },
   "timestamp": "2025-01-01T00:00:00Z"
 }

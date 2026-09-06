@@ -177,5 +177,4 @@ public sealed class WebhookPayload
     public Guid? RecordId { get; init; }
     public DateTimeOffset Timestamp { get; init; }
     public object? Data { get; init; }
-    public object? Previous { get; init; }
 }

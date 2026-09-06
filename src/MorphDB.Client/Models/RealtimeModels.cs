@@ -57,27 +57,6 @@ public enum ChangeOperation
 }
 
 /// <summary>
-/// Subscription options.
-/// </summary>
-public sealed class SubscriptionOptions
-{
-    /// <summary>
-    /// Filter expression for the subscription.
-    /// </summary>
-    public string? Filter { get; init; }
-
-    /// <summary>
-    /// Columns to include in change notifications.
-    /// </summary>
-    public IReadOnlyList<string>? Columns { get; init; }
-
-    /// <summary>
-    /// Whether to include old data in update notifications.
-    /// </summary>
-    public bool IncludeOldData { get; init; }
-}
-
-/// <summary>
 /// Subscription handle for managing subscriptions.
 /// </summary>
 public interface ISubscription : IAsyncDisposable

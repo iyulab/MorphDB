@@ -11,7 +11,7 @@ namespace MorphDB.Tests.Integration;
 /// <summary>
 /// Exercises <see cref="RedisSchemaCache"/> against a real Redis, because
 /// <see cref="ISchemaCache.InvalidateAllAsync"/> is exactly the operation an in-memory double
-/// cannot honestly stand in for (P2-o: it used to log a warning and delete nothing).
+/// cannot honestly stand in for: it used to log a warning and delete nothing.
 /// </summary>
 [Collection("Redis")]
 public class RedisSchemaCacheTests
