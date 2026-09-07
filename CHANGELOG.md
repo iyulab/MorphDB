@@ -13,6 +13,12 @@
   and Python clients; `subscribe` there now takes a table name and a callback. A subscription was
   already per table and nothing narrower — no filtering behaviour is lost, because none existed.
 
+### Removed
+
+- The `FluentValidation.AspNetCore` dependency of the service, which no code used and which its
+  authors have deprecated, along with three package pins nothing referenced (`FluentValidation`,
+  `Humanizer.Core`, `CsvHelper`). No behaviour changes; the container image simply carries less.
+
 ### Fixed
 
 - **A view's join condition and computed-column expression reached SQL without the

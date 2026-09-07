@@ -30,7 +30,6 @@
     <PackageReference Include="Serilog.Sinks.Console" />
 
     <!-- Validation -->
-    <PackageReference Include="FluentValidation.AspNetCore" />
 
     <!-- Health Checks -->
     <PackageReference Include="AspNetCore.HealthChecks.NpgSql" />
