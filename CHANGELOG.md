@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.11.1
+
+A hotfix on `0.11.0`, carrying only the fixes below.
+
+### Fixed
+
+- **A bulk export's column selection reached SQL unvalidated.** The `columns` an export request
+  names were spliced verbatim into the export's `SELECT` list — a name that matched no column was
+  passed through as written, so the string a caller sent was executed as SQL. Every export now
+  resolves its selection against the table's exposed columns before any SQL exists, at the request
+  (answered `400 COLUMN_NOT_FOUND`, the same error the query surface gives) and again when the job
+  streams; only the quoted physical names of matched columns reach the statement. `filter` and
+  `orderBy` on an export request were accepted and never applied; that is unchanged and now said
+  in the code — see the API reference.
+- **The internal `project_id` column leaked through two more surfaces.** The GraphQL `tables` and
+  `table` queries listed it among a table's columns, and a bulk export with no column selection
+  wrote it as a column of the file. REST, row mapping and the available-columns error text each
+  excluded it by their own hand-written comparison; all of those, and the two surfaces that had
+  none, now go through one predicate (`SystemColumns.IsInternal`), so the surfaces cannot drift
+  apart again. An export that names `project_id` explicitly is refused as an unknown column.
+- **A view's join condition and computed-column expression reached SQL without the
+  inline-expression gate.** Both are caller-authored text spliced verbatim into the view's SELECT
+  (identifiers translated, everything else passed through), the same category as an index predicate
+  or a policy expression — but only those two paths called the gate that refuses a statement
+  separator, a comment opener, or a parenthesis that closes a clause it never opened. A view
+  definition is now checked before any metadata is read and answered with `400 INVALID_EXPRESSION`,
+  quoting the offending text. Well-formed expressions are unaffected.
+
 ## 0.11.0
 
 ### Breaking
