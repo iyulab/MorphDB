@@ -2,7 +2,7 @@ name: Release NuGet Packages
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'hotfix/**']
     paths:
       - 'Directory.Build.props'
   workflow_dispatch:
