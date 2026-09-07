@@ -24,7 +24,7 @@ internal static class RowMapper
         foreach (var (key, value) in rowDict)
         {
             var normalizedKey = key.ToLowerInvariant();
-            if (normalizedKey == SystemColumns.ProjectId)
+            if (SystemColumns.IsInternal(normalizedKey))
             {
                 continue;
             }

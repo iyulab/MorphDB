@@ -53,7 +53,7 @@ public sealed class UnknownFieldValidator : IValidator
 
         // project_id is internal — naming it here would advertise a column no caller may use.
         var available = string.Join(", ", declared
-            .Where(n => n != SystemColumns.ProjectId)
+            .Where(n => !SystemColumns.IsInternal(n))
             .OrderBy(n => n, StringComparer.Ordinal));
         foreach (var key in unknown)
         {

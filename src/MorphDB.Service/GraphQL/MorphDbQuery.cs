@@ -41,7 +41,7 @@ public sealed class MorphDbQuery
         {
             Name = t.LogicalName,
             Version = t.SchemaVersion,
-            Columns = t.Columns.Select(c => new ColumnGraphType
+            Columns = t.ExposedColumns().Select(c => new ColumnGraphType
             {
                 Name = c.LogicalName,
                 Type = c.DataType.ToString(),
@@ -74,7 +74,7 @@ public sealed class MorphDbQuery
         {
             Name = table.LogicalName,
             Version = table.SchemaVersion,
-            Columns = table.Columns.Select(c => new ColumnGraphType
+            Columns = table.ExposedColumns().Select(c => new ColumnGraphType
             {
                 Name = c.LogicalName,
                 Type = c.DataType.ToString(),
