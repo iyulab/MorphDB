@@ -286,7 +286,7 @@ X-Project-Id: <project id>
     { "method": "INSERT", "table": "customers", "data": { "name": "Acme" } },
     { "method": "UPDATE", "table": "customers", "id": "…", "data": { "grade": "VIP" } },
     { "method": "DELETE", "table": "orders", "id": "…" },
-    { "method": "UPSERT", "table": "customers", "data": {...}, "keyColumns": ["email"] }
+    { "method": "UPSERT", "table": "customers", "data": { "email": "a@example.com", "name": "Acme" }, "keyColumns": ["email"] }
   ]
 }
 ```
@@ -698,15 +698,15 @@ on that event.
 
 `events` accepts `insert`, `update`, and `delete`; a webhook subscribes to one or more of them.
 
-Webhook payload. Unlike every other surface in this document, a delivery's fields are `snake_case`
-— the payload is signed and posted to a third-party endpoint rather than returned to a client of
-this API, and it has kept its own naming since it was introduced:
+Webhook payload. A delivery's fields are camelCase, the same as every other surface in this
+document — the payload is signed and posted to a third-party endpoint rather than returned to a
+client of this API, but it is still this API naming its own fields:
 
 ```json
 {
   "event": "insert",
   "table": "orders",
-  "record_id": "0f3c1e2a-…",
+  "recordId": "0f3c1e2a-…",
   "data": { "id": "123", "status": "completed" },
   "timestamp": "2025-01-01T00:00:00Z"
 }

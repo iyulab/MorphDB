@@ -13,12 +13,17 @@ namespace MorphDB.Service.Services;
 /// payload, so a naming change that the documentation does not follow is invisible until a live
 /// delivery arrives; holding both halves against one instance is what makes that change fail a
 /// build instead.
+///
+/// The names are camelCase, the same as every other surface this API serves. The payload carried
+/// snake_case from its introduction on the reasoning that a third-party receiver is not a client
+/// of this API; that reasoning explained the difference without making it worth one, and a single
+/// API that names the same field two ways teaches every reader the exception before the rule.
 /// </remarks>
 internal static class WebhookPayloadSerialization
 {
     public static readonly JsonSerializerOptions Options = new()
     {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = false
     };
 }

@@ -4,6 +4,15 @@
 
 ### Breaking
 
+- **A webhook delivery's fields are camelCase.** The delivery payload was the one surface in this
+  API that serialized `snake_case`; a receiver read `record_id` where every other response names
+  `recordId`. The naming was explained by the receiver being a third-party endpoint rather than a
+  client of this API, which is true and still does not make one API worth two conventions. The
+  payload now serializes with the same camelCase policy as the rest of the surface — `record_id`
+  becomes `recordId`, and the other four field names are unchanged because they are single words.
+  **Wire change**: a receiver that reads `record_id` must read `recordId`. It lands in the same
+  release as the `previous` removal below, so a receiver adjusts to the payload once rather than
+  twice.
 - **An export request has no `filter` or `orderBy`.** The three export request bodies (CSV, JSON,
   XLSX), the .NET client's option types and the core option records declared both members, and no
   export ever applied either — an export was always the whole table in storage order, so a caller
@@ -43,6 +52,12 @@
   `description` and `exception`); it is now written by the service and pinned by tests.
 
 ### Fixed
+
+- **The batch example was not valid JSON.** The `POST /api/batch/data` body in the reference showed
+  an upsert's `data` as `{...}` — shorthand a reader can see through but a parser cannot, so the
+  example could not be sent as written even after filling in the elided id. It now shows a real
+  object. Found by a gate that now sends every documented request to a running server, rather than
+  by a reader who copied it.
 
 - **Formula columns and the encryption routes were undocumented.** A column declaration has taken a
   `formula` object (expression, return type) since the feature shipped, and five routes under
@@ -100,11 +115,11 @@
   it, so every delivery ever sent carried `"previous": null` — a field a receiver could branch on
   and never see a value from. It is gone. **Wire change**: `previous` no longer appears in a
   delivery body.
-- **The delivered payload's `record_id` was not documented.** The Webhook section showed a
+- **The delivered payload's record id was not documented.** The Webhook section showed a
   four-field example while a delivery carries five, and the field it left out is the one naming the
   row an event is about — a receiver had to inspect a live delivery to find it. The example now
-  shows what is actually sent, states that a delivery is `snake_case` unlike the rest of this API,
-  and names the values `events` accepts. A parity gate now derives all three — request fields,
+  shows what is actually sent (the field ships as `recordId` — see the camelCase entry above) and
+  names the values `events` accepts. A parity gate now derives all three — request fields,
   event vocabulary, payload fields — from the binding model, the enum, and the delivery
   serializer, so the documentation cannot drift from them again.
 

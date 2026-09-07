@@ -42,7 +42,7 @@ public partial class GraphQlDocsParityTests
         var schema = await ServedSchemaAsync();
         var complaints = new List<string>();
 
-        foreach (var (block, document) in DocumentedBlocks())
+        foreach (var (block, document) in GraphQlDocs.Blocks())
         {
             var fragments = document.Definitions.OfType<FragmentDefinitionNode>()
                 .ToDictionary(f => f.Name.Value, StringComparer.Ordinal);
@@ -206,41 +206,10 @@ public partial class GraphQlDocsParityTests
     /// the top level: nested fields are checked by the other direction.
     /// </summary>
     private static HashSet<(OperationType, string)> DocumentedRootFields()
-        => DocumentedBlocks()
+        => GraphQlDocs.Blocks()
             .SelectMany(b => b.Document.Definitions.OfType<OperationDefinitionNode>())
             .SelectMany(o => o.SelectionSet.Selections.OfType<FieldNode>().Select(f => (o.Operation, f.Name.Value)))
             .ToHashSet();
-
-    /// <summary>
-    /// Every fenced GraphQL example in <c>docs/API.md</c>, parsed. Parsing here is itself part of
-    /// the gate: an example that no parser accepts is one no client can send.
-    /// </summary>
-    private static IReadOnlyList<(string Block, DocumentNode Document)> DocumentedBlocks()
-    {
-        var markdown = ConstraintBoundaryDoc.ReadRepoFile("docs/API.md");
-        var blocks = new List<(string, DocumentNode)>();
-        var ordinal = 0;
-
-        foreach (System.Text.RegularExpressions.Match match in GraphQlBlock().Matches(markdown))
-        {
-            ordinal++;
-            var label = $"API.md graphql example #{ordinal}";
-            var source = match.Groups["body"].Value;
-
-            try
-            {
-                blocks.Add((label, Utf8GraphQLParser.Parse(source)));
-            }
-            catch (SyntaxException ex)
-            {
-                throw new InvalidOperationException($"{label} does not parse as GraphQL: {ex.Message}", ex);
-            }
-        }
-
-        blocks.Should().NotBeEmpty("API.md must carry GraphQL examples for this gate to mean anything");
-
-        return blocks;
-    }
 
     private static async Task<ServedSchema> ServedSchemaAsync()
     {
