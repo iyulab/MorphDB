@@ -157,8 +157,8 @@ the type, not to the storage, so two types that share a storage column are still
 | `singleselect` | | `text` | |
 | `multiselect` | | `jsonb` | |
 | `relation` | | `uuid` | Configured through the relation fields of the declaration |
-| `rollup` | | `jsonb` | Configured through the rollup fields of the declaration |
-| `formula` | | `text` (generated) | Configured through the formula fields of the declaration |
+| `rollup` | | — (virtual) | Declared with a `rollup` object; no storage column, computed on read |
+| `formula` | | — (virtual) | Declared with a `formula` object — see [Formula columns](#formula-columns); no storage column |
 | `attachment` | | `jsonb` | See [Attachment Type](#attachment-type) |
 | `createdtime` | | `timestamptz` | Defaults to `now()` |
 | `modifiedtime` | | `timestamptz` | Defaults to `now()` |
@@ -166,8 +166,9 @@ the type, not to the storage, so two types that share a storage column are still
 | `modifiedby` | | `uuid` | |
 
 Two further names exist in the vocabulary and are **refused** at column creation with
-`400 INVALID_ARGUMENT`, because nothing implements them: `lookup` (a lookup column is configured
-through its own lookup fields, not by naming a type) and `computed`. The error message of an
+`400 INVALID_ARGUMENT`, because nothing implements them: `lookup` (a lookup column is declared
+with a `lookup` object beside its result type, not by naming a type — and, like `rollup` and
+`formula`, is then virtual) and `computed`. The error message of an
 unknown or refused type lists the accepted names, derived from the same table the server uses.
 
 ### Data Operations (DML)
@@ -881,6 +882,52 @@ Cloud SQL and RDS, where `CREATE EXTENSION` is gated behind a server-parameter a
 
 ---
 
+## Formula columns
+
+A formula column is declared like any other column — in `POST /api/schema/tables` or
+`POST /api/schema/tables/{name}/columns` — with a `formula` object beside its `type`:
+
+```json
+{
+  "name": "email_domain",
+  "type": "text",
+  "nullable": true,
+  "formula": {
+    "formula": "SUBSTRING({email}, '@', 999)",
+    "returnType": "text"
+  }
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `formula` | The expression. Required. |
+| `returnType` | The type the expression evaluates to, one of the [column types](#column-types). Defaults to `text`. |
+| `outputFormat` | Optional presentation hint stored with the column (a format string); the API does not apply it. |
+
+A formula column is **virtual**: no column is created in storage, and the value is computed when a
+row is read, by translating the expression to SQL over the table's physical columns. The same is
+true of a `lookup` or `rollup` column — a declaration carrying any of the three configuration
+objects creates a virtual column. A formula column therefore cannot be written to, indexed, or
+given a default.
+
+**Expression syntax.** Reference the table's columns by logical name in braces (`{email}`);
+combine with the arithmetic operators `+ - * /`, the comparison operators `= != <> < <= > >=`, the
+keywords `AND` `OR` `NOT`, string and numeric literals, and the functions below. A function outside
+this list is refused when the column is declared (`400`), naming it.
+
+| Group | Functions |
+|-------|-----------|
+| String | `CONCAT` `UPPER` `LOWER` `TRIM` `LTRIM` `RTRIM` `LEFT` `RIGHT` `SUBSTRING` `REPLACE` `LENGTH` `CHAR_LENGTH` |
+| Numeric | `ABS` `ROUND` `FLOOR` `CEIL` `CEILING` `MOD` `POWER` `SQRT` `LOG` `LOG10` `EXP` `SIGN` |
+| Date | `NOW` `TODAY` `DATE` `YEAR` `MONTH` `DAY` `HOUR` `MINUTE` `SECOND` `DATEADD` `DATEDIFF` `DATE_TRUNC` `CURRENT_DATE` `CURRENT_TIME` `CURRENT_TIMESTAMP` |
+| Conditional | `IF` `IFS` `SWITCH` `COALESCE` `NULLIF` |
+| Boolean | `AND` `OR` `NOT` |
+| Aggregation (over a lookup) | `SUM` `AVG` `MIN` `MAX` `COUNT` |
+| Conversion | `CAST` `TO_TEXT` `TO_NUMBER` `TO_DATE` `TO_BOOLEAN` |
+
+---
+
 ## Attachment Type
 
 The `attachment` data type stores file metadata as JSONB. MorphDB does not manage file storage directly — files should be stored in external services (S3, Azure Blob, etc.) and referenced by URL.
@@ -1005,6 +1052,44 @@ another and revoke the old one. Revocation keeps the row so audit records retain
 
 Only the master secret bypasses row-level security. An issued secret is subject to the same policies
 an anonymous caller is — with `{{role}}` now resolving to something.
+
+## Column encryption
+
+Values can be encrypted at rest. The API never shows ciphertext: a row is encrypted when it is
+written and decrypted when it is read, on every surface, so a consumer sees the same values with
+encryption on or off. What changes is what is stored.
+
+**Turning it on.** Encryption is active only when a master key is configured — `Encryption:MasterKey`
+(`Encryption__MasterKey` as an environment variable), a base64-encoded 32-byte key for AES-256-GCM.
+With no key, nothing is encrypted and the routes below answer `503`. The other settings in the
+`Encryption` section:
+
+| Setting | Default | Meaning |
+|---------|---------|---------|
+| `KeyVersion` | `1` | The version new values are encrypted under; raise it and rotate to re-encrypt |
+| `Algorithm` | `AES-256-GCM` | Recorded with the data for forward compatibility |
+| `EncryptAllByDefault` | `true` | Encrypt every column of an encryptable type unless excluded |
+| `ExcludedColumns` | the system columns | Logical names never encrypted |
+
+**Which columns.** With `EncryptAllByDefault`, every column whose type is `text`, `longtext`,
+`email`, `phone`, `url`, `json`, `integer`, `biginteger` or `decimal` is encrypted, except the
+excluded names; other types (dates, booleans, uuids, selections, relations) are stored in clear.
+The column metadata also carries a per-column encrypted flag that the writer honours, but **no
+request field sets it** — the API exposes no way to mark one column encrypted and leave another
+in clear, so in practice the choice is the `EncryptAllByDefault` setting for the whole service.
+
+**Key rotation.** All under `/api/security`, scoped by `X-Project-Id` like the rest of the API, and
+`503` while encryption is not enabled:
+
+| Route | Does |
+|-------|------|
+| `GET /api/security/encryption/info` | `{ enabled, currentKeyVersion, availableKeyVersions[] }` |
+| `GET /api/security/encryption/status/{table}` | Rotation state of one table: `state`, `currentKeyVersion`, `targetKeyVersion`, `progressPercent`, `rowsProcessed`, `totalRows`, `estimatedTimeRemainingMs`, `startedAt`, `lastRotatedAt` |
+| `GET /api/security/encryption/validate/{table}` | Whether every encrypted value of the table is under the current key: `isValid`, `expectedKeyVersion`, `totalEncryptedValues`, `currentVersionCount`, `oldVersionCount`, `unencryptedCount`, `versionBreakdown` |
+| `POST /api/security/encryption/rotate/{table}` | Re-encrypt one table under the current key version; answers `{ success, tableName, previousKeyVersion, newKeyVersion, rowsProcessed, columnsRotated, durationMs, startedAt, completedAt, errorMessage }` |
+| `POST /api/security/encryption/rotate` | The same for every table of the project |
+
+---
 
 ## Row-Level Security Policies
 

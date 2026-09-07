@@ -44,6 +44,13 @@
 
 ### Fixed
 
+- **Formula columns and the encryption routes were undocumented.** A column declaration has taken a
+  `formula` object (expression, return type) since the feature shipped, and five routes under
+  `/api/security/encryption/*` report and rotate encryption keys, but `docs/API.md` mentioned
+  neither: a consumer could not learn the expression syntax, the function set, that a formula
+  column is virtual, or that the rotation routes answer `503` until a master key is configured. Both
+  now have a section. The encryption section also states plainly that no request field marks a
+  single column as encrypted — the choice is the service-wide `EncryptAllByDefault` setting.
 - **A schema update that omitted `version` was answered `409 SCHEMA_VERSION_CONFLICT`.** `version` is
   documented as the one required field of `PATCH /api/schema/tables/{name}`, `PATCH
   /api/schema/columns/{id}` and `POST /api/schema/batch`, but it was bound as a plain integer, so an
