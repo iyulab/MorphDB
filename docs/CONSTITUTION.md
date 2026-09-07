@@ -74,6 +74,26 @@ PostgreSQL이 자기 위에 무엇이 얹히는지 묻지 않듯, MorphDB도 묻
 
 > **판별 규칙: "이 기능은 MorphDB가 어떤 용도로 쓰이는지를 가정하는가?"** → 그렇다면 거부.
 
+### 어휘 대조 — 같은 단어가 생태계에서 다른 약속을 가리킨다
+
+이 문서의 핵심 용어 중 일부는 데이터 생태계에서 **이미 다른 뜻으로 굳어져 있다.** 처음 읽는 사람은
+자기가 아는 뜻으로 읽으므로, 그 단어로 무엇을 약속하지 **않는지** 여기서 고정한다.
+이 절은 다른 제품을 평가하지 않는다 — 우리 단어의 뜻만 고정한다.
+
+| 용어 | 생태계의 통용 뜻 | 이 문서에서의 뜻 |
+|---|---|---|
+| **virtual schema** | 데이터 가상화 계층(Denodo·Exasol 등)에서 **외부 시스템**의 데이터를 옮기지 않고 로컬 테이블처럼 보이게 하는 매핑. Exasol 의 virtual schema 는 **읽기 전용**이라 INSERT/UPDATE/DELETE 가 되지 않는다. | 이 엔진이 **직접 소유·운영하는** PostgreSQL 안에서 논리 스키마와 물리 스키마를 분리하는 계층. 페더레이션이 아니고, 외부 소스를 붙이지 않으며, **CRUD·트랜잭션이 되는 읽기·쓰기 계층**이다. |
+| **스키마의 정본** | 기존 DB 위에 API 를 얹는 계층(Hasura·PostGraphile 등)은 **database-first** — 이미 존재하는 물리 DDL 을 introspect 해 API 를 도출한다. 정본은 DDL 이고, 스키마를 바꾸려면 DDL 을 바꾼다. | 방향이 반대다. 정본은 **호출자가 선언한 논리 스키마**이고 물리 DDL 은 거기서 파생돼 시스템이 관리한다. 그래서 논리명 변경이 데이터 이동이 아니라 메타데이터 갱신이다(위 「논리-물리 분리」). |
+
+근거: [Exasol — Virtual Schemas](https://docs.exasol.com/db/latest/database_concepts/virtual_schemas.htm) ·
+[Denodo — What is Data Virtualization](https://www.denodo.com/en/data-management/data-virtualization) ·
+[Hasura — PostgreSQL GraphQL](https://hasura.io/graphql/database/postgresql).
+
+**`virtual` 은 이 문서에서 두 가지 뜻으로 쓰인다.** 위 표의 `virtual schema`(논리-물리 분리)와,
+`virtual constraint`·formula/rollup 컬럼에서의 `virtual`(**저장되지 않고 읽을 때 계산·검증된다** —
+`docs/ARCHITECTURE.md` 「Virtual Constraint Architecture」)이다. 뒤의 것은 SQL 의 generated/virtual
+column 관례와 같은 뜻이라 혼동 대상이 아니다. 생태계 용법과 갈리는 것은 앞의 것 하나뿐이다.
+
 ### Non-goals — 명시적으로 하지 않는 것
 
 > **이 목록은 예시이지 닫힌 목록이 아니다**(2026-08-04 개정). 판정은 §2의 테스트가 한다 —
@@ -268,6 +288,9 @@ MorphDB는 공개 OSS다. 소비자가 `docs/`를 열었을 때 **무엇이 현�
 - [ ] `docs/`에 개발 과정 문서(로드맵·계획·리서치·cycle-log)가 섞여 있는가?
 - [ ] `docs/`가 헌법과 반대 방향을 가리키는가?
 - [ ] 문서가 코드와 어긋나 있는가? (버전 표기, 엔드포인트, 설치 안내)
+- [ ] §1 「어휘 대조」가 인용한 **외부 제품의 현재 동작**이 아직 그대로인가? 우리 코드가 아니므로
+      테스트가 잡지 못하는 유일한 주장이다 — 링크 세 개를 열어 확인하고, 달라졌으면 표를 고치거나
+      그 행을 지운다. (다른 제품을 평가하지 않는 절이므로, 애매하면 행을 지우는 쪽이 맞다.)
 
 ### 보고 형식
 
