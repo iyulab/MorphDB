@@ -166,10 +166,10 @@ the type, not to the storage, so two types that share a storage column are still
 | `modifiedby` | | `uuid` | |
 
 Two further names exist in the vocabulary and are **refused** at column creation with
-`400 INVALID_ARGUMENT`, because nothing implements them: `lookup` (a lookup column is declared
-with a `lookup` object beside its result type, not by naming a type — and, like `rollup` and
-`formula`, is then virtual) and `computed`. The error message of an
-unknown or refused type lists the accepted names, derived from the same table the server uses.
+`400 INVALID_ARGUMENT`, because nothing implements them: `lookup` and `computed`. A lookup column
+is declared with a lookup object beside its result type, not by naming a type — and, like rollup
+and formula columns, is then virtual. The error message of an unknown or refused type lists the
+accepted names, derived from the same table the server uses.
 
 ### Data Operations (DML)
 

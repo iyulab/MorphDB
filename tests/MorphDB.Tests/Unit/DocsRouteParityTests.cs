@@ -3,6 +3,8 @@ using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
 
+using MorphDB.Tests.Fixtures;
+
 namespace MorphDB.Tests.Unit;
 
 /// <summary>
@@ -116,27 +118,10 @@ public partial class DocsRouteParityTests
 
     private static IReadOnlyList<string> DocumentedRoutes()
         => DocumentedRoute()
-            .Matches(File.ReadAllText(FindDocsFile("API.md")))
+            .Matches(DocsFiles.ReadApiReference())
             .Select(m => $"{m.Groups["verb"].Value} {m.Groups["path"].Value.TrimEnd('/')}")
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
-
-    private static string FindDocsFile(string name)
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            var candidate = Path.Combine(directory.FullName, "docs", name);
-            if (File.Exists(candidate))
-            {
-                return candidate;
-            }
-
-            directory = directory.Parent;
-        }
-
-        throw new FileNotFoundException($"docs/{name} not found above {AppContext.BaseDirectory}");
-    }
 
     [GeneratedRegex(@"\{([A-Za-z0-9_]+):[^}]+\}")]
     private static partial Regex RouteConstraint();

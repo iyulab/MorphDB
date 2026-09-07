@@ -12,29 +12,12 @@ public static partial class DocsErrorCodes
 {
     public static HashSet<string> Documented()
     {
-        var apiMd = File.ReadAllText(FindDocsFile("API.md"));
+        var apiMd = DocsFiles.ReadApiReference();
         var errorsSection = apiMd[apiMd.IndexOf("## Errors", StringComparison.Ordinal)..];
 
         return ErrorTableRow().Matches(errorsSection)
             .Select(m => m.Groups["code"].Value)
             .ToHashSet(StringComparer.Ordinal);
-    }
-
-    private static string FindDocsFile(string name)
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            var candidate = Path.Combine(directory.FullName, "docs", name);
-            if (File.Exists(candidate))
-            {
-                return candidate;
-            }
-
-            directory = directory.Parent;
-        }
-
-        throw new FileNotFoundException($"docs/{name} not found above {AppContext.BaseDirectory}");
     }
 
     [GeneratedRegex(@"^\|\s*\d{3}\s*\|\s*`(?<code>[A-Z_]+)`\s*\|", RegexOptions.Multiline)]
