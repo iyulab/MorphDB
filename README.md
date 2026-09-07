@@ -109,6 +109,10 @@ volumes:
   postgres_data:
 ```
 
+> This is the file to copy. The `docker-compose.yml` in the repository is the **development
+> bundle** — it builds the service from source and keeps it behind `--profile app` — so
+> `docker compose up -d` from a checkout starts the stores and not the server.
+
 ```bash
 docker compose up -d
 
@@ -138,7 +142,8 @@ Every schema and data endpoint is project-scoped, so a bare request is answered 
 > multi-user, that boundary is still yours to stand, in front of MorphDB.
 
 ```bash
-# 1. Create a project. The response carries the id you will scope requests with.
+# 1. Create a project. The response carries the id you will scope requests with. The name is
+#    slugged and must be unique: creating "my-app" a second time answers 409 DUPLICATE_SLUG.
 PROJECT=$(curl -sS -X POST http://localhost:8080/api/projects \
   -H 'Content-Type: application/json' \
   -d '{"name":"my-app"}' | jq -r .id)
@@ -173,13 +178,14 @@ var client = new MorphDBClient("http://localhost:8080", new MorphDBClientOptions
 ```bash
 # Prerequisites: .NET 10.0, Docker
 
-# Start database
+# Start the stores from the development bundle (the repository's docker-compose.yml)
 docker compose up -d postgres
 
 # Run
 dotnet run --project src/MorphDB.Service
 
-# Access: http://localhost:5400
+# Access: http://localhost:5400  -- the Kestrel development port (launchSettings.json).
+# The container image listens on 8080; that is the port the Docker quick-start above uses.
 ```
 
 ## How It Works

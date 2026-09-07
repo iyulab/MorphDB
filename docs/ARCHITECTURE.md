@@ -256,13 +256,6 @@ When `SoftDeleteEnabled = true`:
 
 ## Data Types
 
-| MorphDB Type | PostgreSQL Type | Description |
-|--------------|-----------------|-------------|
-| `text` | varchar/text | String |
-| `integer` | int2/int4/int8 | Integer |
-| `decimal` | numeric(p,s) | Fixed-point |
-| `boolean` | boolean | True/False |
-| `timestamp` | timestamp | DateTime |
-| `uuid` | uuid | UUID |
-| `json` | jsonb | JSON data |
-| `enum` | enum/lookup | Single selection |
+The column type vocabulary — every accepted name, its aliases and the PostgreSQL column it is
+stored in — is kept in one place, [API.md · Column types](API.md#column-types), so that it cannot
+drift from what the server accepts. This document does not repeat it.

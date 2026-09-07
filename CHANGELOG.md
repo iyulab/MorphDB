@@ -44,6 +44,26 @@
 
 ### Fixed
 
+- **A schema update that omitted `version` was answered `409 SCHEMA_VERSION_CONFLICT`.** `version` is
+  documented as the one required field of `PATCH /api/schema/tables/{name}`, `PATCH
+  /api/schema/columns/{id}` and `POST /api/schema/batch`, but it was bound as a plain integer, so an
+  omitted version was compared as version 0 and refused with the same code as a real lost race. It
+  is required at binding now: a request without it is `400 INVALID_ARGUMENT` naming the member.
+- **A malformed request body was described in .NET terms.** The binding error for an unknown member,
+  a missing required member or a value of the wrong kind quoted the implementation's type names
+  (`MorphDB.Service.Models.Api.…`, `System.Int32`) — identifiers a consumer cannot act on. The same
+  `400 INVALID_ARGUMENT` now says what was sent and what is accepted, in the words of the wire
+  contract: `Unknown member 'filters' (at $.filters). Supported members: filter, orderBy, …`.
+- **The development `docker-compose.yml` collided with anything else on the machine.** Its four
+  services carried fixed `container_name`s, so a second checkout (or `docker compose -p`) could not
+  start beside the first, and its host ports were hard-wired, so a Redis or PostgreSQL already on
+  5432/6379 failed the whole `up`. Names are gone and the host ports read `MORPHDB_PORT`,
+  `MORPHDB_PG_PORT`, `MORPHDB_REDIS_PORT` and `MORPHDB_PGADMIN_PORT`. The file now says what it is —
+  the source-build development bundle — and the README says which compose to copy to run the
+  published image, that the Kestrel development port (5400) is not the container port (8080), and
+  that a project name is slugged and must be unique. The column type catalog moved from
+  `docs/ARCHITECTURE.md`, where it listed eight of the twenty-five accepted types, to
+  `docs/API.md`, complete.
 - **A row read with a `select` that left out `_id` was answered with an all-zero id.** REST's
   `GET /api/data/{table}?select=…` and `POST …/query` built the envelope `id` from the row and, when
   the projection did not carry `_id`, filled it with `00000000-0000-0000-0000-000000000000` — three

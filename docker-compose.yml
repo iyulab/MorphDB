@@ -1,14 +1,21 @@
+# The development bundle: builds the service from this checkout and runs the stores beside it.
+# It is not the quick-start in README.md, which pulls the published image -- copy that one to run
+# MorphDB; use this one to work on it. `docker compose up -d postgres` gives a database for
+# `dotnet run`; `docker compose --profile app up -d` also builds and runs the service.
+#
+# Host ports are overridable so two checkouts (or this and something else on 5432/6379) can run
+# side by side: MORPHDB_PORT, MORPHDB_PG_PORT, MORPHDB_REDIS_PORT, MORPHDB_PGADMIN_PORT. Containers
+# carry no fixed name for the same reason -- `docker compose -p <name>` isolates a second copy.
 services:
   # MorphDB API Service
   api:
     build:
       context: .
       dockerfile: src/MorphDB.Service/Dockerfile
-    container_name: morphdb-api
     ports:
       # Loopback on purpose: nothing here authenticates. To serve other machines, front the
       # service with a reverse proxy (or your app) and bind that instead.
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:${MORPHDB_PORT:-8080}:8080"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ConnectionStrings__MorphDB: Host=postgres;Port=5432;Database=morphdb;Username=morph;Password=morph
@@ -22,9 +29,8 @@ services:
 
   postgres:
     image: postgres:16-alpine
-    container_name: morphdb-postgres
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:${MORPHDB_PG_PORT:-5432}:5432"
     environment:
       POSTGRES_USER: morph
       POSTGRES_PASSWORD: morph
@@ -40,9 +46,8 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: morphdb-redis
     ports:
-      - "127.0.0.1:6379:6379"
+      - "127.0.0.1:${MORPHDB_REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -54,9 +59,8 @@ services:
   # Optional: pgAdmin for database management
   pgadmin:
     image: dpage/pgadmin4:9.17
-    container_name: morphdb-pgadmin
     ports:
-      - "127.0.0.1:5050:80"
+      - "127.0.0.1:${MORPHDB_PGADMIN_PORT:-5050}:80"
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@morphdb.local
       PGADMIN_DEFAULT_PASSWORD: admin

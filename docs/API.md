@@ -130,6 +130,46 @@ GET    /api/schema/tables/{name}/history       # Table change history
 GET    /api/schema/changelog                   # Global schema changelog
 ```
 
+### Column types
+
+The `type` of a column declaration takes one of the names below (case-insensitive; the aliases in
+the second column are accepted and normalized to the name). The storage column is the PostgreSQL
+type the value is kept in; how a value is validated or rendered on the way in and out belongs to
+the type, not to the storage, so two types that share a storage column are still different types.
+
+| `type` | Also accepted | Stored as | Notes |
+|--------|---------------|-----------|-------|
+| `text` | `string` | `text` | |
+| `longtext` | | `text` | |
+| `integer` | `int` | `integer` | Widens to `biginteger` and `decimal` — see [Update Column](#update-column) |
+| `biginteger` | `bigint`, `long` | `bigint` | |
+| `decimal` | `number`, `float`, `double` | `numeric` | |
+| `boolean` | `bool` | `boolean` | |
+| `date` | | `date` | |
+| `datetime` | `timestamp` | `timestamptz` | |
+| `time` | | `time` | |
+| `uuid` | `guid` | `uuid` | |
+| `json` | `jsonb` | `jsonb` | |
+| `array` | | `jsonb` | |
+| `email` | | `text` | |
+| `url` | | `text` | |
+| `phone` | | `text` | |
+| `singleselect` | | `text` | |
+| `multiselect` | | `jsonb` | |
+| `relation` | | `uuid` | Configured through the relation fields of the declaration |
+| `rollup` | | `jsonb` | Configured through the rollup fields of the declaration |
+| `formula` | | `text` (generated) | Configured through the formula fields of the declaration |
+| `attachment` | | `jsonb` | See [Attachment Type](#attachment-type) |
+| `createdtime` | | `timestamptz` | Defaults to `now()` |
+| `modifiedtime` | | `timestamptz` | Defaults to `now()` |
+| `createdby` | | `uuid` | |
+| `modifiedby` | | `uuid` | |
+
+Two further names exist in the vocabulary and are **refused** at column creation with
+`400 INVALID_ARGUMENT`, because nothing implements them: `lookup` (a lookup column is configured
+through its own lookup fields, not by naming a type) and `computed`. The error message of an
+unknown or refused type lists the accepted names, derived from the same table the server uses.
+
 ### Data Operations (DML)
 
 ```yaml

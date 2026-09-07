@@ -223,7 +223,13 @@ public sealed record CreateColumnApiRequest
 public sealed record UpdateTableApiRequest
 {
     public string? Name { get; init; }
-    public int Version { get; init; }
+
+    /// <summary>
+    /// The schema version the caller last read. Required: a request that omits it is refused at
+    /// binding (<c>400 INVALID_ARGUMENT</c>) rather than compared as version 0, which answered every
+    /// omission with a <c>409 SCHEMA_VERSION_CONFLICT</c> that meant something else.
+    /// </summary>
+    public required int Version { get; init; }
 }
 
 /// <summary>
@@ -480,7 +486,11 @@ public sealed record UpdateColumnApiRequest
     public bool? Nullable { get; init; }
     public bool? Unique { get; init; }
     public string? Check { get; init; }
-    public int Version { get; init; }
+
+    /// <summary>
+    /// The schema version the caller last read. Required — see <see cref="UpdateTableApiRequest.Version"/>.
+    /// </summary>
+    public required int Version { get; init; }
 
     /// <summary>
     /// When true, forces type conversion even if it may cause data loss.
@@ -1964,7 +1974,11 @@ public sealed record QueryFilterGroup : FilterNode
 public sealed record BatchDdlApiRequest
 {
     public Guid TableId { get; init; }
-    public int Version { get; init; }
+
+    /// <summary>
+    /// The schema version the caller last read. Required — see <see cref="UpdateTableApiRequest.Version"/>.
+    /// </summary>
+    public required int Version { get; init; }
     public required IReadOnlyList<BatchDdlOperationApiRequest> Operations { get; init; }
 }
 

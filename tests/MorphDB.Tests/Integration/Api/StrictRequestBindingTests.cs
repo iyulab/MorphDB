@@ -36,9 +36,13 @@ public class StrictRequestBindingTests
         return tableName;
     }
 
-    private async Task<(HttpStatusCode Status, ErrorResponse? Body)> PostAsync(string url, string json)
+    private async Task<(HttpStatusCode Status, ErrorResponse? Body)> PostAsync(string url, string json, HttpMethod? method = null)
     {
-        var response = await _client.PostAsync(url, new StringContent(json, Encoding.UTF8, "application/json"));
+        using var request = new HttpRequestMessage(method ?? HttpMethod.Post, url)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        };
+        var response = await _client.SendAsync(request);
         ErrorResponse? body = null;
         if (!response.IsSuccessStatusCode)
         {
@@ -61,6 +65,37 @@ public class StrictRequestBindingTests
         body!.Code.Should().Be("INVALID_ARGUMENT");
         body.Message.Should().Contain("filters");
         body.Message.Should().Contain("Supported members").And.Contain("filter");
+        body.Message.Should().NotContain("MorphDB.Service").And.NotContain(".NET",
+            "the error is the caller's to act on, and an implementation identifier is the one part of it they cannot");
+    }
+
+    [Fact]
+    public async Task A_value_of_the_wrong_kind_is_named_without_a_clr_type()
+    {
+        var tableName = await CreateTableAsync();
+
+        var (status, body) = await PostAsync($"/api/data/{tableName}/query", """{"page":"first"}""");
+
+        status.Should().Be(HttpStatusCode.BadRequest);
+        body!.Code.Should().Be("INVALID_ARGUMENT");
+        body.Message.Should().Contain("not an integer").And.Contain("$.page");
+        body.Message.Should().NotContain("System.");
+    }
+
+    [Fact]
+    public async Task A_schema_update_without_a_version_is_refused_at_binding_not_answered_as_a_conflict()
+    {
+        // `version` is documented as the one required field of a schema update. Bound as a plain int
+        // it defaulted to 0, so an omitted version was compared against the table and answered 409
+        // SCHEMA_VERSION_CONFLICT -- the same code as a real lost race, for a request that never said
+        // which version it had read.
+        var tableName = await CreateTableAsync();
+
+        var (status, body) = await PostAsync($"/api/schema/tables/{tableName}", """{"name":"renamed"}""", HttpMethod.Patch);
+
+        status.Should().Be(HttpStatusCode.BadRequest, "an omitted version is a malformed request, not a conflict");
+        body!.Code.Should().Be("INVALID_ARGUMENT");
+        body.Message.Should().Contain("version").And.NotContain("MorphDB.Service");
     }
 
     [Fact]
