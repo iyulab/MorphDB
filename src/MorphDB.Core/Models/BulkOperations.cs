@@ -140,8 +140,6 @@ public sealed record CsvExportOptions
     public bool IncludeHeader { get; init; } = true;
     public string? DateFormat { get; init; }
     public IReadOnlyList<string>? Columns { get; init; }
-    public string? Filter { get; init; }
-    public string? OrderBy { get; init; }
 }
 
 /// <summary>
@@ -152,8 +150,6 @@ public sealed record JsonExportOptions
     public bool Pretty { get; init; }
     public string? DateFormat { get; init; }
     public IReadOnlyList<string>? Columns { get; init; }
-    public string? Filter { get; init; }
-    public string? OrderBy { get; init; }
 }
 
 /// <summary>
@@ -164,8 +160,6 @@ public sealed record XlsxExportOptions
     public string SheetName { get; init; } = "Data";
     public bool IncludeHeader { get; init; } = true;
     public IReadOnlyList<string>? Columns { get; init; }
-    public string? Filter { get; init; }
-    public string? OrderBy { get; init; }
 }
 
 /// <summary>

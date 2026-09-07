@@ -11,13 +11,16 @@ compatible pair. This is a 0.x line — a minor release may break you, so pin a 
 |-----------|--------------|--------|
 | **Server** (`ghcr.io/iyulab/morphdb`) | Container image, versioned with the repo | Released |
 | **.NET client** (`MorphDB.Client`) | NuGet, versioned with the repo | Released |
-| **TypeScript SDK** (`sdk/typescript`) | **Not published.** Reference implementation only | Reference |
-| **Python SDK** (`sdk/python`) | **Not published.** Reference implementation only | Reference |
+| **TypeScript SDK** (`sdk/typescript`) | **Not published.** Archived | Archived |
+| **Python SDK** (`sdk/python`) | **Not published.** Archived | Archived |
 | **Desk** (`desk/`) | Not published; built from source | Development |
 
-The TypeScript and Python SDKs are reference implementations: they document how to talk to the
-API from those ecosystems, carry version `0.0.0`, and are hard-gated against accidental publishing.
-`pip install morphdb` installs an **unrelated project** — do not use it.
+The TypeScript and Python SDKs are **archived**: the source stays in the repository as a record of
+how the API was called from those ecosystems, frozen at the `0.11.x` contract, but it is not
+maintained, not tested against the server, and not kept in step with later contract changes —
+treat it as a starting point to read, not a client to run. Both carry version `0.0.0` and are
+hard-gated against accidental publishing. `pip install morphdb` installs an **unrelated project** —
+do not use it. The supported clients are the REST/GraphQL API itself and `MorphDB.Client` (.NET).
 
 ## Server ↔ .NET client
 
@@ -32,11 +35,6 @@ Current downstream pair: `Formbase.* 0.9.0` ↔ MorphDB `0.11.x`. Formbase's own
 its full pairing history — this file states MorphDB's own compatibility contract, not a mirror of a
 downstream project's release notes (an earlier drift here was exactly two documents holding the
 same fact and disagreeing). Mixing across the `0.7.x`/`0.6.x` line fails at the first request.
-
-## Reference SDK coverage
-
-The reference SDKs track the core surface (schema, data CRUD, query, batch, bulk, aggregation).
-They do **not** cover the Transactions and Views domains — consult `docs/API.md` for those.
 
 ## Container images
 

@@ -776,9 +776,9 @@ GET  /api/bulk/export/{jobId}/download    # Fetch a finished export
 `columns` selects which of the table's columns the file carries, in that order; omitted, the file
 carries every column the schema surface lists. A name that is not one of those — a typo, a physical
 name, a system-internal column — is refused with `400 COLUMN_NOT_FOUND` when the job is requested,
-before anything runs. `filter` and `orderBy` are accepted by the request models but **not applied**
-to an export today: an export is the whole table in storage order. Filter first through the query
-API if you need a subset.
+before anything runs. An export is the whole table in storage order — there is no `filter` or
+`orderBy` on an export request (a body naming either is refused as an unknown member, like any
+other). Filter first through the query API if you need a subset.
 
 An import job that finishes with `errorCount > 0` carries `errorDetails` — up to the first 100
 per-row failures, each `{ "rowNumber": <1-based>, "error": "<message>" }` — so a row-level failure

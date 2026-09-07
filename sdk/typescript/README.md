@@ -1,11 +1,17 @@
-# @morphdb/client
+# @morphdb/client (archived)
 
-Official TypeScript client SDK for MorphDB - a PostgreSQL-based dynamic schema database service.
+> **Archived — frozen at the MorphDB `0.11.x` contract, not maintained, not published.** This
+> TypeScript client stays in the repository as a record of how the API was called from TypeScript.
+> It is not tested against the server and is not updated when the contract changes; parts of it
+> already disagree with the server it was written for. Use the REST/GraphQL API directly
+> (`docs/API.md`), or `MorphDB.Client` from .NET.
+
+TypeScript client for MorphDB - a PostgreSQL-based dynamic schema database service.
 
 ## Installation
 
-**This SDK is not published.** It is a reference implementation that lives in the MorphDB
-repository; `@morphdb/client` is not registered on npm. Install it from a checkout:
+**This SDK is not published.** `@morphdb/client` is not registered on npm. If you still want to
+read or run it, install it from a checkout:
 
 ```bash
 npm install ./sdk/typescript    # from a clone of iyulab/MorphDB

@@ -283,6 +283,22 @@ public class BulkApiTests
     }
 
     [Fact]
+    public async Task ExportCsv_WithFilterOrOrderBy_IsRefusedAsUnknownMember()
+    {
+        // Export requests once declared filter and orderBy and applied neither; the members are gone,
+        // so a caller who sends them learns that at the request instead of receiving an unfiltered file.
+        var tableName = await SetupTestTableAsync();
+
+        var response = await _client.PostAsync($"/api/bulk/{tableName}/export/csv",
+            new StringContent("""{"columns":["name"],"filter":"name eq 'a'","orderBy":"name"}""", Encoding.UTF8, "application/json"),
+            TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        body.Should().Contain("filter").And.Contain("Supported members");
+    }
+
+    [Fact]
     public async Task ExportCsv_WithColumnSelection_ShouldAccept()
     {
         // Arrange

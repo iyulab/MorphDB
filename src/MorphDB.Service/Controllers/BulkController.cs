@@ -200,9 +200,7 @@ public sealed class BulkController : ControllerBase
             Delimiter = options?.Delimiter ?? ',',
             IncludeHeader = options?.IncludeHeader ?? true,
             DateFormat = options?.DateFormat,
-            Columns = options?.Columns,
-            Filter = options?.Filter,
-            OrderBy = options?.OrderBy
+            Columns = options?.Columns
         };
 
         var job = await _bulkService.StartCsvExportAsync(projectId, table, csvOptions, cancellationToken);
@@ -230,9 +228,7 @@ public sealed class BulkController : ControllerBase
         {
             Pretty = options?.Pretty ?? false,
             DateFormat = options?.DateFormat,
-            Columns = options?.Columns,
-            Filter = options?.Filter,
-            OrderBy = options?.OrderBy
+            Columns = options?.Columns
         };
 
         var job = await _bulkService.StartJsonExportAsync(projectId, table, jsonOptions, cancellationToken);
@@ -260,9 +256,7 @@ public sealed class BulkController : ControllerBase
         {
             SheetName = options?.SheetName ?? "Data",
             IncludeHeader = options?.IncludeHeader ?? true,
-            Columns = options?.Columns,
-            Filter = options?.Filter,
-            OrderBy = options?.OrderBy
+            Columns = options?.Columns
         };
 
         var job = await _bulkService.StartXlsxExportAsync(projectId, table, xlsxOptions, cancellationToken);

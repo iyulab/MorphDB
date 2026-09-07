@@ -229,7 +229,7 @@ MorphDB/
 │   ├── MorphDB.Npgsql/     # Database provider implementation
 │   ├── MorphDB.Service/    # ASP.NET Core API service
 │   └── MorphDB.Client/     # .NET client SDK
-├── sdk/                    # reference clients, not published -- see each README
+├── sdk/                    # archived Python/TypeScript clients -- frozen, not published, not maintained
 │   ├── typescript/         # TypeScript
 │   └── python/             # Python
 ├── desk/                   # Electron desktop app -- parked, see desk/README.md

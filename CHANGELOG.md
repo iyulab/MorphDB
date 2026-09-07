@@ -4,6 +4,13 @@
 
 ### Breaking
 
+- **An export request has no `filter` or `orderBy`.** The three export request bodies (CSV, JSON,
+  XLSX), the .NET client's option types and the core option records declared both members, and no
+  export ever applied either — an export was always the whole table in storage order, so a caller
+  who sent a filter received an unfiltered file and no signal. The members are gone; a body that
+  still names one is refused at the request as an unknown member (`400`, listing the supported
+  members), which is the same answer every other request body already gives. To export a subset,
+  filter through the query API.
 - **The `Subscribe` hub method takes one argument.** It declared a second, optional
   `SubscriptionOptions` — a filter, a field list and an include-data flag — that every subscribe
   call stored and no broadcast ever read. SignalR binds an invocation by argument *count*, and no
@@ -12,6 +19,15 @@
   binder. The parameter and the options type are gone from the hub and from the .NET, TypeScript
   and Python clients; `subscribe` there now takes a table name and a callback. A subscription was
   already per table and nothing narrower — no filtering behaviour is lost, because none existed.
+
+### Deprecated
+
+- **The Python and TypeScript clients under `sdk/` are archived.** They were reference
+  implementations that no workflow ran; measured against the server they document, 4 of their 11
+  documented methods worked. Rather than carry a second and third client contract that nothing
+  verifies, the source stays in the repository frozen at the `0.11.x` contract, marked archived in
+  each README, and is not maintained, tested, or published. The supported clients are the API
+  itself and `MorphDB.Client` (.NET) — `docs/COMPATIBILITY.md` and `docs/TESTING.md` say so.
 
 ### Removed
 

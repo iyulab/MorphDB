@@ -148,22 +148,9 @@ const result = await client.batch('orders', operations)
 
 ## SDK Tests
 
-### Python SDK
-
-```bash
-cd sdk/python
-pytest                      # All tests
-pytest -m unit              # Unit tests only
-pytest -m integration       # Integration tests only
-```
-
-### TypeScript SDK
-
-```bash
-cd sdk/typescript
-npm test                    # All tests
-npm run test:integration    # Integration tests only
-```
+The Python and TypeScript clients under `sdk/` are archived (see `docs/COMPATIBILITY.md`). Their
+test suites are frozen with them: no workflow runs them, and they are not expected to pass against
+the current server.
 
 ---
 
@@ -178,11 +165,7 @@ docker compose -f docker-compose.test.yml up -d
 # 2. Run server integration tests
 dotnet test --filter-namespace MorphDB.Tests.Integration
 
-# 3. Run SDK integration tests
-cd sdk/python && pytest -m integration
-cd sdk/typescript && npm run test:integration
-
-# 4. Run Desk E2E tests
+# 3. Run Desk E2E tests
 cd desk && npx playwright test e2e/integration
 ```
 
@@ -193,13 +176,13 @@ cd desk && npx playwright test e2e/integration
 | Component | Unit | Integration | E2E |
 |-----------|------|-------------|-----|
 | Server | ✅ | ✅ | - |
-| Python SDK | written, not run in CI | written, not run in CI | - |
-| TypeScript SDK | written, not run in CI | written, not run in CI | - |
+| Python SDK (archived) | frozen, not run | frozen, not run | - |
+| TypeScript SDK (archived) | frozen, not run | frozen, not run | - |
 | Desk | ✅ | ✅ | ✅ |
 
-The two reference SDKs ship test suites under `sdk/`, but no workflow in this repository runs
-them — a change to the server contract is not caught on the SDK side until someone runs those
-suites by hand. Treat the SDKs as unverified against the current server until that gate exists.
+The archived SDKs keep their test suites under `sdk/`, but nothing runs them and nothing will: a
+change to the server contract is not reflected on the SDK side. `MorphDB.Client` is the only client
+verified against a live server.
 
 ---
 

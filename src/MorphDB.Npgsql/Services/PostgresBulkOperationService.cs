@@ -241,7 +241,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         var now = DateTimeOffset.UtcNow;
 
         // Count total rows for progress tracking
-        var totalRows = await CountRowsAsync(projectId, tableName, options.Filter, cancellationToken);
+        var totalRows = await CountRowsAsync(projectId, tableName, cancellationToken);
 
         var job = new BulkExportJob
         {
@@ -278,7 +278,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         var jobId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
 
-        var totalRows = await CountRowsAsync(projectId, tableName, options.Filter, cancellationToken);
+        var totalRows = await CountRowsAsync(projectId, tableName, cancellationToken);
 
         var job = new BulkExportJob
         {
@@ -315,7 +315,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         var jobId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
 
-        var totalRows = await CountRowsAsync(projectId, tableName, options.Filter, cancellationToken);
+        var totalRows = await CountRowsAsync(projectId, tableName, cancellationToken);
 
         var job = new BulkExportJob
         {
@@ -894,7 +894,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
 
         // Stream data
         var processedRows = 0L;
-        await foreach (var row in StreamTableDataAsync(job.ProjectId, job.TableName, columns, options.Filter, options.OrderBy, cancellationToken))
+        await foreach (var row in StreamTableDataAsync(job.ProjectId, job.TableName, columns, cancellationToken))
         {
             var values = columns.Select(col => FormatCsvValue(row.TryGetValue(col, out var v) ? v : null, options.DateFormat));
             await writer.WriteLineAsync(string.Join(options.Delimiter, values.Select(EscapeCsvValue)));
@@ -928,7 +928,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         writer.WriteStartArray();
 
         var processedRows = 0L;
-        await foreach (var row in StreamTableDataAsync(job.ProjectId, job.TableName, columns, options.Filter, options.OrderBy, cancellationToken))
+        await foreach (var row in StreamTableDataAsync(job.ProjectId, job.TableName, columns, cancellationToken))
         {
             writer.WriteStartObject();
             foreach (var col in columns)
@@ -984,7 +984,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         }
 
         var processedRows = 0L;
-        await foreach (var row in StreamTableDataAsync(job.ProjectId, job.TableName, columns, options.Filter, options.OrderBy, cancellationToken))
+        await foreach (var row in StreamTableDataAsync(job.ProjectId, job.TableName, columns, cancellationToken))
         {
             for (var i = 0; i < columns.Count; i++)
             {
@@ -1115,14 +1115,12 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
     private async Task<long> CountRowsAsync(
         Guid projectId,
         string tableName,
-        string? filter,
         CancellationToken cancellationToken)
     {
         var table = await _schemaManager.GetTableAsync(projectId, tableName, cancellationToken)
             ?? throw new TableNotFoundException(tableName);
 
         var sql = $"SELECT COUNT(*) FROM {table.PhysicalName}";
-        // Note: In production, filter would be parsed and added safely
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         return await connection.ExecuteScalarAsync<long>(sql);
@@ -1132,8 +1130,6 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         Guid projectId,
         string tableName,
         List<string> columns,
-        string? filter,
-        string? orderBy,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var table = await _schemaManager.GetTableAsync(projectId, tableName, cancellationToken)
@@ -1144,8 +1140,8 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         var exportColumns = ResolveExportColumns(table, columns);
         var selectList = string.Join(", ", exportColumns.Select(c => DmlBuilder.QuoteIdentifier(c.PhysicalName)));
 
+        // An export is the whole table in storage order; a subset is the query API's job.
         var sql = $"SELECT {selectList} FROM {table.PhysicalName}";
-        // filter and orderBy are accepted by the options but not applied here — see the CHANGELOG.
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         using var reader = await connection.ExecuteReaderAsync(sql);

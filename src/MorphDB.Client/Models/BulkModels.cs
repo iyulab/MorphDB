@@ -78,16 +78,6 @@ public sealed class CsvExportOptions
     public IReadOnlyList<string>? Columns { get; init; }
 
     /// <summary>
-    /// Filter expression.
-    /// </summary>
-    public string? Filter { get; init; }
-
-    /// <summary>
-    /// Order by expression.
-    /// </summary>
-    public string? OrderBy { get; init; }
-
-    /// <summary>
     /// Field delimiter character.
     /// </summary>
     public char Delimiter { get; init; } = ',';
@@ -114,16 +104,6 @@ public sealed class JsonExportOptions
     public IReadOnlyList<string>? Columns { get; init; }
 
     /// <summary>
-    /// Filter expression.
-    /// </summary>
-    public string? Filter { get; init; }
-
-    /// <summary>
-    /// Order by expression.
-    /// </summary>
-    public string? OrderBy { get; init; }
-
-    /// <summary>
     /// Whether to format JSON with indentation.
     /// </summary>
     public bool Pretty { get; init; }
@@ -143,16 +123,6 @@ public sealed class XlsxExportOptions
     /// Columns to export. If empty, all columns are exported.
     /// </summary>
     public IReadOnlyList<string>? Columns { get; init; }
-
-    /// <summary>
-    /// Filter expression.
-    /// </summary>
-    public string? Filter { get; init; }
-
-    /// <summary>
-    /// Order by expression.
-    /// </summary>
-    public string? OrderBy { get; init; }
 
     /// <summary>
     /// Sheet name.
