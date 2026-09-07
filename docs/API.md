@@ -761,9 +761,9 @@ name,email,grade
 John Doe,john@example.com,VIP
 
 # Export — options travel in the body
-POST /api/bulk/{table}/export/csv
-POST /api/bulk/{table}/export/json
-POST /api/bulk/{table}/export/xlsx
+POST /api/bulk/{table}/export/csv      # { "columns": ["name", "email"], "delimiter": ",", "includeHeader": true }
+POST /api/bulk/{table}/export/json     # { "columns": [...], "pretty": false }
+POST /api/bulk/{table}/export/xlsx     # { "columns": [...] }
 
 # Following a job
 GET  /api/bulk/jobs/{jobId}/progress      # Progress while it runs
@@ -772,6 +772,13 @@ GET  /api/bulk/import                     # List import jobs
 GET  /api/bulk/export                     # List export jobs
 GET  /api/bulk/export/{jobId}/download    # Fetch a finished export
 ```
+
+`columns` selects which of the table's columns the file carries, in that order; omitted, the file
+carries every column the schema surface lists. A name that is not one of those — a typo, a physical
+name, a system-internal column — is refused with `400 COLUMN_NOT_FOUND` when the job is requested,
+before anything runs. `filter` and `orderBy` are accepted by the request models but **not applied**
+to an export today: an export is the whole table in storage order. Filter first through the query
+API if you need a subset.
 
 An import job that finishes with `errorCount > 0` carries `errorDetails` — up to the first 100
 per-row failures, each `{ "rowNumber": <1-based>, "error": "<message>" }` — so a row-level failure

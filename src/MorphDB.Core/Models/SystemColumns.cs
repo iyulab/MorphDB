@@ -74,6 +74,25 @@ public static class SystemColumns
         columnName.StartsWith('_') || columnName == ProjectId;
 
     /// <summary>
+    /// Whether a column is internal: carried by every table, part of no consumer-facing surface.
+    /// Today that is <see cref="ProjectId"/> alone. Every surface that lists, projects, maps or
+    /// exports a table's columns filters through this one predicate — REST and GraphQL schema
+    /// responses, row mapping, the available-columns error text, bulk export — so the set of
+    /// surfaces that know the rule cannot drift apart again.
+    /// </summary>
+    public static bool IsInternal(string columnName) => columnName == ProjectId;
+
+    /// <summary>
+    /// The columns a consumer may see or name: <see cref="TableMetadata.Columns"/> without the
+    /// internal ones.
+    /// </summary>
+    public static IEnumerable<ColumnMetadata> ExposedColumns(this TableMetadata table)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+        return table.Columns.Where(c => !IsInternal(c.LogicalName));
+    }
+
+    /// <summary>
     /// Extracts the record id from a logical row dictionary via the <see cref="Id"/> column.
     /// Every write-result and query-row dictionary in this codebase is keyed by <see cref="Id"/> —
     /// this is the single, canonical read of it. Returns <c>null</c> when the row has no

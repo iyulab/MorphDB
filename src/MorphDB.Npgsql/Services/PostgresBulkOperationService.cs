@@ -9,6 +9,7 @@ using MorphDB.Core.Abstractions;
 using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
 using MorphDB.Core.Pipeline;
+using MorphDB.Npgsql.Dml;
 using Npgsql;
 
 namespace MorphDB.Npgsql.Services;
@@ -233,6 +234,9 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         var table = await _schemaManager.GetTableAsync(projectId, tableName, cancellationToken)
             ?? throw new TableNotFoundException(tableName);
 
+        // An unknown or internal column is refused now, with the 202, not later inside the job.
+        ResolveExportColumns(table, options.Columns);
+
         var jobId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
 
@@ -268,6 +272,9 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         var table = await _schemaManager.GetTableAsync(projectId, tableName, cancellationToken)
             ?? throw new TableNotFoundException(tableName);
 
+        // An unknown or internal column is refused now, with the 202, not later inside the job.
+        ResolveExportColumns(table, options.Columns);
+
         var jobId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
 
@@ -301,6 +308,9 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
 
         var table = await _schemaManager.GetTableAsync(projectId, tableName, cancellationToken)
             ?? throw new TableNotFoundException(tableName);
+
+        // An unknown or internal column is refused now, with the 202, not later inside the job.
+        ResolveExportColumns(table, options.Columns);
 
         var jobId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
@@ -874,7 +884,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         var table = await _schemaManager.GetTableAsync(job.ProjectId, job.TableName, cancellationToken)
             ?? throw new TableNotFoundException(job.TableName);
 
-        var columns = options.Columns?.ToList() ?? table.Columns.Select(c => c.LogicalName).ToList();
+        var columns = ResolveExportColumns(table, options.Columns).Select(c => c.LogicalName).ToList();
 
         // Write header
         if (options.IncludeHeader)
@@ -913,7 +923,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         var table = await _schemaManager.GetTableAsync(job.ProjectId, job.TableName, cancellationToken)
             ?? throw new TableNotFoundException(job.TableName);
 
-        var columns = options.Columns?.ToList() ?? table.Columns.Select(c => c.LogicalName).ToList();
+        var columns = ResolveExportColumns(table, options.Columns).Select(c => c.LogicalName).ToList();
 
         writer.WriteStartArray();
 
@@ -958,7 +968,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         var table = await _schemaManager.GetTableAsync(job.ProjectId, job.TableName, cancellationToken)
             ?? throw new TableNotFoundException(job.TableName);
 
-        var columns = options.Columns?.ToList() ?? table.Columns.Select(c => c.LogicalName).ToList();
+        var columns = ResolveExportColumns(table, options.Columns).Select(c => c.LogicalName).ToList();
 
         using var workbook = new XLWorkbook();
         var worksheet = workbook.Worksheets.Add(SanitizeSheetName(job.TableName));
@@ -1129,11 +1139,13 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         var table = await _schemaManager.GetTableAsync(projectId, tableName, cancellationToken)
             ?? throw new TableNotFoundException(tableName);
 
-        var columnMap = table.Columns.ToDictionary(c => c.LogicalName, c => c.PhysicalName);
-        var selectColumns = columns.Select(c => columnMap.GetValueOrDefault(c, c)).ToList();
+        // Only physical names of exposed columns reach the SELECT list, and quoted: the caller's
+        // strings were resolved against the table's metadata and refused if they matched nothing.
+        var exportColumns = ResolveExportColumns(table, columns);
+        var selectList = string.Join(", ", exportColumns.Select(c => DmlBuilder.QuoteIdentifier(c.PhysicalName)));
 
-        var sql = $"SELECT {string.Join(", ", selectColumns)} FROM {table.PhysicalName}";
-        // Note: In production, filter and orderBy would be parsed and added safely
+        var sql = $"SELECT {selectList} FROM {table.PhysicalName}";
+        // filter and orderBy are accepted by the options but not applied here — see the CHANGELOG.
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         using var reader = await connection.ExecuteReaderAsync(sql);
@@ -1141,9 +1153,9 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         while (await reader.ReadAsync(cancellationToken))
         {
             var row = new Dictionary<string, object?>();
-            for (var i = 0; i < columns.Count; i++)
+            for (var i = 0; i < exportColumns.Count; i++)
             {
-                row[columns[i]] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                row[exportColumns[i].LogicalName] = reader.IsDBNull(i) ? null : reader.GetValue(i);
             }
             yield return row;
         }
@@ -1218,6 +1230,29 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
             Options = job.Options?.RootElement.GetRawText(),
             job.CreatedAt
         });
+    }
+
+    /// <summary>
+    /// The columns an export carries: the caller's selection, or every exposed column when it made
+    /// none. A name that is not an exposed column of the table — a typo, a physical name, the
+    /// internal project column, anything shaped like SQL — is refused here, before any SQL exists,
+    /// with the same error the query surface answers. What this returns is the only thing that
+    /// reaches the SELECT list.
+    /// </summary>
+    private static List<ColumnMetadata> ResolveExportColumns(TableMetadata table, IReadOnlyList<string>? requested)
+    {
+        var exposed = table.ExposedColumns().ToList();
+        if (requested is null || requested.Count == 0)
+        {
+            return exposed;
+        }
+
+        var byLogicalName = exposed.ToDictionary(c => c.LogicalName, StringComparer.Ordinal);
+        return requested
+            .Select(name => byLogicalName.TryGetValue(name, out var column)
+                ? column
+                : throw new ColumnNotFoundException(table.LogicalName, name))
+            .ToList();
     }
 
     private async Task SaveExportJobAsync(BulkExportJob job, CancellationToken cancellationToken)

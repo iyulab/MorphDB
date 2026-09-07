@@ -1,6 +1,10 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
+using MorphDB.Core.Abstractions;
+using MorphDB.Core.Models;
 using MorphDB.Service.Models.Api;
 using MorphDB.Tests.Fixtures;
 
@@ -17,10 +21,12 @@ namespace MorphDB.Tests.Integration.Api;
 [Trait("Category", "ApiIntegration")]
 public class ProjectIdExposureTests
 {
+    private readonly ApiIntegrationFixture _fixture;
     private readonly HttpClient _client;
 
     public ProjectIdExposureTests(ApiIntegrationFixture fixture)
     {
+        _fixture = fixture;
         _client = fixture.Api.Client;
     }
 
@@ -126,5 +132,75 @@ public class ProjectIdExposureTests
         var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
 
         body.RootElement.GetProperty("value")[0].TryGetProperty("project_id", out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GraphQl_schema_queries_do_not_list_project_id_as_a_column()
+    {
+        var tableName = await CreateTableWithRowAsync();
+
+        const string query = """
+            query($name: String!) {
+              tables { name columns { name } }
+              table(name: $name) { name columns { name } }
+            }
+            """;
+        var response = await _client.PostAsJsonAsync("/graphql", new { query, variables = new { name = tableName } }, TestContext.Current.CancellationToken);
+        response.EnsureSuccessStatusCode();
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+
+        body.RootElement.TryGetProperty("errors", out _).Should().BeFalse();
+        var data = body.RootElement.GetProperty("data");
+        var listed = data.GetProperty("tables").EnumerateArray().Single(x => x.GetProperty("name").GetString() == tableName);
+        ColumnNames(listed).Should().NotContain("project_id", "the GraphQL schema surface must answer what REST answers");
+        ColumnNames(listed).Should().Contain("grade");
+        ColumnNames(data.GetProperty("table")).Should().NotContain("project_id");
+
+        static string[] ColumnNames(JsonElement table) =>
+            table.GetProperty("columns").EnumerateArray().Select(c => c.GetProperty("name").GetString()!).ToArray();
+    }
+
+    [Fact]
+    public async Task A_default_csv_export_does_not_carry_the_project_id()
+    {
+        var tableName = await CreateTableWithRowAsync();
+
+        // The export is driven through the service, as the other export contract tests do: the
+        // test host does not run the background job processor.
+        using var scope = _fixture.Api.Services.CreateScope();
+        var bulkService = scope.ServiceProvider.GetRequiredService<IBulkOperationService>();
+        var job = await bulkService.StartCsvExportAsync(_fixture.Api.ProjectId, tableName, new CsvExportOptions { IncludeHeader = true }, TestContext.Current.CancellationToken);
+        using var output = new MemoryStream();
+        await bulkService.StreamExportAsync(job.JobId, output, TestContext.Current.CancellationToken);
+        output.Position = 0;
+        var header = (await new StreamReader(output).ReadLineAsync(TestContext.Current.CancellationToken))!;
+
+        header.Split(',').Should().NotContain("project_id").And.Contain("grade");
+    }
+
+    [Fact]
+    public async Task An_export_may_not_select_the_project_id_by_name()
+    {
+        var tableName = await CreateTableWithRowAsync();
+
+        var response = await _client.PostAsJsonAsync($"/api/bulk/{tableName}/export/csv",
+            new CsvExportApiRequest { Columns = ["grade", "project_id"] }, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest, "no consumer may name a column no surface exposes");
+        (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).Should().Contain("COLUMN_NOT_FOUND");
+    }
+
+    [Fact]
+    public async Task An_export_column_that_matches_no_column_is_refused_before_any_sql_runs()
+    {
+        // The selection used to be spliced into the SELECT list verbatim. A string shaped like SQL
+        // is now just another name that matches no exposed column, answered the same way as a typo.
+        var tableName = await CreateTableWithRowAsync();
+
+        var response = await _client.PostAsJsonAsync($"/api/bulk/{tableName}/export/csv",
+            new CsvExportApiRequest { Columns = ["(SELECT string_agg(tablename, ',') FROM pg_tables)"] }, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).Should().Contain("COLUMN_NOT_FOUND");
     }
 }

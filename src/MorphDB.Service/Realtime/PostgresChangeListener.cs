@@ -160,7 +160,7 @@ public sealed partial class PostgresChangeListener : BackgroundService
         var logical = new Dictionary<string, object?>();
         foreach (var (key, value) in changeEvent.Data)
         {
-            if (string.Equals(key, SystemColumns.ProjectId, StringComparison.Ordinal))
+            if (SystemColumns.IsInternal(key))
             {
                 continue;
             }
