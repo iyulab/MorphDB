@@ -187,9 +187,13 @@ cd desk && npx playwright test e2e/integration
 | Component | Unit | Integration | E2E |
 |-----------|------|-------------|-----|
 | Server | ✅ | ✅ | - |
-| Python SDK | ✅ | ✅ | - |
-| TypeScript SDK | ✅ | ✅ | - |
+| Python SDK | written, not run in CI | written, not run in CI | - |
+| TypeScript SDK | written, not run in CI | written, not run in CI | - |
 | Desk | ✅ | ✅ | ✅ |
+
+The two reference SDKs ship test suites under `sdk/`, but no workflow in this repository runs
+them — a change to the server contract is not caught on the SDK side until someone runs those
+suites by hand. Treat the SDKs as unverified against the current server until that gate exists.
 
 ---
 
