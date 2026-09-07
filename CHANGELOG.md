@@ -15,6 +15,13 @@
 
 ### Fixed
 
+- **A view's join condition and computed-column expression reached SQL without the
+  inline-expression gate.** Both are caller-authored text spliced verbatim into the view's SELECT
+  (identifiers translated, everything else passed through), the same category as an index predicate
+  or a policy expression — but only those two paths called the gate that refuses a statement
+  separator, a comment opener, or a parenthesis that closes a clause it never opened. A view
+  definition is now checked before any metadata is read and answered with `400 INVALID_EXPRESSION`,
+  quoting the offending text. Well-formed expressions are unaffected.
 - **The documented real-time subscribe call was refused by the server.** `docs/API.md` opens the
   WebSocket section with `connection.invoke("Subscribe", "customers")`, and running it as written
   answered `Invocation provides 1 argument(s) but target expects 2` — the first thing a real-time

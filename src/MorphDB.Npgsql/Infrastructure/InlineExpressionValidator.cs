@@ -5,8 +5,9 @@ namespace MorphDB.Npgsql.Infrastructure;
 /// <summary>
 /// The single gate for a caller-authored predicate that reaches SQL verbatim.
 /// <para>
-/// Check constraints, index predicates and row-level security expressions are all free-form, so
-/// none can be matched against a fixed set the way a function default can. Each is emitted inside
+/// Check constraints, index predicates, row-level security expressions, and a view's join
+/// conditions and computed-column expressions are all free-form, so none can be matched against a
+/// fixed set the way a function default can. Each is emitted inside
 /// parentheses, though, and escaping that form requires a closing parenthesis with no opener of its
 /// own — which is exactly what unbalanced counting detects. Quoted text is skipped so that
 /// parentheses inside a string literal or a quoted identifier do not count. Statement separators
@@ -19,7 +20,10 @@ namespace MorphDB.Npgsql.Infrastructure;
 /// <c>DdlBuilder</c> because it stopped being about DDL: a security policy's expression is spliced
 /// into the WHERE clause of ordinary queries, and that path shipped with no validation at all while
 /// the DDL paths beside it were guarded — one rule with two homes is how the second home ends up
-/// forgotten.
+/// forgotten. The view path proved the point a second time: its translator rewrote identifiers and
+/// passed every other character through, and nothing in front of it refused a separator or a
+/// comment. Every place a caller's expression is spliced into SQL should appear in the list above,
+/// and every entry in that list should call this.
 /// </para>
 /// </summary>
 internal static class InlineExpressionValidator
