@@ -66,10 +66,10 @@ public class AuditRetentionContractTests
     {
         var projectId = await CreateProjectAsync(retentionDays: 14);
 
-        var response = await _client.GetAsync($"/api/projects/{projectId}");
+        var response = await _client.GetAsync($"/api/projects/{projectId}", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var project = await response.Content.ReadFromJsonAsync<ProjectApiResponse>();
+        var project = await response.Content.ReadFromJsonAsync<ProjectApiResponse>(TestContext.Current.CancellationToken);
         project!.Settings!.AuditLogRetentionDays.Should().Be(14,
             "a setting the caller cannot read back is one they cannot verify was applied");
     }
@@ -89,10 +89,10 @@ public class AuditRetentionContractTests
         var patched = await _client.PatchAsJsonAsync($"/api/projects/{projectId}", new
         {
             Settings = new ProjectSettingsApiModel { AuditLogRetentionDays = 30 },
-        });
+        }, TestContext.Current.CancellationToken);
 
-        patched.StatusCode.Should().Be(HttpStatusCode.OK, await patched.Content.ReadAsStringAsync());
-        (await patched.Content.ReadFromJsonAsync<ProjectApiResponse>())!
+        patched.StatusCode.Should().Be(HttpStatusCode.OK, await patched.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        (await patched.Content.ReadFromJsonAsync<ProjectApiResponse>(TestContext.Current.CancellationToken))!
             .Settings!.AuditLogRetentionDays.Should().Be(30);
 
         (await ApplyRetentionAsync(projectId)).Should().Be(1,
@@ -113,10 +113,10 @@ public class AuditRetentionContractTests
         {
             Name = $"ret_{Guid.NewGuid():N}"[..28],
             Settings = new ProjectSettingsApiModel { AuditLogRetentionDays = days },
-        });
+        }, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         body!.Code.Should().Be("INVALID_ARGUMENT");
         body.Message.Should().Contain("auditLogRetentionDays");
     }

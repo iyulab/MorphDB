@@ -102,9 +102,9 @@ public class TransactionWriteContractTests
             new CreateColumnApiRequest { Name = "email", Type = "text", Nullable = true });
 
         var viaRest = await _client.PostAsJsonAsync($"/api/data/{table}",
-            new Dictionary<string, object?> { ["email"] = "rest@example.com" });
+            new Dictionary<string, object?> { ["email"] = "rest@example.com" }, TestContext.Current.CancellationToken);
         viaRest.EnsureSuccessStatusCode();
-        var restRow = JsonDocument.Parse(await viaRest.Content.ReadAsStringAsync())
+        var restRow = JsonDocument.Parse(await viaRest.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))
             .RootElement.GetProperty("data");
 
         var txn = await ExecuteAsync(new
@@ -144,7 +144,7 @@ public class TransactionWriteContractTests
         });
 
         result.Success.Should().BeFalse();
-        var rows = await _client.GetFromJsonAsync<JsonElement>($"/api/data/{table}");
+        var rows = await _client.GetFromJsonAsync<JsonElement>($"/api/data/{table}", TestContext.Current.CancellationToken);
         rows.GetProperty("data").GetArrayLength().Should().Be(0,
             "the pipeline write ran inside the transaction's connection scope, so the rollback must take it too");
     }

@@ -44,9 +44,9 @@ public class ProjectIdExposureTests
     {
         var tableName = await CreateTableWithRowAsync();
 
-        var response = await _client.GetAsync($"/api/data/{tableName}");
+        var response = await _client.GetAsync($"/api/data/{tableName}", TestContext.Current.CancellationToken);
         response.EnsureSuccessStatusCode();
-        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
 
         var row = body.RootElement.GetProperty("data")[0].GetProperty("data");
         row.TryGetProperty("project_id", out _).Should().BeFalse(
@@ -62,13 +62,13 @@ public class ProjectIdExposureTests
         {
             Name = tableName,
             Columns = [new CreateColumnApiRequest { Name = "grade", Type = "text", Nullable = true }],
-        });
+        }, TestContext.Current.CancellationToken);
         create.EnsureSuccessStatusCode();
 
         var insert = await _client.PostAsJsonAsync($"/api/data/{tableName}",
-            new Dictionary<string, object?> { ["grade"] = "vip" });
+            new Dictionary<string, object?> { ["grade"] = "vip" }, TestContext.Current.CancellationToken);
         insert.EnsureSuccessStatusCode();
-        var body = JsonDocument.Parse(await insert.Content.ReadAsStringAsync());
+        var body = JsonDocument.Parse(await insert.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
 
         body.RootElement.GetProperty("data").TryGetProperty("project_id", out _).Should().BeFalse();
     }
@@ -79,9 +79,9 @@ public class ProjectIdExposureTests
         var tableName = await CreateTableWithRowAsync();
 
         var response = await _client.PostAsync($"/api/data/{tableName}/query",
-            new StringContent("""{"pageSize":5}""", Encoding.UTF8, "application/json"));
+            new StringContent("""{"pageSize":5}""", Encoding.UTF8, "application/json"), TestContext.Current.CancellationToken);
         response.EnsureSuccessStatusCode();
-        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
 
         body.RootElement.GetProperty("data")[0].GetProperty("data")
             .TryGetProperty("project_id", out _).Should().BeFalse();
@@ -92,9 +92,9 @@ public class ProjectIdExposureTests
     {
         var tableName = await CreateTableWithRowAsync();
 
-        var response = await _client.GetAsync($"/api/schema/tables/{tableName}");
+        var response = await _client.GetAsync($"/api/schema/tables/{tableName}", TestContext.Current.CancellationToken);
         response.EnsureSuccessStatusCode();
-        var table = await response.Content.ReadFromJsonAsync<TableApiResponse>();
+        var table = await response.Content.ReadFromJsonAsync<TableApiResponse>(TestContext.Current.CancellationToken);
 
         table!.Columns.Select(c => c.Name).Should().NotContain("project_id",
             "docs/SYSTEM_COLUMNS.md does not know it and consumers cannot use it");
@@ -107,9 +107,9 @@ public class ProjectIdExposureTests
         var tableName = await CreateTableWithRowAsync();
 
         var response = await _client.PostAsJsonAsync($"/api/data/{tableName}",
-            new Dictionary<string, object?> { ["discout"] = 5 });
+            new Dictionary<string, object?> { ["discout"] = 5 }, TestContext.Current.CancellationToken);
 
-        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         error!.Message.Should().Contain("Available columns");
         error.Message.Should().NotContain("project_id");
     }
@@ -121,9 +121,9 @@ public class ProjectIdExposureTests
         var entitySet = string.Concat(tableName.Split('_').Select(p =>
             p.Length > 0 ? char.ToUpperInvariant(p[0]) + p[1..].ToLowerInvariant() : p));
 
-        var response = await _client.GetAsync($"/odata/{entitySet}?$top=1");
+        var response = await _client.GetAsync($"/odata/{entitySet}?$top=1", TestContext.Current.CancellationToken);
         response.EnsureSuccessStatusCode();
-        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
 
         body.RootElement.GetProperty("value")[0].TryGetProperty("project_id", out _).Should().BeFalse();
     }

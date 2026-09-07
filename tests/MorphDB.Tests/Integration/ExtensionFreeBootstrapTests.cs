@@ -27,11 +27,11 @@ public class ExtensionFreeBootstrapTests
             .WithPassword("test")
             .Build();
 
-        await container.StartAsync();
+        await container.StartAsync(TestContext.Current.CancellationToken);
         try
         {
             await using var connection = new NpgsqlConnection(container.GetConnectionString());
-            await connection.OpenAsync();
+            await connection.OpenAsync(TestContext.Current.CancellationToken);
 
             var before = await ReadExtensionsAsync(connection);
 
@@ -50,7 +50,7 @@ public class ExtensionFreeBootstrapTests
                 RETURNING table_id
                 """,
                 connection);
-            var generated = (Guid)(await insert.ExecuteScalarAsync())!;
+            var generated = (Guid)(await insert.ExecuteScalarAsync(TestContext.Current.CancellationToken))!;
 
             generated.Should().NotBe(Guid.Empty, "the primary key default must generate a real UUID");
         }
@@ -69,7 +69,7 @@ public class ExtensionFreeBootstrapTests
             .WithPassword("test")
             .Build();
 
-        await container.StartAsync();
+        await container.StartAsync(TestContext.Current.CancellationToken);
         try
         {
             await using var dataSource = NpgsqlDataSource.Create(container.GetConnectionString());
@@ -78,12 +78,12 @@ public class ExtensionFreeBootstrapTests
                 new PostgresSchemaNameResolver(),
                 new Mock<ILogger<PostgresSchemaLayerService>>().Object);
 
-            await service.EnsureGlobalSchemaAsync();
+            await service.EnsureGlobalSchemaAsync(TestContext.Current.CancellationToken);
 
-            await using var connection = await dataSource.OpenConnectionAsync();
+            await using var connection = await dataSource.OpenConnectionAsync(TestContext.Current.CancellationToken);
             var before = await ReadExtensionsAsync(connection);
 
-            var names = await service.ProvisionProjectSchemasAsync(Guid.NewGuid());
+            var names = await service.ProvisionProjectSchemasAsync(Guid.NewGuid(), TestContext.Current.CancellationToken);
 
             var after = await ReadExtensionsAsync(connection);
             after.Should().BeEquivalentTo(
@@ -118,11 +118,11 @@ public class ExtensionFreeBootstrapTests
             .WithPassword("test")
             .Build();
 
-        await container.StartAsync();
+        await container.StartAsync(TestContext.Current.CancellationToken);
         try
         {
             await using var connection = new NpgsqlConnection(container.GetConnectionString());
-            await connection.OpenAsync();
+            await connection.OpenAsync(TestContext.Current.CancellationToken);
 
             foreach (var declared in allowed)
             {
@@ -141,7 +141,7 @@ public class ExtensionFreeBootstrapTests
                 await ExecuteAsync(connection, $"INSERT INTO \"{table}\" DEFAULT VALUES");
 
                 await using var read = new NpgsqlCommand($"SELECT c FROM \"{table}\"", connection);
-                var value = await read.ExecuteScalarAsync();
+                var value = await read.ExecuteScalarAsync(TestContext.Current.CancellationToken);
 
                 value.Should().NotBeNull($"the default {declared} must produce a value");
             }

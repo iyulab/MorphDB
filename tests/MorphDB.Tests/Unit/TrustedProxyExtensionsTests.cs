@@ -21,7 +21,7 @@ public sealed class TrustedProxyExtensionsTests
         using var client = server.CreateClient();
         client.DefaultRequestHeaders.Add("X-Forwarded-For", "203.0.113.7");
 
-        var response = await client.GetStringAsync("/");
+        var response = await client.GetStringAsync("/", TestContext.Current.CancellationToken);
 
         // TestServer's simulated connection never presents 203.0.113.7 as the peer — if the
         // header had been trusted, that is the value that would come back.
@@ -41,7 +41,7 @@ public sealed class TrustedProxyExtensionsTests
         using var client = server.CreateClient();
         client.DefaultRequestHeaders.Add("X-Forwarded-For", "203.0.113.7");
 
-        var response = await client.GetStringAsync("/");
+        var response = await client.GetStringAsync("/", TestContext.Current.CancellationToken);
 
         response.Should().Be("203.0.113.7");
     }

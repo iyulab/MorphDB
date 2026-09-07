@@ -11,7 +11,7 @@ namespace MorphDB.Tests.Integration.Realtime;
 /// </summary>
 [Collection("API")]
 [Trait("Category", "RealtimeIntegration")]
-public class MorphHubTests : IAsyncLifetime
+public sealed class MorphHubTests : IAsyncLifetime
 {
     private readonly ApiIntegrationFixture _fixture;
     private readonly HttpClient _httpClient;
@@ -26,7 +26,7 @@ public class MorphHubTests : IAsyncLifetime
         _httpClient = fixture.Api.Client;
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         var hubUrl = new Uri(_fixture.Api.BaseAddress, "hubs/morph").ToString();
 
@@ -46,7 +46,7 @@ public class MorphHubTests : IAsyncLifetime
         await _hubConnection.StartAsync();
     }
 
-    public async Task DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         if (_hubConnection != null)
         {
@@ -159,8 +159,8 @@ public class MorphHubTests : IAsyncLifetime
         var tableName = await SetupTestTableAsync();
 
         // Act
-        await _hubConnection!.InvokeAsync("Subscribe", tableName);
-        var subscriptions = await _hubConnection!.InvokeAsync<IReadOnlyList<string>>("GetSubscriptions");
+        await _hubConnection!.InvokeAsync("Subscribe", tableName, TestContext.Current.CancellationToken);
+        var subscriptions = await _hubConnection!.InvokeAsync<IReadOnlyList<string>>("GetSubscriptions", TestContext.Current.CancellationToken);
 
         // Assert
         subscriptions.Should().Contain(tableName);
@@ -171,11 +171,11 @@ public class MorphHubTests : IAsyncLifetime
     {
         // Arrange
         var tableName = await SetupTestTableAsync();
-        await _hubConnection!.InvokeAsync("Subscribe", tableName);
+        await _hubConnection!.InvokeAsync("Subscribe", tableName, TestContext.Current.CancellationToken);
 
         // Act
-        await _hubConnection!.InvokeAsync("Unsubscribe", tableName);
-        var subscriptions = await _hubConnection!.InvokeAsync<IReadOnlyList<string>>("GetSubscriptions");
+        await _hubConnection!.InvokeAsync("Unsubscribe", tableName, TestContext.Current.CancellationToken);
+        var subscriptions = await _hubConnection!.InvokeAsync<IReadOnlyList<string>>("GetSubscriptions", TestContext.Current.CancellationToken);
 
         // Assert
         subscriptions.Should().NotContain(tableName);
@@ -189,8 +189,8 @@ public class MorphHubTests : IAsyncLifetime
         var table2 = await SetupTestTableAsync();
 
         // Act
-        await _hubConnection!.InvokeAsync("SubscribeMany", new[] { table1, table2 });
-        var subscriptions = await _hubConnection!.InvokeAsync<IReadOnlyList<string>>("GetSubscriptions");
+        await _hubConnection!.InvokeAsync("SubscribeMany", new[] { table1, table2 }, TestContext.Current.CancellationToken);
+        var subscriptions = await _hubConnection!.InvokeAsync<IReadOnlyList<string>>("GetSubscriptions", TestContext.Current.CancellationToken);
 
         // Assert
         subscriptions.Should().Contain(table1);
@@ -221,9 +221,9 @@ public class MorphHubTests : IAsyncLifetime
         var tableName = await SetupTestTableAsync();
 
         // Exactly `await connection.invoke("Subscribe", "customers");` — one argument, no options.
-        await _hubConnection!.InvokeAsync("Subscribe", tableName);
+        await _hubConnection!.InvokeAsync("Subscribe", tableName, TestContext.Current.CancellationToken);
 
-        var subscriptions = await _hubConnection!.InvokeAsync<IReadOnlyList<string>>("GetSubscriptions");
+        var subscriptions = await _hubConnection!.InvokeAsync<IReadOnlyList<string>>("GetSubscriptions", TestContext.Current.CancellationToken);
 
         subscriptions.Should().Contain(tableName,
             "the documented call must not merely be accepted — it must actually subscribe");
@@ -238,7 +238,7 @@ public class MorphHubTests : IAsyncLifetime
     {
         // Arrange
         var tableName = await SetupTestTableAsync();
-        await _hubConnection!.InvokeAsync("Subscribe", tableName);
+        await _hubConnection!.InvokeAsync("Subscribe", tableName, TestContext.Current.CancellationToken);
         _receivedCreatedMessages.Clear();
 
         // Act
@@ -246,13 +246,13 @@ public class MorphHubTests : IAsyncLifetime
         {
             ["name"] = "Test",
             ["value"] = 42
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Wait for notification (with timeout)
-        var timeout = Task.Delay(TimeSpan.FromSeconds(15));
+        var timeout = Task.Delay(TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken);
         while (_receivedCreatedMessages.Count == 0 && !timeout.IsCompleted)
         {
-            await Task.Delay(100);
+            await Task.Delay(100, TestContext.Current.CancellationToken);
         }
 
         // Assert
@@ -270,19 +270,19 @@ public class MorphHubTests : IAsyncLifetime
     public async Task Subscribe_WhenRecordCreated_NotificationDataUsesLogicalColumnNames()
     {
         var tableName = await SetupTestTableAsync();
-        await _hubConnection!.InvokeAsync("Subscribe", tableName);
+        await _hubConnection!.InvokeAsync("Subscribe", tableName, TestContext.Current.CancellationToken);
         _receivedCreatedMessages.Clear();
 
         await _httpClient.PostAsJsonAsync($"/api/data/{tableName}", new Dictionary<string, object?>
         {
             ["name"] = "Test",
             ["value"] = 42
-        });
+        }, TestContext.Current.CancellationToken);
 
-        var timeout = Task.Delay(TimeSpan.FromSeconds(15));
+        var timeout = Task.Delay(TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken);
         while (_receivedCreatedMessages.Count == 0 && !timeout.IsCompleted)
         {
-            await Task.Delay(100);
+            await Task.Delay(100, TestContext.Current.CancellationToken);
         }
 
         _receivedCreatedMessages.Should().HaveCountGreaterThanOrEqualTo(1);
@@ -307,24 +307,24 @@ public class MorphHubTests : IAsyncLifetime
         {
             ["name"] = "Test",
             ["value"] = 42
-        });
-        var createResult = await createResponse.Content.ReadFromJsonAsync<DataRecordResponse>();
+        }, TestContext.Current.CancellationToken);
+        var createResult = await createResponse.Content.ReadFromJsonAsync<DataRecordResponse>(TestContext.Current.CancellationToken);
         var recordId = createResult!.Id;
 
-        await _hubConnection!.InvokeAsync("Subscribe", tableName);
+        await _hubConnection!.InvokeAsync("Subscribe", tableName, TestContext.Current.CancellationToken);
         _receivedUpdatedMessages.Clear();
 
         // Act
         await _httpClient.PatchAsJsonAsync($"/api/data/{tableName}/{recordId}", new Dictionary<string, object?>
         {
             ["value"] = 100
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Wait for notification (with timeout)
-        var timeout = Task.Delay(TimeSpan.FromSeconds(15));
+        var timeout = Task.Delay(TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken);
         while (_receivedUpdatedMessages.Count == 0 && !timeout.IsCompleted)
         {
-            await Task.Delay(100);
+            await Task.Delay(100, TestContext.Current.CancellationToken);
         }
 
         // Assert
@@ -344,21 +344,21 @@ public class MorphHubTests : IAsyncLifetime
         {
             ["name"] = "Test",
             ["value"] = 42
-        });
-        var createResult = await createResponse.Content.ReadFromJsonAsync<DataRecordResponse>();
+        }, TestContext.Current.CancellationToken);
+        var createResult = await createResponse.Content.ReadFromJsonAsync<DataRecordResponse>(TestContext.Current.CancellationToken);
         var recordId = createResult!.Id;
 
-        await _hubConnection!.InvokeAsync("Subscribe", tableName);
+        await _hubConnection!.InvokeAsync("Subscribe", tableName, TestContext.Current.CancellationToken);
         _receivedDeletedMessages.Clear();
 
         // Act
-        await _httpClient.DeleteAsync($"/api/data/{tableName}/{recordId}");
+        await _httpClient.DeleteAsync($"/api/data/{tableName}/{recordId}", TestContext.Current.CancellationToken);
 
         // Wait for notification (with timeout)
-        var timeout = Task.Delay(TimeSpan.FromSeconds(15));
+        var timeout = Task.Delay(TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken);
         while (_receivedDeletedMessages.Count == 0 && !timeout.IsCompleted)
         {
-            await Task.Delay(100);
+            await Task.Delay(100, TestContext.Current.CancellationToken);
         }
 
         // Assert
@@ -378,7 +378,7 @@ public class MorphHubTests : IAsyncLifetime
         var subscribedTable = await SetupTestTableAsync();
         var otherTable = await SetupTestTableAsync();
 
-        await _hubConnection!.InvokeAsync("Subscribe", subscribedTable);
+        await _hubConnection!.InvokeAsync("Subscribe", subscribedTable, TestContext.Current.CancellationToken);
         _receivedCreatedMessages.Clear();
 
         // Act - Insert into other table
@@ -386,10 +386,10 @@ public class MorphHubTests : IAsyncLifetime
         {
             ["name"] = "Test",
             ["value"] = 42
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Wait a bit
-        await Task.Delay(TimeSpan.FromSeconds(1));
+        await Task.Delay(TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken);
 
         // Assert - Should not receive notification for other table
         _receivedCreatedMessages.Where(m => m.Table == otherTable).Should().BeEmpty();

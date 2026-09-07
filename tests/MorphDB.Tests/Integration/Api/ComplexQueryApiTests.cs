@@ -134,11 +134,11 @@ public class ComplexQueryApiTests
         var response = await _client.PostAsync($"/api/data/{tableName}/query",
             new StringContent(
                 """{"filter":{"$type":"condition","column":"grade","operator":"in","value":["vip"]},"pageSize":10}""",
-                System.Text.Encoding.UTF8, "application/json"));
+                System.Text.Encoding.UTF8, "application/json"), TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest,
             "'in' is not part of the accepted operator vocabulary on any surface — the docs must not promise it");
-        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         body!.Message.Should().Contain("Supported operators");
     }
 }

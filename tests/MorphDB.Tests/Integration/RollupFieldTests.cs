@@ -75,7 +75,7 @@ public class RollupFieldTests
                     }
                 }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Create child table (orders) that references customers
         var ordersTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
@@ -97,7 +97,7 @@ public class RollupFieldTests
                     IsNullable = false
                 }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Assert
         customersTable.Should().NotBeNull();
@@ -159,10 +159,10 @@ public class RollupFieldTests
                     }
                 }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Act - Retrieve the table to verify persistence
-        var storedTable = await _metadataRepository.GetTableByIdAsync(parentTable.TableId, includeColumns: true);
+        var storedTable = await _metadataRepository.GetTableByIdAsync(parentTable.TableId, includeColumns: true, TestContext.Current.CancellationToken);
 
         // Assert
         storedTable.Should().NotBeNull();
@@ -200,7 +200,7 @@ public class RollupFieldTests
                     IsNullable = false
                 }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Create child table
         var childTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
@@ -222,7 +222,7 @@ public class RollupFieldTests
                     IsNullable = false
                 }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         var addColumnRequest = new AddColumnRequest
         {
@@ -242,7 +242,7 @@ public class RollupFieldTests
         };
 
         // Act
-        var newColumn = await _schemaManager.AddColumnAsync(addColumnRequest);
+        var newColumn = await _schemaManager.AddColumnAsync(addColumnRequest, TestContext.Current.CancellationToken);
 
         // Assert
         newColumn.Should().NotBeNull();
@@ -335,7 +335,7 @@ public class RollupFieldTests
                     }
                 }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Assert
         parentTable.Should().NotBeNull();
@@ -392,10 +392,10 @@ public class RollupFieldTests
                     }
                 }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Act - Query PostgreSQL to check actual physical columns
-        await using var connection = await _fixture.DataSource.OpenConnectionAsync();
+        await using var connection = await _fixture.DataSource.OpenConnectionAsync(TestContext.Current.CancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             SELECT column_name
@@ -405,8 +405,8 @@ public class RollupFieldTests
             """;
 
         var physicalColumns = new List<string>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        await using var reader = await command.ExecuteReaderAsync(TestContext.Current.CancellationToken);
+        while (await reader.ReadAsync(TestContext.Current.CancellationToken))
         {
             physicalColumns.Add(reader.GetString(0));
         }
@@ -464,7 +464,7 @@ public class RollupFieldTests
                     }
                 }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Assert
         var rollupColumn = parentTable.Columns.First(c => c.LogicalName == "all_tags");
@@ -537,7 +537,7 @@ public class RollupFieldTests
                     }
                 }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Assert
         var percentCol = table.Columns.First(c => c.LogicalName == "percent_checked");

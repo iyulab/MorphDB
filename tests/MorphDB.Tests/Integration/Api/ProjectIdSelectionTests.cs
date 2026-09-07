@@ -37,8 +37,8 @@ public class ProjectIdSelectionTests
 
         var response = await CreateAsync(chosen);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Created, await response.Content.ReadAsStringAsync());
-        (await response.Content.ReadFromJsonAsync<ProjectApiResponse>())!.Id.Should().Be(chosen);
+        response.StatusCode.Should().Be(HttpStatusCode.Created, await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        (await response.Content.ReadFromJsonAsync<ProjectApiResponse>(TestContext.Current.CancellationToken))!.Id.Should().Be(chosen);
     }
 
     /// <summary>
@@ -52,18 +52,18 @@ public class ProjectIdSelectionTests
         (await CreateAsync(chosen)).EnsureSuccessStatusCode();
 
         using var scopedClient = _fixture.Api.CreateClientWithProject(chosen);
-        var scoped = await scopedClient.GetAsync("/api/schema/tables");
+        var scoped = await scopedClient.GetAsync("/api/schema/tables", TestContext.Current.CancellationToken);
 
-        scoped.StatusCode.Should().Be(HttpStatusCode.OK, await scoped.Content.ReadAsStringAsync());
+        scoped.StatusCode.Should().Be(HttpStatusCode.OK, await scoped.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task Omitting_the_id_still_generates_one()
     {
-        var response = await _client.PostAsJsonAsync("/api/projects", new { Name = UniqueName() });
+        var response = await _client.PostAsJsonAsync("/api/projects", new { Name = UniqueName() }, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Created);
-        (await response.Content.ReadFromJsonAsync<ProjectApiResponse>())!.Id.Should().NotBeEmpty();
+        (await response.Content.ReadFromJsonAsync<ProjectApiResponse>(TestContext.Current.CancellationToken))!.Id.Should().NotBeEmpty();
     }
 
     /// <summary>
@@ -79,8 +79,8 @@ public class ProjectIdSelectionTests
 
         var again = await CreateAsync(chosen);
 
-        again.StatusCode.Should().Be(HttpStatusCode.Conflict, await again.Content.ReadAsStringAsync());
-        (await again.Content.ReadFromJsonAsync<ErrorResponse>())!.Code.Should().Be("DUPLICATE_PROJECT_ID");
+        again.StatusCode.Should().Be(HttpStatusCode.Conflict, await again.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        (await again.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken))!.Code.Should().Be("DUPLICATE_PROJECT_ID");
     }
 
     /// <summary>
@@ -92,12 +92,12 @@ public class ProjectIdSelectionTests
     {
         var chosen = Guid.NewGuid();
         (await CreateAsync(chosen)).EnsureSuccessStatusCode();
-        (await _client.DeleteAsync($"/api/projects/{chosen}")).EnsureSuccessStatusCode();
+        (await _client.DeleteAsync($"/api/projects/{chosen}", TestContext.Current.CancellationToken)).EnsureSuccessStatusCode();
 
         var again = await CreateAsync(chosen);
 
-        again.StatusCode.Should().Be(HttpStatusCode.Conflict, await again.Content.ReadAsStringAsync());
-        (await again.Content.ReadFromJsonAsync<ErrorResponse>())!.Code.Should().Be("DUPLICATE_PROJECT_ID");
+        again.StatusCode.Should().Be(HttpStatusCode.Conflict, await again.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        (await again.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken))!.Code.Should().Be("DUPLICATE_PROJECT_ID");
     }
 
     /// <summary>
@@ -117,8 +117,8 @@ public class ProjectIdSelectionTests
 
         foreach (var refused in responses.Where(r => r.StatusCode != HttpStatusCode.Created))
         {
-            refused.StatusCode.Should().Be(HttpStatusCode.Conflict, await refused.Content.ReadAsStringAsync());
-            (await refused.Content.ReadFromJsonAsync<ErrorResponse>())!.Code.Should().Be("DUPLICATE_PROJECT_ID");
+            refused.StatusCode.Should().Be(HttpStatusCode.Conflict, await refused.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+            (await refused.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken))!.Code.Should().Be("DUPLICATE_PROJECT_ID");
         }
     }
 

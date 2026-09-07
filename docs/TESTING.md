@@ -9,11 +9,17 @@ Integration tests use **Testcontainers** for PostgreSQL - no external DB require
 ### Commands
 
 ```bash
-dotnet test                                            # Run all tests
-dotnet test --filter "FullyQualifiedName~Unit"         # Unit tests only
-dotnet test --filter "FullyQualifiedName~Integration"  # Integration tests only
-dotnet test --filter "ClassName=SchemaManagerTests"    # Single test class
+dotnet test                                                        # Run all tests
+dotnet test --filter-namespace MorphDB.Tests.Unit                  # Unit tests only (includes sub-namespaces)
+dotnet test --filter-namespace MorphDB.Tests.Integration            # Integration tests only
+dotnet test --filter-class MorphDB.Tests.Integration.SchemaManagerTests   # Single test class
+dotnet test --coverlet --coverlet-output-format cobertura           # With coverage (coverlet.MTP)
 ```
+
+The suite runs on xunit.v3 through the Microsoft.Testing.Platform mode of `dotnet test`
+(`global.json` selects the runner), so the VSTest-era `--filter "FullyQualifiedName~..."` and
+`--collect` switches do not apply; the filter switches above are xunit.v3's own. A filter that
+matches nothing fails the run (exit code 8) rather than passing vacuously.
 
 ### Test Organization
 
@@ -170,7 +176,7 @@ For full integration testing across components:
 docker compose -f docker-compose.test.yml up -d
 
 # 2. Run server integration tests
-dotnet test --filter "FullyQualifiedName~Integration"
+dotnet test --filter-namespace MorphDB.Tests.Integration
 
 # 3. Run SDK integration tests
 cd sdk/python && pytest -m integration

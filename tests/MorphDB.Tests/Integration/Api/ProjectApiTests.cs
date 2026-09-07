@@ -33,17 +33,17 @@ public class ProjectApiTests
             {
                 ProjectId = id,
                 Name = $"TotalCount probe {id:N}",
-            });
+            }, TestContext.Current.CancellationToken);
             create.EnsureSuccessStatusCode();
             createdIds.Add(id);
         }
 
         try
         {
-            var listResponse = await _client.GetAsync("/api/projects?page=1&pageSize=1");
+            var listResponse = await _client.GetAsync("/api/projects?page=1&pageSize=1", TestContext.Current.CancellationToken);
             listResponse.EnsureSuccessStatusCode();
 
-            var page = await listResponse.Content.ReadFromJsonAsync<PagedResponse<ProjectApiResponse>>();
+            var page = await listResponse.Content.ReadFromJsonAsync<PagedResponse<ProjectApiResponse>>(TestContext.Current.CancellationToken);
 
             page.Should().NotBeNull();
             page!.Data.Should().HaveCount(1, "pageSize=1 must still cap the returned page");
@@ -54,7 +54,7 @@ public class ProjectApiTests
         {
             foreach (var id in createdIds)
             {
-                await _client.DeleteAsync($"/api/projects/{id}");
+                await _client.DeleteAsync($"/api/projects/{id}", TestContext.Current.CancellationToken);
             }
         }
     }

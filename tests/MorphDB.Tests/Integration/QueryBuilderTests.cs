@@ -113,7 +113,7 @@ public class QueryBuilderTests
         var results = await _dataService.Query(projectId)
             .From(table.LogicalName)
             .SelectAll()
-            .ToListAsync();
+            .ToListAsync(TestContext.Current.CancellationToken);
 
         // Assert
         results.Should().HaveCount(5);
@@ -131,7 +131,7 @@ public class QueryBuilderTests
         var results = await _dataService.Query(projectId)
             .From(table.LogicalName)
             .SelectColumns("name", "email")
-            .ToListAsync();
+            .ToListAsync(TestContext.Current.CancellationToken);
 
         // Assert
         results.Should().HaveCount(5);
@@ -157,7 +157,7 @@ public class QueryBuilderTests
             .From(table.LogicalName)
             .SelectAll()
             .Where("name", FilterOperator.Equals, "Alice")
-            .ToListAsync();
+            .ToListAsync(TestContext.Current.CancellationToken);
 
         // Assert
         results.Should().HaveCount(1);
@@ -175,7 +175,7 @@ public class QueryBuilderTests
             .From(table.LogicalName)
             .SelectAll()
             .Where("age", FilterOperator.GreaterThan, 28)
-            .ToListAsync();
+            .ToListAsync(TestContext.Current.CancellationToken);
 
         // Assert
         results.Should().HaveCount(2); // Bob (30) and Charlie (35)
@@ -193,7 +193,7 @@ public class QueryBuilderTests
             .From(table.LogicalName)
             .SelectAll()
             .WhereIn("name", new object[] { "Alice", "Bob", "Charlie" })
-            .ToListAsync();
+            .ToListAsync(TestContext.Current.CancellationToken);
 
         // Assert
         results.Should().HaveCount(3);
@@ -210,7 +210,7 @@ public class QueryBuilderTests
             .From(table.LogicalName)
             .SelectAll()
             .Where("email", FilterOperator.Contains, "example")
-            .ToListAsync();
+            .ToListAsync(TestContext.Current.CancellationToken);
 
         // Assert
         results.Should().HaveCount(5); // All emails contain "example"
@@ -228,7 +228,7 @@ public class QueryBuilderTests
             .SelectAll()
             .Where("is_active", FilterOperator.Equals, true)
             .AndWhere("age", FilterOperator.GreaterThanOrEquals, 25)
-            .ToListAsync();
+            .ToListAsync(TestContext.Current.CancellationToken);
 
         // Assert
         results.Should().HaveCount(3); // Alice (25), Bob (30), Diana (28)
@@ -249,7 +249,7 @@ public class QueryBuilderTests
             .From(table.LogicalName)
             .SelectAll()
             .OrderBy("age")
-            .ToListAsync();
+            .ToListAsync(TestContext.Current.CancellationToken);
 
         // Assert
         results.Should().HaveCount(5);
@@ -268,7 +268,7 @@ public class QueryBuilderTests
             .From(table.LogicalName)
             .SelectAll()
             .OrderByDesc("score")
-            .ToListAsync();
+            .ToListAsync(TestContext.Current.CancellationToken);
 
         // Assert
         results.Should().HaveCount(5);
@@ -293,7 +293,7 @@ public class QueryBuilderTests
             .OrderBy("name")
             .Limit(2)
             .Offset(0)
-            .ToListAsync();
+            .ToListAsync(TestContext.Current.CancellationToken);
 
         var page2 = await _dataService.Query(projectId)
             .From(table.LogicalName)
@@ -301,7 +301,7 @@ public class QueryBuilderTests
             .OrderBy("name")
             .Limit(2)
             .Offset(2)
-            .ToListAsync();
+            .ToListAsync(TestContext.Current.CancellationToken);
 
         // Assert
         page1.Should().HaveCount(2);
@@ -321,7 +321,7 @@ public class QueryBuilderTests
             .From(table.LogicalName)
             .SelectAll()
             .OrderBy("name")
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().NotBeNull();
@@ -339,7 +339,7 @@ public class QueryBuilderTests
             .From(table.LogicalName)
             .SelectAll()
             .Where("name", FilterOperator.Equals, "NonExistent")
-            .FirstOrDefaultAsync();
+            .FirstOrDefaultAsync(TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().BeNull();
@@ -358,7 +358,7 @@ public class QueryBuilderTests
         // Act
         var count = await _dataService.Query(projectId)
             .From(table.LogicalName)
-            .CountAsync();
+            .CountAsync(TestContext.Current.CancellationToken);
 
         // Assert
         count.Should().Be(5);
@@ -374,7 +374,7 @@ public class QueryBuilderTests
         var count = await _dataService.Query(projectId)
             .From(table.LogicalName)
             .Where("is_active", FilterOperator.Equals, true)
-            .CountAsync();
+            .CountAsync(TestContext.Current.CancellationToken);
 
         // Assert
         count.Should().Be(4); // All except Charlie
@@ -389,7 +389,7 @@ public class QueryBuilderTests
         // Act
         var sum = await _dataService.Query(projectId)
             .From(table.LogicalName)
-            .SumAsync("score");
+            .SumAsync("score", TestContext.Current.CancellationToken);
 
         // Assert
         sum.Should().Be(439.5m); // 85.5 + 92.0 + 78.5 + 95.0 + 88.5
@@ -404,7 +404,7 @@ public class QueryBuilderTests
         // Act
         var avg = await _dataService.Query(projectId)
             .From(table.LogicalName)
-            .AvgAsync("age");
+            .AvgAsync("age", TestContext.Current.CancellationToken);
 
         // Assert
         avg.Should().Be(28m); // (25 + 30 + 35 + 28 + 22) / 5 = 28
@@ -419,7 +419,7 @@ public class QueryBuilderTests
         // Act
         var min = await _dataService.Query(projectId)
             .From(table.LogicalName)
-            .MinAsync<int>("age");
+            .MinAsync<int>("age", TestContext.Current.CancellationToken);
 
         // Assert
         min.Should().Be(22); // Eve
@@ -434,7 +434,7 @@ public class QueryBuilderTests
         // Act
         var max = await _dataService.Query(projectId)
             .From(table.LogicalName)
-            .MaxAsync<decimal>("score");
+            .MaxAsync<decimal>("score", TestContext.Current.CancellationToken);
 
         // Assert
         max.Should().Be(95.0m); // Diana

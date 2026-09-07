@@ -105,9 +105,9 @@ public partial class GraphQlDocsParityTests
         var executor = await new ServiceCollection()
             .AddGraphQLServer()
             .AddMorphDbTypes()
-            .BuildRequestExecutorAsync();
+            .BuildRequestExecutorAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        var result = (await executor.ExecuteAsync("{ __schema { queryType { name } } }"))
+        var result = (await executor.ExecuteAsync("{ __schema { queryType { name } } }", TestContext.Current.CancellationToken))
             .ExpectOperationResult();
 
         result.Errors.Should().ContainSingle(

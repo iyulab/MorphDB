@@ -46,7 +46,7 @@ public class ClientBatchContractTests
         var handler = new CapturingHandler("""{"results":[],"successCount":0,"failureCount":0}""");
         var client = ClientOver(handler);
 
-        await client.Batch.InsertManyAsync("products", [new Dictionary<string, object?> { ["k"] = "a" }]);
+        await client.Batch.InsertManyAsync("products", [new Dictionary<string, object?> { ["k"] = "a" }], TestContext.Current.CancellationToken);
 
         // BatchController: [Route("api/batch")] + [HttpPost("data/{table}/insert")].
         handler.Request!.Method.Should().Be(HttpMethod.Post);
@@ -62,7 +62,7 @@ public class ClientBatchContractTests
         await client.Batch.ExecuteAsync(new ClientModels.BatchRequest
         {
             Operations = [new ClientModels.BatchOperation { Method = ClientModels.BatchMethod.Insert, Table = "products" }],
-        });
+        }, TestContext.Current.CancellationToken);
 
         // BatchController: [Route("api/batch")] + [HttpPost("data")].
         handler.Request!.Method.Should().Be(HttpMethod.Post);
@@ -114,7 +114,7 @@ public class ClientBatchContractTests
         var handler = new CapturingHandler(wire);
         var client = ClientOver(handler);
 
-        var response = await client.Batch.InsertManyAsync("products", [new Dictionary<string, object?>()]);
+        var response = await client.Batch.InsertManyAsync("products", [new Dictionary<string, object?>()], TestContext.Current.CancellationToken);
 
         response.SuccessCount.Should().Be(1);
         response.FailureCount.Should().Be(0);
@@ -134,7 +134,7 @@ public class ClientBatchContractTests
             """;
         var client = ClientOver(new CapturingHandler(wire));
 
-        var page = await client.Data.QueryAsync("products");
+        var page = await client.Data.QueryAsync("products", cancellationToken: TestContext.Current.CancellationToken);
         var values = page.Data[0].Data;
 
         // Each assertion fails against a JsonElement, which is what the client used to hand back.

@@ -64,7 +64,7 @@ public class ODataApiTests
         await SetupTestTableAsync();
 
         // Act
-        var response = await _client.GetAsync("/odata/$metadata");
+        var response = await _client.GetAsync("/odata/$metadata", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -86,12 +86,12 @@ public class ODataApiTests
         var entitySetName = ToPascalCase(tableName);
 
         // Act
-        var response = await _client.GetAsync($"/odata/{entitySetName}");
+        var response = await _client.GetAsync($"/odata/{entitySetName}", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var content = await response.Content.ReadAsStringAsync();
+        var content = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         content.Should().Contain("@odata.context");
         content.Should().Contain("value");
     }
@@ -109,12 +109,12 @@ public class ODataApiTests
         var entitySetName = ToPascalCase(tableName);
 
         // Act
-        var response = await _client.GetAsync($"/odata/{entitySetName}?$top=2");
+        var response = await _client.GetAsync($"/odata/{entitySetName}?$top=2", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var jsonDoc = await response.Content.ReadFromJsonAsync<JsonDocument>();
+        var jsonDoc = await response.Content.ReadFromJsonAsync<JsonDocument>(TestContext.Current.CancellationToken);
         var valueArray = jsonDoc!.RootElement.GetProperty("value");
         valueArray.GetArrayLength().Should().Be(2);
     }
@@ -132,12 +132,12 @@ public class ODataApiTests
         var entitySetName = ToPascalCase(tableName);
 
         // Act
-        var response = await _client.GetAsync($"/odata/{entitySetName}?$count=true");
+        var response = await _client.GetAsync($"/odata/{entitySetName}?$count=true", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var jsonDoc = await response.Content.ReadFromJsonAsync<JsonDocument>();
+        var jsonDoc = await response.Content.ReadFromJsonAsync<JsonDocument>(TestContext.Current.CancellationToken);
         jsonDoc!.RootElement.TryGetProperty("@odata.count", out var countProp).Should().BeTrue();
         countProp.GetInt64().Should().Be(5);
     }
@@ -153,12 +153,12 @@ public class ODataApiTests
         var entitySetName = ToPascalCase(tableName);
 
         // Act
-        var response = await _client.GetAsync($"/odata/{entitySetName}?$filter=is_active eq true");
+        var response = await _client.GetAsync($"/odata/{entitySetName}?$filter=is_active eq true", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var jsonDoc = await response.Content.ReadFromJsonAsync<JsonDocument>();
+        var jsonDoc = await response.Content.ReadFromJsonAsync<JsonDocument>(TestContext.Current.CancellationToken);
         var valueArray = jsonDoc!.RootElement.GetProperty("value");
         valueArray.GetArrayLength().Should().Be(1);
     }
@@ -175,12 +175,12 @@ public class ODataApiTests
         var entitySetName = ToPascalCase(tableName);
 
         // Act
-        var response = await _client.GetAsync($"/odata/{entitySetName}?$orderby=name");
+        var response = await _client.GetAsync($"/odata/{entitySetName}?$orderby=name", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var jsonDoc = await response.Content.ReadFromJsonAsync<JsonDocument>();
+        var jsonDoc = await response.Content.ReadFromJsonAsync<JsonDocument>(TestContext.Current.CancellationToken);
         var valueArray = jsonDoc!.RootElement.GetProperty("value");
         var firstItem = valueArray[0];
         firstItem.GetProperty("name").GetString().Should().Be("Alice");
@@ -196,12 +196,12 @@ public class ODataApiTests
         var entitySetName = ToPascalCase(tableName);
 
         // Act
-        var response = await _client.GetAsync($"/odata/{entitySetName}?$select=name,email");
+        var response = await _client.GetAsync($"/odata/{entitySetName}?$select=name,email", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var jsonDoc = await response.Content.ReadFromJsonAsync<JsonDocument>();
+        var jsonDoc = await response.Content.ReadFromJsonAsync<JsonDocument>(TestContext.Current.CancellationToken);
         var valueArray = jsonDoc!.RootElement.GetProperty("value");
         var firstItem = valueArray[0];
         firstItem.TryGetProperty("name", out _).Should().BeTrue();
@@ -222,12 +222,12 @@ public class ODataApiTests
         var entitySetName = ToPascalCase(tableName);
 
         // Act
-        var response = await _client.GetAsync($"/odata/{entitySetName}({id})");
+        var response = await _client.GetAsync($"/odata/{entitySetName}({id})", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var jsonDoc = await response.Content.ReadFromJsonAsync<JsonDocument>();
+        var jsonDoc = await response.Content.ReadFromJsonAsync<JsonDocument>(TestContext.Current.CancellationToken);
         jsonDoc!.RootElement.TryGetProperty("@odata.context", out _).Should().BeTrue();
         jsonDoc.RootElement.TryGetProperty("value", out var valueProp).Should().BeTrue();
         valueProp.GetProperty("name").GetString().Should().Be("John");
@@ -242,7 +242,7 @@ public class ODataApiTests
         var nonExistentId = Guid.NewGuid();
 
         // Act
-        var response = await _client.GetAsync($"/odata/{entitySetName}({nonExistentId})");
+        var response = await _client.GetAsync($"/odata/{entitySetName}({nonExistentId})", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -267,12 +267,12 @@ public class ODataApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/odata/{entitySetName}", data);
+        var response = await _client.PostAsJsonAsync($"/odata/{entitySetName}", data, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Created);
 
-        var jsonDoc = await response.Content.ReadFromJsonAsync<JsonDocument>();
+        var jsonDoc = await response.Content.ReadFromJsonAsync<JsonDocument>(TestContext.Current.CancellationToken);
         jsonDoc!.RootElement.TryGetProperty("value", out var valueProp).Should().BeTrue();
         valueProp.GetProperty("name").GetString().Should().Be("New User");
     }
@@ -295,12 +295,12 @@ public class ODataApiTests
         {
             Content = JsonContent.Create(updateData)
         };
-        var response = await _client.SendAsync(request);
+        var response = await _client.SendAsync(request, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var jsonDoc = await response.Content.ReadFromJsonAsync<JsonDocument>();
+        var jsonDoc = await response.Content.ReadFromJsonAsync<JsonDocument>(TestContext.Current.CancellationToken);
         jsonDoc!.RootElement.GetProperty("value").GetProperty("name").GetString().Should().Be("John Updated");
     }
 
@@ -313,13 +313,13 @@ public class ODataApiTests
         var entitySetName = ToPascalCase(tableName);
 
         // Act
-        var response = await _client.DeleteAsync($"/odata/{entitySetName}({id})");
+        var response = await _client.DeleteAsync($"/odata/{entitySetName}({id})", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         // Verify deletion
-        var getResponse = await _client.GetAsync($"/odata/{entitySetName}({id})");
+        var getResponse = await _client.GetAsync($"/odata/{entitySetName}({id})", TestContext.Current.CancellationToken);
         getResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
@@ -369,12 +369,12 @@ public class ODataApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync("/odata/$batch", batchRequest);
+        var response = await _client.PostAsJsonAsync("/odata/$batch", batchRequest, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var batchResponse = await response.Content.ReadFromJsonAsync<ODataBatchResponse>();
+        var batchResponse = await response.Content.ReadFromJsonAsync<ODataBatchResponse>(TestContext.Current.CancellationToken);
         batchResponse.Should().NotBeNull();
         batchResponse!.Responses.Should().HaveCount(3);
 

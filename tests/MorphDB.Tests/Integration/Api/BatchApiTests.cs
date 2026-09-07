@@ -52,8 +52,8 @@ public class BatchApiTests
             ["name"] = "Existing",
             ["email"] = "existing@example.com",
             ["score"] = 100
-        });
-        var existingRecord = await insertResponse.Content.ReadFromJsonAsync<DataRecordResponse>();
+        }, TestContext.Current.CancellationToken);
+        var existingRecord = await insertResponse.Content.ReadFromJsonAsync<DataRecordResponse>(TestContext.Current.CancellationToken);
 
         var batchRequest = new BatchRequest
         {
@@ -84,12 +84,12 @@ public class BatchApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/batch/data", batchRequest);
+        var response = await _client.PostAsJsonAsync("/api/batch/data", batchRequest, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<BatchResponse>();
+        var result = await response.Content.ReadFromJsonAsync<BatchResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
         result!.Results.Should().HaveCount(2);
         result.SuccessCount.Should().Be(2);
@@ -103,7 +103,7 @@ public class BatchApiTests
         var batchRequest = new BatchRequest { Operations = [] };
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/batch/data", batchRequest);
+        var response = await _client.PostAsJsonAsync("/api/batch/data", batchRequest, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -133,12 +133,12 @@ public class BatchApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/batch/data", batchRequest);
+        var response = await _client.PostAsJsonAsync("/api/batch/data", batchRequest, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<BatchResponse>();
+        var result = await response.Content.ReadFromJsonAsync<BatchResponse>(TestContext.Current.CancellationToken);
         result!.Results[0].Success.Should().BeFalse();
         result.FailureCount.Should().Be(1);
     }
@@ -160,12 +160,12 @@ public class BatchApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/batch/data/{tableName}/insert", records);
+        var response = await _client.PostAsJsonAsync($"/api/batch/data/{tableName}/insert", records, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<BatchResponse>();
+        var result = await response.Content.ReadFromJsonAsync<BatchResponse>(TestContext.Current.CancellationToken);
         result!.SuccessCount.Should().Be(3);
         result.Results.Should().HaveCount(3);
         result.Results.Should().AllSatisfy(r => r.Success.Should().BeTrue());
@@ -186,11 +186,11 @@ public class BatchApiTests
         // Act
         var response = await _client.PostAsJsonAsync(
             $"/api/batch/data/{missingTable}/insert",
-            new List<Dictionary<string, object?>> { new() { ["name"] = "x" } });
+            new List<Dictionary<string, object?>> { new() { ["name"] = "x" } }, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
-        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         error!.Error.Should().Be("NotFound");
     }
 
@@ -202,7 +202,7 @@ public class BatchApiTests
         var records = new List<Dictionary<string, object?>>();
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/batch/data/{tableName}/insert", records);
+        var response = await _client.PostAsJsonAsync($"/api/batch/data/{tableName}/insert", records, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -224,13 +224,13 @@ public class BatchApiTests
             ["name"] = "User 1",
             ["email"] = "u1@example.com",
             ["score"] = 10
-        });
+        }, TestContext.Current.CancellationToken);
         await _client.PostAsJsonAsync($"/api/data/{tableName}", new Dictionary<string, object?>
         {
             ["name"] = "User 2",
             ["email"] = "u2@example.com",
             ["score"] = 20
-        });
+        }, TestContext.Current.CancellationToken);
 
         var updateRequest = new BulkUpdateRequest
         {
@@ -239,12 +239,12 @@ public class BatchApiTests
         };
 
         // Act
-        var response = await _client.PatchAsJsonAsync($"/api/batch/data/{tableName}", updateRequest);
+        var response = await _client.PatchAsJsonAsync($"/api/batch/data/{tableName}", updateRequest, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<BatchResponse>();
+        var result = await response.Content.ReadFromJsonAsync<BatchResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
         result!.Results.Should().HaveCount(1);
         result.Results[0].Success.Should().BeTrue();
@@ -269,28 +269,28 @@ public class BatchApiTests
             ["name"] = "User 1",
             ["email"] = "u1@example.com",
             ["score"] = 10
-        });
+        }, TestContext.Current.CancellationToken);
         await _client.PostAsJsonAsync($"/api/data/{tableName}", new Dictionary<string, object?>
         {
             ["_id"] = id2,
             ["name"] = "User 2",
             ["email"] = "u2@example.com",
             ["score"] = 20
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Act - Delete using filter
-        var response = await _client.DeleteAsync($"/api/batch/data/{tableName}?filter=score:lt:50");
+        var response = await _client.DeleteAsync($"/api/batch/data/{tableName}?filter=score:lt:50", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<BatchResponse>();
+        var result = await response.Content.ReadFromJsonAsync<BatchResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
         result!.Results.Should().HaveCount(1);
         result.Results[0].Success.Should().BeTrue();
 
         // Verify deletion
-        var getResponse1 = await _client.GetAsync($"/api/data/{tableName}/{id1}");
+        var getResponse1 = await _client.GetAsync($"/api/data/{tableName}/{id1}", TestContext.Current.CancellationToken);
         getResponse1.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
@@ -301,7 +301,7 @@ public class BatchApiTests
         var tableName = await SetupTestTableAsync();
 
         // Act
-        var response = await _client.DeleteAsync($"/api/batch/data/{tableName}");
+        var response = await _client.DeleteAsync($"/api/batch/data/{tableName}", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -328,12 +328,12 @@ public class BatchApiTests
         };
 
         // Act
-        var response = await _client.PutAsJsonAsync($"/api/batch/data/{tableName}", request);
+        var response = await _client.PutAsJsonAsync($"/api/batch/data/{tableName}", request, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<DataRecordResponse>();
+        var result = await response.Content.ReadFromJsonAsync<DataRecordResponse>(TestContext.Current.CancellationToken);
         result!.Data["name"]?.ToString().Should().Be("Upsert User");
     }
 
@@ -349,7 +349,7 @@ public class BatchApiTests
             ["name"] = "Original",
             ["email"] = "existing@example.com",
             ["score"] = 10
-        });
+        }, TestContext.Current.CancellationToken);
 
         var request = new UpsertRequest
         {
@@ -363,12 +363,12 @@ public class BatchApiTests
         };
 
         // Act
-        var response = await _client.PutAsJsonAsync($"/api/batch/data/{tableName}", request);
+        var response = await _client.PutAsJsonAsync($"/api/batch/data/{tableName}", request, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<DataRecordResponse>();
+        var result = await response.Content.ReadFromJsonAsync<DataRecordResponse>(TestContext.Current.CancellationToken);
         result!.Data["name"]?.ToString().Should().Be("Updated");
     }
 
@@ -387,7 +387,7 @@ public class BatchApiTests
         };
 
         // Act
-        var response = await _client.PutAsJsonAsync($"/api/batch/data/{tableName}", request);
+        var response = await _client.PutAsJsonAsync($"/api/batch/data/{tableName}", request, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);

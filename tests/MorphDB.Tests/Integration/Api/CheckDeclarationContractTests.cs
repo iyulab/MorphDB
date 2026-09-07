@@ -43,7 +43,7 @@ public class CheckDeclarationContractTests
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest,
             "a stored-but-unenforceable CHECK would constrain nothing, silently");
-        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         body!.Code.Should().Be("INVALID_ARGUMENT");
         body.Message.Should().Contain("Supported CHECK forms");
     }
@@ -54,7 +54,7 @@ public class CheckDeclarationContractTests
         var response = await CreateTableAsync($"chkgram_{Guid.NewGuid():N}"[..25], "name ~ '^[a-z]+$'");
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        (await response.Content.ReadFromJsonAsync<ErrorResponse>())!.Message
+        (await response.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken))!.Message
             .Should().Contain("MATCHES", "the grammar's regex form is MATCHES, not the SQL operator");
     }
 
@@ -64,7 +64,7 @@ public class CheckDeclarationContractTests
         var tableName = $"chkgram_{Guid.NewGuid():N}"[..25];
         var response = await CreateTableAsync(tableName, "name != 'forbidden'");
         response.EnsureSuccessStatusCode();
-        var table = await response.Content.ReadFromJsonAsync<TableApiResponse>();
+        var table = await response.Content.ReadFromJsonAsync<TableApiResponse>(TestContext.Current.CancellationToken);
         var physicalName = await GetPhysicalNameAsync(table!.Id);
 
         await using var connection = new NpgsqlConnection(_fixture.Postgres.ConnectionString);
@@ -87,9 +87,9 @@ public class CheckDeclarationContractTests
         (await CreateTableAsync(tableName, "name != 'forbidden'")).EnsureSuccessStatusCode();
 
         var refused = await _client.PostAsJsonAsync($"/api/data/{tableName}",
-            new Dictionary<string, object?> { ["name"] = "forbidden" });
+            new Dictionary<string, object?> { ["name"] = "forbidden" }, TestContext.Current.CancellationToken);
         var accepted = await _client.PostAsJsonAsync($"/api/data/{tableName}",
-            new Dictionary<string, object?> { ["name"] = "fine" });
+            new Dictionary<string, object?> { ["name"] = "fine" }, TestContext.Current.CancellationToken);
 
         refused.StatusCode.Should().Be(HttpStatusCode.BadRequest,
             "removing the physical CHECK must not remove the constraint itself");
@@ -103,10 +103,10 @@ public class CheckDeclarationContractTests
         (await CreateTableAsync(tableName, "name != 'x'")).EnsureSuccessStatusCode();
 
         var response = await _client.PostAsJsonAsync($"/api/schema/tables/{tableName}/columns",
-            new AddColumnApiRequest { Name = "score", Type = "integer", Check = "score IN (1,2,3)" });
+            new AddColumnApiRequest { Name = "score", Type = "integer", Check = "score IN (1,2,3)" }, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        (await response.Content.ReadFromJsonAsync<ErrorResponse>())!.Message
+        (await response.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken))!.Message
             .Should().Contain("Supported CHECK forms");
     }
 

@@ -64,7 +64,7 @@ public class ViewQueryBuilderTests
             ProjectId = projectId,
             LogicalName = "customers_" + suffix,
             Columns = [new CreateColumnRequest { LogicalName = "name", DataType = MorphDataType.Text, IsNullable = false }]
-        });
+        }, TestContext.Current.CancellationToken);
 
         var ordersTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
@@ -75,17 +75,17 @@ public class ViewQueryBuilderTests
                 new CreateColumnRequest { LogicalName = "customer_ref", DataType = MorphDataType.Uuid, IsNullable = false },
                 new CreateColumnRequest { LogicalName = "amount", DataType = MorphDataType.Decimal, IsNullable = false },
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         var customerId = Guid.NewGuid();
         await _dataService.InsertBatchAsync(projectId, customersTable.LogicalName,
         [
             new Dictionary<string, object?> { ["_id"] = customerId, ["name"] = "Alice" },
-        ]);
+        ], TestContext.Current.CancellationToken);
         await _dataService.InsertBatchAsync(projectId, ordersTable.LogicalName,
         [
             new Dictionary<string, object?> { ["customer_ref"] = customerId, ["amount"] = 100m },
-        ]);
+        ], TestContext.Current.CancellationToken);
 
         var definition = new ViewDefinition
         {
@@ -111,9 +111,9 @@ public class ViewQueryBuilderTests
             ],
         };
 
-        var sql = await viewBuilder.BuildSelectStatementAsync(definition);
+        var sql = await viewBuilder.BuildSelectStatementAsync(definition, TestContext.Current.CancellationToken);
 
-        await using var connection = await _fixture.DataSource.OpenConnectionAsync();
+        await using var connection = await _fixture.DataSource.OpenConnectionAsync(TestContext.Current.CancellationToken);
         var row = await connection.QuerySingleAsync<(decimal Amount, string CustomerName, decimal Doubled)>(sql);
 
         row.Amount.Should().Be(100m);

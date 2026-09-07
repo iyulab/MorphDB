@@ -67,7 +67,7 @@ public class LookupFieldTests
                     IsNullable = true
                 }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Create child table (orders) with lookup field
         var request = new CreateTableRequest
@@ -100,7 +100,7 @@ public class LookupFieldTests
         };
 
         // Act
-        var result = await _schemaManager.CreateTableAsync(request);
+        var result = await _schemaManager.CreateTableAsync(request, TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().NotBeNull();
@@ -142,7 +142,7 @@ public class LookupFieldTests
                     IsNullable = false
                 }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Create child table with lookup
         var childTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
@@ -172,10 +172,10 @@ public class LookupFieldTests
                     }
                 }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Act - Retrieve the table to verify persistence
-        var storedTable = await _metadataRepository.GetTableByIdAsync(childTable.TableId, includeColumns: true);
+        var storedTable = await _metadataRepository.GetTableByIdAsync(childTable.TableId, includeColumns: true, TestContext.Current.CancellationToken);
 
         // Assert
         storedTable.Should().NotBeNull();
@@ -208,7 +208,7 @@ public class LookupFieldTests
                     IsNullable = false
                 }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Create child table without lookup initially
         var childTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
@@ -224,7 +224,7 @@ public class LookupFieldTests
                     IsNullable = false
                 }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         var addColumnRequest = new AddColumnRequest
         {
@@ -244,7 +244,7 @@ public class LookupFieldTests
         };
 
         // Act
-        var newColumn = await _schemaManager.AddColumnAsync(addColumnRequest);
+        var newColumn = await _schemaManager.AddColumnAsync(addColumnRequest, TestContext.Current.CancellationToken);
 
         // Assert
         newColumn.Should().NotBeNull();
@@ -285,7 +285,7 @@ public class LookupFieldTests
                     IsNullable = true
                 }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Create products table
         var productsTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
@@ -307,7 +307,7 @@ public class LookupFieldTests
                     IsNullable = false
                 }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Create orders table with multiple lookups
         var ordersTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
@@ -381,7 +381,7 @@ public class LookupFieldTests
                     }
                 }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Assert
         ordersTable.Should().NotBeNull();
@@ -422,7 +422,7 @@ public class LookupFieldTests
                     IsNullable = false
                 }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Create child table with lookup
         var childTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
@@ -451,10 +451,10 @@ public class LookupFieldTests
                     }
                 }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Act - Query PostgreSQL to check actual physical columns
-        await using var connection = await _fixture.DataSource.OpenConnectionAsync();
+        await using var connection = await _fixture.DataSource.OpenConnectionAsync(TestContext.Current.CancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             SELECT column_name
@@ -464,8 +464,8 @@ public class LookupFieldTests
             """;
 
         var physicalColumns = new List<string>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        await using var reader = await command.ExecuteReaderAsync(TestContext.Current.CancellationToken);
+        while (await reader.ReadAsync(TestContext.Current.CancellationToken))
         {
             physicalColumns.Add(reader.GetString(0));
         }

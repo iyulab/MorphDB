@@ -54,14 +54,14 @@ public class SecurityPolicyServiceTests
             TableName = tableName,
             PolicyType = PolicyType.Select,
             Expression = "owner_id = current_user_id()"
-        });
+        }, TestContext.Current.CancellationToken);
 
         created.TableId.Should().NotBeEmpty("the policy must resolve the table it applies to");
 
-        var byName = await _policies.GetPoliciesByTableNameAsync(projectId, tableName);
+        var byName = await _policies.GetPoliciesByTableNameAsync(projectId, tableName, TestContext.Current.CancellationToken);
         byName.Should().ContainSingle(p => p.Name == "owner_reads_only");
 
-        var byId = await _policies.GetPoliciesAsync(projectId, created.TableId);
+        var byId = await _policies.GetPoliciesAsync(projectId, created.TableId, TestContext.Current.CancellationToken);
         byId.Should().ContainSingle(p => p.Id == created.Id);
     }
 
@@ -96,12 +96,12 @@ public class SecurityPolicyServiceTests
             TableName = tableName,
             PolicyType = PolicyType.Select,
             Expression = "true"
-        });
+        }, TestContext.Current.CancellationToken);
 
-        await _schemaManager.DeleteTableAsync(first.TableId);
+        await _schemaManager.DeleteTableAsync(first.TableId, TestContext.Current.CancellationToken);
         await CreateTableAsync(projectId, tableName);
 
-        var policies = await _policies.GetPoliciesByTableNameAsync(projectId, tableName);
+        var policies = await _policies.GetPoliciesByTableNameAsync(projectId, tableName, TestContext.Current.CancellationToken);
         policies.Should().BeEmpty("the name now belongs to a different table");
     }
 
@@ -146,7 +146,7 @@ public class SecurityPolicyServiceTests
             TableName = tableName,
             PolicyType = PolicyType.Select,
             Expression = "owner_id = {{user_id}} AND (owner_id IS NOT NULL)"
-        });
+        }, TestContext.Current.CancellationToken);
 
         created.Expression.Should().Contain("{{user_id}}", "the placeholder is substituted at read time");
     }
@@ -164,16 +164,16 @@ public class SecurityPolicyServiceTests
             TableName = tableName,
             PolicyType = PolicyType.Select,
             Expression = "true"
-        });
+        }, TestContext.Current.CancellationToken);
 
         var updated = await _policies.UpdatePolicyAsync(projectId, created.Id, new UpdatePolicyRequest
         {
             Name = "after",
             Expression = "owner_id IS NOT NULL"
-        });
+        }, TestContext.Current.CancellationToken);
 
         updated.Name.Should().Be("after");
-        (await _policies.GetPolicyAsync(projectId, created.Id))!.Expression.Should().Be("owner_id IS NOT NULL");
+        (await _policies.GetPolicyAsync(projectId, created.Id, TestContext.Current.CancellationToken))!.Expression.Should().Be("owner_id IS NOT NULL");
 
         var act = () => _policies.UpdatePolicyAsync(projectId, created.Id, new UpdatePolicyRequest
         {
@@ -195,13 +195,13 @@ public class SecurityPolicyServiceTests
             TableName = tableName,
             PolicyType = PolicyType.Select,
             Expression = "owner_id IS NOT NULL"
-        });
+        }, TestContext.Current.CancellationToken);
 
-        await _policies.DeletePolicyAsync(projectId, created.Id);
+        await _policies.DeletePolicyAsync(projectId, created.Id, TestContext.Current.CancellationToken);
 
-        (await _policies.GetPolicyAsync(projectId, created.Id)).Should().BeNull();
+        (await _policies.GetPolicyAsync(projectId, created.Id, TestContext.Current.CancellationToken)).Should().BeNull();
         (await _policies.EvaluatePoliciesAsync(
-            projectId, tableName, PolicyType.Select, new SecurityContext { ProjectId = projectId }))
+            projectId, tableName, PolicyType.Select, new SecurityContext { ProjectId = projectId }, TestContext.Current.CancellationToken))
             .Should().BeNull("no policy remains to constrain the read");
     }
 
@@ -218,27 +218,27 @@ public class SecurityPolicyServiceTests
             TableName = tableName,
             PolicyType = PolicyType.Select,
             Expression = "owner_id = {{user_id}}"
-        });
+        }, TestContext.Current.CancellationToken);
         await _policies.CreatePolicyAsync(projectId, new CreatePolicyRequest
         {
             Name = "not_null",
             TableName = tableName,
             PolicyType = PolicyType.Select,
             Expression = "owner_id IS NOT NULL"
-        });
+        }, TestContext.Current.CancellationToken);
         await _policies.CreatePolicyAsync(projectId, new CreatePolicyRequest
         {
             Name = "writes_only",
             TableName = tableName,
             PolicyType = PolicyType.Insert,
             Expression = "false"
-        });
+        }, TestContext.Current.CancellationToken);
 
         var where = await _policies.EvaluatePoliciesAsync(
             projectId,
             tableName,
             PolicyType.Select,
-            new SecurityContext { ProjectId = projectId, UserId = "u-1" });
+            new SecurityContext { ProjectId = projectId, UserId = "u-1" }, TestContext.Current.CancellationToken);
 
         where.Should().Contain("'u-1'", "the caller is substituted for the placeholder");
         where.Should().Contain(" AND ", "applicable policies are combined, not chosen between");
@@ -262,13 +262,13 @@ public class SecurityPolicyServiceTests
             TableName = tableName,
             PolicyType = PolicyType.Select,
             Expression = "owner_id = {{user_id}}"
-        });
+        }, TestContext.Current.CancellationToken);
 
         var where = await _policies.EvaluatePoliciesAsync(
             projectId,
             tableName,
             PolicyType.Select,
-            new SecurityContext { ProjectId = projectId, UserId = "x' OR '1'='1" });
+            new SecurityContext { ProjectId = projectId, UserId = "x' OR '1'='1" }, TestContext.Current.CancellationToken);
 
         where.Should().Contain("''", "the quote is doubled, not closed");
     }
@@ -285,7 +285,7 @@ public class SecurityPolicyServiceTests
         var tableName = "policy_legacy_" + Guid.NewGuid().ToString("N")[..8];
         var table = await CreateTableAsync(projectId, tableName);
 
-        await using (var connection = await _dataSource.OpenConnectionAsync())
+        await using (var connection = await _dataSource.OpenConnectionAsync(TestContext.Current.CancellationToken))
         {
             await connection.ExecuteAsync(
                 """

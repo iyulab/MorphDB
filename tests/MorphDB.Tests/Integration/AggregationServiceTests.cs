@@ -144,7 +144,7 @@ public class AggregationServiceTests
         };
 
         // Act
-        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, request);
+        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, request, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Single(result.Data);
@@ -173,7 +173,7 @@ public class AggregationServiceTests
         };
 
         // Act
-        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, request);
+        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, request, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(3, result.Data.Count);
@@ -216,7 +216,7 @@ public class AggregationServiceTests
         };
 
         // Act
-        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, request);
+        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, request, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Single(result.Data);
@@ -246,7 +246,7 @@ public class AggregationServiceTests
         };
 
         // Act
-        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, request);
+        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, request, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(3, result.Data.Count);
@@ -282,7 +282,7 @@ public class AggregationServiceTests
         };
 
         // Act
-        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, request);
+        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, request, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Single(result.Data);
@@ -317,7 +317,7 @@ public class AggregationServiceTests
         };
 
         // Act
-        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, request);
+        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, request, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Single(result.Data);
@@ -359,7 +359,7 @@ public class AggregationServiceTests
         };
 
         // Act
-        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, request);
+        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, request, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Single(result.Data);
@@ -402,7 +402,7 @@ public class AggregationServiceTests
         };
 
         // Act
-        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, request);
+        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, request, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(2, result.Data.Count); // electronics (350) and clothing (230)
@@ -444,7 +444,7 @@ public class AggregationServiceTests
         };
 
         // Act
-        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, request);
+        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, request, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(3, result.Data.Count);
@@ -486,7 +486,7 @@ public class AggregationServiceTests
         };
 
         // Act
-        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, request);
+        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, request, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(2, result.Data.Count);
@@ -519,7 +519,7 @@ public class AggregationServiceTests
         };
 
         // Act
-        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, request);
+        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, request, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(3, result.Data.Count);

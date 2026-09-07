@@ -22,7 +22,7 @@ public class SchemaBootstrapResilienceTests
     {
         var (services, attempts) = Build(failures: 2, Unreachable);
 
-        await services.EnsureMorphDbSchemaAsync();
+        await services.EnsureMorphDbSchemaAsync(TestContext.Current.CancellationToken);
 
         attempts().Should().Be(3, "the two refusals must be retried, not fatal");
     }

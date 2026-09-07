@@ -30,7 +30,7 @@ public sealed class PostgresFixture : IAsyncLifetime
 
     public NpgsqlDataSource DataSource { get; private set; } = null!;
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         await _container.StartAsync();
 
@@ -50,7 +50,7 @@ public sealed class PostgresFixture : IAsyncLifetime
         await schemaLayer.EnsureGlobalSchemaAsync();
     }
 
-    public async Task DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         DataSource.Dispose();
         await _container.DisposeAsync();

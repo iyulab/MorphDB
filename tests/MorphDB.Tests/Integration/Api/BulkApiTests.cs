@@ -68,12 +68,12 @@ public class BulkApiTests
         var content = new StringContent(csvContent, Encoding.UTF8, "text/csv");
 
         // Act
-        var response = await _client.PostAsync($"/api/bulk/{tableName}/import/csv?delimiter=,&hasHeader=true", content);
+        var response = await _client.PostAsync($"/api/bulk/{tableName}/import/csv?delimiter=,&hasHeader=true", content, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);
 
-        var result = await response.Content.ReadFromJsonAsync<ImportJobApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<ImportJobApiResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
         result!.JobId.Should().NotBeEmpty();
         result.TableName.Should().Be(tableName);
@@ -90,7 +90,7 @@ public class BulkApiTests
         var content = new StringContent(csvContent, Encoding.UTF8, "text/csv");
 
         // Act
-        var response = await _client.PostAsync($"/api/bulk/{tableName}/import/csv?delimiter=;&hasHeader=true", content);
+        var response = await _client.PostAsync($"/api/bulk/{tableName}/import/csv?delimiter=;&hasHeader=true", content, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);
@@ -124,20 +124,20 @@ public class BulkApiTests
                 Delimiter = ',',
                 IncludeHeader = true,
                 Columns = ["name", "email", "age", "is_active"]
-            });
+            }, TestContext.Current.CancellationToken);
 
         using var exportStream = new MemoryStream();
-        await bulkService.StreamExportAsync(exportJob.JobId, exportStream);
+        await bulkService.StreamExportAsync(exportJob.JobId, exportStream, TestContext.Current.CancellationToken);
         exportStream.Position = 0;
-        var csvContent = await new StreamReader(exportStream, Encoding.UTF8).ReadToEndAsync();
+        var csvContent = await new StreamReader(exportStream, Encoding.UTF8).ReadToEndAsync(TestContext.Current.CancellationToken);
 
         // Act — re-import the exported CSV into the same table.
         using var importStream = new MemoryStream(Encoding.UTF8.GetBytes(csvContent));
         var importJob = await bulkService.StartCsvImportAsync(
-            _fixture.Api.ProjectId, tableName, importStream, new CsvImportOptions { Delimiter = ',', HasHeader = true });
+            _fixture.Api.ProjectId, tableName, importStream, new CsvImportOptions { Delimiter = ',', HasHeader = true }, TestContext.Current.CancellationToken);
 
         long successCount = 0, errorCount = 0;
-        await foreach (var result in bulkService.ProcessImportAsync(importJob.JobId))
+        await foreach (var result in bulkService.ProcessImportAsync(importJob.JobId, TestContext.Current.CancellationToken))
         {
             if (result.Success)
                 successCount++;
@@ -149,7 +149,7 @@ public class BulkApiTests
         errorCount.Should().Be(0, "typed CSV values (integer, boolean) must round-trip like JSON/NDJSON does");
         successCount.Should().Be(3);
 
-        var finalJob = await bulkService.GetImportJobAsync(importJob.JobId);
+        var finalJob = await bulkService.GetImportJobAsync(importJob.JobId, TestContext.Current.CancellationToken);
         finalJob!.ErrorCount.Should().Be(0);
         finalJob.SuccessCount.Should().Be(3);
     }
@@ -168,16 +168,16 @@ public class BulkApiTests
 
         using var importStream = new MemoryStream(Encoding.UTF8.GetBytes(csvContent));
         var importJob = await bulkService.StartCsvImportAsync(
-            _fixture.Api.ProjectId, tableName, importStream, new CsvImportOptions { Delimiter = ',', HasHeader = true });
+            _fixture.Api.ProjectId, tableName, importStream, new CsvImportOptions { Delimiter = ',', HasHeader = true }, TestContext.Current.CancellationToken);
 
         // Act
-        await foreach (var _ in bulkService.ProcessImportAsync(importJob.JobId))
+        await foreach (var _ in bulkService.ProcessImportAsync(importJob.JobId, TestContext.Current.CancellationToken))
         {
             // Drain — the job record is what's under test, not the per-row stream.
         }
 
         // Assert
-        var finalJob = await bulkService.GetImportJobAsync(importJob.JobId);
+        var finalJob = await bulkService.GetImportJobAsync(importJob.JobId, TestContext.Current.CancellationToken);
         finalJob!.ErrorCount.Should().Be(1);
         finalJob.ErrorDetails.Should().NotBeNullOrEmpty();
         finalJob.ErrorDetails![0].RowNumber.Should().Be(1);
@@ -192,12 +192,12 @@ public class BulkApiTests
         var content = new StringContent(string.Empty, Encoding.UTF8, "text/csv");
 
         // Act
-        var response = await _client.PostAsync($"/api/bulk/{tableName}/import/csv?delimiter=,&hasHeader=true", content);
+        var response = await _client.PostAsync($"/api/bulk/{tableName}/import/csv?delimiter=,&hasHeader=true", content, TestContext.Current.CancellationToken);
 
         // Assert - empty content is accepted and creates a job (with 0 rows to process)
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);
 
-        var result = await response.Content.ReadFromJsonAsync<ImportJobApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<ImportJobApiResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
         result!.TotalRows.Should().Be(0);
     }
@@ -220,12 +220,12 @@ public class BulkApiTests
         var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
 
         // Act
-        var response = await _client.PostAsync($"/api/bulk/{tableName}/import/json", content);
+        var response = await _client.PostAsync($"/api/bulk/{tableName}/import/json", content, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);
 
-        var result = await response.Content.ReadFromJsonAsync<ImportJobApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<ImportJobApiResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
         result!.Format.Should().Be("json");
     }
@@ -242,12 +242,12 @@ public class BulkApiTests
         var content = new StringContent(ndjsonContent, Encoding.UTF8, "application/x-ndjson");
 
         // Act
-        var response = await _client.PostAsync($"/api/bulk/{tableName}/import/ndjson", content);
+        var response = await _client.PostAsync($"/api/bulk/{tableName}/import/ndjson", content, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);
 
-        var result = await response.Content.ReadFromJsonAsync<ImportJobApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<ImportJobApiResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
         result!.Format.Should().Be("ndjson");
     }
@@ -270,12 +270,12 @@ public class BulkApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/bulk/{tableName}/export/csv", request);
+        var response = await _client.PostAsJsonAsync($"/api/bulk/{tableName}/export/csv", request, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);
 
-        var result = await response.Content.ReadFromJsonAsync<ExportJobApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<ExportJobApiResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
         result!.JobId.Should().NotBeEmpty();
         result.TableName.Should().Be(tableName);
@@ -296,7 +296,7 @@ public class BulkApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/bulk/{tableName}/export/csv", request);
+        var response = await _client.PostAsJsonAsync($"/api/bulk/{tableName}/export/csv", request, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);
@@ -319,12 +319,12 @@ public class BulkApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/bulk/{tableName}/export/json", request);
+        var response = await _client.PostAsJsonAsync($"/api/bulk/{tableName}/export/json", request, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);
 
-        var result = await response.Content.ReadFromJsonAsync<ExportJobApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<ExportJobApiResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
         result!.Format.Should().Be("json");
     }
@@ -342,12 +342,12 @@ public class BulkApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/bulk/{tableName}/export/xlsx", request);
+        var response = await _client.PostAsJsonAsync($"/api/bulk/{tableName}/export/xlsx", request, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);
 
-        var result = await response.Content.ReadFromJsonAsync<ExportJobApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<ExportJobApiResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
         result!.Format.Should().Be("xlsx");
     }
@@ -364,16 +364,16 @@ public class BulkApiTests
         var csvContent = "name,email,age,is_active\nTest,test@test.com,25,true";
         var content = new StringContent(csvContent, Encoding.UTF8, "text/csv");
 
-        var importResponse = await _client.PostAsync($"/api/bulk/{tableName}/import/csv?delimiter=,&hasHeader=true", content);
-        var importJob = await importResponse.Content.ReadFromJsonAsync<ImportJobApiResponse>();
+        var importResponse = await _client.PostAsync($"/api/bulk/{tableName}/import/csv?delimiter=,&hasHeader=true", content, TestContext.Current.CancellationToken);
+        var importJob = await importResponse.Content.ReadFromJsonAsync<ImportJobApiResponse>(TestContext.Current.CancellationToken);
 
         // Act
-        var response = await _client.GetAsync($"/api/bulk/import/{importJob!.JobId}");
+        var response = await _client.GetAsync($"/api/bulk/import/{importJob!.JobId}", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<ImportJobApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<ImportJobApiResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
         result!.JobId.Should().Be(importJob.JobId);
     }
@@ -382,7 +382,7 @@ public class BulkApiTests
     public async Task GetImportJobStatus_WithInvalidJobId_ShouldReturnNotFound()
     {
         // Act
-        var response = await _client.GetAsync($"/api/bulk/import/{Guid.NewGuid()}");
+        var response = await _client.GetAsync($"/api/bulk/import/{Guid.NewGuid()}", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -396,16 +396,16 @@ public class BulkApiTests
         await InsertTestDataAsync(tableName, 2);
 
         var exportResponse = await _client.PostAsJsonAsync($"/api/bulk/{tableName}/export/csv",
-            new CsvExportApiRequest());
-        var exportJob = await exportResponse.Content.ReadFromJsonAsync<ExportJobApiResponse>();
+            new CsvExportApiRequest(), TestContext.Current.CancellationToken);
+        var exportJob = await exportResponse.Content.ReadFromJsonAsync<ExportJobApiResponse>(TestContext.Current.CancellationToken);
 
         // Act
-        var response = await _client.GetAsync($"/api/bulk/export/{exportJob!.JobId}");
+        var response = await _client.GetAsync($"/api/bulk/export/{exportJob!.JobId}", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<ExportJobApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<ExportJobApiResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
         result!.JobId.Should().Be(exportJob.JobId);
     }
@@ -414,7 +414,7 @@ public class BulkApiTests
     public async Task GetExportJobStatus_WithInvalidJobId_ShouldReturnNotFound()
     {
         // Act
-        var response = await _client.GetAsync($"/api/bulk/export/{Guid.NewGuid()}");
+        var response = await _client.GetAsync($"/api/bulk/export/{Guid.NewGuid()}", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -438,11 +438,11 @@ public class BulkApiTests
 
         var content = new StringContent(csvLines.ToString(), Encoding.UTF8, "text/csv");
 
-        var importResponse = await _client.PostAsync($"/api/bulk/{tableName}/import/csv?delimiter=,&hasHeader=true", content);
-        var importJob = await importResponse.Content.ReadFromJsonAsync<ImportJobApiResponse>();
+        var importResponse = await _client.PostAsync($"/api/bulk/{tableName}/import/csv?delimiter=,&hasHeader=true", content, TestContext.Current.CancellationToken);
+        var importJob = await importResponse.Content.ReadFromJsonAsync<ImportJobApiResponse>(TestContext.Current.CancellationToken);
 
         // Act
-        var response = await _client.PostAsync($"/api/bulk/jobs/{importJob!.JobId}/cancel", null);
+        var response = await _client.PostAsync($"/api/bulk/jobs/{importJob!.JobId}/cancel", null, TestContext.Current.CancellationToken);
 
         // Assert
         // Job might be already completed (fast processing), not found (already processed), or cancelled (204 NoContent)
@@ -457,11 +457,11 @@ public class BulkApiTests
         await InsertTestDataAsync(tableName, 10);
 
         var exportResponse = await _client.PostAsJsonAsync($"/api/bulk/{tableName}/export/csv",
-            new CsvExportApiRequest());
-        var exportJob = await exportResponse.Content.ReadFromJsonAsync<ExportJobApiResponse>();
+            new CsvExportApiRequest(), TestContext.Current.CancellationToken);
+        var exportJob = await exportResponse.Content.ReadFromJsonAsync<ExportJobApiResponse>(TestContext.Current.CancellationToken);
 
         // Act
-        var response = await _client.PostAsync($"/api/bulk/jobs/{exportJob!.JobId}/cancel", null);
+        var response = await _client.PostAsync($"/api/bulk/jobs/{exportJob!.JobId}/cancel", null, TestContext.Current.CancellationToken);
 
         // Assert
         // Job might be already completed (fast processing), not found (already processed), or cancelled (204 NoContent)
@@ -480,22 +480,22 @@ public class BulkApiTests
         await InsertTestDataAsync(tableName, 3);
 
         var exportResponse = await _client.PostAsJsonAsync($"/api/bulk/{tableName}/export/csv",
-            new CsvExportApiRequest { Delimiter = ',', IncludeHeader = true });
-        var exportJob = await exportResponse.Content.ReadFromJsonAsync<ExportJobApiResponse>();
+            new CsvExportApiRequest { Delimiter = ',', IncludeHeader = true }, TestContext.Current.CancellationToken);
+        var exportJob = await exportResponse.Content.ReadFromJsonAsync<ExportJobApiResponse>(TestContext.Current.CancellationToken);
 
         // Wait for job to complete (with timeout)
         ExportJobApiResponse? jobStatus = null;
         for (var i = 0; i < 10; i++)
         {
-            await Task.Delay(500);
-            var statusResponse = await _client.GetAsync($"/api/bulk/export/{exportJob!.JobId}");
-            jobStatus = await statusResponse.Content.ReadFromJsonAsync<ExportJobApiResponse>();
+            await Task.Delay(500, TestContext.Current.CancellationToken);
+            var statusResponse = await _client.GetAsync($"/api/bulk/export/{exportJob!.JobId}", TestContext.Current.CancellationToken);
+            jobStatus = await statusResponse.Content.ReadFromJsonAsync<ExportJobApiResponse>(TestContext.Current.CancellationToken);
             if (jobStatus?.Status == "completed")
                 break;
         }
 
         // Act
-        var response = await _client.GetAsync($"/api/bulk/export/{exportJob!.JobId}/download");
+        var response = await _client.GetAsync($"/api/bulk/export/{exportJob!.JobId}/download", TestContext.Current.CancellationToken);
 
         // Assert
         if (jobStatus?.Status == "completed")
@@ -514,7 +514,7 @@ public class BulkApiTests
     public async Task DownloadExport_WithInvalidJobId_ShouldReturnNotFound()
     {
         // Act
-        var response = await _client.GetAsync($"/api/bulk/export/{Guid.NewGuid()}/download");
+        var response = await _client.GetAsync($"/api/bulk/export/{Guid.NewGuid()}/download", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -532,7 +532,7 @@ public class BulkApiTests
         var content = new StringContent(csvContent, Encoding.UTF8, "text/csv");
 
         // Act
-        var response = await _client.PostAsync("/api/bulk/nonexistent_table/import/csv?delimiter=,&hasHeader=true", content);
+        var response = await _client.PostAsync("/api/bulk/nonexistent_table/import/csv?delimiter=,&hasHeader=true", content, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -543,7 +543,7 @@ public class BulkApiTests
     {
         // Act
         var response = await _client.PostAsJsonAsync("/api/bulk/nonexistent_table/export/csv",
-            new CsvExportApiRequest());
+            new CsvExportApiRequest(), TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);

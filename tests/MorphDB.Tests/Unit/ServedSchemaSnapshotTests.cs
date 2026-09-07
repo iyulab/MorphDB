@@ -35,7 +35,7 @@ public class ServedSchemaSnapshotTests
         var schema = await new ServiceCollection()
             .AddGraphQLServer()
             .AddMorphDbTypes()
-            .BuildSchemaAsync();
+            .BuildSchemaAsync(cancellationToken: TestContext.Current.CancellationToken);
 
         // Line endings are the checkout's business, not the schema's.
         static string Normalize(string sdl) =>

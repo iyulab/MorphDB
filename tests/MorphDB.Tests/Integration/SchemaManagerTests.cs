@@ -70,7 +70,7 @@ public class SchemaManagerTests
         };
 
         // Act
-        var result = await _schemaManager.CreateTableAsync(request);
+        var result = await _schemaManager.CreateTableAsync(request, TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().NotBeNull();
@@ -89,7 +89,7 @@ public class SchemaManagerTests
         result.Columns.Should().Contain(c => c.LogicalName == "name");
 
         // Verify metadata was persisted
-        var storedTable = await _metadataRepository.GetTableByIdAsync(result.TableId, includeColumns: true);
+        var storedTable = await _metadataRepository.GetTableByIdAsync(result.TableId, includeColumns: true, TestContext.Current.CancellationToken);
         storedTable.Should().NotBeNull();
         storedTable!.LogicalName.Should().Be(request.LogicalName);
         storedTable.Columns.Should().HaveCount(7);
@@ -115,7 +115,7 @@ public class SchemaManagerTests
             ]
         };
 
-        await _schemaManager.CreateTableAsync(request);
+        await _schemaManager.CreateTableAsync(request, TestContext.Current.CancellationToken);
 
         // Act & Assert
         var act = () => _schemaManager.CreateTableAsync(request);
@@ -140,9 +140,9 @@ public class SchemaManagerTests
             ProjectId = projectId,
             LogicalName = tableName,
             Columns = [new CreateColumnRequest { LogicalName = "sku", DataType = MorphDataType.Text }]
-        });
+        }, TestContext.Current.CancellationToken);
 
-        await _schemaManager.DeleteTableAsync(first.TableId);
+        await _schemaManager.DeleteTableAsync(first.TableId, TestContext.Current.CancellationToken);
 
         var second = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
@@ -153,19 +153,19 @@ public class SchemaManagerTests
                 new CreateColumnRequest { LogicalName = "sku", DataType = MorphDataType.Text },
                 new CreateColumnRequest { LogicalName = "warehouse", DataType = MorphDataType.Text }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         second.TableId.Should().NotBe(first.TableId, "the second declaration is a new table");
         second.Columns.Should().Contain(c => c.LogicalName == "warehouse", "the new shape must take effect");
 
         // Third time as well: the guarantee is a property of the delete path, not a one-off pardon.
-        await _schemaManager.DeleteTableAsync(second.TableId);
+        await _schemaManager.DeleteTableAsync(second.TableId, TestContext.Current.CancellationToken);
         var third = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
             ProjectId = projectId,
             LogicalName = tableName,
             Columns = [new CreateColumnRequest { LogicalName = "sku", DataType = MorphDataType.Text }]
-        });
+        }, TestContext.Current.CancellationToken);
         third.TableId.Should().NotBe(second.TableId);
     }
 
@@ -185,9 +185,9 @@ public class SchemaManagerTests
             Columns = [new CreateColumnRequest { LogicalName = "data", DataType = MorphDataType.Text }]
         };
 
-        var created = await _schemaManager.CreateTableAsync(request);
-        await _schemaManager.DeleteTableAsync(created.TableId);
-        await _schemaManager.CreateTableAsync(request);
+        var created = await _schemaManager.CreateTableAsync(request, TestContext.Current.CancellationToken);
+        await _schemaManager.DeleteTableAsync(created.TableId, TestContext.Current.CancellationToken);
+        await _schemaManager.CreateTableAsync(request, TestContext.Current.CancellationToken);
 
         var act = () => _schemaManager.CreateTableAsync(request);
         await act.Should().ThrowAsync<DuplicateNameException>(
@@ -214,7 +214,7 @@ public class SchemaManagerTests
             ]
         };
 
-        var table = await _schemaManager.CreateTableAsync(createTableRequest);
+        var table = await _schemaManager.CreateTableAsync(createTableRequest, TestContext.Current.CancellationToken);
         var initialColumnCount = table.Columns.Count;
 
         var addColumnRequest = new AddColumnRequest
@@ -227,7 +227,7 @@ public class SchemaManagerTests
         };
 
         // Act
-        var column = await _schemaManager.AddColumnAsync(addColumnRequest);
+        var column = await _schemaManager.AddColumnAsync(addColumnRequest, TestContext.Current.CancellationToken);
 
         // Assert
         column.Should().NotBeNull();
@@ -236,7 +236,7 @@ public class SchemaManagerTests
         column.IsNullable.Should().BeFalse();
 
         // Verify metadata was updated
-        var storedTable = await _metadataRepository.GetTableByIdAsync(table.TableId, includeColumns: true);
+        var storedTable = await _metadataRepository.GetTableByIdAsync(table.TableId, includeColumns: true, TestContext.Current.CancellationToken);
         storedTable!.Columns.Should().HaveCount(initialColumnCount + 1);
         storedTable.Columns.Should().Contain(c => c.LogicalName == "price");
     }
@@ -267,7 +267,7 @@ public class SchemaManagerTests
             ]
         };
 
-        var table = await _schemaManager.CreateTableAsync(createTableRequest);
+        var table = await _schemaManager.CreateTableAsync(createTableRequest, TestContext.Current.CancellationToken);
         var customerIdColumn = table.Columns.First(c => c.LogicalName == "customer_id");
 
         var createIndexRequest = new CreateIndexRequest
@@ -280,7 +280,7 @@ public class SchemaManagerTests
         };
 
         // Act
-        var index = await _schemaManager.CreateIndexAsync(createIndexRequest);
+        var index = await _schemaManager.CreateIndexAsync(createIndexRequest, TestContext.Current.CancellationToken);
 
         // Assert
         index.Should().NotBeNull();
@@ -289,7 +289,7 @@ public class SchemaManagerTests
         index.IsUnique.Should().BeFalse();
 
         // Verify metadata was persisted
-        var indexes = await _metadataRepository.GetIndexesByTableIdAsync(table.TableId);
+        var indexes = await _metadataRepository.GetIndexesByTableIdAsync(table.TableId, TestContext.Current.CancellationToken);
         indexes.Should().Contain(i => i.LogicalName == "idx_orders_customer");
     }
 
@@ -313,7 +313,7 @@ public class SchemaManagerTests
                     IsNullable = false
                 }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Create child table (orders)
         var ordersTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
@@ -329,7 +329,7 @@ public class SchemaManagerTests
                     IsNullable = false
                 }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         var sourceColumn = ordersTable.Columns.First(c => c.LogicalName == "customer_id");
         var targetColumn = customersTable.Columns.First(c => c.LogicalName == "_id");
@@ -347,7 +347,7 @@ public class SchemaManagerTests
         };
 
         // Act
-        var relation = await _schemaManager.CreateRelationAsync(createRelationRequest);
+        var relation = await _schemaManager.CreateRelationAsync(createRelationRequest, TestContext.Current.CancellationToken);
 
         // Assert
         relation.Should().NotBeNull();
@@ -356,7 +356,7 @@ public class SchemaManagerTests
         relation.OnDelete.Should().Be(OnDeleteAction.Cascade);
 
         // Verify metadata was persisted
-        var relations = await _metadataRepository.GetRelationsByTableIdAsync(ordersTable.TableId);
+        var relations = await _metadataRepository.GetRelationsByTableIdAsync(ordersTable.TableId, TestContext.Current.CancellationToken);
         relations.Should().Contain(r => r.LogicalName == "fk_orders_customer");
     }
 
@@ -380,10 +380,10 @@ public class SchemaManagerTests
             ]
         };
 
-        var created = await _schemaManager.CreateTableAsync(createTableRequest);
+        var created = await _schemaManager.CreateTableAsync(createTableRequest, TestContext.Current.CancellationToken);
 
         // Act
-        var result = await _schemaManager.GetTableByIdAsync(created.TableId);
+        var result = await _schemaManager.GetTableByIdAsync(created.TableId, TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().NotBeNull();
@@ -413,10 +413,10 @@ public class SchemaManagerTests
             ]
         };
 
-        await _schemaManager.CreateTableAsync(createTableRequest);
+        await _schemaManager.CreateTableAsync(createTableRequest, TestContext.Current.CancellationToken);
 
         // Act
-        var result = await _schemaManager.GetTableAsync(projectId, logicalName);
+        var result = await _schemaManager.GetTableAsync(projectId, logicalName, TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().NotBeNull();
@@ -444,7 +444,7 @@ public class SchemaManagerTests
         };
 
         // Act
-        var result = await _schemaManager.CreateTableAsync(request);
+        var result = await _schemaManager.CreateTableAsync(request, TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().NotBeNull();
@@ -496,7 +496,7 @@ public class SchemaManagerTests
                     DataType = MorphDataType.Text
                 }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
@@ -510,10 +510,10 @@ public class SchemaManagerTests
                     DataType = MorphDataType.Text
                 }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Act
-        var tables = await _schemaManager.ListTablesAsync(projectId);
+        var tables = await _schemaManager.ListTablesAsync(projectId, TestContext.Current.CancellationToken);
 
         // Assert
         tables.Should().HaveCountGreaterThanOrEqualTo(2);
@@ -540,20 +540,20 @@ public class SchemaManagerTests
             // Unique: a relation targets a key, and PostgreSQL refuses a foreign key to a column
             // nothing guarantees is unique.
             Columns = [new CreateColumnRequest { LogicalName = "code", DataType = MorphDataType.Text, IsUnique = true }]
-        });
+        }, TestContext.Current.CancellationToken);
         var child = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
             ProjectId = projectId,
             LogicalName = "cascade_child_" + suffix,
             Columns = [new CreateColumnRequest { LogicalName = "parent_code", DataType = MorphDataType.Text }]
-        });
+        }, TestContext.Current.CancellationToken);
 
         await _schemaManager.CreateIndexAsync(new CreateIndexRequest
         {
             TableId = parent.TableId,
             LogicalName = "ix_cascade_" + suffix,
             ColumnIds = [parent.Columns.First(c => c.LogicalName == "code").ColumnId]
-        });
+        }, TestContext.Current.CancellationToken);
         await _schemaManager.CreateRelationAsync(new CreateRelationRequest
         {
             ProjectId = projectId,
@@ -563,7 +563,7 @@ public class SchemaManagerTests
             TargetTableId = parent.TableId,
             TargetColumnId = parent.Columns.First(c => c.LogicalName == "code").ColumnId,
             RelationType = RelationType.OneToMany
-        });
+        }, TestContext.Current.CancellationToken);
 
         // The child holds the foreign key, so it is the side that can be dropped. (Deleting the
         // target side is a separate matter — the physical DROP has nothing to cascade with.)
@@ -572,25 +572,25 @@ public class SchemaManagerTests
             TableId = child.TableId,
             LogicalName = "ix_cascade_child_" + suffix,
             ColumnIds = [child.Columns.First(c => c.LogicalName == "parent_code").ColumnId]
-        });
+        }, TestContext.Current.CancellationToken);
 
-        (await _metadataRepository.GetColumnsByTableIdAsync(child.TableId)).Should().NotBeEmpty();
-        (await _metadataRepository.GetIndexesByTableIdAsync(child.TableId)).Should().NotBeEmpty();
-        (await _metadataRepository.GetRelationsByTableIdAsync(child.TableId)).Should().NotBeEmpty();
+        (await _metadataRepository.GetColumnsByTableIdAsync(child.TableId, TestContext.Current.CancellationToken)).Should().NotBeEmpty();
+        (await _metadataRepository.GetIndexesByTableIdAsync(child.TableId, TestContext.Current.CancellationToken)).Should().NotBeEmpty();
+        (await _metadataRepository.GetRelationsByTableIdAsync(child.TableId, TestContext.Current.CancellationToken)).Should().NotBeEmpty();
 
-        await _schemaManager.DeleteTableAsync(child.TableId);
+        await _schemaManager.DeleteTableAsync(child.TableId, TestContext.Current.CancellationToken);
 
-        (await _metadataRepository.GetColumnsByTableIdAsync(child.TableId))
+        (await _metadataRepository.GetColumnsByTableIdAsync(child.TableId, TestContext.Current.CancellationToken))
             .Should().BeEmpty("the columns went with the table that held them");
-        (await _metadataRepository.GetIndexesByTableIdAsync(child.TableId))
+        (await _metadataRepository.GetIndexesByTableIdAsync(child.TableId, TestContext.Current.CancellationToken))
             .Should().BeEmpty("dropping the table dropped its indexes physically too");
-        (await _metadataRepository.GetRelationsByTableIdAsync(child.TableId))
+        (await _metadataRepository.GetRelationsByTableIdAsync(child.TableId, TestContext.Current.CancellationToken))
             .Should().BeEmpty("a relation whose source table is gone is not a relation");
 
         // The cascade follows the deleted table, not the project: the other side is untouched.
-        (await _metadataRepository.GetColumnsByTableIdAsync(parent.TableId))
+        (await _metadataRepository.GetColumnsByTableIdAsync(parent.TableId, TestContext.Current.CancellationToken))
             .Should().NotBeEmpty("the surviving table keeps its columns");
-        (await _metadataRepository.GetIndexesByTableIdAsync(parent.TableId))
+        (await _metadataRepository.GetIndexesByTableIdAsync(parent.TableId, TestContext.Current.CancellationToken))
             .Should().NotBeEmpty("and its indexes");
     }
 
@@ -610,13 +610,13 @@ public class SchemaManagerTests
             ProjectId = projectId,
             LogicalName = "referenced_" + suffix,
             Columns = [new CreateColumnRequest { LogicalName = "code", DataType = MorphDataType.Text, IsUnique = true }]
-        });
+        }, TestContext.Current.CancellationToken);
         var source = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
             ProjectId = projectId,
             LogicalName = "referencing_" + suffix,
             Columns = [new CreateColumnRequest { LogicalName = "target_code", DataType = MorphDataType.Text }]
-        });
+        }, TestContext.Current.CancellationToken);
 
         await _schemaManager.CreateRelationAsync(new CreateRelationRequest
         {
@@ -627,7 +627,7 @@ public class SchemaManagerTests
             TargetTableId = target.TableId,
             TargetColumnId = target.Columns.First(c => c.LogicalName == "code").ColumnId,
             RelationType = RelationType.OneToMany
-        });
+        }, TestContext.Current.CancellationToken);
 
         var act = () => _schemaManager.DeleteTableAsync(target.TableId);
 

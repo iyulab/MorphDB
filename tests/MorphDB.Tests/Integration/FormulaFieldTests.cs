@@ -84,7 +84,7 @@ public class FormulaFieldTests
                     }
                 }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Assert
         table.Should().NotBeNull();
@@ -143,10 +143,10 @@ public class FormulaFieldTests
                     }
                 }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Act - Retrieve the table to verify persistence
-        var storedTable = await _metadataRepository.GetTableByIdAsync(table.TableId, includeColumns: true);
+        var storedTable = await _metadataRepository.GetTableByIdAsync(table.TableId, includeColumns: true, TestContext.Current.CancellationToken);
 
         // Assert
         storedTable.Should().NotBeNull();
@@ -184,7 +184,7 @@ public class FormulaFieldTests
                     IsNullable = false
                 }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         var addColumnRequest = new AddColumnRequest
         {
@@ -201,7 +201,7 @@ public class FormulaFieldTests
         };
 
         // Act
-        var newColumn = await _schemaManager.AddColumnAsync(addColumnRequest);
+        var newColumn = await _schemaManager.AddColumnAsync(addColumnRequest, TestContext.Current.CancellationToken);
 
         // Assert
         newColumn.Should().NotBeNull();
@@ -280,7 +280,7 @@ public class FormulaFieldTests
                     }
                 }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Assert
         table.Should().NotBeNull();
@@ -336,10 +336,10 @@ public class FormulaFieldTests
                     }
                 }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Act - Query PostgreSQL to check actual physical columns
-        await using var connection = await _fixture.DataSource.OpenConnectionAsync();
+        await using var connection = await _fixture.DataSource.OpenConnectionAsync(TestContext.Current.CancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = $"""
             SELECT column_name
@@ -349,8 +349,8 @@ public class FormulaFieldTests
             """;
 
         var physicalColumns = new List<string>();
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        await using var reader = await command.ExecuteReaderAsync(TestContext.Current.CancellationToken);
+        while (await reader.ReadAsync(TestContext.Current.CancellationToken))
         {
             physicalColumns.Add(reader.GetString(0));
         }
@@ -403,7 +403,7 @@ public class FormulaFieldTests
                     }
                 }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Assert
         var formulaColumn = table.Columns.First(c => c.LogicalName == "grade");
@@ -445,7 +445,7 @@ public class FormulaFieldTests
                     }
                 }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Assert
         var formulaColumn = table.Columns.First(c => c.LogicalName == "age_days");
@@ -518,7 +518,7 @@ public class FormulaFieldTests
                     }
                 }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Assert
         table.Should().NotBeNull();

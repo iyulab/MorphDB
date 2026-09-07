@@ -49,7 +49,7 @@ public class SecurityApiTests
     {
         var tableName = await SetupTestTableAsync();
 
-        var response = await _client.GetAsync($"/api/security/policies/{tableName}");
+        var response = await _client.GetAsync($"/api/security/policies/{tableName}", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK,
             "the service is unauthenticated by design; there is no identity it could demand");
@@ -61,11 +61,11 @@ public class SecurityApiTests
         var tableName = await SetupTestTableAsync();
 
         var insert = await _client.PostAsJsonAsync($"/api/data/{tableName}",
-            new Dictionary<string, object?> { ["name"] = "visible before the policy" });
+            new Dictionary<string, object?> { ["name"] = "visible before the policy" }, TestContext.Current.CancellationToken);
         insert.StatusCode.Should().Be(HttpStatusCode.Created);
 
         var before = await _client.GetFromJsonAsync<PagedResponse<DataRecordResponse>>(
-            $"/api/data/{tableName}");
+            $"/api/data/{tableName}", TestContext.Current.CancellationToken);
         before!.Data.Should().HaveCount(1, "the row exists and no policy restricts it yet");
 
         var policy = await _client.PostAsJsonAsync("/api/security/policies", new CreateSecurityPolicyRequest
@@ -74,11 +74,11 @@ public class SecurityApiTests
             TableName = tableName,
             PolicyType = PolicyType.Select,
             Expression = "1 = 0"
-        });
+        }, TestContext.Current.CancellationToken);
         policy.StatusCode.Should().Be(HttpStatusCode.Created);
 
         var after = await _client.GetFromJsonAsync<PagedResponse<DataRecordResponse>>(
-            $"/api/data/{tableName}");
+            $"/api/data/{tableName}", TestContext.Current.CancellationToken);
         after!.Data.Should().BeEmpty(
             "the policy filters every row; if this holds rows, policy evaluation was skipped — " +
             "the ambient security context is not reaching the query layer");

@@ -58,21 +58,21 @@ public class RedisSchemaCacheTests
         var tableA = MakeTable(projectId, "orders");
         var tableB = MakeTable(projectId, "customers");
 
-        await cache.SetTableAsync(tableA);
-        await cache.SetTableAsync(tableB);
+        await cache.SetTableAsync(tableA, TestContext.Current.CancellationToken);
+        await cache.SetTableAsync(tableB, TestContext.Current.CancellationToken);
 
-        (await cache.GetTableAsync(projectId, "orders")).Should().NotBeNull(
+        (await cache.GetTableAsync(projectId, "orders", TestContext.Current.CancellationToken)).Should().NotBeNull(
             "the cache write above must be visible before invalidation is exercised");
-        (await cache.GetTableAsync(projectId, "customers")).Should().NotBeNull();
+        (await cache.GetTableAsync(projectId, "customers", TestContext.Current.CancellationToken)).Should().NotBeNull();
 
-        await cache.InvalidateAllAsync();
+        await cache.InvalidateAllAsync(TestContext.Current.CancellationToken);
 
-        (await cache.GetTableAsync(projectId, "orders")).Should().BeNull(
+        (await cache.GetTableAsync(projectId, "orders", TestContext.Current.CancellationToken)).Should().BeNull(
             "InvalidateAllAsync used to just log a warning (SchemaCacheLogs.InvalidateAllRequested) and delete nothing");
-        (await cache.GetTableAsync(projectId, "customers")).Should().BeNull();
-        (await cache.GetTableByIdAsync(tableA.TableId)).Should().BeNull(
+        (await cache.GetTableAsync(projectId, "customers", TestContext.Current.CancellationToken)).Should().BeNull();
+        (await cache.GetTableByIdAsync(tableA.TableId, TestContext.Current.CancellationToken)).Should().BeNull(
             "SetTableAsync writes a second id-keyed entry per table; invalidate-all must clear both");
-        (await cache.GetTablesAsync(projectId)).Should().BeNull();
+        (await cache.GetTablesAsync(projectId, TestContext.Current.CancellationToken)).Should().BeNull();
     }
 
     [Fact]
@@ -84,13 +84,13 @@ public class RedisSchemaCacheTests
         var cacheB = CreateCache(keyPrefixB);
 
         var projectId = Guid.NewGuid();
-        await cacheA.SetTableAsync(MakeTable(projectId, "orders"));
-        await cacheB.SetTableAsync(MakeTable(projectId, "orders"));
+        await cacheA.SetTableAsync(MakeTable(projectId, "orders"), TestContext.Current.CancellationToken);
+        await cacheB.SetTableAsync(MakeTable(projectId, "orders"), TestContext.Current.CancellationToken);
 
-        await cacheA.InvalidateAllAsync();
+        await cacheA.InvalidateAllAsync(TestContext.Current.CancellationToken);
 
-        (await cacheA.GetTableAsync(projectId, "orders")).Should().BeNull();
-        (await cacheB.GetTableAsync(projectId, "orders")).Should().NotBeNull(
+        (await cacheA.GetTableAsync(projectId, "orders", TestContext.Current.CancellationToken)).Should().BeNull();
+        (await cacheB.GetTableAsync(projectId, "orders", TestContext.Current.CancellationToken)).Should().NotBeNull(
             "a differently-prefixed cache instance shares the same Redis but not the same namespace");
     }
 }

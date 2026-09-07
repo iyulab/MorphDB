@@ -79,11 +79,11 @@ public class TransactionApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}?mode=draft", data);
+        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}?mode=draft", data, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Created);
-        var result = await response.Content.ReadFromJsonAsync<DataRecordResponse>();
+        var result = await response.Content.ReadFromJsonAsync<DataRecordResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
         result!.Data["_row_state"]?.ToString().Should().Be("draft");
     }
@@ -100,11 +100,11 @@ public class TransactionApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}?mode=draft", data);
+        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}?mode=draft", data, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         error!.Code.Should().Be("ROW_STATE_NOT_ENABLED");
     }
 
@@ -121,11 +121,11 @@ public class TransactionApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}", data);
+        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}", data, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Created);
-        var result = await response.Content.ReadFromJsonAsync<DataRecordResponse>();
+        var result = await response.Content.ReadFromJsonAsync<DataRecordResponse>(TestContext.Current.CancellationToken);
         result!.Data["_row_state"]?.ToString().Should().Be("valid");
     }
 
@@ -144,7 +144,7 @@ public class TransactionApiTests
         {
             ["name"] = "Draft",
             ["email"] = "draft@test.com"
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Insert valid record
         await _client.PostAsJsonAsync($"/api/data/{tableName}", new Dictionary<string, object?>
@@ -152,19 +152,19 @@ public class TransactionApiTests
             ["name"] = "Valid",
             ["email"] = "valid@test.com",
             ["score"] = 50
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Act - Query only valid records
-        var validResponse = await _client.GetAsync($"/api/data/{tableName}?state=valid");
-        var validResult = await validResponse.Content.ReadFromJsonAsync<PagedResponse<DataRecordResponse>>();
+        var validResponse = await _client.GetAsync($"/api/data/{tableName}?state=valid", TestContext.Current.CancellationToken);
+        var validResult = await validResponse.Content.ReadFromJsonAsync<PagedResponse<DataRecordResponse>>(TestContext.Current.CancellationToken);
 
         // Act - Query only draft records
-        var draftResponse = await _client.GetAsync($"/api/data/{tableName}?state=draft");
-        var draftResult = await draftResponse.Content.ReadFromJsonAsync<PagedResponse<DataRecordResponse>>();
+        var draftResponse = await _client.GetAsync($"/api/data/{tableName}?state=draft", TestContext.Current.CancellationToken);
+        var draftResult = await draftResponse.Content.ReadFromJsonAsync<PagedResponse<DataRecordResponse>>(TestContext.Current.CancellationToken);
 
         // Act - Query all records
-        var allResponse = await _client.GetAsync($"/api/data/{tableName}?state=all");
-        var allResult = await allResponse.Content.ReadFromJsonAsync<PagedResponse<DataRecordResponse>>();
+        var allResponse = await _client.GetAsync($"/api/data/{tableName}?state=all", TestContext.Current.CancellationToken);
+        var allResult = await allResponse.Content.ReadFromJsonAsync<PagedResponse<DataRecordResponse>>(TestContext.Current.CancellationToken);
 
         // Assert
         validResult!.Data.Should().HaveCount(1);
@@ -192,17 +192,17 @@ public class TransactionApiTests
             ["name"] = "Complete Draft",
             ["email"] = "complete@test.com",
             ["score"] = 75
-        });
-        var inserted = await insertResponse.Content.ReadFromJsonAsync<DataRecordResponse>();
+        }, TestContext.Current.CancellationToken);
+        var inserted = await insertResponse.Content.ReadFromJsonAsync<DataRecordResponse>(TestContext.Current.CancellationToken);
 
         // Act
         var finalizeResponse = await _client.PatchAsync(
             $"/api/data/{tableName}/{inserted!.Id}/finalize",
-            null);
+            null, TestContext.Current.CancellationToken);
 
         // Assert
         finalizeResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-        var result = await finalizeResponse.Content.ReadFromJsonAsync<FinalizeApiResponse>();
+        var result = await finalizeResponse.Content.ReadFromJsonAsync<FinalizeApiResponse>(TestContext.Current.CancellationToken);
         result!.Results.Should().HaveCount(1);
         result.Results[0].Success.Should().BeTrue();
         result.Results[0].NewState.Should().Be("valid");
@@ -220,23 +220,23 @@ public class TransactionApiTests
         {
             ["name"] = "Incomplete",
             ["email"] = "" // Empty string for required field
-        });
-        var inserted = await insertResponse.Content.ReadFromJsonAsync<DataRecordResponse>();
+        }, TestContext.Current.CancellationToken);
+        var inserted = await insertResponse.Content.ReadFromJsonAsync<DataRecordResponse>(TestContext.Current.CancellationToken);
 
         // Update to set email as empty (should fail validation on finalize)
         await _client.PatchAsJsonAsync($"/api/data/{tableName}/{inserted!.Id}", new Dictionary<string, object?>
         {
             ["email"] = "" // Empty required field
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Act
         var finalizeResponse = await _client.PatchAsync(
             $"/api/data/{tableName}/{inserted.Id}/finalize",
-            null);
+            null, TestContext.Current.CancellationToken);
 
         // Assert - This should succeed but transition to error state
         finalizeResponse.StatusCode.Should().Be(HttpStatusCode.OK);
-        var result = await finalizeResponse.Content.ReadFromJsonAsync<FinalizeApiResponse>();
+        var result = await finalizeResponse.Content.ReadFromJsonAsync<FinalizeApiResponse>(TestContext.Current.CancellationToken);
 
         // Note: Actual behavior depends on validator implementation
         // The record should have _row_errors populated if validation fails
@@ -252,7 +252,7 @@ public class TransactionApiTests
         // Act
         var response = await _client.PatchAsync(
             $"/api/data/{tableName}/{nonExistentId}/finalize",
-            null);
+            null, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -273,19 +273,19 @@ public class TransactionApiTests
                 ["name"] = $"Bulk Draft {i}",
                 ["email"] = $"bulk{i}@test.com",
                 ["score"] = i * 10
-            });
-            var record = await insertResponse.Content.ReadFromJsonAsync<DataRecordResponse>();
+            }, TestContext.Current.CancellationToken);
+            var record = await insertResponse.Content.ReadFromJsonAsync<DataRecordResponse>(TestContext.Current.CancellationToken);
             ids.Add(record!.Id);
         }
 
         // Act
         var response = await _client.PostAsJsonAsync(
             $"/api/data/{tableName}/finalize",
-            new FinalizeApiRequest { RecordIds = ids });
+            new FinalizeApiRequest { RecordIds = ids }, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var result = await response.Content.ReadFromJsonAsync<FinalizeApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<FinalizeApiResponse>(TestContext.Current.CancellationToken);
         result!.Results.Should().HaveCount(3);
         result.ValidCount.Should().Be(3);
     }
@@ -332,11 +332,11 @@ public class TransactionApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/batch/transaction", transactionRequest);
+        var response = await _client.PostAsJsonAsync("/api/batch/transaction", transactionRequest, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var result = await response.Content.ReadFromJsonAsync<TransactionApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<TransactionApiResponse>(TestContext.Current.CancellationToken);
         result!.Success.Should().BeTrue();
         result.Results.Should().HaveCount(2);
         result.Results.Should().AllSatisfy(r => r.Success.Should().BeTrue());
@@ -355,8 +355,8 @@ public class TransactionApiTests
             ["name"] = "Original",
             ["email"] = "original@test.com",
             ["score"] = 1
-        });
-        var inserted = await insertResponse.Content.ReadFromJsonAsync<DataRecordResponse>();
+        }, TestContext.Current.CancellationToken);
+        var inserted = await insertResponse.Content.ReadFromJsonAsync<DataRecordResponse>(TestContext.Current.CancellationToken);
 
         var transactionRequest = new TransactionApiRequest
         {
@@ -376,18 +376,18 @@ public class TransactionApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/batch/transaction", transactionRequest);
+        var response = await _client.PostAsJsonAsync("/api/batch/transaction", transactionRequest, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var result = await response.Content.ReadFromJsonAsync<TransactionApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<TransactionApiResponse>(TestContext.Current.CancellationToken);
         result!.Success.Should().BeTrue();
         result.Results.Should().HaveCount(1);
         result.Results[0].Success.Should().BeTrue();
 
         // Verify the update actually landed
-        var getResponse = await _client.GetAsync($"/api/data/{tableName}/{inserted.Id}");
-        var updated = await getResponse.Content.ReadFromJsonAsync<DataRecordResponse>();
+        var getResponse = await _client.GetAsync($"/api/data/{tableName}/{inserted.Id}", TestContext.Current.CancellationToken);
+        var updated = await getResponse.Content.ReadFromJsonAsync<DataRecordResponse>(TestContext.Current.CancellationToken);
         updated!.Data["score"]?.ToString().Should().Be("99");
     }
 
@@ -429,11 +429,11 @@ public class TransactionApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/batch/transaction", transactionRequest);
+        var response = await _client.PostAsJsonAsync("/api/batch/transaction", transactionRequest, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var result = await response.Content.ReadFromJsonAsync<TransactionApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<TransactionApiResponse>(TestContext.Current.CancellationToken);
         result!.Success.Should().BeTrue();
         result.Results.Should().HaveCount(2);
         result.Results.Should().AllSatisfy(r => r.Success.Should().BeTrue());
@@ -451,8 +451,8 @@ public class TransactionApiTests
             ["name"] = "ToDelete",
             ["email"] = "delete@test.com",
             ["score"] = 5
-        });
-        var inserted = await insertResponse.Content.ReadFromJsonAsync<DataRecordResponse>();
+        }, TestContext.Current.CancellationToken);
+        var inserted = await insertResponse.Content.ReadFromJsonAsync<DataRecordResponse>(TestContext.Current.CancellationToken);
 
         var transactionRequest = new TransactionApiRequest
         {
@@ -468,18 +468,18 @@ public class TransactionApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/batch/transaction", transactionRequest);
+        var response = await _client.PostAsJsonAsync("/api/batch/transaction", transactionRequest, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var result = await response.Content.ReadFromJsonAsync<TransactionApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<TransactionApiResponse>(TestContext.Current.CancellationToken);
         result!.Success.Should().BeTrue();
         result.Results[0].Success.Should().BeTrue();
         result.Results[0].Id.Should().Be(inserted.Id,
             "the deleted record's own id, not Guid.Empty or null, must ride back on the result");
 
         // Verify the record is gone
-        var getResponse = await _client.GetAsync($"/api/data/{tableName}/{inserted.Id}");
+        var getResponse = await _client.GetAsync($"/api/data/{tableName}/{inserted.Id}", TestContext.Current.CancellationToken);
         getResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
@@ -490,7 +490,7 @@ public class TransactionApiTests
         var request = new TransactionApiRequest { Operations = [] };
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/batch/transaction", request);
+        var response = await _client.PostAsJsonAsync("/api/batch/transaction", request, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -530,14 +530,14 @@ public class TransactionApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/batch/transaction", transactionRequest);
+        var response = await _client.PostAsJsonAsync("/api/batch/transaction", transactionRequest, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
 
         // Verify first record was NOT inserted (atomic rollback)
-        var queryResponse = await _client.GetAsync($"/api/data/{tableName}?state=all");
-        var queryResult = await queryResponse.Content.ReadFromJsonAsync<PagedResponse<DataRecordResponse>>();
+        var queryResponse = await _client.GetAsync($"/api/data/{tableName}?state=all", TestContext.Current.CancellationToken);
+        var queryResult = await queryResponse.Content.ReadFromJsonAsync<PagedResponse<DataRecordResponse>>(TestContext.Current.CancellationToken);
         var hasRollbackEmail = queryResult!.Data.Any(r =>
             r.Data.TryGetValue("email", out var email) && email?.ToString() == "rollback@test.com");
         hasRollbackEmail.Should().BeFalse("first record should have been rolled back");
@@ -558,17 +558,17 @@ public class TransactionApiTests
         {
             ["name"] = "Draft",
             ["email"] = "d@test.com"
-        });
+        }, TestContext.Current.CancellationToken);
         await _client.PostAsJsonAsync($"/api/data/{tableName}", new Dictionary<string, object?>
         {
             ["name"] = "Valid",
             ["email"] = "v@test.com",
             ["score"] = 100
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Act - No state filter
-        var response = await _client.GetAsync($"/api/data/{tableName}");
-        var result = await response.Content.ReadFromJsonAsync<PagedResponse<DataRecordResponse>>();
+        var response = await _client.GetAsync($"/api/data/{tableName}", TestContext.Current.CancellationToken);
+        var result = await response.Content.ReadFromJsonAsync<PagedResponse<DataRecordResponse>>(TestContext.Current.CancellationToken);
 
         // Assert - Default behavior returns all records (backward compatible)
         result!.Data.Should().HaveCount(2);
@@ -581,8 +581,8 @@ public class TransactionApiTests
         var tableName = await SetupRowStateTableAsync();
 
         // Act
-        var response = await _client.GetAsync($"/api/schema/tables/{tableName}");
-        var table = await response.Content.ReadFromJsonAsync<TableApiResponse>();
+        var response = await _client.GetAsync($"/api/schema/tables/{tableName}", TestContext.Current.CancellationToken);
+        var table = await response.Content.ReadFromJsonAsync<TableApiResponse>(TestContext.Current.CancellationToken);
 
         // Assert
         table!.SystemColumns.RowState.Should().BeTrue();

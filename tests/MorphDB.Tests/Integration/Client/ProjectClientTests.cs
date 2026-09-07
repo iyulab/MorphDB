@@ -51,7 +51,7 @@ public class ProjectClientTests
             ProjectId = id,
             Name = "SDK round trip",
             Slug = slug,
-        });
+        }, TestContext.Current.CancellationToken);
 
         try
         {
@@ -59,25 +59,25 @@ public class ProjectClientTests
             created.Slug.Should().Be(slug);
             created.Status.Should().Be("active");
 
-            (await client.Projects.GetAsync(id))!.Name.Should().Be("SDK round trip");
-            (await client.Projects.GetBySlugAsync(slug))!.Id.Should().Be(id);
+            (await client.Projects.GetAsync(id, TestContext.Current.CancellationToken))!.Name.Should().Be("SDK round trip");
+            (await client.Projects.GetBySlugAsync(slug, TestContext.Current.CancellationToken))!.Id.Should().Be(id);
 
-            var renamed = await client.Projects.UpdateAsync(id, new UpdateProjectRequest { Name = "Renamed" });
+            var renamed = await client.Projects.UpdateAsync(id, new UpdateProjectRequest { Name = "Renamed" }, TestContext.Current.CancellationToken);
             renamed.Name.Should().Be("Renamed");
             renamed.Slug.Should().Be(slug, "renaming does not re-derive the slug an id was published under");
 
-            var stats = await client.Projects.GetStatsAsync(id);
+            var stats = await client.Projects.GetStatsAsync(id, TestContext.Current.CancellationToken);
             stats.ProjectId.Should().Be(id);
 
-            var health = await client.Projects.GetHealthAsync(id);
+            var health = await client.Projects.GetHealthAsync(id, TestContext.Current.CancellationToken);
             health.ProjectId.Should().Be(id);
         }
         finally
         {
-            await client.Projects.DeleteAsync(id);
+            await client.Projects.DeleteAsync(id, TestContext.Current.CancellationToken);
         }
 
-        (await client.Projects.GetAsync(id)).Should().BeNull("a deleted project is gone, not merely unreadable");
+        (await client.Projects.GetAsync(id, TestContext.Current.CancellationToken)).Should().BeNull("a deleted project is gone, not merely unreadable");
     }
 
     [Fact]
@@ -95,17 +95,17 @@ public class ProjectClientTests
             ProjectId = other,
             Name = "Not the scoped one",
             Slug = $"other-{other:N}"[..20],
-        });
+        }, TestContext.Current.CancellationToken);
 
         try
         {
             created.Id.Should().Be(other);
-            (await client.Projects.GetAsync(other))!.Id.Should().Be(other);
-            (await client.Projects.GetAsync(_fixture.Api.ProjectId))!.Id.Should().Be(_fixture.Api.ProjectId);
+            (await client.Projects.GetAsync(other, TestContext.Current.CancellationToken))!.Id.Should().Be(other);
+            (await client.Projects.GetAsync(_fixture.Api.ProjectId, TestContext.Current.CancellationToken))!.Id.Should().Be(_fixture.Api.ProjectId);
         }
         finally
         {
-            await client.Projects.DeleteAsync(other);
+            await client.Projects.DeleteAsync(other, TestContext.Current.CancellationToken);
         }
     }
 
@@ -114,7 +114,7 @@ public class ProjectClientTests
     {
         await using var client = ClientWithoutProject();
 
-        var page = await client.Projects.ListAsync(pageSize: 100);
+        var page = await client.Projects.ListAsync(pageSize: 100, cancellationToken: TestContext.Current.CancellationToken);
 
         page.Data.Should().NotBeEmpty("the fixture provisions a project before the server starts");
         page.Data.Should().Contain(p => p.Id == _fixture.Api.ProjectId);
@@ -126,8 +126,8 @@ public class ProjectClientTests
     {
         await using var client = ClientWithoutProject();
 
-        (await client.Projects.GetAsync(Guid.NewGuid())).Should().BeNull();
-        (await client.Projects.GetBySlugAsync($"absent-{Guid.NewGuid():N}"[..20])).Should().BeNull();
+        (await client.Projects.GetAsync(Guid.NewGuid(), TestContext.Current.CancellationToken)).Should().BeNull();
+        (await client.Projects.GetBySlugAsync($"absent-{Guid.NewGuid():N}"[..20], TestContext.Current.CancellationToken)).Should().BeNull();
     }
 
     [Fact]
@@ -142,7 +142,7 @@ public class ProjectClientTests
             Slug = $"taken-{id:N}"[..20],
         };
 
-        await client.Projects.CreateAsync(request);
+        await client.Projects.CreateAsync(request, TestContext.Current.CancellationToken);
 
         try
         {
@@ -160,7 +160,7 @@ public class ProjectClientTests
         }
         finally
         {
-            await client.Projects.DeleteAsync(id);
+            await client.Projects.DeleteAsync(id, TestContext.Current.CancellationToken);
         }
     }
 
@@ -185,11 +185,11 @@ public class ProjectClientTests
                 EnableAuditLog = false,
                 DefaultEnforceOnWrite = false,
             },
-        });
+        }, TestContext.Current.CancellationToken);
 
         try
         {
-            var stated = (await client.Projects.GetAsync(id))!.Settings!;
+            var stated = (await client.Projects.GetAsync(id, TestContext.Current.CancellationToken))!.Settings!;
             stated.DefaultLocale.Should().Be("en-GB");
             stated.EnableAuditLog.Should().BeFalse();
             stated.DefaultEnforceOnWrite.Should().BeFalse();
@@ -198,9 +198,9 @@ public class ProjectClientTests
             await client.Projects.UpdateAsync(id, new UpdateProjectRequest
             {
                 Settings = new ProjectSettings { Timezone = "Europe/London" },
-            });
+            }, TestContext.Current.CancellationToken);
 
-            var after = (await client.Projects.GetAsync(id))!.Settings!;
+            var after = (await client.Projects.GetAsync(id, TestContext.Current.CancellationToken))!.Settings!;
             after.Timezone.Should().Be("Europe/London");
             after.DefaultLocale.Should().BeNull("settings are stored by replacement, not merged");
             after.DefaultEnforceOnWrite.Should().BeTrue(
@@ -210,7 +210,7 @@ public class ProjectClientTests
         }
         finally
         {
-            await client.Projects.DeleteAsync(id);
+            await client.Projects.DeleteAsync(id, TestContext.Current.CancellationToken);
         }
     }
 }

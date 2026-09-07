@@ -141,7 +141,7 @@ public sealed class GracefulShutdownServiceTests : IDisposable
         {
             await Task.Delay(100);
             _service.CompleteRequest(requestId);
-        });
+        }, TestContext.Current.CancellationToken);
 
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         await _service.StopAsync(CancellationToken.None);

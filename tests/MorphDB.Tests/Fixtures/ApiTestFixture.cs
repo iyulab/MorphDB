@@ -39,7 +39,7 @@ public sealed class ApiTestFixture : IAsyncLifetime
     public HttpClient Client { get; private set; } = null!;
     public Guid ProjectId { get; } = Guid.NewGuid();
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         // Pre-provision the test project's project schema directly in the database.
         // This avoids the chicken-and-egg problem where the audit middleware tries
@@ -275,7 +275,7 @@ public sealed class ApiTestFixture : IAsyncLifetime
         });
     }
 
-    public Task DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         foreach (var factory in _secretFactories.Values)
         {
@@ -285,7 +285,7 @@ public sealed class ApiTestFixture : IAsyncLifetime
         _secretFactories.Clear();
         Client?.Dispose();
         _factory?.Dispose();
-        return Task.CompletedTask;
+        return ValueTask.CompletedTask;
     }
 }
 
@@ -297,14 +297,14 @@ public sealed class ApiIntegrationFixture : IAsyncLifetime
     public PostgresFixture Postgres { get; } = new();
     public ApiTestFixture Api { get; private set; } = null!;
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         await Postgres.InitializeAsync();
         Api = new ApiTestFixture(Postgres);
         await Api.InitializeAsync();
     }
 
-    public async Task DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         await Api.DisposeAsync();
         await Postgres.DisposeAsync();

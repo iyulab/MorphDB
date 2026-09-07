@@ -105,8 +105,8 @@ public class RelationEnforcementDefaultTests
         var patched = await _adminClient.PatchAsJsonAsync($"/api/projects/{projectId}", new
         {
             Settings = new ProjectSettingsApiModel { DefaultEnforceOnWrite = true },
-        });
-        patched.StatusCode.Should().Be(HttpStatusCode.OK, await patched.Content.ReadAsStringAsync());
+        }, TestContext.Current.CancellationToken);
+        patched.StatusCode.Should().Be(HttpStatusCode.OK, await patched.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
 
         // Relations have no read endpoint, so the stored value is read where it lives.
         (await StoredEnforcementAsync(relation.Id)).Should().BeFalse(

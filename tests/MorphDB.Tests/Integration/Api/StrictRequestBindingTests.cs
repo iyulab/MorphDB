@@ -107,7 +107,7 @@ public class StrictRequestBindingTests
         var tableName = await CreateTableAsync();
 
         var response = await _client.PostAsJsonAsync($"/api/data/{tableName}",
-            new Dictionary<string, object?> { ["grade"] = "vip" });
+            new Dictionary<string, object?> { ["grade"] = "vip" }, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Created);
     }
@@ -120,7 +120,7 @@ public class StrictRequestBindingTests
         var response = await _client.PostAsync($"/api/data/{tableName}/query",
             new StringContent(
                 """{"filter":{"$type":"condition","column":"grade","operator":"eq","value":"vip"},"pageSize":5}""",
-                Encoding.UTF8, "application/json"));
+                Encoding.UTF8, "application/json"), TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }

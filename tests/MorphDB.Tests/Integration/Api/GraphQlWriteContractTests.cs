@@ -74,9 +74,9 @@ public class GraphQlWriteContractTests
             new CreateColumnApiRequest { Name = "name", Type = "text", Nullable = false });
         var row = new Dictionary<string, object?> { ["name"] = "ok", ["ghost"] = 1 };
 
-        var rest = await _client.PostAsJsonAsync($"/api/data/{table}", row);
+        var rest = await _client.PostAsJsonAsync($"/api/data/{table}", row, TestContext.Current.CancellationToken);
         rest.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        var restBody = await rest.Content.ReadFromJsonAsync<ErrorResponse>();
+        var restBody = await rest.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         restBody!.Message.Should().Contain("ghost");
 
         var gql = await PostGraphQlAsync(CreateRecordMutation, new { table, data = row });
@@ -96,9 +96,9 @@ public class GraphQlWriteContractTests
             new CreateColumnApiRequest { Name = "name", Type = "text", Nullable = false });
         var row = new Dictionary<string, object?> { ["name"] = null };
 
-        var rest = await _client.PostAsJsonAsync($"/api/data/{table}", row);
+        var rest = await _client.PostAsJsonAsync($"/api/data/{table}", row, TestContext.Current.CancellationToken);
         rest.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        var restBody = await rest.Content.ReadFromJsonAsync<ErrorResponse>();
+        var restBody = await rest.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         restBody!.Message.Should().Contain("name");
 
         var gql = await PostGraphQlAsync(CreateRecordMutation, new { table, data = row });
@@ -115,9 +115,9 @@ public class GraphQlWriteContractTests
             new CreateColumnApiRequest { Name = "name", Type = "text", Nullable = false });
 
         var restInsert = await _client.PostAsJsonAsync($"/api/data/{table}",
-            new Dictionary<string, object?> { ["name"] = "via rest" });
+            new Dictionary<string, object?> { ["name"] = "via rest" }, TestContext.Current.CancellationToken);
         restInsert.StatusCode.Should().Be(HttpStatusCode.Created);
-        var restRow = (await restInsert.Content.ReadFromJsonAsync<DataRecordResponse>())!;
+        var restRow = (await restInsert.Content.ReadFromJsonAsync<DataRecordResponse>(TestContext.Current.CancellationToken))!;
 
         var gql = await PostGraphQlAsync(CreateRecordMutation,
             new { table, data = new Dictionary<string, object?> { ["name"] = "via graphql" } });
@@ -130,9 +130,9 @@ public class GraphQlWriteContractTests
         // Read both rows back through the same (REST) door and compare shapes there, so the
         // comparison cannot be confused by per-door serialization.
         var restReadBack = await _client.GetFromJsonAsync<DataRecordResponse>(
-            $"/api/data/{table}/{restRow.Id}");
+            $"/api/data/{table}/{restRow.Id}", TestContext.Current.CancellationToken);
         var gqlReadBack = await _client.GetFromJsonAsync<DataRecordResponse>(
-            $"/api/data/{table}/{gqlId}");
+            $"/api/data/{table}/{gqlId}", TestContext.Current.CancellationToken);
 
         gqlReadBack!.Data.Keys.Should().BeEquivalentTo(restReadBack!.Data.Keys,
             "a row is the same row whichever door admitted it — same declared and system columns");

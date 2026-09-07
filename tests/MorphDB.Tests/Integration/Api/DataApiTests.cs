@@ -54,12 +54,12 @@ public class DataApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}", data);
+        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}", data, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Created);
 
-        var result = await response.Content.ReadFromJsonAsync<DataRecordResponse>();
+        var result = await response.Content.ReadFromJsonAsync<DataRecordResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
         result!.Id.Should().NotBeEmpty();
         result.Data["name"]?.ToString().Should().Be("John Doe");
@@ -81,12 +81,12 @@ public class DataApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}", data);
+        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}", data, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Created);
 
-        var result = await response.Content.ReadFromJsonAsync<DataRecordResponse>();
+        var result = await response.Content.ReadFromJsonAsync<DataRecordResponse>(TestContext.Current.CancellationToken);
         result!.Id.Should().Be(customId);
     }
 
@@ -109,16 +109,16 @@ public class DataApiTests
                 ["email"] = $"user{i}@example.com",
                 ["age"] = 20 + i,
                 ["is_active"] = true
-            });
+            }, TestContext.Current.CancellationToken);
         }
 
         // Act
-        var response = await _client.GetAsync($"/api/data/{tableName}");
+        var response = await _client.GetAsync($"/api/data/{tableName}", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<PagedResponse<DataRecordResponse>>();
+        var result = await response.Content.ReadFromJsonAsync<PagedResponse<DataRecordResponse>>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
         result!.Data.Should().HaveCount(5);
         result.Pagination.TotalCount.Should().Be(5);
@@ -138,16 +138,16 @@ public class DataApiTests
                 ["email"] = $"user{i}@example.com",
                 ["age"] = 20 + i,
                 ["is_active"] = true
-            });
+            }, TestContext.Current.CancellationToken);
         }
 
         // Act
-        var response = await _client.GetAsync($"/api/data/{tableName}?page=2&pageSize=3");
+        var response = await _client.GetAsync($"/api/data/{tableName}?page=2&pageSize=3", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<PagedResponse<DataRecordResponse>>();
+        var result = await response.Content.ReadFromJsonAsync<PagedResponse<DataRecordResponse>>(TestContext.Current.CancellationToken);
         result!.Data.Should().HaveCount(3);
         result.Pagination.Page.Should().Be(2);
         result.Pagination.PageSize.Should().Be(3);
@@ -165,22 +165,22 @@ public class DataApiTests
             ["email"] = "alice@example.com",
             ["age"] = 25,
             ["is_active"] = true
-        });
+        }, TestContext.Current.CancellationToken);
         await _client.PostAsJsonAsync($"/api/data/{tableName}", new Dictionary<string, object?>
         {
             ["name"] = "Bob",
             ["email"] = "bob@example.com",
             ["age"] = 30,
             ["is_active"] = false
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Act
-        var response = await _client.GetAsync($"/api/data/{tableName}?filter=is_active:eq:true");
+        var response = await _client.GetAsync($"/api/data/{tableName}?filter=is_active:eq:true", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<PagedResponse<DataRecordResponse>>();
+        var result = await response.Content.ReadFromJsonAsync<PagedResponse<DataRecordResponse>>(TestContext.Current.CancellationToken);
         result!.Data.Should().HaveCount(1);
         result.Data[0].Data["name"]?.ToString().Should().Be("Alice");
     }
@@ -197,22 +197,22 @@ public class DataApiTests
             ["email"] = "charlie@example.com",
             ["age"] = 35,
             ["is_active"] = true
-        });
+        }, TestContext.Current.CancellationToken);
         await _client.PostAsJsonAsync($"/api/data/{tableName}", new Dictionary<string, object?>
         {
             ["name"] = "Alice",
             ["email"] = "alice@example.com",
             ["age"] = 25,
             ["is_active"] = true
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Act
-        var response = await _client.GetAsync($"/api/data/{tableName}?orderBy=name:asc");
+        var response = await _client.GetAsync($"/api/data/{tableName}?orderBy=name:asc", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<PagedResponse<DataRecordResponse>>();
+        var result = await response.Content.ReadFromJsonAsync<PagedResponse<DataRecordResponse>>(TestContext.Current.CancellationToken);
         result!.Data[0].Data["name"]?.ToString().Should().Be("Alice");
         result.Data[1].Data["name"]?.ToString().Should().Be("Charlie");
     }
@@ -229,15 +229,15 @@ public class DataApiTests
             ["email"] = "alice@example.com",
             ["age"] = 25,
             ["is_active"] = true
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Act
-        var response = await _client.GetAsync($"/api/data/{tableName}?select=name,email");
+        var response = await _client.GetAsync($"/api/data/{tableName}?select=name,email", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<PagedResponse<DataRecordResponse>>();
+        var result = await response.Content.ReadFromJsonAsync<PagedResponse<DataRecordResponse>>(TestContext.Current.CancellationToken);
         result!.Data[0].Data.Should().ContainKey("name");
         result.Data[0].Data.Should().ContainKey("email");
     }
@@ -257,16 +257,16 @@ public class DataApiTests
             ["email"] = "test@example.com",
             ["age"] = 28,
             ["is_active"] = true
-        });
-        var insertedRecord = await insertResponse.Content.ReadFromJsonAsync<DataRecordResponse>();
+        }, TestContext.Current.CancellationToken);
+        var insertedRecord = await insertResponse.Content.ReadFromJsonAsync<DataRecordResponse>(TestContext.Current.CancellationToken);
 
         // Act
-        var response = await _client.GetAsync($"/api/data/{tableName}/{insertedRecord!.Id}");
+        var response = await _client.GetAsync($"/api/data/{tableName}/{insertedRecord!.Id}", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<DataRecordResponse>();
+        var result = await response.Content.ReadFromJsonAsync<DataRecordResponse>(TestContext.Current.CancellationToken);
         result!.Id.Should().Be(insertedRecord.Id);
         result.Data["name"]?.ToString().Should().Be("Test User");
     }
@@ -278,7 +278,7 @@ public class DataApiTests
         var tableName = await SetupTestTableAsync();
 
         // Act
-        var response = await _client.GetAsync($"/api/data/{tableName}/{Guid.NewGuid()}");
+        var response = await _client.GetAsync($"/api/data/{tableName}/{Guid.NewGuid()}", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -299,8 +299,8 @@ public class DataApiTests
             ["email"] = "original@example.com",
             ["age"] = 25,
             ["is_active"] = true
-        });
-        var insertedRecord = await insertResponse.Content.ReadFromJsonAsync<DataRecordResponse>();
+        }, TestContext.Current.CancellationToken);
+        var insertedRecord = await insertResponse.Content.ReadFromJsonAsync<DataRecordResponse>(TestContext.Current.CancellationToken);
 
         var updateData = new Dictionary<string, object?>
         {
@@ -309,12 +309,12 @@ public class DataApiTests
         };
 
         // Act
-        var response = await _client.PatchAsJsonAsync($"/api/data/{tableName}/{insertedRecord!.Id}", updateData);
+        var response = await _client.PatchAsJsonAsync($"/api/data/{tableName}/{insertedRecord!.Id}", updateData, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<DataRecordResponse>();
+        var result = await response.Content.ReadFromJsonAsync<DataRecordResponse>(TestContext.Current.CancellationToken);
         result!.Data["name"]?.ToString().Should().Be("Updated Name");
     }
 
@@ -326,7 +326,7 @@ public class DataApiTests
 
         // Act
         var response = await _client.PatchAsJsonAsync($"/api/data/{tableName}/{Guid.NewGuid()}",
-            new Dictionary<string, object?> { ["name"] = "Test" });
+            new Dictionary<string, object?> { ["name"] = "Test" }, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -347,17 +347,17 @@ public class DataApiTests
             ["email"] = "delete@example.com",
             ["age"] = 30,
             ["is_active"] = true
-        });
-        var insertedRecord = await insertResponse.Content.ReadFromJsonAsync<DataRecordResponse>();
+        }, TestContext.Current.CancellationToken);
+        var insertedRecord = await insertResponse.Content.ReadFromJsonAsync<DataRecordResponse>(TestContext.Current.CancellationToken);
 
         // Act
-        var response = await _client.DeleteAsync($"/api/data/{tableName}/{insertedRecord!.Id}");
+        var response = await _client.DeleteAsync($"/api/data/{tableName}/{insertedRecord!.Id}", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         // Verify deletion
-        var getResponse = await _client.GetAsync($"/api/data/{tableName}/{insertedRecord.Id}");
+        var getResponse = await _client.GetAsync($"/api/data/{tableName}/{insertedRecord.Id}", TestContext.Current.CancellationToken);
         getResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
@@ -368,7 +368,7 @@ public class DataApiTests
         var tableName = await SetupTestTableAsync();
 
         // Act
-        var response = await _client.DeleteAsync($"/api/data/{tableName}/{Guid.NewGuid()}");
+        var response = await _client.DeleteAsync($"/api/data/{tableName}/{Guid.NewGuid()}", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -407,11 +407,11 @@ public class DataApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}", data);
+        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}", data, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Created);
-        var result = await response.Content.ReadFromJsonAsync<DataRecordResponse>();
+        var result = await response.Content.ReadFromJsonAsync<DataRecordResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
         result!.Data["sku"]?.ToString().Should().Be("SKU-001");
     }
@@ -428,7 +428,7 @@ public class DataApiTests
             ["name"] = "Widget",
             ["sku"] = "SKU-DUP"
         };
-        var first = await _client.PostAsJsonAsync($"/api/data/{tableName}", data);
+        var first = await _client.PostAsJsonAsync($"/api/data/{tableName}", data, TestContext.Current.CancellationToken);
         first.StatusCode.Should().Be(HttpStatusCode.Created);
 
         // Act — insert a second row with the same unique value
@@ -436,11 +436,11 @@ public class DataApiTests
         {
             ["name"] = "Widget Clone",
             ["sku"] = "SKU-DUP"
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Assert — unique violation surfaces as a validation error, not a 500
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         error!.Code.Should().Be("VALIDATION_ERROR");
     }
 
@@ -471,18 +471,18 @@ public class DataApiTests
                     Check = "status = 'active' OR status = 'pending'"
                 }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Act — insert a value that violates the CHECK constraint
         var response = await _client.PostAsJsonAsync($"/api/data/{tableName}", new Dictionary<string, object?>
         {
             ["name"] = "Test",
             ["status"] = "banned"
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Assert — rejected at the validation layer with a clean 400
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         error!.Code.Should().Be("VALIDATION_ERROR");
     }
 
@@ -505,14 +505,14 @@ public class DataApiTests
                     Check = "status = 'active' OR status = 'pending'"
                 }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Act
         var response = await _client.PostAsJsonAsync($"/api/data/{tableName}", new Dictionary<string, object?>
         {
             ["name"] = "Test",
             ["status"] = "active"
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Created);

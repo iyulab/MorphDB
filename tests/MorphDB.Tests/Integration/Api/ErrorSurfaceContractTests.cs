@@ -47,10 +47,10 @@ public class ErrorSurfaceContractTests
         {
             Name = $"errsurf_{Guid.NewGuid():N}"[..30],
             Columns = [new CreateColumnApiRequest { Name = "a", Type = "varchar2" }]
-        });
+        }, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         body!.Code.Should().Be("INVALID_ARGUMENT");
         body.Message.Should().Contain("varchar2").And.Contain("Supported types",
             "the caller should learn what is possible, not just that they failed");
@@ -69,10 +69,10 @@ public class ErrorSurfaceContractTests
             new CreateColumnApiRequest { Name = "title", Type = "text", Nullable = false });
 
         var response = await _client.PostAsJsonAsync($"/api/data/{table}",
-            new Dictionary<string, object?> { ["title"] = null });
+            new Dictionary<string, object?> { ["title"] = null }, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         body!.Error.Should().NotBe("InternalError", "a caller's null is not our defect");
         (body.Message ?? "").Should().Contain("title", "the caller must learn which column rejected the null");
     }
@@ -87,10 +87,10 @@ public class ErrorSurfaceContractTests
         var table = await CreateTableAsync(
             new CreateColumnApiRequest { Name = "email", Type = "text", Nullable = true });
 
-        var response = await _client.GetAsync($"/api/data/{table}?filter=email:zz:1");
+        var response = await _client.GetAsync($"/api/data/{table}?filter=email:zz:1", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         body!.Message.Should().Contain("zz").And.Contain("Supported operators");
     }
 
@@ -104,10 +104,10 @@ public class ErrorSurfaceContractTests
     {
         var response = await _client.PostAsJsonAsync(
             "/api/bulk/no_such_table/import/json",
-            new[] { new Dictionary<string, object?> { ["a"] = 1 } });
+            new[] { new Dictionary<string, object?> { ["a"] = 1 } }, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
-        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         body!.Code.Should().Be("TABLE_NOT_FOUND");
     }
 
@@ -122,10 +122,10 @@ public class ErrorSurfaceContractTests
         var table = await CreateTableAsync(
             new CreateColumnApiRequest { Name = "email", Type = "text", Nullable = true });
 
-        var response = await _client.GetAsync($"/api/data/{table}?filter=nosuch:eq:1");
+        var response = await _client.GetAsync($"/api/data/{table}?filter=nosuch:eq:1", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         body!.Code.Should().Be("COLUMN_NOT_FOUND");
         body.Message.Should().Contain("nosuch");
     }
@@ -142,10 +142,10 @@ public class ErrorSurfaceContractTests
         using var request = new HttpRequestMessage(HttpMethod.Get, "/api/data/customers");
         request.Headers.Add("X-Project-Id", ghostProject.ToString());
 
-        var response = await _client.SendAsync(request);
+        var response = await _client.SendAsync(request, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
-        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         body!.Code.Should().Be("TABLE_NOT_FOUND");
         (body.Message ?? "").Should().NotContain(ghostProject.ToString(),
             "internal identifiers do not belong in error text");
@@ -163,10 +163,10 @@ public class ErrorSurfaceContractTests
             new CreateColumnApiRequest { Name = "email", Type = "text", Nullable = true });
 
         var response = await _client.PostAsJsonAsync($"/api/data/{table}",
-            new Dictionary<string, object?> { ["email"] = "bob@example.com", ["emial_typo"] = "lost?" });
+            new Dictionary<string, object?> { ["email"] = "bob@example.com", ["emial_typo"] = "lost?" }, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         (body!.Message ?? "").Should().Contain("emial_typo");
         body.Code.Should().Be("UNKNOWN_COLUMN",
             "docs/API.md promises exactly this code for a write naming an undeclared column");
@@ -179,10 +179,10 @@ public class ErrorSurfaceContractTests
             new CreateColumnApiRequest { Name = "email", Type = "text", Nullable = true });
 
         var response = await _client.PostAsJsonAsync($"/api/data/{table}?ignoreUnknown=true",
-            new Dictionary<string, object?> { ["email"] = "bob@example.com", ["emial_typo"] = "dropped-by-consent" });
+            new Dictionary<string, object?> { ["email"] = "bob@example.com", ["emial_typo"] = "dropped-by-consent" }, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Created);
-        var body = await response.Content.ReadFromJsonAsync<DataRecordResponse>();
+        var body = await response.Content.ReadFromJsonAsync<DataRecordResponse>(TestContext.Current.CancellationToken);
         body!.Data.Should().ContainKey("email");
         body.Data.Should().NotContainKey("emial_typo");
     }
@@ -193,11 +193,11 @@ public class ErrorSurfaceContractTests
         var table = await CreateTableAsync(
             new CreateColumnApiRequest { Name = "email", Type = "text", Nullable = true });
         var created = await _client.PostAsJsonAsync($"/api/data/{table}",
-            new Dictionary<string, object?> { ["email"] = "a@example.com" });
-        var record = await created.Content.ReadFromJsonAsync<DataRecordResponse>();
+            new Dictionary<string, object?> { ["email"] = "a@example.com" }, TestContext.Current.CancellationToken);
+        var record = await created.Content.ReadFromJsonAsync<DataRecordResponse>(TestContext.Current.CancellationToken);
 
         var response = await _client.PatchAsJsonAsync($"/api/data/{table}/{record!.Id}",
-            new Dictionary<string, object?> { ["emial_typo"] = "lost?" });
+            new Dictionary<string, object?> { ["emial_typo"] = "lost?" }, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
@@ -217,10 +217,10 @@ public class ErrorSurfaceContractTests
         {
             data = new Dictionary<string, object?> { ["email"] = "b@example.com", ["emial_typo"] = "lost?" },
             keyColumns = (string[])["email"]
-        });
+        }, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         (body!.Message ?? "").Should().Contain("emial_typo");
     }
 
@@ -236,10 +236,10 @@ public class ErrorSurfaceContractTests
         {
             Name = $"errsurf_{Guid.NewGuid():N}"[..30],
             Columns = [new CreateColumnApiRequest { Name = "a", Type = "integer", Check = "a > (1" }]
-        });
+        }, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         (body!.Message ?? "").Should().Contain("a > (1", "the caller must recognise their own expression");
         (body.Message ?? "").Should().NotContain("col_", "physical column names are not contract");
     }
@@ -255,16 +255,16 @@ public class ErrorSurfaceContractTests
         var table = await CreateTableAsync(
             new CreateColumnApiRequest { Name = "score", Type = "integer", Nullable = true });
         await _client.PostAsJsonAsync($"/api/data/{table}",
-            new Dictionary<string, object?> { ["score"] = 1 });
+            new Dictionary<string, object?> { ["score"] = 1 }, TestContext.Current.CancellationToken);
 
         var response = await _client.PatchAsJsonAsync($"/api/batch/data/{table}", new
         {
             data = new Dictionary<string, object?> { ["scoer_typo"] = 100 },
             filter = "score:lt:50"
-        });
+        }, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        var body = await response.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         (body!.Message ?? "").Should().Contain("scoer_typo");
     }
 
@@ -280,11 +280,11 @@ public class ErrorSurfaceContractTests
         var table = await CreateTableAsync(
             new CreateColumnApiRequest { Name = "email", Type = "text", Nullable = true });
 
-        var response = await _client.GetAsync($"/api/data/{table}?filter=nosuch:eq:1");
+        var response = await _client.GetAsync($"/api/data/{table}?filter=nosuch:eq:1", TestContext.Current.CancellationToken);
 
         if ((int)response.StatusCode >= 500)
         {
-            var body = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+            var body = await response.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
             body.Should().NotBeNull("a 5xx with no body gives the caller nothing to branch on");
             body!.Code.Should().Be("INTERNAL_ERROR");
         }

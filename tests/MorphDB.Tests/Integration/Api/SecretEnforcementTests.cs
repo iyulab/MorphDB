@@ -65,11 +65,11 @@ public class SecretEnforcementTests
     [Fact]
     public async Task A_request_with_no_secret_is_refused_when_a_master_secret_is_injected()
     {
-        var response = await EnforcedClient().GetAsync("/api/schema/tables");
+        var response = await EnforcedClient().GetAsync("/api/schema/tables", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
 
-        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         error!.Code.Should().Be("UNAUTHENTICATED");
     }
 
@@ -81,7 +81,7 @@ public class SecretEnforcementTests
     {
         var client = _fixture.Api.WithMasterSecret(MasterSecret).CreateClient();
 
-        var response = await client.GetAsync("/api/schema/tables");
+        var response = await client.GetAsync("/api/schema/tables", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized,
             "an unauthenticated request must be refused on its own account, not only when it also " +
@@ -93,7 +93,7 @@ public class SecretEnforcementTests
     [Fact]
     public async Task An_unrecognized_secret_is_refused()
     {
-        var response = await EnforcedClient("mdb_not_a_real_secret").GetAsync("/api/schema/tables");
+        var response = await EnforcedClient("mdb_not_a_real_secret").GetAsync("/api/schema/tables", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
@@ -101,7 +101,7 @@ public class SecretEnforcementTests
     [Fact]
     public async Task The_master_secret_is_accepted()
     {
-        var response = await EnforcedClient(MasterSecret).GetAsync("/api/schema/tables");
+        var response = await EnforcedClient(MasterSecret).GetAsync("/api/schema/tables", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
@@ -112,7 +112,7 @@ public class SecretEnforcementTests
     [Fact]
     public async Task Without_an_injected_master_secret_nothing_is_required()
     {
-        var response = await _fixture.Api.Client.GetAsync("/api/schema/tables");
+        var response = await _fixture.Api.Client.GetAsync("/api/schema/tables", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
@@ -126,7 +126,7 @@ public class SecretEnforcementTests
     [InlineData("/metrics")]
     public async Task Machine_surfaces_answer_without_a_secret(string route)
     {
-        var response = await EnforcedClient().GetAsync(route);
+        var response = await EnforcedClient().GetAsync(route, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().NotBe(HttpStatusCode.Unauthorized,
             "an orchestrator polls health and a scraper collects metrics before any credential is " +
@@ -155,7 +155,7 @@ public class SecretEnforcementTests
             {
                 Name = $"escalation-attempt-{reserved}",
                 Role = reserved
-            });
+            }, TestContext.Current.CancellationToken);
 
             response.StatusCode.Should().Be(HttpStatusCode.BadRequest,
                 $"'{reserved}' is reserved: privilege must originate at start-up, never in-band");
@@ -168,7 +168,7 @@ public class SecretEnforcementTests
         var master = EnforcedClient(MasterSecret);
         var issued = await IssueAsync(master, "delegate", "writer");
 
-        var response = await EnforcedClient(issued).GetAsync("/api/security/secrets");
+        var response = await EnforcedClient(issued).GetAsync("/api/security/secrets", TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden,
             "issuing credentials is the master secret's authority alone");
@@ -180,16 +180,16 @@ public class SecretEnforcementTests
         var master = EnforcedClient(MasterSecret);
         var issued = await IssueAsync(master, "revocation-subject", "reader");
 
-        var before = await EnforcedClient(issued).GetAsync("/api/schema/tables");
+        var before = await EnforcedClient(issued).GetAsync("/api/schema/tables", TestContext.Current.CancellationToken);
         before.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var listed = await master.GetFromJsonAsync<List<SecretResponse>>("/api/security/secrets");
+        var listed = await master.GetFromJsonAsync<List<SecretResponse>>("/api/security/secrets", TestContext.Current.CancellationToken);
         var subject = listed!.First(s => s.Name == "revocation-subject");
 
-        var revoked = await master.DeleteAsync($"/api/security/secrets/{subject.SecretId}");
+        var revoked = await master.DeleteAsync($"/api/security/secrets/{subject.SecretId}", TestContext.Current.CancellationToken);
         revoked.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
-        var after = await EnforcedClient(issued).GetAsync("/api/schema/tables");
+        var after = await EnforcedClient(issued).GetAsync("/api/schema/tables", TestContext.Current.CancellationToken);
         after.StatusCode.Should().Be(HttpStatusCode.Unauthorized,
             "revocation that leaves the credential working is bookkeeping, not revocation");
     }
@@ -200,10 +200,10 @@ public class SecretEnforcementTests
         var master = EnforcedClient(MasterSecret);
         var confined = await IssueAsync(master, "confined", "reader", _fixture.Api.ProjectId);
 
-        var ownProject = await EnforcedClient(confined).GetAsync("/api/schema/tables");
+        var ownProject = await EnforcedClient(confined).GetAsync("/api/schema/tables", TestContext.Current.CancellationToken);
         ownProject.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var otherProject = await EnforcedClient(confined, Guid.NewGuid()).GetAsync("/api/schema/tables");
+        var otherProject = await EnforcedClient(confined, Guid.NewGuid()).GetAsync("/api/schema/tables", TestContext.Current.CancellationToken);
         otherProject.StatusCode.Should().Be(HttpStatusCode.Forbidden,
             "a project column that no check reads is a boundary that exists only in the schema");
     }
@@ -267,7 +267,7 @@ public class SecretEnforcementTests
                     IsNullable = true
                 }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         var policies = services.GetRequiredService<ISecurityPolicyService>();
         await policies.CreatePolicyAsync(_fixture.Api.ProjectId, new CreatePolicyRequest
@@ -276,10 +276,10 @@ public class SecretEnforcementTests
             TableName = tableName,
             PolicyType = PolicyType.Select,
             Expression = "{{role}} = 'analyst'"
-        });
+        }, TestContext.Current.CancellationToken);
 
         var clause = await policies.EvaluatePoliciesAsync(
-            _fixture.Api.ProjectId, tableName, PolicyType.Select, authenticated);
+            _fixture.Api.ProjectId, tableName, PolicyType.Select, authenticated, TestContext.Current.CancellationToken);
 
         clause.Should().NotBeNull();
         clause.Should().Contain("'analyst'",
@@ -317,7 +317,7 @@ public class SecretEnforcementTests
     [InlineData("/hubs/morph/negotiate")]
     public async Task Non_rest_surfaces_are_covered_too(string route)
     {
-        var response = await EnforcedClient().PostAsync(route, new StringContent("{}", Encoding.UTF8, "application/json"));
+        var response = await EnforcedClient().PostAsync(route, new StringContent("{}", Encoding.UTF8, "application/json"), TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized,
             $"{route} is not on the exemption list, so it must answer like every other endpoint -- " +
@@ -334,10 +334,10 @@ public class SecretEnforcementTests
         var master = EnforcedClient(MasterSecret);
         var issued = await IssueAsync(master, "audit-subject", "reader");
 
-        await EnforcedClient(issued).GetAsync("/api/schema/tables");
+        await EnforcedClient(issued).GetAsync("/api/schema/tables", TestContext.Current.CancellationToken);
 
         var auditService = _fixture.Api.Services.GetRequiredService<IAuditService>();
-        var entries = await auditService.QueryAsync(_fixture.Api.ProjectId, new AuditLogQuery());
+        var entries = await auditService.QueryAsync(_fixture.Api.ProjectId, new AuditLogQuery(), TestContext.Current.CancellationToken);
 
         var serialized = JsonSerializer.Serialize(entries);
 
@@ -349,7 +349,7 @@ public class SecretEnforcementTests
 
         // The other half: an audit trail that cannot say who acted is worth less than one that can,
         // and now that the caller is identified there is no reason to keep recording nobody.
-        var listed = await master.GetFromJsonAsync<List<SecretResponse>>("/api/security/secrets");
+        var listed = await master.GetFromJsonAsync<List<SecretResponse>>("/api/security/secrets", TestContext.Current.CancellationToken);
         var subject = listed!.First(s => s.Name == "audit-subject");
 
         serialized.Should().Contain(subject.SecretId.ToString(),

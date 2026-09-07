@@ -33,7 +33,7 @@ public class GraphQlSchemaIndependenceTests
             .Services
             .BuildServiceProvider();
 
-        var executor = await provider.GetRequestExecutorAsync();
+        var executor = await provider.GetRequestExecutorAsync(cancellationToken: TestContext.Current.CancellationToken);
 
         executor.Schema.QueryType.Should().NotBeNull("the schema's shape comes from CLR types");
     }
@@ -49,7 +49,7 @@ public class GraphQlSchemaIndependenceTests
             .Services
             .BuildServiceProvider();
 
-        var schema = (await provider.GetRequestExecutorAsync()).Schema;
+        var schema = (await provider.GetRequestExecutorAsync(cancellationToken: TestContext.Current.CancellationToken)).Schema;
 
         schema.QueryType.Fields.Should().Contain(f => f.Name == "tables",
             "the table listing is a dynamic-extension field and must survive a database-less build");

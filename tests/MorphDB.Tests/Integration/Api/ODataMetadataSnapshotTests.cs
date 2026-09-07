@@ -70,7 +70,7 @@ public class ODataMetadataSnapshotTests
     {
         var entityTypeName = await CreateCoveringTableAsync();
 
-        var metadata = XDocument.Parse(await _client.GetStringAsync("/odata/$metadata"));
+        var metadata = XDocument.Parse(await _client.GetStringAsync("/odata/$metadata", TestContext.Current.CancellationToken));
 
         var entity = metadata.Descendants(Edm + "EntityType")
             .Single(e => (string?)e.Attribute("Name") == entityTypeName);

@@ -45,10 +45,10 @@ public class ProjectSettingsReplacementTests
         var patched = await _client.PatchAsJsonAsync($"/api/projects/{projectId}", new
         {
             Settings = new ProjectSettingsApiModel { AuditLogRetentionDays = 7 },
-        });
-        patched.StatusCode.Should().Be(HttpStatusCode.OK, await patched.Content.ReadAsStringAsync());
+        }, TestContext.Current.CancellationToken);
+        patched.StatusCode.Should().Be(HttpStatusCode.OK, await patched.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
 
-        var settings = (await patched.Content.ReadFromJsonAsync<ProjectApiResponse>())!.Settings!;
+        var settings = (await patched.Content.ReadFromJsonAsync<ProjectApiResponse>(TestContext.Current.CancellationToken))!.Settings!;
 
         settings.AuditLogRetentionDays.Should().Be(7, "the field they sent is the field they changed");
         settings.Timezone.Should().BeNull(
@@ -76,10 +76,10 @@ public class ProjectSettingsReplacementTests
                 DefaultEnforceOnWrite = false,
                 Timezone = "Asia/Seoul",
             },
-        });
+        }, TestContext.Current.CancellationToken);
         patched.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var settings = (await patched.Content.ReadFromJsonAsync<ProjectApiResponse>())!.Settings!;
+        var settings = (await patched.Content.ReadFromJsonAsync<ProjectApiResponse>(TestContext.Current.CancellationToken))!.Settings!;
         settings.AuditLogRetentionDays.Should().Be(7);
         settings.Timezone.Should().Be("Asia/Seoul");
         settings.DefaultEnforceOnWrite.Should().BeFalse();

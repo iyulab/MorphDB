@@ -37,11 +37,11 @@ public class ProjectScopeContractTests
     [MemberData(nameof(ScopedGetEndpoints))]
     public async Task An_endpoint_that_needs_a_project_says_so_the_same_way(string route)
     {
-        var response = await _clientWithoutProject.GetAsync(route);
+        var response = await _clientWithoutProject.GetAsync(route, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
 
-        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         error!.Code.Should().Be("MISSING_PROJECT",
             "the answer must carry a code callers can branch on, not just prose");
     }
@@ -57,11 +57,11 @@ public class ProjectScopeContractTests
     {
         var response = await _clientWithoutProject.PostAsJsonAsync(
             "/api/data/anything",
-            new { name = "value" });
+            new { name = "value" }, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
 
-        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         error!.Code.Should().Be("MISSING_PROJECT");
     }
 }

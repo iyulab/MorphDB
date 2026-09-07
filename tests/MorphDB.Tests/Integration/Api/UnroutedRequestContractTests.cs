@@ -44,10 +44,10 @@ public class UnroutedRequestContractTests
     [InlineData("/not-even-the-api")]
     public async Task A_url_that_matches_no_route_is_answered_without_an_envelope(string path)
     {
-        var response = await _client.GetAsync(path);
+        var response = await _client.GetAsync(path, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
-        (await response.Content.ReadAsStringAsync()).Should().BeEmpty(
+        (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).Should().BeEmpty(
             "nothing in this API handled the request, so there is no code for a caller to branch on — " +
             "docs/API.md says so, and a body appearing here would mean callers can assume more than that");
     }

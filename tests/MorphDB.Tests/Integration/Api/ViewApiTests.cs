@@ -92,12 +92,12 @@ public class ViewApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/views", request);
+        var response = await _client.PostAsJsonAsync("/api/views", request, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Created);
 
-        var view = await response.Content.ReadFromJsonAsync<ViewApiResponse>();
+        var view = await response.Content.ReadFromJsonAsync<ViewApiResponse>(TestContext.Current.CancellationToken);
         view.Should().NotBeNull();
         view!.Name.Should().Be(viewName);
         view.BaseTable.Should().Be(baseTable);
@@ -127,12 +127,12 @@ public class ViewApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/views", request);
+        var response = await _client.PostAsJsonAsync("/api/views", request, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Created);
 
-        var view = await response.Content.ReadFromJsonAsync<ViewApiResponse>();
+        var view = await response.Content.ReadFromJsonAsync<ViewApiResponse>(TestContext.Current.CancellationToken);
         view.Should().NotBeNull();
         view!.Name.Should().Be(viewName);
     }
@@ -164,11 +164,11 @@ public class ViewApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/views", request);
+        var response = await _client.PostAsJsonAsync("/api/views", request, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Created);
-        var view = await response.Content.ReadFromJsonAsync<ViewApiResponse>();
+        var view = await response.Content.ReadFromJsonAsync<ViewApiResponse>(TestContext.Current.CancellationToken);
         view!.Name.Should().Be(viewName);
     }
 
@@ -192,7 +192,7 @@ public class ViewApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/views", request);
+        var response = await _client.PostAsJsonAsync("/api/views", request, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -219,12 +219,12 @@ public class ViewApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/views", request);
+        var response = await _client.PostAsJsonAsync("/api/views", request, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Created);
 
-        var view = await response.Content.ReadFromJsonAsync<ViewApiResponse>();
+        var view = await response.Content.ReadFromJsonAsync<ViewApiResponse>(TestContext.Current.CancellationToken);
         view.Should().NotBeNull();
         view!.IsMaterialized.Should().BeTrue();
     }
@@ -243,10 +243,10 @@ public class ViewApiTests
             Columns = [new ViewColumnApiSpec { Source = "name", Alias = "name" }]
         };
 
-        await _client.PostAsJsonAsync("/api/views", request);
+        await _client.PostAsJsonAsync("/api/views", request, TestContext.Current.CancellationToken);
 
         // Act - try to create again with same name
-        var response = await _client.PostAsJsonAsync("/api/views", request);
+        var response = await _client.PostAsJsonAsync("/api/views", request, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Conflict);
@@ -264,7 +264,7 @@ public class ViewApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/views", request);
+        var response = await _client.PostAsJsonAsync("/api/views", request, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().BeOneOf(HttpStatusCode.NotFound, HttpStatusCode.BadRequest);
@@ -287,15 +287,15 @@ public class ViewApiTests
             BaseTable = baseTable,
             Columns = [new ViewColumnApiSpec { Source = "name", Alias = "name" }]
         };
-        await _client.PostAsJsonAsync("/api/views", createRequest);
+        await _client.PostAsJsonAsync("/api/views", createRequest, TestContext.Current.CancellationToken);
 
         // Act
-        var response = await _client.GetAsync($"/api/views/{viewName}");
+        var response = await _client.GetAsync($"/api/views/{viewName}", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var view = await response.Content.ReadFromJsonAsync<ViewApiResponse>();
+        var view = await response.Content.ReadFromJsonAsync<ViewApiResponse>(TestContext.Current.CancellationToken);
         view.Should().NotBeNull();
         view!.Name.Should().Be(viewName);
     }
@@ -304,7 +304,7 @@ public class ViewApiTests
     public async Task GetView_WithNonExistentView_ShouldReturnNotFound()
     {
         // Act
-        var response = await _client.GetAsync("/api/views/nonexistent_view");
+        var response = await _client.GetAsync("/api/views/nonexistent_view", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -322,15 +322,15 @@ public class ViewApiTests
             Name = viewName,
             BaseTable = baseTable,
             Columns = [new ViewColumnApiSpec { Source = "name", Alias = "name" }]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Act
-        var response = await _client.GetAsync("/api/views");
+        var response = await _client.GetAsync("/api/views", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var views = await response.Content.ReadFromJsonAsync<IReadOnlyList<ViewApiResponse>>();
+        var views = await response.Content.ReadFromJsonAsync<IReadOnlyList<ViewApiResponse>>(TestContext.Current.CancellationToken);
         views.Should().NotBeNull();
         views!.Should().NotBeEmpty();
         views.Should().Contain(v => v.Name == viewName);
@@ -353,7 +353,7 @@ public class ViewApiTests
             Name = viewName,
             BaseTable = baseTable,
             Columns = [new ViewColumnApiSpec { Source = "name", Alias = "name" }]
-        });
+        }, TestContext.Current.CancellationToken);
 
         var updateRequest = new UpdateViewApiRequest
         {
@@ -362,12 +362,12 @@ public class ViewApiTests
         };
 
         // Act
-        var response = await _client.PatchAsJsonAsync($"/api/views/{viewName}", updateRequest);
+        var response = await _client.PatchAsJsonAsync($"/api/views/{viewName}", updateRequest, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var updatedView = await response.Content.ReadFromJsonAsync<ViewApiResponse>();
+        var updatedView = await response.Content.ReadFromJsonAsync<ViewApiResponse>(TestContext.Current.CancellationToken);
         updatedView.Should().NotBeNull();
         updatedView!.Name.Should().Be(newName);
     }
@@ -388,16 +388,16 @@ public class ViewApiTests
             Name = viewName,
             BaseTable = baseTable,
             Columns = [new ViewColumnApiSpec { Source = "name", Alias = "name" }]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Act
-        var response = await _client.DeleteAsync($"/api/views/{viewName}");
+        var response = await _client.DeleteAsync($"/api/views/{viewName}", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         // Verify deletion
-        var getResponse = await _client.GetAsync($"/api/views/{viewName}");
+        var getResponse = await _client.GetAsync($"/api/views/{viewName}", TestContext.Current.CancellationToken);
         getResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
@@ -405,7 +405,7 @@ public class ViewApiTests
     public async Task DeleteView_WithNonExistentView_ShouldReturnNotFound()
     {
         // Act
-        var response = await _client.DeleteAsync("/api/views/nonexistent_view");
+        var response = await _client.DeleteAsync("/api/views/nonexistent_view", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -428,10 +428,10 @@ public class ViewApiTests
             BaseTable = baseTable,
             Columns = [new ViewColumnApiSpec { Source = "name", Alias = "name" }],
             Materialized = true
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Act
-        var response = await _client.PostAsync($"/api/views/{viewName}/refresh", null);
+        var response = await _client.PostAsync($"/api/views/{viewName}/refresh", null, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
@@ -450,10 +450,10 @@ public class ViewApiTests
             BaseTable = baseTable,
             Columns = [new ViewColumnApiSpec { Source = "name", Alias = "name" }],
             Materialized = false
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Act
-        var response = await _client.PostAsync($"/api/views/{viewName}/refresh", null);
+        var response = await _client.PostAsync($"/api/views/{viewName}/refresh", null, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -472,10 +472,10 @@ public class ViewApiTests
             BaseTable = baseTable,
             Columns = [new ViewColumnApiSpec { Source = "name", Alias = "name" }],
             Materialized = true
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Act
-        var response = await _client.GetAsync($"/api/views/{viewName}/stale");
+        var response = await _client.GetAsync($"/api/views/{viewName}/stale", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -503,15 +503,15 @@ public class ViewApiTests
                 new ViewColumnApiSpec { Source = "name", Alias = "name" },
                 new ViewColumnApiSpec { Source = "email", Alias = "email" }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Act
-        var response = await _client.GetAsync($"/api/views/{viewName}/data");
+        var response = await _client.GetAsync($"/api/views/{viewName}/data", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<ViewQueryApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<ViewQueryApiResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
         result!.TotalCount.Should().BeGreaterThanOrEqualTo(3);
         result.Data.Should().NotBeEmpty();
@@ -531,15 +531,15 @@ public class ViewApiTests
             Name = viewName,
             BaseTable = baseTable,
             Columns = [new ViewColumnApiSpec { Source = "name", Alias = "name" }]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Act
-        var response = await _client.GetAsync($"/api/views/{viewName}/data?skip=0&take=2");
+        var response = await _client.GetAsync($"/api/views/{viewName}/data?skip=0&take=2", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<ViewQueryApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<ViewQueryApiResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
         result!.Data.Count.Should().BeLessThanOrEqualTo(2);
     }
@@ -562,8 +562,8 @@ public class ViewApiTests
             Name = "base_table",
             Columns = [new CreateColumnApiRequest { Name = "data", Type = "text" }]
         };
-        await project1Client.PostAsJsonAsync("/api/schema/tables", table1Request);
-        await project2Client.PostAsJsonAsync("/api/schema/tables", table1Request);
+        await project1Client.PostAsJsonAsync("/api/schema/tables", table1Request, TestContext.Current.CancellationToken);
+        await project2Client.PostAsJsonAsync("/api/schema/tables", table1Request, TestContext.Current.CancellationToken);
 
         var viewRequest = new CreateViewApiRequest
         {
@@ -573,8 +573,8 @@ public class ViewApiTests
         };
 
         // Act
-        var response1 = await project1Client.PostAsJsonAsync("/api/views", viewRequest);
-        var response2 = await project2Client.PostAsJsonAsync("/api/views", viewRequest);
+        var response1 = await project1Client.PostAsJsonAsync("/api/views", viewRequest, TestContext.Current.CancellationToken);
+        var response2 = await project2Client.PostAsJsonAsync("/api/views", viewRequest, TestContext.Current.CancellationToken);
 
         // Assert - Both should succeed as they're in different projects
         response1.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -593,13 +593,13 @@ public class ViewApiTests
             Name = viewName,
             BaseTable = baseTable,
             Columns = [new ViewColumnApiSpec { Source = "name", Alias = "name" }]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Create a client for a different project
         var otherProjectClient = _fixture.Api.CreateClientWithProject(Guid.NewGuid());
 
         // Act
-        var response = await otherProjectClient.GetAsync($"/api/views/{viewName}");
+        var response = await otherProjectClient.GetAsync($"/api/views/{viewName}", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);

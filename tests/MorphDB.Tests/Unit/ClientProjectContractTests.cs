@@ -72,7 +72,7 @@ public class ClientProjectContractTests
         var handler = new CapturingHandler(ProjectJson, HttpStatusCode.Created);
         var client = ClientOver(handler);
 
-        await client.Projects.CreateAsync(new ClientModels.CreateProjectRequest { Name = "Catalogue" });
+        await client.Projects.CreateAsync(new ClientModels.CreateProjectRequest { Name = "Catalogue" }, TestContext.Current.CancellationToken);
 
         handler.Request!.Method.Should().Be(HttpMethod.Post);
         handler.Request.RequestUri!.AbsolutePath.Should().Be("/api/projects");
@@ -85,7 +85,7 @@ public class ClientProjectContractTests
         var client = ClientOver(handler);
         var id = Guid.Parse("0197c0de-0000-4000-8000-000000000001");
 
-        await client.Projects.GetAsync(id);
+        await client.Projects.GetAsync(id, TestContext.Current.CancellationToken);
 
         handler.Request!.Method.Should().Be(HttpMethod.Get);
         handler.Request.RequestUri!.AbsolutePath.Should().Be($"/api/projects/{id}");
@@ -99,7 +99,7 @@ public class ClientProjectContractTests
 
         // Slugs are URL-safe by construction, but the client escapes anyway: a caller can pass any
         // string, and an unescaped one would silently address a different route.
-        await client.Projects.GetBySlugAsync("cata logue");
+        await client.Projects.GetBySlugAsync("cata logue", TestContext.Current.CancellationToken);
 
         handler.Request!.RequestUri!.AbsolutePath.Should().Be("/api/projects/slug/cata%20logue");
     }
@@ -111,7 +111,7 @@ public class ClientProjectContractTests
         var client = ClientOver(handler);
         var id = Guid.NewGuid();
 
-        await client.Projects.UpdateAsync(id, new ClientModels.UpdateProjectRequest { Name = "Renamed" });
+        await client.Projects.UpdateAsync(id, new ClientModels.UpdateProjectRequest { Name = "Renamed" }, TestContext.Current.CancellationToken);
 
         handler.Request!.Method.Should().Be(HttpMethod.Patch);
         handler.Request.RequestUri!.AbsolutePath.Should().Be($"/api/projects/{id}");
@@ -124,7 +124,7 @@ public class ClientProjectContractTests
         var client = ClientOver(handler);
         var id = Guid.NewGuid();
 
-        await client.Projects.DeleteAsync(id);
+        await client.Projects.DeleteAsync(id, TestContext.Current.CancellationToken);
 
         handler.Request!.Method.Should().Be(HttpMethod.Delete);
         handler.Request.RequestUri!.AbsolutePath.Should().Be($"/api/projects/{id}");
@@ -143,13 +143,13 @@ public class ClientProjectContractTests
                                 "totalSizeBytes":5,"dataSizeBytes":4,"indexSizeBytes":1,"lastModified":null},
              "totalSizeBytes":15,"totalTableCount":3}
             """);
-        await ClientOver(statsHandler).Projects.GetStatsAsync(id);
+        await ClientOver(statsHandler).Projects.GetStatsAsync(id, TestContext.Current.CancellationToken);
         statsHandler.Request!.RequestUri!.AbsolutePath.Should().Be($"/api/projects/{id}/stats");
 
         var healthHandler = new CapturingHandler($$"""
             {"projectId":"{{id}}","isHealthy":true,"issues":[],"checkedAt":"2026-01-01T00:00:00+00:00"}
             """);
-        await ClientOver(healthHandler).Projects.GetHealthAsync(id);
+        await ClientOver(healthHandler).Projects.GetHealthAsync(id, TestContext.Current.CancellationToken);
         healthHandler.Request!.RequestUri!.AbsolutePath.Should().Be($"/api/projects/{id}/health");
     }
 
@@ -159,7 +159,7 @@ public class ClientProjectContractTests
         var handler = new CapturingHandler("""{"data":[],"pagination":{"page":2,"pageSize":10,"totalCount":0}}""");
         var client = ClientOver(handler);
 
-        await client.Projects.ListAsync(status: "active", page: 2, pageSize: 10);
+        await client.Projects.ListAsync(status: "active", page: 2, pageSize: 10, TestContext.Current.CancellationToken);
 
         // ProjectQueryParameters binds status/page/pageSize from the query string.
         var query = handler.Request!.RequestUri!.Query;
@@ -172,7 +172,7 @@ public class ClientProjectContractTests
         var handler = new CapturingHandler("""{"data":[],"pagination":{"page":1,"pageSize":50,"totalCount":0}}""");
         var client = ClientOver(handler);
 
-        await client.Projects.ListAsync();
+        await client.Projects.ListAsync(cancellationToken: TestContext.Current.CancellationToken);
 
         // An empty `status=` is not the same request as no status at all: the server parses the
         // value and would filter on a status nobody asked about if it ever started accepting one.
@@ -350,7 +350,7 @@ public class ClientProjectContractTests
             new ClientModels.UpdateProjectRequest
             {
                 Settings = new ClientModels.ProjectSettings { EnableAuditLog = false },
-            });
+            }, TestContext.Current.CancellationToken);
 
         var sent = JsonDocument.Parse(handler.Body!).RootElement.GetProperty("settings");
         sent.GetProperty("enableAuditLog").GetBoolean().Should().BeFalse();

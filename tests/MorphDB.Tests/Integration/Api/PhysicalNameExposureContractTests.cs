@@ -58,14 +58,14 @@ public class PhysicalNameExposureContractTests
     {
         var tableName = await CreateTableWithRowAsync("physrest");
 
-        var dataResponse = await _client.GetAsync($"/api/data/{tableName}");
+        var dataResponse = await _client.GetAsync($"/api/data/{tableName}", TestContext.Current.CancellationToken);
         dataResponse.EnsureSuccessStatusCode();
-        PhysicalNameGuard.FindPhysicalNames(await dataResponse.Content.ReadAsStringAsync())
+        PhysicalNameGuard.FindPhysicalNames(await dataResponse.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))
             .Should().BeEmpty("REST data rows must carry only the columns the caller declared");
 
-        var schemaResponse = await _client.GetAsync($"/api/schema/tables/{tableName}");
+        var schemaResponse = await _client.GetAsync($"/api/schema/tables/{tableName}", TestContext.Current.CancellationToken);
         schemaResponse.EnsureSuccessStatusCode();
-        PhysicalNameGuard.FindPhysicalNames(await schemaResponse.Content.ReadAsStringAsync())
+        PhysicalNameGuard.FindPhysicalNames(await schemaResponse.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))
             .Should().BeEmpty("the schema surface exists precisely to describe columns by their logical names");
     }
 
@@ -81,9 +81,9 @@ public class PhysicalNameExposureContractTests
               }
             }
             """;
-        var response = await _client.PostAsJsonAsync("/graphql", new { query, variables = new { table = tableName } });
+        var response = await _client.PostAsJsonAsync("/graphql", new { query, variables = new { table = tableName } }, TestContext.Current.CancellationToken);
         response.EnsureSuccessStatusCode();
-        var body = await response.Content.ReadAsStringAsync();
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         JsonDocument.Parse(body).RootElement.TryGetProperty("errors", out _).Should().BeFalse(body);
         PhysicalNameGuard.FindPhysicalNames(body).Should().BeEmpty(
@@ -103,12 +103,12 @@ public class PhysicalNameExposureContractTests
         var bulkService = scope.ServiceProvider.GetRequiredService<IBulkOperationService>();
 
         var exportJob = await bulkService.StartCsvExportAsync(
-            _fixture.Api.ProjectId, tableName, new CsvExportOptions { Delimiter = ',', IncludeHeader = true });
+            _fixture.Api.ProjectId, tableName, new CsvExportOptions { Delimiter = ',', IncludeHeader = true }, TestContext.Current.CancellationToken);
 
         using var exportStream = new MemoryStream();
-        await bulkService.StreamExportAsync(exportJob.JobId, exportStream);
+        await bulkService.StreamExportAsync(exportJob.JobId, exportStream, TestContext.Current.CancellationToken);
         exportStream.Position = 0;
-        var csv = await new StreamReader(exportStream, Encoding.UTF8).ReadToEndAsync();
+        var csv = await new StreamReader(exportStream, Encoding.UTF8).ReadToEndAsync(TestContext.Current.CancellationToken);
 
         PhysicalNameGuard.FindPhysicalNames(csv).Should().BeEmpty(
             "an exported file is a data interchange contract with the same logical-only rule as any API response");
@@ -124,12 +124,12 @@ public class PhysicalNameExposureContractTests
         {
             Name = customersTable,
             Columns = [new CreateColumnApiRequest { Name = "tier", Type = "text", Nullable = true }]
-        });
+        }, TestContext.Current.CancellationToken);
         createCustomers.EnsureSuccessStatusCode();
         var customerInsert = await _client.PostAsJsonAsync($"/api/data/{customersTable}",
-            new Dictionary<string, object?> { ["tier"] = "gold" });
+            new Dictionary<string, object?> { ["tier"] = "gold" }, TestContext.Current.CancellationToken);
         customerInsert.EnsureSuccessStatusCode();
-        var customer = await customerInsert.Content.ReadFromJsonAsync<DataRecordResponse>();
+        var customer = await customerInsert.Content.ReadFromJsonAsync<DataRecordResponse>(TestContext.Current.CancellationToken);
 
         var ordersTable = $"physview_orders_{Guid.NewGuid():N}"[..30];
         var createOrders = await _client.PostAsJsonAsync("/api/schema/tables", new CreateTableApiRequest
@@ -140,10 +140,10 @@ public class PhysicalNameExposureContractTests
                 new CreateColumnApiRequest { Name = "customer_ref", Type = "uuid", Nullable = false },
                 new CreateColumnApiRequest { Name = "order_total", Type = "decimal", Nullable = true }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
         createOrders.EnsureSuccessStatusCode();
         (await _client.PostAsJsonAsync($"/api/data/{ordersTable}",
-            new Dictionary<string, object?> { ["customer_ref"] = customer!.Id, ["order_total"] = 42.5m }))
+            new Dictionary<string, object?> { ["customer_ref"] = customer!.Id, ["order_total"] = 42.5m }, TestContext.Current.CancellationToken))
             .EnsureSuccessStatusCode();
 
         var viewName = $"physview_{Guid.NewGuid():N}"[..30];
@@ -168,12 +168,12 @@ public class PhysicalNameExposureContractTests
                     Condition = $"{ordersTable}.customer_ref = {customersTable}._id"
                 }
             ]
-        });
+        }, TestContext.Current.CancellationToken);
         createView.EnsureSuccessStatusCode();
 
-        var response = await _client.GetAsync($"/api/views/{viewName}/data");
+        var response = await _client.GetAsync($"/api/views/{viewName}/data", TestContext.Current.CancellationToken);
         response.EnsureSuccessStatusCode();
-        PhysicalNameGuard.FindPhysicalNames(await response.Content.ReadAsStringAsync()).Should().BeEmpty(
+        PhysicalNameGuard.FindPhysicalNames(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).Should().BeEmpty(
             "a view built over an unaliased join is the exact shape that once leaked physical names into its rows");
     }
 }

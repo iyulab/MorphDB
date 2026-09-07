@@ -69,22 +69,22 @@ public class BulkXlsxExportServiceTests
                 new CreateColumnRequest { LogicalName = "age", DataType = MorphDataType.Integer, IsNullable = true },
                 new CreateColumnRequest { LogicalName = "is_active", DataType = MorphDataType.Boolean, IsNullable = false },
             ]
-        });
+        }, TestContext.Current.CancellationToken);
 
         await _dataService.InsertBatchAsync(projectId, table.LogicalName,
         [
             new Dictionary<string, object?> { ["name"] = "Alice", ["age"] = 25, ["is_active"] = true },
             new Dictionary<string, object?> { ["name"] = "Bob", ["age"] = 30, ["is_active"] = false },
-        ]);
+        ], TestContext.Current.CancellationToken);
 
         var job = await _bulkService.StartXlsxExportAsync(projectId, table.LogicalName, new XlsxExportOptions
         {
             IncludeHeader = true,
             Columns = ["name", "age", "is_active"],
-        });
+        }, TestContext.Current.CancellationToken);
 
         using var outputStream = new MemoryStream();
-        await _bulkService.StreamExportAsync(job.JobId, outputStream);
+        await _bulkService.StreamExportAsync(job.JobId, outputStream, TestContext.Current.CancellationToken);
 
         var bytes = outputStream.ToArray();
 

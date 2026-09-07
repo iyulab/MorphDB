@@ -12,7 +12,7 @@ namespace MorphDB.Tests.Integration.Api;
 /// </summary>
 [Collection("API")]
 [Trait("Category", "ApiIntegration")]
-public class AuditApiTests : IAsyncLifetime
+public sealed class AuditApiTests : IAsyncLifetime
 {
     private readonly ApiIntegrationFixture _fixture;
     private readonly HttpClient _client;
@@ -24,7 +24,7 @@ public class AuditApiTests : IAsyncLifetime
         _client = fixture.Api.Client;
     }
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         // Create a project first to provision the system schema with _audit_logs table
         var projectName = $"audit_test_{Guid.NewGuid():N}"[..30];
@@ -45,7 +45,7 @@ public class AuditApiTests : IAsyncLifetime
         }
     }
 
-    public Task DisposeAsync() => Task.CompletedTask;
+    public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 
     #region Query Logs Tests
 
@@ -53,12 +53,12 @@ public class AuditApiTests : IAsyncLifetime
     public async Task QueryLogs_WithNoFilters_ShouldReturnPagedResults()
     {
         // Act
-        var response = await _client.GetAsync($"/api/projects/{_projectId}/audit/logs");
+        var response = await _client.GetAsync($"/api/projects/{_projectId}/audit/logs", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<AuditLogPageApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<AuditLogPageApiResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
         result!.Page.Should().BeGreaterThanOrEqualTo(1);
         result.PageSize.Should().BeGreaterThan(0);
@@ -69,12 +69,12 @@ public class AuditApiTests : IAsyncLifetime
     public async Task QueryLogs_WithCategoryFilter_ShouldReturnFilteredResults()
     {
         // Act - Filter by Data category (1)
-        var response = await _client.GetAsync($"/api/projects/{_projectId}/audit/logs?category=1");
+        var response = await _client.GetAsync($"/api/projects/{_projectId}/audit/logs?category=1", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<AuditLogPageApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<AuditLogPageApiResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
         // All returned items should have "data" category if any exist
         foreach (var item in result!.Items)
@@ -87,12 +87,12 @@ public class AuditApiTests : IAsyncLifetime
     public async Task QueryLogs_WithSeverityFilter_ShouldReturnFilteredResults()
     {
         // Act - Filter by minimum severity Warning (2)
-        var response = await _client.GetAsync($"/api/projects/{_projectId}/audit/logs?minSeverity=2");
+        var response = await _client.GetAsync($"/api/projects/{_projectId}/audit/logs?minSeverity=2", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<AuditLogPageApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<AuditLogPageApiResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
         // Results should only contain Warning, Error, or Critical severity
         var validSeverities = new[] { "warning", "error", "critical" };
@@ -115,12 +115,12 @@ public class AuditApiTests : IAsyncLifetime
 
         // Act
         var response = await _client.GetAsync(
-            $"/api/projects/{_projectId}/audit/logs?from={fromStr}&to={toStr}");
+            $"/api/projects/{_projectId}/audit/logs?from={fromStr}&to={toStr}", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<AuditLogPageApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<AuditLogPageApiResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
     }
 
@@ -129,12 +129,12 @@ public class AuditApiTests : IAsyncLifetime
     {
         // Act
         var response = await _client.GetAsync(
-            $"/api/projects/{_projectId}/audit/logs?page=1&pageSize=10");
+            $"/api/projects/{_projectId}/audit/logs?page=1&pageSize=10", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<AuditLogPageApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<AuditLogPageApiResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
         result!.Page.Should().Be(1);
         result.PageSize.Should().Be(10);
@@ -146,12 +146,12 @@ public class AuditApiTests : IAsyncLifetime
     {
         // Act
         var response = await _client.GetAsync(
-            $"/api/projects/{_projectId}/audit/logs?orderBy=timestamp&descending=true");
+            $"/api/projects/{_projectId}/audit/logs?orderBy=timestamp&descending=true", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<AuditLogPageApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<AuditLogPageApiResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
 
         // Verify descending order if there are multiple items
@@ -170,12 +170,12 @@ public class AuditApiTests : IAsyncLifetime
     {
         // Act
         var response = await _client.GetAsync(
-            $"/api/projects/{_projectId}/audit/logs?actorId=test-actor");
+            $"/api/projects/{_projectId}/audit/logs?actorId=test-actor", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<AuditLogPageApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<AuditLogPageApiResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
     }
 
@@ -184,12 +184,12 @@ public class AuditApiTests : IAsyncLifetime
     {
         // Act
         var response = await _client.GetAsync(
-            $"/api/projects/{_projectId}/audit/logs?resourceType=table&resourceId=test_table");
+            $"/api/projects/{_projectId}/audit/logs?resourceType=table&resourceId=test_table", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<AuditLogPageApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<AuditLogPageApiResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
     }
 
@@ -198,12 +198,12 @@ public class AuditApiTests : IAsyncLifetime
     {
         // Act
         var response = await _client.GetAsync(
-            $"/api/projects/{_projectId}/audit/logs?action=create");
+            $"/api/projects/{_projectId}/audit/logs?action=create", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<AuditLogPageApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<AuditLogPageApiResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
     }
 
@@ -212,12 +212,12 @@ public class AuditApiTests : IAsyncLifetime
     {
         // Act
         var response = await _client.GetAsync(
-            $"/api/projects/{_projectId}/audit/logs?searchText=test");
+            $"/api/projects/{_projectId}/audit/logs?searchText=test", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<AuditLogPageApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<AuditLogPageApiResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
     }
 
@@ -226,12 +226,12 @@ public class AuditApiTests : IAsyncLifetime
     {
         // Act - Request page size larger than max (100)
         var response = await _client.GetAsync(
-            $"/api/projects/{_projectId}/audit/logs?pageSize=200");
+            $"/api/projects/{_projectId}/audit/logs?pageSize=200", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<AuditLogPageApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<AuditLogPageApiResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
         result!.PageSize.Should().BeLessThanOrEqualTo(100);
     }
@@ -248,7 +248,7 @@ public class AuditApiTests : IAsyncLifetime
 
         // Act
         var response = await _client.GetAsync(
-            $"/api/projects/{_projectId}/audit/logs/{nonExistentLogId}");
+            $"/api/projects/{_projectId}/audit/logs/{nonExistentLogId}", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -259,7 +259,7 @@ public class AuditApiTests : IAsyncLifetime
     {
         // Act - Invalid GUID format should return 404 (route won't match)
         var response = await _client.GetAsync(
-            $"/api/projects/{_projectId}/audit/logs/invalid-guid");
+            $"/api/projects/{_projectId}/audit/logs/invalid-guid", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -273,12 +273,12 @@ public class AuditApiTests : IAsyncLifetime
     public async Task GetStats_WithNoTimeRange_ShouldReturnStats()
     {
         // Act
-        var response = await _client.GetAsync($"/api/projects/{_projectId}/audit/stats");
+        var response = await _client.GetAsync($"/api/projects/{_projectId}/audit/stats", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<AuditStatsApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<AuditStatsApiResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
         result!.TotalEvents.Should().BeGreaterThanOrEqualTo(0);
         result.ByCategory.Should().NotBeNull();
@@ -301,12 +301,12 @@ public class AuditApiTests : IAsyncLifetime
 
         // Act
         var response = await _client.GetAsync(
-            $"/api/projects/{_projectId}/audit/stats?from={fromStr}&to={toStr}");
+            $"/api/projects/{_projectId}/audit/stats?from={fromStr}&to={toStr}", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<AuditStatsApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<AuditStatsApiResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
         result!.From.Should().BeCloseTo(from, TimeSpan.FromSeconds(1));
         result.To.Should().BeCloseTo(to, TimeSpan.FromSeconds(1));
@@ -316,12 +316,12 @@ public class AuditApiTests : IAsyncLifetime
     public async Task GetStats_CategoryBreakdown_ShouldHaveValidCategories()
     {
         // Act
-        var response = await _client.GetAsync($"/api/projects/{_projectId}/audit/stats");
+        var response = await _client.GetAsync($"/api/projects/{_projectId}/audit/stats", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<AuditStatsApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<AuditStatsApiResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
 
         // Valid categories should be lowercase enum names
@@ -336,12 +336,12 @@ public class AuditApiTests : IAsyncLifetime
     public async Task GetStats_SeverityBreakdown_ShouldHaveValidSeverities()
     {
         // Act
-        var response = await _client.GetAsync($"/api/projects/{_projectId}/audit/stats");
+        var response = await _client.GetAsync($"/api/projects/{_projectId}/audit/stats", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<AuditStatsApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<AuditStatsApiResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
 
         // Valid severities should be lowercase enum names

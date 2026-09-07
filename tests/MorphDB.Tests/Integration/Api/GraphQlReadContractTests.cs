@@ -36,7 +36,7 @@ public class GraphQlReadContractTests
     {
         var (table, id) = await SeedRowAsync("read-me", 7);
 
-        var rest = await _client.GetFromJsonAsync<DataRecordResponse>($"/api/data/{table}/{id}");
+        var rest = await _client.GetFromJsonAsync<DataRecordResponse>($"/api/data/{table}/{id}", TestContext.Current.CancellationToken);
         var gql = await PostGraphQlAsync(
             """
             query($table: String!, $id: UUID!) {

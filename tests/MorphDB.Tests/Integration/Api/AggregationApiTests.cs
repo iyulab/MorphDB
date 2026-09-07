@@ -86,12 +86,12 @@ public class AggregationApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}/aggregate", request);
+        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}/aggregate", request, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<AggregationApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<AggregationApiResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
         result!.Data.Should().HaveCount(1);
         GetInt64(result.Data[0]["total"]).Should().Be(6L);
@@ -118,12 +118,12 @@ public class AggregationApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}/aggregate", request);
+        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}/aggregate", request, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<AggregationApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<AggregationApiResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
         result!.Data.Should().HaveCount(3);
     }
@@ -153,12 +153,12 @@ public class AggregationApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}/aggregate", request);
+        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}/aggregate", request, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<AggregationApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<AggregationApiResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
         result!.Data.Should().HaveCount(1);
         GetDecimal(result.Data[0]["total_amount"]).Should().Be(575.00m);
@@ -186,12 +186,12 @@ public class AggregationApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}/aggregate", request);
+        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}/aggregate", request, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<AggregationApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<AggregationApiResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
         result!.Data.Should().HaveCount(3);
 
@@ -224,12 +224,12 @@ public class AggregationApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}/aggregate", request);
+        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}/aggregate", request, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<AggregationApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<AggregationApiResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
         result!.Data.Should().HaveCount(1);
 
@@ -274,12 +274,12 @@ public class AggregationApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}/aggregate", request);
+        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}/aggregate", request, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<AggregationApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<AggregationApiResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
         result!.Data.Should().HaveCount(1);
         // 5 active records (electronics: 2, clothing: 2, food: 1)
@@ -321,12 +321,12 @@ public class AggregationApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}/aggregate", request);
+        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}/aggregate", request, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<AggregationApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<AggregationApiResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
         result!.Data.Should().HaveCount(2); // electronics (350) and clothing (200)
     }
@@ -365,12 +365,12 @@ public class AggregationApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}/aggregate", request);
+        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}/aggregate", request, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<AggregationApiResponse>();
+        var result = await response.Content.ReadFromJsonAsync<AggregationApiResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
         result!.Data.Should().HaveCount(3);
         // Electronics (350) > Clothing (200) > Food (25)
@@ -395,7 +395,7 @@ public class AggregationApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}/aggregate", request);
+        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}/aggregate", request, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -418,7 +418,7 @@ public class AggregationApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/data/nonexistent_table/aggregate", request);
+        var response = await _client.PostAsJsonAsync("/api/data/nonexistent_table/aggregate", request, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -444,7 +444,7 @@ public class AggregationApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}/aggregate", request);
+        var response = await _client.PostAsJsonAsync($"/api/data/{tableName}/aggregate", request, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);

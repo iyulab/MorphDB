@@ -51,7 +51,7 @@ public class SchemaApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/schema/tables", request);
+        var response = await _client.PostAsJsonAsync("/api/schema/tables", request, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -73,12 +73,12 @@ public class SchemaApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/schema/tables", request);
+        var response = await _client.PostAsJsonAsync("/api/schema/tables", request, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Created);
 
-        var table = await response.Content.ReadFromJsonAsync<TableApiResponse>();
+        var table = await response.Content.ReadFromJsonAsync<TableApiResponse>(TestContext.Current.CancellationToken);
         table.Should().NotBeNull();
         table!.Name.Should().Be(request.Name);
         table.Columns.Should().HaveCountGreaterThanOrEqualTo(3); // +1 for auto-added id column
@@ -99,15 +99,15 @@ public class SchemaApiTests
             Name = $"dup_test_{Guid.NewGuid():N}"[..30],
             Columns = [new CreateColumnApiRequest { Name = "name", Type = "text" }]
         };
-        var first = await _client.PostAsJsonAsync("/api/schema/tables", request);
+        var first = await _client.PostAsJsonAsync("/api/schema/tables", request, TestContext.Current.CancellationToken);
         first.StatusCode.Should().Be(HttpStatusCode.Created);
 
         // Act
-        var second = await _client.PostAsJsonAsync("/api/schema/tables", request);
+        var second = await _client.PostAsJsonAsync("/api/schema/tables", request, TestContext.Current.CancellationToken);
 
         // Assert
         second.StatusCode.Should().Be(HttpStatusCode.Conflict);
-        var error = await second.Content.ReadFromJsonAsync<ErrorResponse>();
+        var error = await second.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         error!.Error.Should().Be("DuplicateTable");
     }
 
@@ -125,19 +125,19 @@ public class SchemaApiTests
         {
             Name = tableName,
             Columns = [new CreateColumnApiRequest { Name = "name", Type = "text" }]
-        });
-        var table = await created.Content.ReadFromJsonAsync<TableApiResponse>();
+        }, TestContext.Current.CancellationToken);
+        var table = await created.Content.ReadFromJsonAsync<TableApiResponse>(TestContext.Current.CancellationToken);
 
         // Act — a version nobody has ever seen
         var response = await _client.PatchAsJsonAsync($"/api/schema/tables/{tableName}", new UpdateTableApiRequest
         {
             Name = $"{tableName}_r",
             Version = table!.Version + 41
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Conflict);
-        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         error!.Error.Should().Be("ConcurrencyConflict");
     }
 
@@ -151,15 +151,15 @@ public class SchemaApiTests
             Name = tableName,
             Columns = [new CreateColumnApiRequest { Name = "name", Type = "text" }]
         };
-        await _client.PostAsJsonAsync("/api/schema/tables", createRequest);
+        await _client.PostAsJsonAsync("/api/schema/tables", createRequest, TestContext.Current.CancellationToken);
 
         // Act
-        var response = await _client.GetAsync($"/api/schema/tables/{tableName}");
+        var response = await _client.GetAsync($"/api/schema/tables/{tableName}", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var table = await response.Content.ReadFromJsonAsync<TableApiResponse>();
+        var table = await response.Content.ReadFromJsonAsync<TableApiResponse>(TestContext.Current.CancellationToken);
         table.Should().NotBeNull();
         table!.Name.Should().Be(tableName);
     }
@@ -168,7 +168,7 @@ public class SchemaApiTests
     public async Task GetTable_WithNonExistingTable_ShouldReturnNotFound()
     {
         // Act
-        var response = await _client.GetAsync("/api/schema/tables/nonexistent_table");
+        var response = await _client.GetAsync("/api/schema/tables/nonexistent_table", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -183,15 +183,15 @@ public class SchemaApiTests
         {
             Name = tableName,
             Columns = [new CreateColumnApiRequest { Name = "name", Type = "text" }]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Act
-        var response = await _client.GetAsync("/api/schema/tables");
+        var response = await _client.GetAsync("/api/schema/tables", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<IReadOnlyList<TableApiResponse>>();
+        var result = await response.Content.ReadFromJsonAsync<IReadOnlyList<TableApiResponse>>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
         result!.Should().NotBeEmpty();
     }
@@ -205,8 +205,8 @@ public class SchemaApiTests
         {
             Name = tableName,
             Columns = [new CreateColumnApiRequest { Name = "name", Type = "text" }]
-        });
-        var createdTable = await createResponse.Content.ReadFromJsonAsync<TableApiResponse>();
+        }, TestContext.Current.CancellationToken);
+        var createdTable = await createResponse.Content.ReadFromJsonAsync<TableApiResponse>(TestContext.Current.CancellationToken);
 
         var updateRequest = new UpdateTableApiRequest
         {
@@ -215,7 +215,7 @@ public class SchemaApiTests
         };
 
         // Act
-        var response = await _client.PatchAsJsonAsync($"/api/schema/tables/{tableName}", updateRequest);
+        var response = await _client.PatchAsJsonAsync($"/api/schema/tables/{tableName}", updateRequest, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -230,16 +230,16 @@ public class SchemaApiTests
         {
             Name = tableName,
             Columns = [new CreateColumnApiRequest { Name = "name", Type = "text" }]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Act
-        var response = await _client.DeleteAsync($"/api/schema/tables/{tableName}");
+        var response = await _client.DeleteAsync($"/api/schema/tables/{tableName}", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         // Verify deletion
-        var getResponse = await _client.GetAsync($"/api/schema/tables/{tableName}");
+        var getResponse = await _client.GetAsync($"/api/schema/tables/{tableName}", TestContext.Current.CancellationToken);
         getResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
@@ -256,7 +256,7 @@ public class SchemaApiTests
         {
             Name = tableName,
             Columns = [new CreateColumnApiRequest { Name = "name", Type = "text" }]
-        });
+        }, TestContext.Current.CancellationToken);
 
         var addColumnRequest = new AddColumnApiRequest
         {
@@ -266,12 +266,12 @@ public class SchemaApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/schema/tables/{tableName}/columns", addColumnRequest);
+        var response = await _client.PostAsJsonAsync($"/api/schema/tables/{tableName}/columns", addColumnRequest, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Created);
 
-        var column = await response.Content.ReadFromJsonAsync<ColumnApiResponse>();
+        var column = await response.Content.ReadFromJsonAsync<ColumnApiResponse>(TestContext.Current.CancellationToken);
         column!.Name.Should().Be("description");
     }
 
@@ -288,7 +288,7 @@ public class SchemaApiTests
         {
             Name = tableName,
             Columns = [new CreateColumnApiRequest { Name = "email", Type = "text" }]
-        });
+        }, TestContext.Current.CancellationToken);
 
         var createIndexRequest = new CreateIndexApiRequest
         {
@@ -299,12 +299,12 @@ public class SchemaApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync($"/api/schema/tables/{tableName}/indexes", createIndexRequest);
+        var response = await _client.PostAsJsonAsync($"/api/schema/tables/{tableName}/indexes", createIndexRequest, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Created);
 
-        var index = await response.Content.ReadFromJsonAsync<IndexApiResponse>();
+        var index = await response.Content.ReadFromJsonAsync<IndexApiResponse>(TestContext.Current.CancellationToken);
         index!.Name.Should().Be("idx_email");
     }
 
@@ -327,8 +327,8 @@ public class SchemaApiTests
         };
 
         // Act
-        var response1 = await project1Client.PostAsJsonAsync("/api/schema/tables", request);
-        var response2 = await project2Client.PostAsJsonAsync("/api/schema/tables", request);
+        var response1 = await project1Client.PostAsJsonAsync("/api/schema/tables", request, TestContext.Current.CancellationToken);
+        var response2 = await project2Client.PostAsJsonAsync("/api/schema/tables", request, TestContext.Current.CancellationToken);
 
         // Assert - Both should succeed as they're in different projects
         response1.StatusCode.Should().Be(HttpStatusCode.Created);
@@ -342,7 +342,7 @@ public class SchemaApiTests
         var client = _fixture.Api.CreateClientWithProject(Guid.Empty);
 
         // Act
-        var response = await client.GetAsync("/api/schema/tables");
+        var response = await client.GetAsync("/api/schema/tables", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);

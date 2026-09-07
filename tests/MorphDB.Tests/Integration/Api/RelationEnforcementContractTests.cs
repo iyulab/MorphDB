@@ -55,7 +55,7 @@ public class RelationEnforcementContractTests
         {
             ["title"] = "child written before its parent",
             ["parent_ref"] = Guid.NewGuid().ToString()
-        });
+        }, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Created,
             "a caller that rebuilds its tables wholesale writes children and parents in whatever " +
@@ -73,7 +73,7 @@ public class RelationEnforcementContractTests
         {
             ["title"] = "orphan",
             ["parent_ref"] = Guid.NewGuid().ToString()
-        });
+        }, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest,
             "making enforcement optional must not make it absent — the default is still to check, " +

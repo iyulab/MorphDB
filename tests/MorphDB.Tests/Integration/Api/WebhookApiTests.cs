@@ -61,12 +61,12 @@ public class WebhookApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/webhooks", request);
+        var response = await _client.PostAsJsonAsync("/api/webhooks", request, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Created);
 
-        var webhook = await response.Content.ReadFromJsonAsync<WebhookApiResponse>();
+        var webhook = await response.Content.ReadFromJsonAsync<WebhookApiResponse>(TestContext.Current.CancellationToken);
         webhook.Should().NotBeNull();
         webhook!.Name.Should().Be(request.Name);
         webhook.Table.Should().Be(tableName);
@@ -90,12 +90,12 @@ public class WebhookApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/webhooks", request);
+        var response = await _client.PostAsJsonAsync("/api/webhooks", request, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Created);
 
-        var webhook = await response.Content.ReadFromJsonAsync<WebhookApiResponse>();
+        var webhook = await response.Content.ReadFromJsonAsync<WebhookApiResponse>(TestContext.Current.CancellationToken);
         webhook!.Events.Should().Contain("insert");
         webhook.Events.Should().Contain("update");
         webhook.Events.Should().Contain("delete");
@@ -113,7 +113,7 @@ public class WebhookApiTests
         };
 
         // Act
-        var response = await _client.PostAsJsonAsync("/api/webhooks", request);
+        var response = await _client.PostAsJsonAsync("/api/webhooks", request, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -132,7 +132,7 @@ public class WebhookApiTests
         };
 
         // Act
-        var response = await client.PostAsJsonAsync("/api/webhooks", request);
+        var response = await client.PostAsJsonAsync("/api/webhooks", request, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
@@ -153,16 +153,16 @@ public class WebhookApiTests
             Table = tableName,
             Url = "https://example.com/webhook"
         };
-        var createResponse = await _client.PostAsJsonAsync("/api/webhooks", createRequest);
-        var createdWebhook = await createResponse.Content.ReadFromJsonAsync<WebhookApiResponse>();
+        var createResponse = await _client.PostAsJsonAsync("/api/webhooks", createRequest, TestContext.Current.CancellationToken);
+        var createdWebhook = await createResponse.Content.ReadFromJsonAsync<WebhookApiResponse>(TestContext.Current.CancellationToken);
 
         // Act
-        var response = await _client.GetAsync($"/api/webhooks/{createdWebhook!.Id}");
+        var response = await _client.GetAsync($"/api/webhooks/{createdWebhook!.Id}", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var webhook = await response.Content.ReadFromJsonAsync<WebhookApiResponse>();
+        var webhook = await response.Content.ReadFromJsonAsync<WebhookApiResponse>(TestContext.Current.CancellationToken);
         webhook.Should().NotBeNull();
         webhook!.Name.Should().Be(createRequest.Name);
         webhook.Secret.Should().BeNull(); // Secret should be hidden on GET
@@ -172,7 +172,7 @@ public class WebhookApiTests
     public async Task GetWebhook_WithNonExistentWebhook_ShouldReturnNotFound()
     {
         // Act
-        var response = await _client.GetAsync($"/api/webhooks/{Guid.NewGuid()}");
+        var response = await _client.GetAsync($"/api/webhooks/{Guid.NewGuid()}", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -193,15 +193,15 @@ public class WebhookApiTests
             Name = webhookName,
             Table = tableName,
             Url = "https://example.com/webhook"
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Act
-        var response = await _client.GetAsync("/api/webhooks");
+        var response = await _client.GetAsync("/api/webhooks", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var webhooks = await response.Content.ReadFromJsonAsync<IReadOnlyList<WebhookApiResponse>>();
+        var webhooks = await response.Content.ReadFromJsonAsync<IReadOnlyList<WebhookApiResponse>>(TestContext.Current.CancellationToken);
         webhooks.Should().NotBeNull();
         webhooks!.Should().Contain(w => w.Name == webhookName);
     }
@@ -218,22 +218,22 @@ public class WebhookApiTests
             Name = $"webhook1_{Guid.NewGuid():N}"[..30],
             Table = tableName1,
             Url = "https://example.com/webhook1"
-        });
+        }, TestContext.Current.CancellationToken);
 
         await _client.PostAsJsonAsync("/api/webhooks", new CreateWebhookApiRequest
         {
             Name = $"webhook2_{Guid.NewGuid():N}"[..30],
             Table = tableName2,
             Url = "https://example.com/webhook2"
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Act
-        var response = await _client.GetAsync($"/api/webhooks?table={tableName1}");
+        var response = await _client.GetAsync($"/api/webhooks?table={tableName1}", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var webhooks = await response.Content.ReadFromJsonAsync<IReadOnlyList<WebhookApiResponse>>();
+        var webhooks = await response.Content.ReadFromJsonAsync<IReadOnlyList<WebhookApiResponse>>(TestContext.Current.CancellationToken);
         webhooks.Should().NotBeNull();
         webhooks!.Should().OnlyContain(w => w.Table == tableName1);
     }
@@ -252,8 +252,8 @@ public class WebhookApiTests
             Name = $"update_test_{Guid.NewGuid():N}"[..30],
             Table = tableName,
             Url = "https://example.com/original"
-        });
-        var created = await createResponse.Content.ReadFromJsonAsync<WebhookApiResponse>();
+        }, TestContext.Current.CancellationToken);
+        var created = await createResponse.Content.ReadFromJsonAsync<WebhookApiResponse>(TestContext.Current.CancellationToken);
 
         var updateRequest = new UpdateWebhookApiRequest
         {
@@ -263,12 +263,12 @@ public class WebhookApiTests
         };
 
         // Act
-        var response = await _client.PatchAsJsonAsync($"/api/webhooks/{created!.Id}", updateRequest);
+        var response = await _client.PatchAsJsonAsync($"/api/webhooks/{created!.Id}", updateRequest, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var updated = await response.Content.ReadFromJsonAsync<WebhookApiResponse>();
+        var updated = await response.Content.ReadFromJsonAsync<WebhookApiResponse>(TestContext.Current.CancellationToken);
         updated!.Url.Should().Be("https://example.com/updated");
         updated.Events.Should().HaveCount(1);
         updated.Events.Should().Contain("insert");
@@ -285,7 +285,7 @@ public class WebhookApiTests
         };
 
         // Act
-        var response = await _client.PatchAsJsonAsync($"/api/webhooks/{Guid.NewGuid()}", updateRequest);
+        var response = await _client.PatchAsJsonAsync($"/api/webhooks/{Guid.NewGuid()}", updateRequest, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -305,17 +305,17 @@ public class WebhookApiTests
             Name = $"delete_test_{Guid.NewGuid():N}"[..30],
             Table = tableName,
             Url = "https://example.com/webhook"
-        });
-        var created = await createResponse.Content.ReadFromJsonAsync<WebhookApiResponse>();
+        }, TestContext.Current.CancellationToken);
+        var created = await createResponse.Content.ReadFromJsonAsync<WebhookApiResponse>(TestContext.Current.CancellationToken);
 
         // Act
-        var response = await _client.DeleteAsync($"/api/webhooks/{created!.Id}");
+        var response = await _client.DeleteAsync($"/api/webhooks/{created!.Id}", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         // Verify deletion
-        var getResponse = await _client.GetAsync($"/api/webhooks/{created.Id}");
+        var getResponse = await _client.GetAsync($"/api/webhooks/{created.Id}", TestContext.Current.CancellationToken);
         getResponse.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
@@ -323,7 +323,7 @@ public class WebhookApiTests
     public async Task DeleteWebhook_WithNonExistentWebhook_ShouldReturnNotFound()
     {
         // Act
-        var response = await _client.DeleteAsync($"/api/webhooks/{Guid.NewGuid()}");
+        var response = await _client.DeleteAsync($"/api/webhooks/{Guid.NewGuid()}", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -343,17 +343,17 @@ public class WebhookApiTests
             Name = $"secret_test_{Guid.NewGuid():N}"[..30],
             Table = tableName,
             Url = "https://example.com/webhook"
-        });
-        var created = await createResponse.Content.ReadFromJsonAsync<WebhookApiResponse>();
+        }, TestContext.Current.CancellationToken);
+        var created = await createResponse.Content.ReadFromJsonAsync<WebhookApiResponse>(TestContext.Current.CancellationToken);
         var originalSecret = created!.Secret;
 
         // Act
-        var response = await _client.PostAsync($"/api/webhooks/{created.Id}/regenerate-secret", null);
+        var response = await _client.PostAsync($"/api/webhooks/{created.Id}/regenerate-secret", null, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var result = await response.Content.ReadFromJsonAsync<RegenerateSecretResponse>();
+        var result = await response.Content.ReadFromJsonAsync<RegenerateSecretResponse>(TestContext.Current.CancellationToken);
         result.Should().NotBeNull();
         result!.Secret.Should().NotBeNullOrEmpty();
         result.Secret.Should().NotBe(originalSecret);
@@ -364,7 +364,7 @@ public class WebhookApiTests
     public async Task RegenerateSecret_WithNonExistentWebhook_ShouldReturnNotFound()
     {
         // Act
-        var response = await _client.PostAsync($"/api/webhooks/{Guid.NewGuid()}/regenerate-secret", null);
+        var response = await _client.PostAsync($"/api/webhooks/{Guid.NewGuid()}/regenerate-secret", null, TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -384,16 +384,16 @@ public class WebhookApiTests
             Name = $"history_test_{Guid.NewGuid():N}"[..30],
             Table = tableName,
             Url = "https://example.com/webhook"
-        });
-        var created = await createResponse.Content.ReadFromJsonAsync<WebhookApiResponse>();
+        }, TestContext.Current.CancellationToken);
+        var created = await createResponse.Content.ReadFromJsonAsync<WebhookApiResponse>(TestContext.Current.CancellationToken);
 
         // Act
-        var response = await _client.GetAsync($"/api/webhooks/{created!.Id}/deliveries");
+        var response = await _client.GetAsync($"/api/webhooks/{created!.Id}/deliveries", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var deliveries = await response.Content.ReadFromJsonAsync<IReadOnlyList<DeliveryApiResponse>>();
+        var deliveries = await response.Content.ReadFromJsonAsync<IReadOnlyList<DeliveryApiResponse>>(TestContext.Current.CancellationToken);
         deliveries.Should().NotBeNull();
         deliveries.Should().BeEmpty(); // No deliveries yet
     }
@@ -402,7 +402,7 @@ public class WebhookApiTests
     public async Task GetDeliveryHistory_WithNonExistentWebhook_ShouldReturnNotFound()
     {
         // Act
-        var response = await _client.GetAsync($"/api/webhooks/{Guid.NewGuid()}/deliveries");
+        var response = await _client.GetAsync($"/api/webhooks/{Guid.NewGuid()}/deliveries", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -429,25 +429,25 @@ public class WebhookApiTests
             Table = tableName,
             Url = "https://example.invalid/webhook",
             Events = ["insert"]
-        });
-        var created = await createResponse.Content.ReadFromJsonAsync<WebhookApiResponse>();
+        }, TestContext.Current.CancellationToken);
+        var created = await createResponse.Content.ReadFromJsonAsync<WebhookApiResponse>(TestContext.Current.CancellationToken);
 
         // Act
         await _client.PostAsJsonAsync($"/api/data/{tableName}", new Dictionary<string, object?>
         {
             ["name"] = "Test",
             ["email"] = "test@example.com"
-        });
+        }, TestContext.Current.CancellationToken);
 
         // The change listener reacts to a PostgreSQL NOTIFY asynchronously, same as the SignalR
         // broadcast tests above poll for their message to arrive.
         IReadOnlyList<DeliveryApiResponse>? deliveries = null;
-        var timeout = Task.Delay(TimeSpan.FromSeconds(15));
+        var timeout = Task.Delay(TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken);
         while ((deliveries is null || deliveries.Count == 0) && !timeout.IsCompleted)
         {
-            await Task.Delay(100);
-            var response = await _client.GetAsync($"/api/webhooks/{created!.Id}/deliveries");
-            deliveries = await response.Content.ReadFromJsonAsync<IReadOnlyList<DeliveryApiResponse>>();
+            await Task.Delay(100, TestContext.Current.CancellationToken);
+            var response = await _client.GetAsync($"/api/webhooks/{created!.Id}/deliveries", TestContext.Current.CancellationToken);
+            deliveries = await response.Content.ReadFromJsonAsync<IReadOnlyList<DeliveryApiResponse>>(TestContext.Current.CancellationToken);
         }
 
         // Assert
@@ -475,22 +475,22 @@ public class WebhookApiTests
             Url = "https://example.invalid/webhook",
             Events = ["insert"],
             Filter = System.Text.Json.JsonDocument.Parse("""{"name":"vip"}""")
-        });
-        var created = await createResponse.Content.ReadFromJsonAsync<WebhookApiResponse>();
+        }, TestContext.Current.CancellationToken);
+        var created = await createResponse.Content.ReadFromJsonAsync<WebhookApiResponse>(TestContext.Current.CancellationToken);
 
         await _client.PostAsJsonAsync($"/api/data/{tableName}", new Dictionary<string, object?>
         {
             ["name"] = "vip",
             ["email"] = "vip@example.com"
-        });
+        }, TestContext.Current.CancellationToken);
 
         IReadOnlyList<DeliveryApiResponse>? deliveries = null;
-        var timeout = Task.Delay(TimeSpan.FromSeconds(15));
+        var timeout = Task.Delay(TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken);
         while ((deliveries is null || deliveries.Count == 0) && !timeout.IsCompleted)
         {
-            await Task.Delay(100);
-            var response = await _client.GetAsync($"/api/webhooks/{created!.Id}/deliveries");
-            deliveries = await response.Content.ReadFromJsonAsync<IReadOnlyList<DeliveryApiResponse>>();
+            await Task.Delay(100, TestContext.Current.CancellationToken);
+            var response = await _client.GetAsync($"/api/webhooks/{created!.Id}/deliveries", TestContext.Current.CancellationToken);
+            deliveries = await response.Content.ReadFromJsonAsync<IReadOnlyList<DeliveryApiResponse>>(TestContext.Current.CancellationToken);
         }
 
         deliveries.Should().NotBeNullOrEmpty(
@@ -509,21 +509,21 @@ public class WebhookApiTests
             Table = watchedTable,
             Url = "https://example.invalid/webhook",
             Events = ["insert"]
-        });
-        var created = await createResponse.Content.ReadFromJsonAsync<WebhookApiResponse>();
+        }, TestContext.Current.CancellationToken);
+        var created = await createResponse.Content.ReadFromJsonAsync<WebhookApiResponse>(TestContext.Current.CancellationToken);
 
         // Act
         var response = await _client.PostAsJsonAsync($"/api/data/{otherTable}", new Dictionary<string, object?>
         {
             ["name"] = "Test",
             ["email"] = "test@example.com"
-        });
+        }, TestContext.Current.CancellationToken);
         response.EnsureSuccessStatusCode();
-        await Task.Delay(TimeSpan.FromSeconds(1)); // give the listener a chance to (wrongly) react
+        await Task.Delay(TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken); // give the listener a chance to (wrongly) react
 
         // Assert
-        var deliveriesResponse = await _client.GetAsync($"/api/webhooks/{created!.Id}/deliveries");
-        var deliveries = await deliveriesResponse.Content.ReadFromJsonAsync<IReadOnlyList<DeliveryApiResponse>>();
+        var deliveriesResponse = await _client.GetAsync($"/api/webhooks/{created!.Id}/deliveries", TestContext.Current.CancellationToken);
+        var deliveries = await deliveriesResponse.Content.ReadFromJsonAsync<IReadOnlyList<DeliveryApiResponse>>(TestContext.Current.CancellationToken);
         deliveries.Should().BeEmpty();
     }
 
@@ -544,7 +544,7 @@ public class WebhookApiTests
         {
             Name = tableName1,
             Columns = [new CreateColumnApiRequest { Name = "data", Type = "text" }]
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Create webhook for project 1
         var webhookResponse = await project1Client.PostAsJsonAsync("/api/webhooks", new CreateWebhookApiRequest
@@ -552,18 +552,18 @@ public class WebhookApiTests
             Name = "project1_webhook",
             Table = tableName1,
             Url = "https://example.com/project1"
-        });
-        var webhook = await webhookResponse.Content.ReadFromJsonAsync<WebhookApiResponse>();
+        }, TestContext.Current.CancellationToken);
+        var webhook = await webhookResponse.Content.ReadFromJsonAsync<WebhookApiResponse>(TestContext.Current.CancellationToken);
 
         // Act - Project 2 tries to access project 1's webhook
-        var response = await project2Client.GetAsync($"/api/webhooks/{webhook!.Id}");
+        var response = await project2Client.GetAsync($"/api/webhooks/{webhook!.Id}", TestContext.Current.CancellationToken);
 
         // Assert - Should not find it (different project)
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
 
         // Project 2's list should be empty
-        var listResponse = await project2Client.GetAsync("/api/webhooks");
-        var webhooks = await listResponse.Content.ReadFromJsonAsync<IReadOnlyList<WebhookApiResponse>>();
+        var listResponse = await project2Client.GetAsync("/api/webhooks", TestContext.Current.CancellationToken);
+        var webhooks = await listResponse.Content.ReadFromJsonAsync<IReadOnlyList<WebhookApiResponse>>(TestContext.Current.CancellationToken);
         webhooks.Should().BeEmpty();
     }
 

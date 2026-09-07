@@ -111,7 +111,7 @@ public class DataServiceTests
         };
 
         // Act
-        var result = await _dataService.InsertAsync(projectId, table.LogicalName, data);
+        var result = await _dataService.InsertAsync(projectId, table.LogicalName, data, TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().NotBeNull();
@@ -140,7 +140,7 @@ public class DataServiceTests
         };
 
         // Act
-        var result = await _dataService.InsertAsync(projectId, table.LogicalName, data);
+        var result = await _dataService.InsertAsync(projectId, table.LogicalName, data, TestContext.Current.CancellationToken);
 
         // Assert
         result["_id"].Should().Be(id);
@@ -186,10 +186,10 @@ public class DataServiceTests
             ["email"] = "find@example.com",
             ["name"] = "Find Me",
             ["is_active"] = true
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Act
-        var result = await _dataService.GetByIdAsync(projectId, table.LogicalName, id);
+        var result = await _dataService.GetByIdAsync(projectId, table.LogicalName, id, TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().NotBeNull();
@@ -207,7 +207,7 @@ public class DataServiceTests
         var nonExistentId = Guid.NewGuid();
 
         // Act
-        var result = await _dataService.GetByIdAsync(projectId, table.LogicalName, nonExistentId);
+        var result = await _dataService.GetByIdAsync(projectId, table.LogicalName, nonExistentId, TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().BeNull();
@@ -244,14 +244,14 @@ public class DataServiceTests
             ["email"] = "old@example.com",
             ["name"] = "Old Name",
             ["is_active"] = true
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Act
         var result = await _dataService.UpdateAsync(projectId, table.LogicalName, id, new Dictionary<string, object?>
         {
             ["email"] = "new@example.com",
             ["name"] = "New Name"
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().NotBeNull();
@@ -294,16 +294,16 @@ public class DataServiceTests
             ["_id"] = id,
             ["email"] = "delete@example.com",
             ["is_active"] = true
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Act
-        var result = await _dataService.DeleteAsync(projectId, table.LogicalName, id);
+        var result = await _dataService.DeleteAsync(projectId, table.LogicalName, id, TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().BeTrue();
 
         // Verify deletion
-        var getResult = await _dataService.GetByIdAsync(projectId, table.LogicalName, id);
+        var getResult = await _dataService.GetByIdAsync(projectId, table.LogicalName, id, TestContext.Current.CancellationToken);
         getResult.Should().BeNull();
     }
 
@@ -315,7 +315,7 @@ public class DataServiceTests
         var table = await CreateTestTableAsync(projectId, "delete_none_" + Guid.NewGuid().ToString("N")[..8]);
 
         // Act
-        var result = await _dataService.DeleteAsync(projectId, table.LogicalName, Guid.NewGuid());
+        var result = await _dataService.DeleteAsync(projectId, table.LogicalName, Guid.NewGuid(), TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().BeFalse();
@@ -358,7 +358,7 @@ public class DataServiceTests
         };
 
         // Act
-        var results = await _dataService.InsertBatchAsync(projectId, table.LogicalName, records);
+        var results = await _dataService.InsertBatchAsync(projectId, table.LogicalName, records, TestContext.Current.CancellationToken);
 
         // Assert
         results.Should().HaveCount(3);
@@ -375,7 +375,7 @@ public class DataServiceTests
         var table = await CreateTestTableAsync(projectId, "batch_empty_" + Guid.NewGuid().ToString("N")[..8]);
 
         // Act
-        var results = await _dataService.InsertBatchAsync(projectId, table.LogicalName, []);
+        var results = await _dataService.InsertBatchAsync(projectId, table.LogicalName, [], TestContext.Current.CancellationToken);
 
         // Assert
         results.Should().BeEmpty();
@@ -402,7 +402,7 @@ public class DataServiceTests
         };
 
         // Act
-        var result = await _dataService.UpsertAsync(projectId, table.LogicalName, data, ["_id"]);
+        var result = await _dataService.UpsertAsync(projectId, table.LogicalName, data, ["_id"], TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().NotBeNull();
@@ -425,7 +425,7 @@ public class DataServiceTests
             ["email"] = "old@example.com",
             ["name"] = "Old Name",
             ["is_active"] = true
-        });
+        }, TestContext.Current.CancellationToken);
 
         // Upsert with same ID
         var data = new Dictionary<string, object?>
@@ -437,7 +437,7 @@ public class DataServiceTests
         };
 
         // Act
-        var result = await _dataService.UpsertAsync(projectId, table.LogicalName, data, ["_id"]);
+        var result = await _dataService.UpsertAsync(projectId, table.LogicalName, data, ["_id"], TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().NotBeNull();
