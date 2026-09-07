@@ -29,13 +29,6 @@
     <PackageReference Include="Serilog.AspNetCore" />
     <PackageReference Include="Serilog.Sinks.Console" />
 
-    <!-- Validation -->
-
-    <!-- Health Checks -->
-    <PackageReference Include="AspNetCore.HealthChecks.NpgSql" />
-    <PackageReference Include="AspNetCore.HealthChecks.Redis" />
-    <PackageReference Include="AspNetCore.HealthChecks.UI.Client" />
-
     <!-- OpenTelemetry -->
     <PackageReference Include="OpenTelemetry.Api" />
     <PackageReference Include="OpenTelemetry.Extensions.Hosting" />

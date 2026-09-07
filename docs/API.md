@@ -1039,6 +1039,24 @@ GET /health/live   # Liveness probe
 GET /health/ready  # Readiness probe
 ```
 
+`/health` runs every registered check (the database always; Redis only when a Redis connection
+string is configured), `/health/ready` runs the checks tagged `ready` (the database), and
+`/health/live` runs none — it answers as long as the process is serving requests. A healthy report
+is `200`, an unhealthy one `503`; either way the body is:
+
+```json
+{
+  "status": "Healthy",
+  "totalDuration": "00:00:00.0123456",
+  "entries": {
+    "postgresql": { "data": {}, "duration": "00:00:00.0098765", "status": "Healthy", "tags": ["db", "ready"] }
+  }
+}
+```
+
+`status` is `Healthy`, `Degraded`, or `Unhealthy`. A failing entry adds `description` and
+`exception` (the failure's message); members that would be null are omitted.
+
 ---
 
 ## Errors

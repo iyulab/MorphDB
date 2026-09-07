@@ -1,5 +1,4 @@
 using System.Globalization;
-using HealthChecks.UI.Client;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.OpenApi;
 using MorphDB.Core.Abstractions;
@@ -10,6 +9,7 @@ using MorphDB.Npgsql.Security;
 using MorphDB.Service;
 using MorphDB.Service.Extensions;
 using MorphDB.Service.GraphQL;
+using MorphDB.Service.Health;
 using MorphDB.Service.Infrastructure;
 using MorphDB.Service.Middleware;
 using MorphDB.Service.OData;
@@ -217,12 +217,15 @@ try
     // It is also a cache: when it is configured but down, reads fall back to the database, so it is
     // not part of readiness.
     var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
+    // Both checks read the connection the service itself holds (the NpgsqlDataSource, the Redis
+    // multiplexer) rather than a connection string of their own, so a probe can never report on a
+    // database or cache other than the one the service is using.
     var healthChecks = builder.Services.AddHealthChecks()
-        .AddNpgSql(connectionString, name: "postgresql", tags: ["db", "ready"]);
+        .AddCheck<PostgresHealthCheck>("postgresql", tags: ["db", "ready"]);
 
     if (!string.IsNullOrWhiteSpace(redisConnectionString))
     {
-        healthChecks.AddRedis(redisConnectionString, name: "redis", tags: ["cache"]);
+        healthChecks.AddCheck<RedisHealthCheck>("redis", tags: ["cache"]);
     }
 
     // OpenTelemetry configuration
@@ -296,17 +299,17 @@ try
     // Health check endpoints
     app.MapHealthChecks("/health", new HealthCheckOptions
     {
-        ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
+        ResponseWriter = HealthReportJson.WriteAsync
     });
     app.MapHealthChecks("/health/live", new HealthCheckOptions
     {
         Predicate = _ => false, // No dependency checks for liveness
-        ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
+        ResponseWriter = HealthReportJson.WriteAsync
     });
     app.MapHealthChecks("/health/ready", new HealthCheckOptions
     {
         Predicate = check => check.Tags.Contains("ready"),
-        ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
+        ResponseWriter = HealthReportJson.WriteAsync
     });
 
     // Prometheus metrics endpoint

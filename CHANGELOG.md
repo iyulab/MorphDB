@@ -18,6 +18,13 @@
 - The `FluentValidation.AspNetCore` dependency of the service, which no code used and which its
   authors have deprecated, along with three package pins nothing referenced (`FluentValidation`,
   `Humanizer.Core`, `CsvHelper`). No behaviour changes; the container image simply carries less.
+- The three `AspNetCore.HealthChecks.*` packages (NpgSql, Redis, UI.Client), whose line stopped at
+  9.0.0. The database and Redis checks are now the service's own, and they probe the connection the
+  service itself holds — the `NpgsqlDataSource` and the Redis multiplexer — rather than a
+  connection string of their own, so a probe cannot report on a database the service is not using.
+  The health endpoints answer the same JSON document as before (`status`, `totalDuration`, and one
+  `entries` member per check with `status`, `duration`, `tags`, `data`, and, when set,
+  `description` and `exception`); it is now written by the service and pinned by tests.
 
 ### Fixed
 
