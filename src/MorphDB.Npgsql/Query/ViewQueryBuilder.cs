@@ -32,6 +32,13 @@ public sealed class ViewQueryBuilder
         ViewDefinition definition,
         CancellationToken cancellationToken = default)
     {
+        // A join condition and a computed column's expression are caller-authored text that reaches
+        // SQL verbatim -- the translator below swaps identifiers and passes everything else through
+        // -- so they go through the same gate as an index predicate or a policy expression. Checked
+        // before any metadata is read: a refused definition costs no round trip, and the failure
+        // quotes the caller their own text rather than a Postgres syntax error.
+        ValidateInlineExpressions(definition);
+
         var sb = new StringBuilder();
 
         // Load base table metadata
@@ -316,6 +323,22 @@ public sealed class ViewQueryBuilder
         }
 
         return DdlBuilder.QuoteIdentifier(logicalName);
+    }
+
+    private static void ValidateInlineExpressions(ViewDefinition definition)
+    {
+        foreach (var join in definition.Joins)
+        {
+            InlineExpressionValidator.Validate(join.Condition, "Join condition");
+        }
+
+        foreach (var column in definition.Columns)
+        {
+            if (!string.IsNullOrEmpty(column.Expression))
+            {
+                InlineExpressionValidator.Validate(column.Expression, "View column");
+            }
+        }
     }
 
     private Task<string> TranslateConditionAsync(

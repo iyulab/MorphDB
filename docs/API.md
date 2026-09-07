@@ -1070,7 +1070,7 @@ fixed string — internal exception text never reaches the wire) and retrying ma
 | 400 | `INVALID_WEBHOOK_FILTER` | A webhook `filter` value that is not a scalar literal — object and array values are not supported (see [Webhook](#webhook)) |
 | 400 | `INVALID_ARGUMENT` | A malformed value elsewhere in the request (e.g. an unknown column type — the message lists the supported set) |
 | 400 | `MISSING_PROJECT` | The request did not say which project it applies to — send `X-Project-Id` |
-| 400 | `INVALID_EXPRESSION` | A CHECK predicate, index predicate or policy expression that could escape the clause it is written into |
+| 400 | `INVALID_EXPRESSION` | A CHECK predicate, index predicate, policy expression, or a view's join condition or column expression that could escape the clause it is written into |
 | 400 | `TABLE_HAS_DEPENDENTS` | Deleting a table another table still references — delete those relations first |
 | 400 | `EMPTY_BATCH` | A batch request with no operations |
 | 400 | `EMPTY_DATA` | A batch write with no rows |
