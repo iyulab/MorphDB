@@ -13,8 +13,8 @@
     <!-- API Frameworks -->
     <!-- 16.x: Any carries a parsed JSON value in both directions (see GraphQlAny). 15.1.14+ had
          closed GHSA-qr3m-xw4c-jqw3 in the transitive HotChocolate.Language; 16 carries it forward. -->
-    <PackageVersion Include="HotChocolate.AspNetCore" Version="16.6.2" />
-    <PackageVersion Include="HotChocolate.Data" Version="16.6.2" />
+    <PackageVersion Include="HotChocolate.AspNetCore" Version="16.6.4" />
+    <PackageVersion Include="HotChocolate.Data" Version="16.6.4" />
     <PackageVersion Include="Microsoft.AspNetCore.OData" Version="9.5.0" />
     <!-- Swashbuckle 10.2.1+ pulls Microsoft.OpenApi 2.7.5, closing GHSA-v5pm-xwqc-g5wc -->
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.2.3" />
@@ -40,7 +40,7 @@
     <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.18.0" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.18.0" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.18.0" />
-    <PackageVersion Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.17.0-beta.1" />
+    <PackageVersion Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.18.0-beta.1" />
     <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.18.0" />
     <!-- Utilities -->
     <PackageVersion Include="Polly" Version="8.7.0" />
@@ -55,8 +55,8 @@
     <PackageVersion Include="Moq" Version="4.20.72" />
     <!-- AwesomeAssertions: Apache-2.0 community fork of FluentAssertions (FA 8.x is commercial). API-compatible; namespace is AwesomeAssertions (not FluentAssertions). -->
     <PackageVersion Include="AwesomeAssertions" Version="9.6.0" />
-    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.14.0" />
-    <PackageVersion Include="Testcontainers.Redis" Version="4.14.0" />
+    <PackageVersion Include="Testcontainers.PostgreSql" Version="4.15.0" />
+    <PackageVersion Include="Testcontainers.Redis" Version="4.15.0" />
     <PackageVersion Include="Bogus" Version="35.6.5" />
   </ItemGroup>
 </Project>
