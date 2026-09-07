@@ -63,7 +63,7 @@ public class DocsErrorCodeParityTests
     public void Retired_codes_do_not_come_back()
     {
         // VALIDATION_FAILED appeared in no documentation and was retired for VALIDATION_ERROR /
-        // UNKNOWN_COLUMN (cycle-72). Nothing may quietly reintroduce it.
+        // UNKNOWN_COLUMN. Nothing may quietly reintroduce it.
         DocsErrorCodes.Documented().Should().NotContain("VALIDATION_FAILED");
         ServerCodes.Should().NotContain("VALIDATION_FAILED");
 

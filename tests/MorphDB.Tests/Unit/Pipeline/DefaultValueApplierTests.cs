@@ -191,7 +191,7 @@ public class DefaultValueApplierTests
     [Fact]
     public async Task ExecuteAsync_Computed_SumOfTwoFields_ComputesTheArithmeticExpression()
     {
-        // This is the P2-o regression: the pre-fix implementation only did the bare-field-reference
+        // This is the regression: the pre-fix implementation only did the bare-field-reference
         // case above and returned null for anything with an operator in it.
         var columns = new List<ColumnMetadata>
         {

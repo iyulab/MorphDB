@@ -23,7 +23,7 @@ namespace MorphDB.Tests.Integration.Api;
 /// enforced: a production image had no way to mint a key, so no request was ever actually refused.
 /// The condition for bringing the concept back was that turning enforcement off has to turn this
 /// file red. Each test below names what it would stop detecting if the corresponding production
-/// code were deleted, and the removal was run to confirm it (see cycle-60).
+/// code were deleted, and the removal was run to confirm it.
 /// </para>
 /// </summary>
 [Collection("API")]

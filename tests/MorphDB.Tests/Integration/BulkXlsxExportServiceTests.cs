@@ -16,7 +16,7 @@ namespace MorphDB.Tests.Integration;
 /// <c>BulkJobProcessor</c> hosted service is deliberately removed under <c>ApiTestFixture</c> (it
 /// polls tables that aren't ready yet at factory start-up), so the API-level export tests can only
 /// ever observe a job stuck at "pending" and never actually exercise the byte output. This is the
-/// one place the real fix for P2-o's XLSX defect (tab-delimited text served as
+/// one place the real fix for the XLSX defect (tab-delimited text served as
 /// <c>application/vnd.openxmlformats-officedocument.spreadsheetml.sheet</c>) gets verified against
 /// actual OOXML bytes.
 /// </summary>

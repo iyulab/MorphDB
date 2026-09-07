@@ -12,7 +12,7 @@ using MorphDB.Tests.Fixtures;
 namespace MorphDB.Tests.Integration;
 
 /// <summary>
-/// Exercises <see cref="ViewQueryBuilder"/> against a real Postgres to pin P2-p: the JOIN
+/// Exercises <see cref="ViewQueryBuilder"/> against a real Postgres to pin a fixed defect: the JOIN
 /// condition and computed-expression translators used to be verbatim pass-throughs
 /// ("Simple translation ... assume conditions use physical names"), so any view with a join
 /// condition or expression written in logical column names -- the vocabulary every other view
