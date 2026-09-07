@@ -10,6 +10,29 @@ namespace MorphDB.Tests.Unit.Models;
 public class SystemColumnsTests
 {
     [Fact]
+    public void RequireRecordId_returns_the_id_when_present()
+    {
+        var id = Guid.NewGuid();
+
+        SystemColumns.RequireRecordId(new Dictionary<string, object?> { ["_id"] = id }).Should().Be(id);
+    }
+
+    [Fact]
+    public void RequireRecordId_fails_instead_of_answering_an_empty_guid()
+    {
+        var act = () => SystemColumns.RequireRecordId(new Dictionary<string, object?> { ["name"] = "row" });
+
+        act.Should().Throw<System.Diagnostics.UnreachableException>().WithMessage("*'_id'*");
+    }
+
+    [Fact]
+    public void WithRecordId_adds_the_id_column_first_when_the_caller_left_it_out()
+    {
+        SystemColumns.WithRecordId(["name", "email"]).Should().Equal("_id", "name", "email");
+        SystemColumns.WithRecordId(["name", "_id"]).Should().Equal("name", "_id");
+    }
+
+    [Fact]
     public void Reads_a_Guid_typed_id_column()
     {
         var id = Guid.NewGuid();

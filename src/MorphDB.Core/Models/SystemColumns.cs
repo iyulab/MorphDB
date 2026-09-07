@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace MorphDB.Core.Models;
 
 /// <summary>
@@ -112,6 +114,37 @@ public static class SystemColumns
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// The record id a row must carry. Every row a write returns and every row a read produces
+    /// with <see cref="Id"/> in its projection has one; a row without it is a producer's bug, and
+    /// answering it with <see cref="Guid.Empty"/> — as several surfaces once did — hands the caller
+    /// a well-formed id that is the same for every such row, which is worse than failing. This
+    /// fails instead.
+    /// </summary>
+    /// <exception cref="UnreachableException">The row has no readable <see cref="Id"/>. An invariant
+    /// violation rather than an <see cref="InvalidOperationException"/>, so that no request-level
+    /// handler that answers the latter with a 4xx can turn a server bug into a caller error.</exception>
+    public static Guid RequireRecordId(IDictionary<string, object?>? data) =>
+        GetRecordId(data) ?? throw new UnreachableException(
+            $"The row carries no '{Id}' column; every row read or written through MorphDB must, so this is a producer bug, not a caller error.");
+
+    /// <summary>
+    /// The caller's column selection with <see cref="Id"/> guaranteed present, in first position when
+    /// it had to be added. The REST envelope names each row by its id, so a projection that drops the
+    /// id column cannot produce a well-formed response; rather than answer with a placeholder id, the
+    /// id column is always fetched.
+    /// </summary>
+    public static IReadOnlyList<string> WithRecordId(IEnumerable<string> columns)
+    {
+        ArgumentNullException.ThrowIfNull(columns);
+        var list = columns.ToList();
+        if (!list.Contains(Id, StringComparer.Ordinal))
+        {
+            list.Insert(0, Id);
+        }
+        return list;
     }
 
     /// <summary>

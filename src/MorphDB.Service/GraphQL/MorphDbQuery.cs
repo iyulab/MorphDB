@@ -159,7 +159,7 @@ public sealed class MorphDbQuery
         var edges = records.Select(r => new RecordEdge
         {
             Node = CreateRecordNode(r),
-            Cursor = EncodeCursor(SystemColumns.GetRecordId(r) ?? Guid.Empty)
+            Cursor = EncodeCursor(SystemColumns.RequireRecordId(r))
         }).ToList();
 
         return new RecordConnection
@@ -365,13 +365,19 @@ public sealed class MorphDbQuery
 
     private static Guid DecodeCursor(string cursor)
     {
+        // A cursor this server did not issue is the caller's error. Decoding it to Guid.Empty, as
+        // this once did, silently restarted the page from the beginning — a well-formed answer to a
+        // malformed request, with no signal that the cursor was ignored.
         try
         {
             return new Guid(Convert.FromBase64String(cursor));
         }
-        catch
+        catch (Exception ex) when (ex is FormatException or ArgumentException)
         {
-            return Guid.Empty;
+            throw new GraphQLException(ErrorBuilder.New()
+                .SetMessage($"'{cursor}' is not a cursor this server issued; pass a cursor from a previous page's edges.")
+                .SetCode("INVALID_CURSOR")
+                .Build());
         }
     }
 
@@ -379,7 +385,7 @@ public sealed class MorphDbQuery
     {
         return new RecordNode
         {
-            Id = SystemColumns.GetRecordId(r) ?? Guid.Empty,
+            Id = SystemColumns.RequireRecordId(r),
             Data = GraphQlAny.FromRow(r),
             CreatedAt = r.TryGetValue("_created_at", out var createdAt) && createdAt is DateTimeOffset ca ? ca : null,
             UpdatedAt = r.TryGetValue("_updated_at", out var updatedAt) && updatedAt is DateTimeOffset ua ? ua : null

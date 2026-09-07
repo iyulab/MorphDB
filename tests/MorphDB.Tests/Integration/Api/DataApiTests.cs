@@ -242,6 +242,41 @@ public class DataApiTests
         result.Data[0].Data.Should().ContainKey("email");
     }
 
+    [Fact]
+    public async Task GetAll_WithSelectThatOmitsTheIdColumn_StillNamesEveryRow()
+    {
+        // A projection without _id once answered every row with the same all-zero id — a well-formed
+        // value that collapsed distinct rows into one for any consumer keying on it. The id column is
+        // always fetched now, and the envelope id is the row's own.
+        var tableName = await SetupTestTableAsync();
+        string[] names = ["Alice", "Bob", "Carol"];
+        foreach (var name in names)
+        {
+            await _client.PostAsJsonAsync($"/api/data/{tableName}", new Dictionary<string, object?>
+            {
+                ["name"] = name,
+                ["email"] = $"{name.ToLowerInvariant()}@example.com",
+                ["age"] = 30,
+                ["is_active"] = true
+            }, TestContext.Current.CancellationToken);
+        }
+
+        var response = await _client.GetAsync($"/api/data/{tableName}?select=name,email", TestContext.Current.CancellationToken);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var result = await response.Content.ReadFromJsonAsync<PagedResponse<DataRecordResponse>>(TestContext.Current.CancellationToken);
+
+        result!.Data.Should().HaveCount(3);
+        result.Data.Select(r => r.Id).Should().OnlyHaveUniqueItems().And.NotContain(Guid.Empty);
+        result.Data.Should().AllSatisfy(r => r.Data.Should().ContainKey("_id"));
+
+        string[] onlyName = ["name"];
+        var posted = await _client.PostAsJsonAsync($"/api/data/{tableName}/query",
+            new { select = onlyName }, TestContext.Current.CancellationToken);
+        posted.StatusCode.Should().Be(HttpStatusCode.OK);
+        var queried = await posted.Content.ReadFromJsonAsync<PagedResponse<DataRecordResponse>>(TestContext.Current.CancellationToken);
+        queried!.Data.Select(r => r.Id).Should().OnlyHaveUniqueItems().And.NotContain(Guid.Empty);
+    }
+
     #endregion
 
     #region GetById Operations

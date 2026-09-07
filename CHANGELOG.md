@@ -44,6 +44,15 @@
 
 ### Fixed
 
+- **A row read with a `select` that left out `_id` was answered with an all-zero id.** REST's
+  `GET /api/data/{table}?select=…` and `POST …/query` built the envelope `id` from the row and, when
+  the projection did not carry `_id`, filled it with `00000000-0000-0000-0000-000000000000` — three
+  distinct rows came back with the same well-formed id, and nothing said so. `_id` is now always
+  fetched, so every row's `id` is its own. The same fill-in stood behind the batch, upsert, OData and
+  GraphQL record ids and the GraphQL page cursor, where the row always carries `_id` but a missing one
+  would have been hidden the same way; those now fail loudly instead of answering with a placeholder.
+  A GraphQL `after` cursor the server did not issue is refused with `INVALID_CURSOR` instead of being
+  read as the empty id and silently restarting the page.
 - **The documented real-time subscribe call was refused by the server.** `docs/API.md` opens the
   WebSocket section with `connection.invoke("Subscribe", "customers")`, and running it as written
   answered `Invocation provides 1 argument(s) but target expects 2` — the first thing a real-time

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using MorphDB.Core.Abstractions;
+using MorphDB.Core.Models;
 using MorphDB.Service.Filters;
 using MorphDB.Service.Models.Api;
 using MorphDB.Service.Services;
@@ -120,7 +121,7 @@ public sealed class BatchController : ControllerBase
 
         var results = insertedRecords.Select((record, index) =>
         {
-            var id = record.TryGetValue("_id", out var idValue) && idValue is Guid guid ? guid : Guid.Empty;
+            var id = SystemColumns.RequireRecordId(record);
             return new BatchOperationResult
             {
                 Index = index,
@@ -276,7 +277,7 @@ public sealed class BatchController : ControllerBase
         var result = await _dataService.UpsertAsync(
             projectId, table, request.Data, request.KeyColumns.ToArray(), cancellationToken);
 
-        var id = result.TryGetValue("_id", out var idValue) && idValue is Guid guid ? guid : Guid.Empty;
+        var id = SystemColumns.RequireRecordId(result);
 
         var response = new DataRecordResponse
         {
@@ -419,7 +420,7 @@ public sealed class BatchController : ControllerBase
         }
 
         var result = await _dataService.InsertAsync(projectId, operation.Table, operation.Data, cancellationToken);
-        var id = result.TryGetValue("_id", out var idValue) && idValue is Guid guid ? guid : Guid.Empty;
+        var id = SystemColumns.RequireRecordId(result);
 
         return new BatchOperationResult
         {
@@ -530,7 +531,7 @@ public sealed class BatchController : ControllerBase
 
         var result = await _dataService.UpsertAsync(
             projectId, operation.Table, operation.Data, operation.KeyColumns.ToArray(), cancellationToken);
-        var id = result.TryGetValue("_id", out var idValue) && idValue is Guid guid ? guid : Guid.Empty;
+        var id = SystemColumns.RequireRecordId(result);
 
         return new BatchOperationResult
         {

@@ -90,6 +90,30 @@ public class GraphQlReadContractTests
         node.GetProperty("data").GetProperty("label").GetString().Should().Be("listed");
     }
 
+    [Fact]
+    public async Task A_cursor_the_server_did_not_issue_is_refused_not_read_as_the_first_page()
+    {
+        // The cursor used to decode to Guid.Empty on any parse failure, so a malformed `after`
+        // silently restarted the list from the beginning -- a well-formed answer to a malformed
+        // request. It is a GraphQL error now, with a code the caller can branch on.
+        var (table, _) = await SeedRowAsync("cursored", 2);
+
+        var response = await _client.PostAsJsonAsync("/graphql", new
+        {
+            query = """
+                query($table: String!) {
+                  records(table: $table, first: 10, after: "not-a-cursor") { totalCount }
+                }
+                """,
+            variables = new { table }
+        }, TestContext.Current.CancellationToken);
+        var root = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).RootElement;
+
+        root.TryGetProperty("errors", out var errors).Should().BeTrue("a cursor this server never issued must not resolve");
+        errors[0].GetProperty("extensions").GetProperty("code").GetString().Should().Be("INVALID_CURSOR");
+        errors[0].GetProperty("message").GetString().Should().Contain("not-a-cursor");
+    }
+
     /// <summary>
     /// Aggregation carries a row shape out through <c>Any</c> and a comparison value in through it,
     /// so it is the one read that exercises the boundary in both directions.

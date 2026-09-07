@@ -157,7 +157,7 @@ GET /api/data/customers?filter=grade:eq:VIP&orderBy=_created_at:desc&page=1&page
 | `filter` | Field filtering (`column:operator:value`) | `grade:eq:VIP`, `status:neq:inactive` |
 | `orderBy` | Sort order (`column:asc` or `column:desc`) | `name:asc`, `_created_at:desc` |
 | `search` | Full-text search across text columns | `john` |
-| `select` | Comma-separated column names | `name,email,grade` |
+| `select` | Comma-separated column names. `_id` is always fetched, so each row's envelope `id` is its own | `name,email,grade` |
 | `state` | Row state filter (if enabled) | `valid`, `draft`, `error`, `all` |
 | `page` | Page number | `1` |
 | `pageSize` | Records per page (max 1000) | `20` |
@@ -211,7 +211,8 @@ X-Project-Id: <project id>
 
 - `filter` — optional; a `condition` (`column`, `operator`, `value`) or a `group` (`logic`:
   `"and"`|`"or"`, `filters`: child nodes).
-- `select` — optional column list; omitted selects all.
+- `select` — optional column list; omitted selects all. `_id` is always fetched even when left
+  out, so the envelope `id` of every row is that row's own.
 - `orderBy` — optional `column` or `column:desc` entries.
 - `page` / `pageSize` — 1-based; `pageSize` is clamped to the server maximum.
 

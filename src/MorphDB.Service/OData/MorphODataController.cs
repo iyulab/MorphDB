@@ -3,6 +3,7 @@ using System.Xml;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.OData.Edm.Csdl;
 using MorphDB.Core.Abstractions;
+using MorphDB.Core.Models;
 using MorphDB.Core.Pipeline;
 using MorphDB.Npgsql.Repositories;
 using MorphDB.Service.Services;
@@ -200,7 +201,7 @@ public sealed partial class MorphODataController : ControllerBase
                 Value = result
             };
 
-            var id = result.TryGetValue("_id", out var idValue) && idValue is Guid guidId ? guidId : Guid.Empty;
+            var id = SystemColumns.RequireRecordId(result);
             return Created($"/odata/{entitySet}({id})", response);
         }
         catch (InvalidOperationException ex)

@@ -317,7 +317,7 @@ public sealed class MorphDbMutation
     {
         return new RecordNode
         {
-            Id = SystemColumns.GetRecordId(r) ?? Guid.Empty,
+            Id = SystemColumns.RequireRecordId(r),
             Data = GraphQlAny.FromRow(r),
             CreatedAt = r.TryGetValue("_created_at", out var createdAt) && createdAt is DateTimeOffset ca ? ca : null,
             UpdatedAt = r.TryGetValue("_updated_at", out var updatedAt) && updatedAt is DateTimeOffset ua ? ua : null

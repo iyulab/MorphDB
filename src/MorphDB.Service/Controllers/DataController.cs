@@ -88,7 +88,7 @@ public sealed class DataController : ControllerBase
             if (!string.IsNullOrEmpty(query.Select))
             {
                 var columns = query.Select.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                morphQuery = morphQuery.SelectColumns(columns);
+                morphQuery = morphQuery.SelectColumns([.. SystemColumns.WithRecordId(columns)]);
             }
             else
             {
@@ -133,7 +133,7 @@ public sealed class DataController : ControllerBase
 
             var records = results.Select(r => new DataRecordResponse
             {
-                Id = r.TryGetValue("_id", out var id) && id is Guid guid ? guid : Guid.Empty,
+                Id = SystemColumns.RequireRecordId(r),
                 Data = r
             }).ToList();
 
@@ -210,7 +210,7 @@ public sealed class DataController : ControllerBase
             // Select
             if (request.Select is { Count: > 0 })
             {
-                morphQuery = morphQuery.SelectColumns([.. request.Select]);
+                morphQuery = morphQuery.SelectColumns([.. SystemColumns.WithRecordId(request.Select)]);
             }
             else
             {
@@ -235,7 +235,7 @@ public sealed class DataController : ControllerBase
             var results = await morphQuery.ToListAsync(cancellationToken);
             var records = results.Select(r => new DataRecordResponse
             {
-                Id = r.TryGetValue("_id", out var id) && id is Guid guid ? guid : Guid.Empty,
+                Id = SystemColumns.RequireRecordId(r),
                 Data = r
             }).ToList();
 
@@ -328,7 +328,7 @@ public sealed class DataController : ControllerBase
         }
 
         var result = writeResult.Data ?? data;
-        var id = result.TryGetValue("_id", out var idValue) && idValue is Guid guid ? guid : Guid.Empty;
+        var id = SystemColumns.RequireRecordId(result);
 
         var response = new DataRecordResponse
         {
