@@ -146,6 +146,26 @@ public class ProjectNotFoundException : MorphDbException
 }
 
 /// <summary>
+/// Thrown when a request names a project, but the value is not a GUID.
+/// <para>
+/// Distinct from <see cref="MissingProjectException"/> on purpose: that one says the request said
+/// nothing about which project it means, this one says it said something and that something cannot
+/// be a project id. Collapsing the two into the same "not present" case sends a caller who mistyped
+/// their project id looking for a header they had already sent.
+/// </para>
+/// </summary>
+public class MalformedProjectIdException : MorphDbException
+{
+    public string Value { get; }
+
+    public MalformedProjectIdException(string value)
+        : base("INVALID_PROJECT_ID", $"X-Project-Id must be a GUID; received '{value}'.")
+    {
+        Value = value;
+    }
+}
+
+/// <summary>
 /// Thrown when a project slug is already in use. A sibling of <see cref="DuplicateNameException"/>
 /// with the project-specific code the API documents.
 /// </summary>

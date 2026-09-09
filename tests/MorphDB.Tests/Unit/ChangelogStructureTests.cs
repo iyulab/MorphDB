@@ -29,7 +29,7 @@ namespace MorphDB.Tests.Unit;
 /// held to its own word rather than to this one's.
 /// </para>
 /// </summary>
-public class ChangelogStructureTests
+public partial class ChangelogStructureTests
 {
     /// <summary>The block these rules read; released blocks are history and are left alone.</summary>
     private const string Unreleased = "Unreleased";
@@ -75,6 +75,43 @@ public class ChangelogStructureTests
             + "or the same kind under a second name. A heading carrying prose after the word is the "
             + "second case: it reads as its own section, so the kind gets split — which is how one "
             + "released block in this file came to hold three 'Changed' sections");
+    }
+
+    /// <summary>
+    /// A CHANGELOG bullet that claims one thing is equivalent to or a substitute for another — a
+    /// removed member "works the same as" an existing one, a migration path "produces the same
+    /// result" — is a claim prose alone cannot be held to; the export-filter removal in this same
+    /// file once claimed an equivalence the running server did not have. This rule does not try to
+    /// detect such a claim in the prose (that was tried and rejected — see the CHANGELOG-migration
+    /// issue this rule answers): it requires that wherever an author already marked one with a
+    /// <c>Verified-by:</c> tag, the test named actually exists. It checks existence only, not that
+    /// the test proves what the bullet claims — a semantic check would need to understand prose the
+    /// same unbounded way the rejected alternative did.
+    /// </summary>
+    [Fact]
+    public void Every_Verified_by_tag_in_the_unreleased_block_names_a_test_that_exists()
+    {
+        var tags = VerifiedByTags(UnreleasedText(Changelog()));
+        var testSource = TestFileContents();
+
+        var unresolved = tags.Where(tag => !TestExists(tag, testSource)).ToList();
+
+        string.Join(", ", unresolved).Should().BeEmpty(
+            "a Verified-by tag is where a claim of equivalence or substitutability points at the "
+            + "test that backs it — a tag naming a test that does not exist reads as verified when "
+            + "nothing was checked, which is worse than carrying no tag at all");
+    }
+
+    [Fact]
+    public void The_gate_reports_a_Verified_by_tag_naming_no_real_test()
+    {
+        const string broken = "- Some claim. (Verified-by: NoSuchClass.NoSuchMethod)";
+
+        var tags = VerifiedByTags(broken);
+
+        tags.Should().ContainSingle().Which.Should().Be("NoSuchClass.NoSuchMethod");
+        TestExists(tags[0], TestFileContents()).Should().BeFalse(
+            "without this the existence check above would pass over any tag and be vacuous");
     }
 
     [Fact]
@@ -197,4 +234,68 @@ public class ChangelogStructureTests
             .Where(g => g.Count() > 1)
             .Select(g => g.Key)
             .OrderBy(k => k, StringComparer.Ordinal)];
+
+    /// <summary>
+    /// The raw text of the <c>##</c> block named <see cref="Unreleased"/> — headings included, unlike
+    /// <see cref="Headings"/>, because a <c>Verified-by:</c> tag lives in bullet prose rather than a
+    /// heading. Confined to <c>Unreleased</c> for the same reason the other two rules are: a released
+    /// block is history, and a test renamed or removed later must not turn an already-shipped claim
+    /// red.
+    /// </summary>
+    private static string UnreleasedText(string changelog)
+    {
+        var lines = new List<string>();
+        var inBlock = false;
+
+        foreach (var line in changelog.Split('\n').Select(l => l.TrimEnd('\r')))
+        {
+            if (line.StartsWith("## ", StringComparison.Ordinal))
+            {
+                inBlock = line[3..].Trim() == Unreleased;
+                continue;
+            }
+
+            if (inBlock)
+            {
+                lines.Add(line);
+            }
+        }
+
+        return string.Join('\n', lines);
+    }
+
+    private static IReadOnlyList<string> VerifiedByTags(string text) =>
+        [.. VerifiedByTag().Matches(text).Select(m => m.Groups["test"].Value)];
+
+    /// <summary>
+    /// Whether a test named <c>ClassName.MethodName</c> exists anywhere under the test project — a
+    /// file declaring that class and, in the same file, a method of that name. Existence only: this
+    /// does not run the test or read what it asserts, matching the gate's declared scope.
+    /// </summary>
+    private static bool TestExists(string tag, IReadOnlyList<string> testFileContents)
+    {
+        var parts = tag.Split('.', 2);
+        if (parts.Length != 2)
+        {
+            return false;
+        }
+
+        var classPattern = new Regex($@"\bclass\s+{Regex.Escape(parts[0])}\b");
+        var methodPattern = new Regex($@"\b{Regex.Escape(parts[1])}\s*\(");
+
+        return testFileContents.Any(text => classPattern.IsMatch(text) && methodPattern.IsMatch(text));
+    }
+
+    private static IReadOnlyList<string> TestFileContents()
+    {
+        var testsRoot = Path.GetDirectoryName(
+            ConstraintBoundaryDoc.RepoFilePath("tests/MorphDB.Tests/MorphDB.Tests.csproj"))!;
+
+        return [.. new DirectoryInfo(testsRoot)
+            .GetFiles("*.cs", SearchOption.AllDirectories)
+            .Select(f => File.ReadAllText(f.FullName))];
+    }
+
+    [GeneratedRegex(@"Verified-by:\s*(?<test>[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*)")]
+    private static partial Regex VerifiedByTag();
 }

@@ -45,6 +45,7 @@ internal sealed class GlobalExceptionHandler : IExceptionHandler
             UnauthenticatedException u => (StatusCodes.Status401Unauthorized, "Unauthenticated", u.ErrorCode),
             ForbiddenException f => (StatusCodes.Status403Forbidden, "Forbidden", f.ErrorCode),
             MissingProjectException m => (StatusCodes.Status400BadRequest, "BadRequest", m.ErrorCode),
+            MalformedProjectIdException mpi => (StatusCodes.Status400BadRequest, "BadRequest", mpi.ErrorCode),
             TableNotFoundException t => (StatusCodes.Status404NotFound, "NotFound", t.ErrorCode),
             // A column is not an addressable resource of any route — an unknown column is a defect
             // in the request body/query, so it stays 400 (the contract aggregation documented).

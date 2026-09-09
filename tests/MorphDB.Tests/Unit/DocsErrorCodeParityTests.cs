@@ -22,7 +22,7 @@ public class DocsErrorCodeParityTests
     private static readonly IReadOnlySet<string> ServerCodes = new HashSet<string>
     {
         // GlobalExceptionHandler — typed exceptions
-        "VALIDATION_ERROR", "MISSING_PROJECT", "TABLE_NOT_FOUND", "COLUMN_NOT_FOUND",
+        "VALIDATION_ERROR", "MISSING_PROJECT", "INVALID_PROJECT_ID", "TABLE_NOT_FOUND", "COLUMN_NOT_FOUND",
         "DUPLICATE_NAME", "DUPLICATE_SLUG", "DUPLICATE_PROJECT_ID",
         "PROJECT_NOT_FOUND", "SCHEMA_VERSION_CONFLICT",
         "LOCK_ACQUISITION_FAILED", "NOT_FOUND", "INVALID_ARGUMENT", "INTERNAL_ERROR",

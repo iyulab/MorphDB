@@ -19,7 +19,9 @@ Every schema and data endpoint applies to one project. Say which:
 X-Project-Id: <project id>
 ```
 
-A request that omits it is answered with `400` and the code `MISSING_PROJECT`.
+A request that omits it is answered with `400` and the code `MISSING_PROJECT`; a request that sends
+it but not as a GUID gets `400 INVALID_PROJECT_ID` instead — the two are distinguished because only
+the second one told the caller something it can act on.
 
 ### What this is not
 
@@ -1223,6 +1225,7 @@ fixed string — internal exception text never reaches the wire) and retrying ma
 | 400 | `INVALID_WEBHOOK_FILTER` | A webhook `filter` value that is not a scalar literal — object and array values are not supported (see [Webhook](#webhook)) |
 | 400 | `INVALID_ARGUMENT` | A malformed value elsewhere in the request (e.g. an unknown column type — the message lists the supported set) |
 | 400 | `MISSING_PROJECT` | The request did not say which project it applies to — send `X-Project-Id` |
+| 400 | `INVALID_PROJECT_ID` | `X-Project-Id` was sent but is not a GUID |
 | 400 | `INVALID_EXPRESSION` | A CHECK predicate, index predicate, policy expression, or a view's join condition or column expression that could escape the clause it is written into |
 | 400 | `TABLE_HAS_DEPENDENTS` | Deleting a table another table still references — delete those relations first |
 | 400 | `EMPTY_BATCH` | A batch request with no operations |

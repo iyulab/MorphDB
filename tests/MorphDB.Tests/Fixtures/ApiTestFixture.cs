@@ -187,6 +187,18 @@ public sealed class ApiTestFixture : IAsyncLifetime
     }
 
     /// <summary>
+    /// Sends <c>X-Project-Id</c> as the literal string given, unlike <see cref="CreateClientWithProject"/>
+    /// which always sends something <see cref="Guid.TryParse(string?, out Guid)"/> accepts — this is
+    /// how a test reaches the "the header exists but is not a GUID" case.
+    /// </summary>
+    public HttpClient CreateClientWithRawProjectHeader(string rawValue)
+    {
+        var client = _factory!.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Project-Id", rawValue);
+        return client;
+    }
+
+    /// <summary>
     /// Returns a factory identical to this one except that a master secret is injected, which is
     /// what turns secret enforcement on.
     /// <para>

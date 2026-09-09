@@ -2,9 +2,10 @@
 
 > **Archived — frozen at the MorphDB `0.11.x` contract, not maintained, not published.** This
 > TypeScript client stays in the repository as a record of how the API was called from TypeScript.
-> It is not tested against the server and is not updated when the contract changes; parts of it
-> already disagree with the server it was written for. Use the REST/GraphQL API directly
-> (`docs/API.md`), or `MorphDB.Client` from .NET.
+> It is not tested against the server, and is not updated for a contract change unless leaving it
+> would make its own documented call fail outright (as `subscribe`'s signature once did) — short
+> of that, parts of it already disagree with the server it was written for. Use the REST/GraphQL
+> API directly (`docs/API.md`), or `MorphDB.Client` from .NET.
 
 TypeScript client for MorphDB - a PostgreSQL-based dynamic schema database service.
 

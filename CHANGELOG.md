@@ -18,8 +18,10 @@
   export ever applied either — an export was always the whole table in storage order, so a caller
   who sent a filter received an unfiltered file and no signal. The members are gone; a body that
   still names one is refused at the request as an unknown member (`400`, listing the supported
-  members), which is the same answer every other request body already gives. To export a subset,
-  filter through the query API.
+  members), which is the same answer every other request body already gives. An export is the
+  whole table; there is no export-shaped replacement for a subset. To work with a subset, page it
+  through `GET /api/data/{table}?filter=...` and assemble the file yourself — that route does
+  filter, and always has (Verified-by: DataApiTests.Query_WithFilter_ShouldReturnFilteredResults).
 - **The `Subscribe` hub method takes one argument.** It declared a second, optional
   `SubscriptionOptions` — a filter, a field list and an include-data flag — that every subscribe
   call stored and no broadcast ever read. SignalR binds an invocation by argument *count*, and no
@@ -34,9 +36,12 @@
 - **The Python and TypeScript clients under `sdk/` are archived.** They were reference
   implementations that no workflow ran; measured against the server they document, 4 of their 11
   documented methods worked. Rather than carry a second and third client contract that nothing
-  verifies, the source stays in the repository frozen at the `0.11.x` contract, marked archived in
-  each README, and is not maintained, tested, or published. The supported clients are the API
-  itself and `MorphDB.Client` (.NET) — `docs/COMPATIBILITY.md` and `docs/TESTING.md` say so.
+  verifies, the source stays in the repository at the `0.11.x` contract, marked archived in each
+  README, and is not maintained, tested, or published — except for this release's own `Subscribe`
+  signature change (above), applied here because leaving it would have made the one call both
+  clients document fail at the binder. Neither client is updated for any other contract change.
+  The supported clients are the API itself and `MorphDB.Client` (.NET) — `docs/COMPATIBILITY.md`
+  and `docs/TESTING.md` say so.
 
 ### Removed
 
@@ -53,6 +58,16 @@
 
 ### Fixed
 
+- **An `X-Project-Id` that failed to parse was answered as if it had never been sent.** The header
+  and an authenticated claim both collapsed into the same `Guid?`, so "no project id" and "a project
+  id that is not a GUID" produced the identical `400 MISSING_PROJECT` — a caller who mistyped their
+  project id was told to send a header it had already sent. A header that fails to parse now answers
+  `400 INVALID_PROJECT_ID`, naming what was sent.
+- **A data or schema request against a project that does not exist answered `TABLE_NOT_FOUND`.**
+  `ProjectNotFoundException` already existed but was only thrown from the project-management routes;
+  every other project-scoped route resolved a table inside a schema that was never there and reported
+  the table missing. It now answers `404 PROJECT_NOT_FOUND` — checked only on that error path, so a
+  request whose project and table both exist pays no extra query.
 - **The batch example was not valid JSON.** The `POST /api/batch/data` body in the reference showed
   an upsert's `data` as `{...}` — shorthand a reader can see through but a parser cannot, so the
   example could not be sent as written even after filling in the elided id. It now shows a real

@@ -62,6 +62,16 @@ public class GlobalExceptionHandlerTests
     }
 
     [Fact]
+    public async Task MalformedProjectIdException_IsA400_AndNamesWhatWasSent()
+    {
+        var (status, body, _) = await RunAsync(new MalformedProjectIdException("nonexistent-xyz"));
+
+        status.Should().Be(400);
+        body!.Code.Should().Be("INVALID_PROJECT_ID");
+        body.Message.Should().Contain("nonexistent-xyz");
+    }
+
+    [Fact]
     public async Task NotFoundException_IsA404()
     {
         var (status, body, _) = await RunAsync(new NotFoundException("Table", "orders"));
