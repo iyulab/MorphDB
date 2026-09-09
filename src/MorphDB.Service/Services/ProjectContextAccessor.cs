@@ -1,6 +1,3 @@
-using System.Security.Claims;
-using MorphDB.Core.Exceptions;
-
 namespace MorphDB.Service.Services;
 
 /// <summary>
@@ -34,8 +31,6 @@ public interface IProjectContextAccessor
 /// </summary>
 public sealed class HttpProjectContextAccessor : IProjectContextAccessor
 {
-    private const string ProjectIdHeader = "X-Project-Id";
-    private const string ProjectIdClaimType = "project_id";
     private readonly IHttpContextAccessor _httpContextAccessor;
 
     public HttpProjectContextAccessor(IHttpContextAccessor httpContextAccessor)
@@ -43,69 +38,10 @@ public sealed class HttpProjectContextAccessor : IProjectContextAccessor
         _httpContextAccessor = httpContextAccessor;
     }
 
-    public Guid ProjectId
-    {
-        get
-        {
-            var (value, malformed) = Resolve();
-            if (value is not null)
-            {
-                return value.Value;
-            }
+    public Guid ProjectId => ProjectIdResolver.Require(_httpContextAccessor.HttpContext);
 
-            throw malformed is not null
-                ? new MalformedProjectIdException(malformed)
-                : new MissingProjectException();
-        }
-    }
+    public Guid? ProjectIdOrNull => ProjectIdResolver.Resolve(_httpContextAccessor.HttpContext).Value;
 
-    public Guid? ProjectIdOrNull => Resolve().Value;
-
-    public string? MalformedProjectIdHeaderValue => Resolve().Malformed;
-
-    /// <summary>
-    /// The single walk that decides both <see cref="ProjectIdOrNull"/> and
-    /// <see cref="MalformedProjectIdHeaderValue"/>, so the two can never disagree about which state
-    /// a request is in.
-    /// </summary>
-    private (Guid? Value, string? Malformed) Resolve()
-    {
-        var httpContext = _httpContextAccessor.HttpContext;
-        if (httpContext is null)
-        {
-            return (null, null);
-        }
-
-        // 1. First, try to get project ID from authenticated user claims (set by API key authentication)
-        var user = httpContext.User;
-        if (user.Identity?.IsAuthenticated == true)
-        {
-            var projectClaim = user.FindFirst(ProjectIdClaimType);
-            if (projectClaim != null && Guid.TryParse(projectClaim.Value, out var claimProjectId) && claimProjectId != Guid.Empty)
-            {
-                return (claimProjectId, null);
-            }
-        }
-
-        // 2. Otherwise the X-Project-Id header, which is how an unauthenticated caller says it.
-        if (httpContext.Request.Headers.TryGetValue(ProjectIdHeader, out var projectIdHeader))
-        {
-            var raw = projectIdHeader.FirstOrDefault();
-            if (raw is not null)
-            {
-                if (Guid.TryParse(raw, out var headerProjectId) && headerProjectId != Guid.Empty)
-                {
-                    return (headerProjectId, null);
-                }
-
-                // Guid.Empty parses fine but names no project a caller could own, so it stays in the
-                // same "nothing usable" bucket as an absent header — only a value that fails to parse
-                // at all is something the caller can be told to fix.
-                var malformed = Guid.TryParse(raw, out _) ? null : raw;
-                return (null, malformed);
-            }
-        }
-
-        return (null, null);
-    }
+    public string? MalformedProjectIdHeaderValue =>
+        ProjectIdResolver.Resolve(_httpContextAccessor.HttpContext).Malformed;
 }

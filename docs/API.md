@@ -611,7 +611,8 @@ with. Rows carry `_id`, `_created_at` and `_updated_at` alongside them.
 
 The connection is scoped the same way every other request is, by `X-Project-Id` — and it is scoped
 at *connect* time, not per subscription. A connection that names no project is refused rather than
-served a stream that would stay empty forever.
+served a stream that would stay empty forever, and — the same distinction REST/GraphQL make — a
+header that was sent but is not a GUID is refused for that reason, not reported as if none were sent.
 
 That header has to ride the HTTP request that establishes the connection, which a browser cannot
 do on the WebSocket transport. Ask for a transport that carries headers:

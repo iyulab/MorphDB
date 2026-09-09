@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 using Microsoft.AspNetCore.SignalR;
-using MorphDB.Core.Exceptions;
+using MorphDB.Service.Services;
 
 namespace MorphDB.Service.Realtime;
 
@@ -128,19 +128,15 @@ public sealed partial class MorphHub : Hub<IMorphHubClient>
     /// <para>
     /// A connection that does not name one used to fall back to <see cref="Guid.Empty"/> "for
     /// development". Nothing publishes to that project, so the client would subscribe successfully
-    /// and then receive nothing, forever, with no error to explain it. Failing here says so.
+    /// and then receive nothing, forever, with no error to explain it. Failing here says so — and,
+    /// like REST/GraphQL, distinguishes that from a header that was sent but did not parse
+    /// (<see cref="ProjectIdResolver"/> is the shared rule; this hub must not read
+    /// <c>IHttpContextAccessor</c> itself — see that class's remarks).
     /// </para>
     /// </summary>
-    private Guid GetProjectId() => ProjectIdOrNull() ?? throw new MissingProjectException();
+    private Guid GetProjectId() => ProjectIdResolver.Require(Context.GetHttpContext());
 
-    private Guid? ProjectIdOrNull()
-    {
-        var projectIdHeader = Context.GetHttpContext()?.Request.Headers["X-Project-Id"].FirstOrDefault();
-
-        return Guid.TryParse(projectIdHeader, out var projectId) && projectId != Guid.Empty
-            ? projectId
-            : null;
-    }
+    private Guid? ProjectIdOrNull() => ProjectIdResolver.Resolve(Context.GetHttpContext()).Value;
 
     internal static string GetTableGroupName(Guid projectId, string tableName)
     {

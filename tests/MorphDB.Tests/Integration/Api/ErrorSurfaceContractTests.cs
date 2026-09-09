@@ -132,8 +132,12 @@ public class ErrorSurfaceContractTests
 
     /// <summary>
     /// Live probe #1: a syntactically valid X-Project-Id that no project bears answered a 500.
-    /// A project that does not exist has no tables, so the request lands on the documented 404 —
-    /// and the message must not echo the project GUID (hidden-layer sweep).
+    /// A project that does not exist has no tables, so a naive lookup lands on the schema-layer
+    /// <c>TABLE_NOT_FOUND</c> first. <see cref="MorphDB.Service.Filters.RequireProjectAttribute"/>'s
+    /// exception filter checks whether the project itself exists before letting that answer stand,
+    /// and reclassifies to the project-layer <c>PROJECT_NOT_FOUND</c> when it does not — this test
+    /// pins that reclassification (see CHANGELOG.md's `### Fixed` entry on this behavior) alongside
+    /// the GUID-echo check below.
     /// </summary>
     [Fact]
     public async Task Query_AgainstNonexistentProject_IsA404_WithoutEchoingTheGuid()
@@ -146,7 +150,7 @@ public class ErrorSurfaceContractTests
 
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
         var body = await response.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
-        body!.Code.Should().Be("TABLE_NOT_FOUND");
+        body!.Code.Should().Be("PROJECT_NOT_FOUND");
         (body.Message ?? "").Should().NotContain(ghostProject.ToString(),
             "internal identifiers do not belong in error text");
     }

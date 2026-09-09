@@ -104,6 +104,29 @@ public sealed class MorphHubTests : IAsyncLifetime
         await AssertRefusedAsync(connection);
     }
 
+    /// <summary>
+    /// The same malformed/missing distinction REST and GraphQL make on `X-Project-Id` must hold at
+    /// connect time too — a header that was sent but does not parse is a different problem than a
+    /// header that was never sent, and the two must not be reported identically here either.
+    /// </summary>
+    [Fact]
+    public async Task Connect_WithMalformedProjectHeader_ShouldBeRefused()
+    {
+        await using var malformed = BuildConnectionWithHeaders(
+            new Dictionary<string, string> { ["X-Project-Id"] = "not-a-guid" });
+        await using var missing = BuildConnectionWithHeaders(new Dictionary<string, string>());
+
+        var malformedMessage = await AssertRefusedAsync(malformed);
+        var missingMessage = await AssertRefusedAsync(missing);
+
+        malformedMessage.Should().NotBeNullOrEmpty(
+            "EnableDetailedErrors is on, so the refusal must say why, the same as REST/GraphQL's 400 body does");
+        malformedMessage.Should().Contain("GUID").And.Contain("not-a-guid",
+            "a malformed header must be reported as MalformedProjectIdException, not the generic missing-project refusal");
+        malformedMessage.Should().NotBe(missingMessage,
+            "the two refusal reasons must be distinguishable, the same as MISSING_PROJECT vs INVALID_PROJECT_ID on REST");
+    }
+
     private HubConnection BuildConnectionWithHeaders(IDictionary<string, string> headers)
     {
         var hubUrl = new Uri(_fixture.Api.BaseAddress, "hubs/morph").ToString();
@@ -124,17 +147,30 @@ public sealed class MorphHubTests : IAsyncLifetime
     /// The refusal can surface in either of two shapes depending on timing: the handshake may fail
     /// outright (StartAsync throws), or the handshake completes before OnConnectedAsync throws and the
     /// server then closes the connection. Both count; a connection that stays usable does not.
+    /// <para>
+    /// Returns whatever refusal text was observable on that shape (the caught exception's message, or
+    /// the <see cref="HubConnection.Closed"/> handler's, when the close arrives after a completed
+    /// handshake) — null if neither surfaced one, which a caller checking only connection state may
+    /// ignore.
+    /// </para>
     /// </summary>
-    private static async Task AssertRefusedAsync(HubConnection connection)
+    private static async Task<string?> AssertRefusedAsync(HubConnection connection)
     {
+        string? closedMessage = null;
+        connection.Closed += ex =>
+        {
+            closedMessage = ex?.Message;
+            return Task.CompletedTask;
+        };
+
         try
         {
             await connection.StartAsync();
         }
-        catch
+        catch (Exception ex)
         {
             connection.State.Should().Be(HubConnectionState.Disconnected);
-            return;
+            return ex.Message;
         }
 
         var deadline = Task.Delay(TimeSpan.FromSeconds(5));
@@ -146,6 +182,8 @@ public sealed class MorphHubTests : IAsyncLifetime
         connection.State.Should().Be(
             HubConnectionState.Disconnected,
             "a connection that does not name a project must not remain connected");
+
+        return closedMessage;
     }
 
     #endregion

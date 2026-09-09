@@ -133,13 +133,20 @@ public class MissingProjectException : MorphDbException
 /// Thrown when a request addresses a project that does not exist. Exists as a type for the same
 /// reason as <see cref="MissingProjectException"/>: the alternative was branching on the
 /// <c>ErrorCode</c> string, which made the code literal part of every catch site.
+/// <para>
+/// The message does not include <see cref="ProjectId"/> — a project id is an internal operating
+/// detail this API's own docs say a caller must never forward from an end user, so it does not
+/// belong in text a caller may show one. Unlike a table or column name, it names nothing a caller
+/// chose; the code and status already say what was wrong, and <see cref="ProjectId"/> is there for
+/// a caller (or a log) that needs the id itself.
+/// </para>
 /// </summary>
 public class ProjectNotFoundException : MorphDbException
 {
     public Guid ProjectId { get; }
 
     public ProjectNotFoundException(Guid projectId)
-        : base("PROJECT_NOT_FOUND", $"Project with ID '{projectId}' not found.")
+        : base("PROJECT_NOT_FOUND", "Project not found.")
     {
         ProjectId = projectId;
     }

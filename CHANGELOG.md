@@ -63,11 +63,23 @@
   id that is not a GUID" produced the identical `400 MISSING_PROJECT` — a caller who mistyped their
   project id was told to send a header it had already sent. A header that fails to parse now answers
   `400 INVALID_PROJECT_ID`, naming what was sent.
+- **The real-time hub made the same misdiagnosis at connect time.** `MorphHub` parsed
+  `X-Project-Id` on its own instead of sharing the rule above, so a connection whose header failed to
+  parse was refused with the same generic "no project" message as a connection that sent no header
+  at all. It now shares the one resolution rule REST/GraphQL use and reports the same distinction —
+  the two duplicate implementations were exactly how this drifted apart the first time
+  (Verified-by: MorphHubTests.Connect_WithMalformedProjectHeader_ShouldBeRefused).
 - **A data or schema request against a project that does not exist answered `TABLE_NOT_FOUND`.**
   `ProjectNotFoundException` already existed but was only thrown from the project-management routes;
   every other project-scoped route resolved a table inside a schema that was never there and reported
   the table missing. It now answers `404 PROJECT_NOT_FOUND` — checked only on that error path, so a
   request whose project and table both exist pays no extra query.
+- **That `404`'s own message echoed the project id.** `ProjectNotFoundException` quoted it in text
+  (`Project with ID '…' not found.`), which the hidden-layer principle this codebase already applies
+  to table and column names does not allow for an id a caller must never forward from an end user.
+  The message now says only `Project not found.`; the id is still on the exception's `ProjectId`
+  property for a caller or a log that needs it
+  (Verified-by: ErrorSurfaceContractTests.Query_AgainstNonexistentProject_IsA404_WithoutEchoingTheGuid).
 - **The batch example was not valid JSON.** The `POST /api/batch/data` body in the reference showed
   an upsert's `data` as `{...}` — shorthand a reader can see through but a parser cannot, so the
   example could not be sent as written even after filling in the elided id. It now shows a real
