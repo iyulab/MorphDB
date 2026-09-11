@@ -178,6 +178,56 @@ public sealed class RealtimeClientTests
     }
 
     /// <summary>
+    /// The README shows an <c>async</c> callback, and until this overload existed that example
+    /// compiled against <c>Action&lt;ChangeNotification&gt;</c> as <c>async void</c> — the client could not
+    /// wait for it and an exception inside it was unobservable. With a task-returning callback the
+    /// client awaits each delivery before the next, so work the callback awaits is done, in order,
+    /// by the time the next change is delivered.
+    /// </summary>
+    [Fact]
+    public async Task An_async_callback_is_awaited_before_the_next_change_is_delivered()
+    {
+        await using var client = ClientScopedToTheFixtureProject();
+        var tableName = await CreateTableAsync(client);
+        string[] names = ["first", "second", "third"];
+        var completedInOrder = new List<string>();
+        var inFlight = 0;
+        var overlapped = false;
+
+        await using var subscription = await client.Realtime.SubscribeAsync(tableName, async change =>
+        {
+            if (Interlocked.Increment(ref inFlight) > 1)
+                overlapped = true;
+            await Task.Delay(150);
+            lock (completedInOrder)
+                completedInOrder.Add((string)change.Data!["name"]!);
+            Interlocked.Decrement(ref inFlight);
+        }, TestContext.Current.CancellationToken);
+
+        foreach (var name in names)
+        {
+            await client.Data.InsertAsync(tableName, new Dictionary<string, object?> { ["name"] = name },
+                TestContext.Current.CancellationToken);
+        }
+
+        var deadline = DateTimeOffset.UtcNow + NotificationTimeout;
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            lock (completedInOrder)
+            {
+                if (completedInOrder.Count == 3)
+                    break;
+            }
+
+            await Task.Delay(100, TestContext.Current.CancellationToken);
+        }
+
+        completedInOrder.Should().Equal(names,
+            "each callback's task is awaited before the next change is dispatched");
+        overlapped.Should().BeFalse("two callbacks never run at once on one connection");
+    }
+
+    /// <summary>
     /// The hub connection borrows the client's <see cref="MorphDBClientOptions.HttpMessageHandler"/>
     /// — that is what lets it reach a proxy, or this test server, at all — and disposes what it is
     /// handed when it closes. The handler is the client's, so closing the real-time connection must

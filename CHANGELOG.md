@@ -38,6 +38,17 @@
   stops compiling until it is adjusted; nothing that compiled ever observed a different value, since
   the client's real-time callback had never been invoked (see Fixed).
 
+### Added
+
+- **`RealtimeClient.SubscribeAsync` accepts a task-returning callback.** A second overload takes
+  `Func<ChangeNotification, Task>` alongside the existing `Action<ChangeNotification>`, the same
+  pair SignalR's own `HubConnection.On` offers. An `async` lambda now binds to it, and the client
+  awaits each delivery before dispatching the next — so a callback that writes each change
+  somewhere can await that write and rely on the order, and an exception it throws is observed
+  rather than lost. The `MorphDB.Client` README's real-time example, which passed an `async`
+  lambda to the `Action` overload and so compiled as `async void`, now shows both forms
+  (Verified-by: RealtimeClientTests.An_async_callback_is_awaited_before_the_next_change_is_delivered).
+
 ### Deprecated
 
 - **The Python and TypeScript clients under `sdk/` are archived.** They were reference

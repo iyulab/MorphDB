@@ -52,11 +52,16 @@ var adults = await client.Data.QueryAsync("users", new QueryRequest
     PageSize = 10
 });
 
-// Real-time subscriptions
-await client.Realtime.SubscribeAsync("users", async (change) =>
+// Real-time subscriptions — changes arrive one at a time, in order, and the next one waits
+// for the callback's task, so the callback can await its own work
+await client.Realtime.SubscribeAsync("users", async change =>
 {
-    Console.WriteLine($"Change: {change.Operation} on {change.TableName}");
+    await store.WriteAsync(change.TableName, change.RecordId, change.Data);
 });
+
+// A callback with nothing to await takes the plain form
+await client.Realtime.SubscribeAsync("users", change =>
+    Console.WriteLine($"Change: {change.Operation} on {change.TableName}"));
 ```
 
 ## Features

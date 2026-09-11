@@ -68,11 +68,11 @@ public sealed class RealtimeClient : IAsyncDisposable
             var connection = builder.Build();
 
             connection.On<RecordChangedMessage>("RecordCreated",
-                message => Dispatch(message.Table, ToNotification(message, ChangeOperation.Insert)));
+                message => DispatchAsync(message.Table, ToNotification(message, ChangeOperation.Insert)));
             connection.On<RecordChangedMessage>("RecordUpdated",
-                message => Dispatch(message.Table, ToNotification(message, ChangeOperation.Update)));
+                message => DispatchAsync(message.Table, ToNotification(message, ChangeOperation.Update)));
             connection.On<RecordDeletedMessage>("RecordDeleted",
-                message => Dispatch(message.Table, ToNotification(message)));
+                message => DispatchAsync(message.Table, ToNotification(message)));
 
             // A reconnect is a new connection to the hub, and the hub's group membership went with
             // the old one — without this, the first dropped connection would silence every
@@ -95,13 +95,41 @@ public sealed class RealtimeClient : IAsyncDisposable
     }
 
     /// <summary>
-    /// Subscribes to changes on a table.
+    /// Subscribes to changes on a table, with a callback that has nothing to await.
     /// </summary>
-    public async Task<ISubscription> SubscribeAsync(
+    /// <remarks>
+    /// Pass an <c>async</c> lambda to the <see cref="SubscribeAsync(string, Func{ChangeNotification, Task}, CancellationToken)"/>
+    /// overload instead — the compiler binds it there. Bound to this one it would be <c>async void</c>:
+    /// the client could not wait for it, and an exception inside it would escape to the thread pool.
+    /// </remarks>
+    public Task<ISubscription> SubscribeAsync(
         string tableName,
         Action<ChangeNotification> onChangeHandler,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(onChangeHandler);
+        return SubscribeAsync(tableName, change =>
+        {
+            onChangeHandler(change);
+            return Task.CompletedTask;
+        }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Subscribes to changes on a table.
+    /// <para>
+    /// Changes are delivered to the callback one at a time, in the order the hub sent them, and the
+    /// next change is not delivered until the returned task completes — so a callback that writes
+    /// each change somewhere can await that write and rely on the order. An exception thrown by the
+    /// callback surfaces through the hub connection's logging, not silently.
+    /// </para>
+    /// </summary>
+    public async Task<ISubscription> SubscribeAsync(
+        string tableName,
+        Func<ChangeNotification, Task> onChangeHandler,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(onChangeHandler);
         await ConnectAsync(cancellationToken);
 
         if (_connection == null)
@@ -206,7 +234,7 @@ public sealed class RealtimeClient : IAsyncDisposable
         _connectionLock.Dispose();
     }
 
-    private void Dispatch(string tableName, ChangeNotification notification)
+    private async Task DispatchAsync(string tableName, ChangeNotification notification)
     {
         Subscription[] subscribers;
         lock (_subscriptionsGate)
@@ -219,7 +247,7 @@ public sealed class RealtimeClient : IAsyncDisposable
 
         foreach (var subscriber in subscribers)
         {
-            subscriber.OnChange?.Invoke(notification);
+            await subscriber.OnChange(notification);
         }
     }
 
@@ -298,7 +326,7 @@ public sealed class RealtimeClient : IAsyncDisposable
         private readonly RealtimeClient _client;
         private bool _isActive = true;
 
-        public Subscription(string subscriptionId, string tableName, Action<ChangeNotification> onChangeHandler, RealtimeClient client)
+        public Subscription(string subscriptionId, string tableName, Func<ChangeNotification, Task> onChangeHandler, RealtimeClient client)
         {
             SubscriptionId = subscriptionId;
             TableName = tableName;
@@ -309,7 +337,7 @@ public sealed class RealtimeClient : IAsyncDisposable
         public string SubscriptionId { get; }
         public string TableName { get; }
         public bool IsActive => _isActive;
-        public Action<ChangeNotification>? OnChange { get; }
+        public Func<ChangeNotification, Task> OnChange { get; }
 
         public async Task UnsubscribeAsync(CancellationToken cancellationToken = default)
         {

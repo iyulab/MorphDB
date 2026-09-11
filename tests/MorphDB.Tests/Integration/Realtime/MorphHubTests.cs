@@ -385,7 +385,10 @@ public sealed class MorphHubTests : IAsyncLifetime
     /// <para>
     /// Each change is read back by key when handled, so a later commit may already be visible when
     /// an earlier notification is handled — which is why the sequence is asserted non-decreasing
-    /// rather than equal to <c>1..n</c>: order is the contract, per-statement images are not.
+    /// rather than equal to <c>1..n</c>: order is the contract, per-statement images are not. The
+    /// event's <c>timestamp</c> is not the order key either: the trigger stamps it with the
+    /// transaction's start time, and PostgreSQL orders notifications by commit, so a transaction
+    /// that started earlier and committed later is correctly delivered later with an earlier stamp.
     /// </para>
     /// </summary>
     [Fact]
@@ -418,9 +421,9 @@ public sealed class MorphHubTests : IAsyncLifetime
             await Task.Delay(100, TestContext.Current.CancellationToken);
         }
 
+        _receivedUpdatedMessages.Should().OnlyContain(m => m.Table == tableName && m.RecordId == recordId,
+            "the connection is subscribed to this table alone, so nothing else may reach it");
         _receivedUpdatedMessages.Should().HaveCount(changes, "every committed change is broadcast once");
-        _receivedUpdatedMessages.Select(m => m.Timestamp).Should().BeInAscendingOrder(
-            "the trigger stamps each notification at its own commit and the service must not reorder them");
         _receivedUpdatedMessages.Select(m => Convert.ToInt32(m.Data["value"]!.ToString(), CultureInfo.InvariantCulture)).Should().BeInAscendingOrder(
             "a row read back in handling order can only ever show a state at or after the notifying commit");
     }
