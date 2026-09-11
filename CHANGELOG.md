@@ -235,6 +235,19 @@
   security fix (CVE-2026-62900) and moves cluster discovery from `CLUSTER NODES` to `CLUSTER SLOTS`;
   the cache is an optional dependency and no code here touches either. No behavior change.
 
+### Internal
+
+- **`scripts/start-dev.ps1 -Headless` and a `stop-dev.ps1` that stops only what was started.**
+  A headless run brings PostgreSQL up in a compose project of its own, runs the Release build of
+  the service in the background on a port of its own, and records the process id, project and
+  ports in `.dev-state.json`; `stop-dev.ps1` stops that process by id and that project, and
+  nothing else. It used to stop every `dotnet` process whose command line looked like the
+  service or a watcher, which also matches the build servers a concurrent `dotnet build` is
+  using. Driving the service from a script no longer needs the setup to be assembled by hand.
+  Two leftovers went with it: the scripts still called `POST /api/dev/bootstrap`, an endpoint
+  removed with the authentication machinery, and waited for PostgreSQL by a container name compose
+  no longer assigns, so that wait always ran its 30 seconds out.
+
 ## 0.11.1
 
 A hotfix on `0.11.0`, carrying only the fixes below.
