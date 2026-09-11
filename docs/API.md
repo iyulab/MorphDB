@@ -644,7 +644,7 @@ connection.on("RecordDeleted", (message) => { /* … */ });
 | `GetSubscriptions` | none — answers the table names this connection is subscribed to |
 
 **A subscription is per table and nothing narrower.** `Subscribe` takes the table name and nothing
-else, and every subscriber to a table receives every change to it. Filter on the receiving side.
+else, and a change to a table goes to every subscriber it has. Filter on the receiving side.
 
 #### Client events
 
@@ -662,8 +662,20 @@ project is refused at connect. Nothing arrives out of band.
 
 `operation` is `INSERT`, `UPDATE` or `DELETE` — upper case, and not the same vocabulary as the
 GraphQL subscription's `changeType`. A deletion carries the id of the row that is gone and no
-`data`. There is no before-image on any event. `data` is keyed by the same logical column names
-REST and GraphQL use — not the physical (`col_…`) names the trigger payload carries internally.
+`data`. There is no before-image on any event. `data` is the row as `GET /api/data/{table}/{id}` would
+serve it — the same logical column names, the same system columns, decrypted the same way — read
+back by key once the change has been notified. It is the row as it stands at that read, not the
+image the notifying statement wrote: a row changed twice in quick succession can arrive carrying
+the later state on both events, and a row deleted before the service read it arrives with an
+empty `data` (its `RecordDeleted` follows).
+
+#### Delivery
+
+Events for one table arrive in the order the changes committed, and each committed change is
+broadcast at most once. Delivery is not guaranteed: a change committed while the service's own
+database listener or your connection is reconnecting is not delivered later, and no event says
+that a gap occurred. To catch up after a reconnect, re-read the table — `_updated_at` finds the
+rows inserted or updated since a point in time; a deletion leaves no trace to catch up from.
 
 ---
 

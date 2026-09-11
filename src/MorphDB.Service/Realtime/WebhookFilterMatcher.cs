@@ -85,10 +85,13 @@ internal static class WebhookFilterMatcher
             return filterValue.ValueKind == JsonValueKind.Null;
         }
 
-        if (dataValue is not JsonElement dataElement)
-        {
-            return false;
-        }
+        // The row arrives as .NET values — the same values a REST response is serialized from —
+        // so the comparison is made against the value as a caller would see it on the wire. A
+        // filter written from what `GET /api/data/{table}/{id}` returned then matches the row it
+        // was written from, whatever CLR type the column maps to underneath.
+        var dataElement = dataValue is JsonElement element
+            ? element
+            : JsonSerializer.SerializeToElement(dataValue, WireOptions);
 
         if (filterValue.ValueKind != dataElement.ValueKind)
         {
@@ -103,4 +106,6 @@ internal static class WebhookFilterMatcher
             _ => false,
         };
     }
+
+    private static readonly JsonSerializerOptions WireOptions = JsonSerializerOptions.Web;
 }

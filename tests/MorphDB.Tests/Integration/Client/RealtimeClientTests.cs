@@ -79,7 +79,8 @@ public sealed class RealtimeClientTests
 
         await using var subscription = await client.Realtime.SubscribeAsync(tableName, change =>
         {
-            lock (received) received.Enqueue(change);
+            lock (received)
+                received.Enqueue(change);
         }, TestContext.Current.CancellationToken);
 
         var created = await client.Data.InsertAsync(tableName, new Dictionary<string, object?>
@@ -111,7 +112,8 @@ public sealed class RealtimeClientTests
 
         await using var subscription = await client.Realtime.SubscribeAsync(tableName, change =>
         {
-            lock (received) received.Enqueue(change);
+            lock (received)
+                received.Enqueue(change);
         }, TestContext.Current.CancellationToken);
 
         var created = await client.Data.InsertAsync(tableName, new Dictionary<string, object?> { ["name"] = "Before" },
@@ -148,11 +150,13 @@ public sealed class RealtimeClientTests
 
         var firstSubscription = await client.Realtime.SubscribeAsync(tableName, change =>
         {
-            lock (first) first.Enqueue(change);
+            lock (first)
+                first.Enqueue(change);
         }, TestContext.Current.CancellationToken);
         await using var secondSubscription = await client.Realtime.SubscribeAsync(tableName, change =>
         {
-            lock (second) second.Enqueue(change);
+            lock (second)
+                second.Enqueue(change);
         }, TestContext.Current.CancellationToken);
 
         await client.Data.InsertAsync(tableName, new Dictionary<string, object?> { ["name"] = "Both" },

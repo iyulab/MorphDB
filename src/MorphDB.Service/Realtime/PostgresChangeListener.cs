@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Threading.Channels;
 using Microsoft.AspNetCore.SignalR;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Models;
@@ -8,31 +9,60 @@ namespace MorphDB.Service.Realtime;
 
 /// <summary>
 /// Listens for PostgreSQL NOTIFY events and broadcasts changes to connected clients.
+/// <para>
+/// Notifications are handled one at a time, in the order they arrive. PostgreSQL delivers them in
+/// the order the transactions committed, and that order is the only thing a subscriber has to tell
+/// two changes to one row apart — so the LISTEN connection's event handler does nothing but hand
+/// each payload to a bounded channel, and a single consumer loop drains it. Handling a payload
+/// inside the event handler itself (an <c>async void</c>, since Npgsql's handler is a plain
+/// <c>void</c> delegate) let handlers overlap on their awaits and broadcast out of commit order.
+/// The channel is bounded so a burst of writes cannot start an unbounded number of handlers: when
+/// it fills, the LISTEN connection simply stops asking for the next notification until there is
+/// room, and PostgreSQL queues the rest on its side.
+/// </para>
 /// </summary>
 public sealed partial class PostgresChangeListener : BackgroundService
 {
     private const string ChannelName = "morphdb_changes";
 
+    /// <summary>
+    /// Notifications waiting to be handled. Sized so a bulk write does not stall the LISTEN
+    /// connection on every row, and small enough that a slow downstream (webhook queueing, a
+    /// schema lookup) is felt as backpressure rather than as memory.
+    /// </summary>
+    private const int PendingNotificationCapacity = 1024;
+
+    /// <summary>
+    /// Seconds of silence after which Npgsql sends a keepalive on the LISTEN connection. A
+    /// connection that only ever waits is exactly the one a NAT or load balancer drops for idling,
+    /// and without this the drop is only noticed at the next notification — which is then lost
+    /// along with every one committed until the reconnect.
+    /// </summary>
+    private const int KeepAliveSeconds = 30;
+
     private readonly ILogger<PostgresChangeListener> _logger;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IHubContext<MorphHub, IMorphHubClient> _hubContext;
-    private readonly SubscriptionManager _subscriptionManager;
-    private readonly ISchemaManager _schemaManager;
+    private readonly IMorphDataService _dataService;
     private readonly string _connectionString;
+    private readonly Channel<string> _pending = Channel.CreateBounded<string>(new BoundedChannelOptions(PendingNotificationCapacity)
+    {
+        SingleReader = true,
+        SingleWriter = true,
+        FullMode = BoundedChannelFullMode.Wait,
+    });
 
     public PostgresChangeListener(
         ILogger<PostgresChangeListener> logger,
         IServiceScopeFactory scopeFactory,
         IHubContext<MorphHub, IMorphHubClient> hubContext,
-        SubscriptionManager subscriptionManager,
-        ISchemaManager schemaManager,
+        IMorphDataService dataService,
         IConfiguration configuration)
     {
         _logger = logger;
         _scopeFactory = scopeFactory;
         _hubContext = hubContext;
-        _subscriptionManager = subscriptionManager;
-        _schemaManager = schemaManager;
+        _dataService = dataService;
         _connectionString = configuration.GetConnectionString("MorphDB")
             ?? throw new InvalidOperationException("Connection string 'MorphDB' not found.");
     }
@@ -41,24 +71,34 @@ public sealed partial class PostgresChangeListener : BackgroundService
     {
         LogListenerStarting(_logger);
 
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            try
-            {
-                await ListenForChangesAsync(stoppingToken);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                // Normal shutdown
-                break;
-            }
-            catch (Exception ex)
-            {
-                LogListenerError(_logger, ex);
+        var consumer = ConsumePendingAsync(stoppingToken);
 
-                // Wait before reconnecting
-                await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+        try
+        {
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                try
+                {
+                    await ListenForChangesAsync(stoppingToken);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    // Normal shutdown
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    LogListenerError(_logger, ex);
+
+                    // Wait before reconnecting
+                    await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+                }
             }
+        }
+        finally
+        {
+            _pending.Writer.TryComplete();
+            await consumer;
         }
 
         LogListenerStopped(_logger);
@@ -66,20 +106,19 @@ public sealed partial class PostgresChangeListener : BackgroundService
 
     private async Task ListenForChangesAsync(CancellationToken stoppingToken)
     {
-        await using var dataSource = NpgsqlDataSource.Create(_connectionString);
+        var connectionSettings = new NpgsqlConnectionStringBuilder(_connectionString)
+        {
+            KeepAlive = KeepAliveSeconds,
+        };
+
+        await using var dataSource = NpgsqlDataSource.Create(connectionSettings);
         await using var connection = await dataSource.OpenConnectionAsync(stoppingToken);
 
-        connection.Notification += async (_, e) =>
-        {
-            try
-            {
-                await HandleNotificationAsync(e.Payload);
-            }
-            catch (Exception ex)
-            {
-                LogNotificationError(_logger, ex);
-            }
-        };
+        // Npgsql raises this synchronously, from inside WaitAsync, once per notification and in
+        // delivery order. It only collects; the payloads are queued after WaitAsync returns, so the
+        // wait on a full channel happens on this loop and not inside the driver's event dispatch.
+        var received = new Queue<string>();
+        connection.Notification += (_, e) => received.Enqueue(e.Payload);
 
         await using (var cmd = new NpgsqlCommand($"LISTEN {ChannelName}", connection))
         {
@@ -92,10 +131,45 @@ public sealed partial class PostgresChangeListener : BackgroundService
         while (!stoppingToken.IsCancellationRequested)
         {
             await connection.WaitAsync(stoppingToken);
+
+            while (received.TryDequeue(out var payload))
+            {
+                await _pending.Writer.WriteAsync(payload, stoppingToken);
+            }
         }
     }
 
-    private async Task HandleNotificationAsync(string payload)
+    /// <summary>
+    /// The one place notifications are handled — strictly in the order they were queued.
+    /// </summary>
+    private async Task ConsumePendingAsync(CancellationToken stoppingToken)
+    {
+        try
+        {
+            await foreach (var payload in _pending.Reader.ReadAllAsync(stoppingToken))
+            {
+                try
+                {
+                    await HandleNotificationAsync(payload, stoppingToken);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    // Normal shutdown, mid-notification — not an error to report
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    LogNotificationError(_logger, ex);
+                }
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Normal shutdown
+        }
+    }
+
+    private async Task HandleNotificationAsync(string payload, CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(payload))
             return;
@@ -106,72 +180,61 @@ public sealed partial class PostgresChangeListener : BackgroundService
 
         LogChangeReceived(_logger, changeEvent.Operation, changeEvent.Table, changeEvent.RecordId);
 
-        // Translated once here so every consumer downstream (the SignalR broadcast and the
-        // webhook filter/payload) sees the same logical-only vocabulary every other surface
-        // uses -- see TranslateToLogicalAsync.
-        var logicalData = await TranslateToLogicalAsync(changeEvent);
-
         var groupName = MorphHub.GetTableGroupName(changeEvent.ProjectId, changeEvent.Table);
 
         switch (changeEvent.Operation.ToUpperInvariant())
         {
             case ChangeOperation.Insert:
-                await BroadcastRecordCreatedAsync(groupName, changeEvent, logicalData);
-                await DeliverWebhooksAsync(changeEvent, logicalData, WebhookEvent.Insert);
-                break;
+                {
+                    var data = await ReadRowAsync(changeEvent, cancellationToken);
+                    await BroadcastRecordChangedAsync(groupName, changeEvent, ChangeOperation.Insert, data);
+                    await DeliverWebhooksAsync(changeEvent, data, WebhookEvent.Insert);
+                    break;
+                }
 
             case ChangeOperation.Update:
-                await BroadcastRecordUpdatedAsync(groupName, changeEvent, logicalData);
-                await DeliverWebhooksAsync(changeEvent, logicalData, WebhookEvent.Update);
-                break;
+                {
+                    var data = await ReadRowAsync(changeEvent, cancellationToken);
+                    await BroadcastRecordChangedAsync(groupName, changeEvent, ChangeOperation.Update, data);
+                    await DeliverWebhooksAsync(changeEvent, data, WebhookEvent.Update);
+                    break;
+                }
 
             case ChangeOperation.Delete:
                 await BroadcastRecordDeletedAsync(groupName, changeEvent);
-                await DeliverWebhooksAsync(changeEvent, logicalData, WebhookEvent.Delete);
+                await DeliverWebhooksAsync(changeEvent, null, WebhookEvent.Delete);
                 break;
         }
     }
 
     /// <summary>
-    /// Translates the trigger's physical row (<c>to_jsonb(NEW)</c> — see
-    /// <c>ChangeNotificationSetup.cs</c>) into the logical vocabulary every other surface (REST,
-    /// GraphQL, export, view) already speaks, and drops <c>project_id</c> the same way
-    /// <c>RowMapper</c> does for those surfaces. Unlike <c>RowMapper</c>, this does not convert
-    /// value *types* -- the values are already <see cref="JsonElement"/>s from deserializing the
-    /// NOTIFY payload, and go back out as JSON over SignalR/webhooks unchanged, so only the keys
-    /// need translating.
+    /// The row a notification names, read back through the same door REST serves it through — so
+    /// the broadcast and the webhook payload carry logical column names, decrypted values and the
+    /// system columns exactly as a <c>GET /api/data/{table}/{id}</c> would, with no second
+    /// translation to keep in step. The trigger deliberately sends only the key (see
+    /// <c>ChangeNotificationSetup</c>).
+    /// <para>
+    /// This is the row as it stands when it is read, not the image the notifying statement wrote:
+    /// a row changed again before the service got to its first notification arrives carrying the
+    /// later state on both, and a row already deleted arrives with no data at all. Both are the
+    /// documented contract of the real-time surface (<c>docs/API.md</c>).
+    /// </para>
     /// </summary>
-    private async Task<IDictionary<string, object?>?> TranslateToLogicalAsync(DatabaseChangeEvent changeEvent)
+    private async Task<IDictionary<string, object?>> ReadRowAsync(DatabaseChangeEvent changeEvent, CancellationToken cancellationToken)
     {
-        if (changeEvent.Data is null)
-            return null;
-
-        var table = await _schemaManager.GetTableByIdAsync(changeEvent.TableId);
-        if (table is null)
+        if (changeEvent.RecordId is not { } recordId)
         {
-            // The table a just-committed write's trigger fired for should always resolve; if it
-            // doesn't (dropped between commit and notify), fail closed rather than let physical
-            // column names reach a consumer with no way to translate them itself.
-            LogTranslationTableMissing(_logger, changeEvent.TableId, changeEvent.Table);
-            return null;
+            return new Dictionary<string, object?>();
         }
 
-        var physicalToLogical = table.Columns.ToDictionary(c => c.PhysicalName, c => c.LogicalName, StringComparer.Ordinal);
-        var logical = new Dictionary<string, object?>();
-        foreach (var (key, value) in changeEvent.Data)
+        var row = await _dataService.GetByIdAsync(changeEvent.ProjectId, changeEvent.Table, recordId, cancellationToken);
+        if (row is null)
         {
-            if (SystemColumns.IsInternal(key))
-            {
-                continue;
-            }
-
-            // A key absent from the table's declared columns is already logical -- every system
-            // column (_id, _created_at, ...) has physical name == logical name, so it never
-            // appears in physicalToLogical and passes through here unchanged.
-            logical[physicalToLogical.TryGetValue(key, out var logicalName) ? logicalName : key] = value;
+            LogRowGoneBeforeRead(_logger, changeEvent.Operation, changeEvent.Table, recordId);
+            return new Dictionary<string, object?>();
         }
 
-        return logical;
+        return row;
     }
 
     /// <summary>
@@ -221,34 +284,26 @@ public sealed partial class PostgresChangeListener : BackgroundService
         }
     }
 
-    private async Task BroadcastRecordCreatedAsync(
-        string groupName, DatabaseChangeEvent changeEvent, IDictionary<string, object?>? logicalData)
+    private async Task BroadcastRecordChangedAsync(
+        string groupName, DatabaseChangeEvent changeEvent, string operation, IDictionary<string, object?> data)
     {
         var message = new RecordChangedMessage
         {
             Table = changeEvent.Table,
             RecordId = changeEvent.RecordId,
-            Operation = ChangeOperation.Insert,
-            Data = logicalData ?? new Dictionary<string, object?>(),
+            Operation = operation,
+            Data = data,
             Timestamp = changeEvent.Timestamp
         };
 
-        await _hubContext.Clients.Group(groupName).RecordCreated(message);
-    }
-
-    private async Task BroadcastRecordUpdatedAsync(
-        string groupName, DatabaseChangeEvent changeEvent, IDictionary<string, object?>? logicalData)
-    {
-        var message = new RecordChangedMessage
+        if (operation == ChangeOperation.Insert)
         {
-            Table = changeEvent.Table,
-            RecordId = changeEvent.RecordId,
-            Operation = ChangeOperation.Update,
-            Data = logicalData ?? new Dictionary<string, object?>(),
-            Timestamp = changeEvent.Timestamp
-        };
-
-        await _hubContext.Clients.Group(groupName).RecordUpdated(message);
+            await _hubContext.Clients.Group(groupName).RecordCreated(message);
+        }
+        else
+        {
+            await _hubContext.Clients.Group(groupName).RecordUpdated(message);
+        }
     }
 
     private async Task BroadcastRecordDeletedAsync(string groupName, DatabaseChangeEvent changeEvent)
@@ -290,8 +345,8 @@ public sealed partial class PostgresChangeListener : BackgroundService
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to queue webhook delivery for webhook {WebhookId}")]
     private static partial void LogWebhookQueueError(ILogger logger, Guid webhookId, Exception exception);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Change notification for table {TableId} ({Table}) referenced a table that no longer resolves; dropping its row data rather than broadcasting it untranslated")]
-    private static partial void LogTranslationTableMissing(ILogger logger, Guid tableId, string table);
+    [LoggerMessage(Level = LogLevel.Debug, Message = "{Operation} on {Table}, record {RecordId}: the row was gone before it could be read back; broadcasting the change without data")]
+    private static partial void LogRowGoneBeforeRead(ILogger logger, string operation, string table, Guid recordId);
 }
 
 /// <summary>
@@ -314,7 +369,8 @@ internal static class ChangeOperation
 }
 
 /// <summary>
-/// Event structure from PostgreSQL NOTIFY payload.
+/// Event structure from PostgreSQL NOTIFY payload — the key of the changed row and nothing else
+/// (see <c>ChangeNotificationSetup</c> for why the row itself does not ride along).
 /// </summary>
 internal sealed class DatabaseChangeEvent
 {
@@ -323,6 +379,5 @@ internal sealed class DatabaseChangeEvent
     public required string Table { get; init; }
     public required string Operation { get; init; }
     public Guid? RecordId { get; init; }
-    public IDictionary<string, object?>? Data { get; init; }
     public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
 }

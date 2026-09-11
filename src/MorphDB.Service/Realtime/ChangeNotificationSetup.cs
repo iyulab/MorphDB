@@ -35,16 +35,21 @@ public sealed partial class ChangeNotificationSetup : ITableNotificationTriggerM
         // Use the global morphdb._morph_tables to look up table metadata by physical name.
         // This works regardless of which schema the data table is created in.
         // Note: System columns use _id (Phase 18.6)
+        //
+        // The payload names the row and nothing more. NOTIFY caps a payload at 8,000 bytes and
+        // raises inside this AFTER ROW trigger when it is exceeded, which aborts the statement --
+        // so carrying to_jsonb(NEW) here made any row past that size impossible to write, whether
+        // or not anyone was listening. The service reads the row back by key when it handles the
+        // notification (PostgresChangeListener), which is the shape the NOTIFY documentation
+        // recommends: "put it in a database table and send the key of the record".
         var sql = $"""
             CREATE OR REPLACE FUNCTION {FunctionName}() RETURNS trigger AS $$
             DECLARE
-                payload JSONB;
                 record_id UUID;
                 project_id UUID;
                 table_name TEXT;
                 table_id_val UUID;
                 id_col_name TEXT;
-                row_data JSONB;
             BEGIN
                 -- Look up the table directly from global morphdb._morph_tables using physical name
                 SELECT t.project_id, t.logical_name, t.table_id
@@ -62,36 +67,18 @@ public sealed partial class ChangeNotificationSetup : ITableNotificationTriggerM
                 FROM morphdb._morph_columns c
                 WHERE c.table_id = table_id_val AND c.logical_name = '_id' AND c.is_active = true;
 
-                IF TG_OP = 'DELETE' THEN
-                    row_data := to_jsonb(OLD);
-                    IF id_col_name IS NOT NULL THEN
-                        record_id := (row_data ->> id_col_name)::uuid;
-                    END IF;
-                    payload := jsonb_build_object(
-                        'project_id', project_id,
-                        'table_id', table_id_val,
-                        'table', table_name,
-                        'operation', TG_OP,
-                        'record_id', record_id,
-                        'timestamp', NOW()
-                    );
-                ELSE
-                    row_data := to_jsonb(NEW);
-                    IF id_col_name IS NOT NULL THEN
-                        record_id := (row_data ->> id_col_name)::uuid;
-                    END IF;
-                    payload := jsonb_build_object(
-                        'project_id', project_id,
-                        'table_id', table_id_val,
-                        'table', table_name,
-                        'operation', TG_OP,
-                        'record_id', record_id,
-                        'data', row_data,
-                        'timestamp', NOW()
-                    );
+                IF id_col_name IS NOT NULL THEN
+                    record_id := (to_jsonb(COALESCE(NEW, OLD)) ->> id_col_name)::uuid;
                 END IF;
 
-                PERFORM pg_notify('{ChannelName}', payload::text);
+                PERFORM pg_notify('{ChannelName}', jsonb_build_object(
+                    'project_id', project_id,
+                    'table_id', table_id_val,
+                    'table', table_name,
+                    'operation', TG_OP,
+                    'record_id', record_id,
+                    'timestamp', NOW()
+                )::text);
 
                 RETURN COALESCE(NEW, OLD);
             END;

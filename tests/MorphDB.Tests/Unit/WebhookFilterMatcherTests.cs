@@ -10,8 +10,9 @@ namespace MorphDB.Tests.Unit;
 [Trait("Category", "Unit")]
 public class WebhookFilterMatcherTests
 {
-    // Deserializes exactly the way PostgresChangeListener does — object? values land as
-    // JsonElement, which is the assumption the matcher's ValueEquals relies on.
+    // A row deserialized from JSON — object? values land as JsonElement. The listener no longer
+    // produces this shape (it reads the row back as .NET values, see the last test), but a
+    // JsonElement value must keep matching the same way, since both are the same value on the wire.
     private static IDictionary<string, object?> Data(string json) =>
         JsonSerializer.Deserialize<Dictionary<string, object?>>(json)!;
 
@@ -130,6 +131,30 @@ public class WebhookFilterMatcherTests
         WebhookFilterMatcher.Matches(
             Filter("""{"qty":"10"}"""),
             Data("""{"qty":10}""")).Should().BeFalse();
+    }
+
+    /// <summary>
+    /// Regression. The listener used to hand the matcher the NOTIFY payload's row, whose values
+    /// were <see cref="JsonElement"/>s, and the matcher matched nothing else — so once the row
+    /// was read back through the data service (whose values are the CLR values a REST response is
+    /// serialized from) every filter stopped matching and no filtered webhook fired.
+    /// </summary>
+    [Fact]
+    public void Matches_RowReadBackAsClrValues_ComparesAsItWouldOnTheWire()
+    {
+        var row = new Dictionary<string, object?>
+        {
+            ["name"] = "vip",
+            ["count"] = 42,
+            ["active"] = true,
+            ["price"] = 9.5m,
+            ["note"] = null,
+        };
+
+        WebhookFilterMatcher.Matches(Filter("""{"name":"vip","count":42,"active":true,"price":9.5,"note":null}"""), row).Should().BeTrue();
+        WebhookFilterMatcher.Matches(Filter("""{"name":"VIP"}"""), row).Should().BeFalse();
+        WebhookFilterMatcher.Matches(Filter("""{"count":"42"}"""), row).Should().BeFalse("a string literal never equals a number, whatever the CLR type underneath");
+        WebhookFilterMatcher.Matches(Filter("""{"active":"true"}"""), row).Should().BeFalse();
     }
 
     [Fact]

@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.SignalR.Client;
 using MorphDB.Service.Models.Api;
@@ -332,6 +334,95 @@ public sealed class MorphHubTests : IAsyncLifetime
             "the project is already the connection's scope; the internal GUID says nothing to a subscriber");
         data.Keys.Where(PhysicalNameGuard.IsPhysicalName).Should().BeEmpty(
             "no key in a real-time payload may be a physical (hash-based) column name");
+    }
+
+    /// <summary>
+    /// Regression. The trigger used to put the whole row (<c>to_jsonb(NEW)</c>) into the NOTIFY
+    /// payload, and PostgreSQL caps a payload at 8,000 bytes — raising inside the AFTER ROW trigger,
+    /// which aborted the <em>write</em>: a <c>text</c> value of 9,000 characters answered <c>500</c>
+    /// and was never stored, whether or not anyone was subscribed. The payload now carries only the
+    /// row's key and the service reads the row back, so there is no size at which a write starts
+    /// failing, and the subscriber still gets the whole row.
+    /// </summary>
+    [Fact]
+    public async Task A_row_wider_than_a_notify_payload_is_stored_and_broadcast_whole()
+    {
+        var tableName = $"realtime_wide_{Guid.NewGuid():N}"[..30];
+        await _httpClient.PostAsJsonAsync("/api/schema/tables", new CreateTableApiRequest
+        {
+            Name = tableName,
+            Columns = [new CreateColumnApiRequest { Name = "body", Type = "text", Nullable = false }]
+        }, TestContext.Current.CancellationToken);
+        await _hubConnection!.InvokeAsync("Subscribe", tableName, TestContext.Current.CancellationToken);
+        _receivedCreatedMessages.Clear();
+
+        var body = new string('x', 9_000);
+        var response = await _httpClient.PostAsJsonAsync($"/api/data/{tableName}", new Dictionary<string, object?>
+        {
+            ["body"] = body
+        }, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created,
+            "a row's width must not decide whether it can be written — the notify payload carries the key, not the row");
+
+        var timeout = Task.Delay(TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken);
+        while (_receivedCreatedMessages.Count == 0 && !timeout.IsCompleted)
+        {
+            await Task.Delay(100, TestContext.Current.CancellationToken);
+        }
+
+        _receivedCreatedMessages.Should().HaveCount(1);
+        _receivedCreatedMessages[0].Data["body"]!.ToString().Should().Be(body,
+            "the subscriber gets the row as REST would serve it, read back by key after the commit");
+    }
+
+    /// <summary>
+    /// Regression. Notifications used to be handled inside Npgsql's event handler — an <c>async
+    /// void</c> — so handlers for consecutive commits overlapped on their awaits and could broadcast
+    /// in either order. PostgreSQL delivers NOTIFY in commit order, and a subscriber has nothing else
+    /// to tell two changes to one row apart, so the service must keep that order: one consumer,
+    /// one notification at a time.
+    /// <para>
+    /// Each change is read back by key when handled, so a later commit may already be visible when
+    /// an earlier notification is handled — which is why the sequence is asserted non-decreasing
+    /// rather than equal to <c>1..n</c>: order is the contract, per-statement images are not.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Consecutive_changes_to_one_row_are_broadcast_in_commit_order()
+    {
+        const int changes = 20;
+        var tableName = await SetupTestTableAsync();
+        var createResponse = await _httpClient.PostAsJsonAsync($"/api/data/{tableName}", new Dictionary<string, object?>
+        {
+            ["name"] = "Ordered",
+            ["value"] = 0
+        }, TestContext.Current.CancellationToken);
+        var recordId = (await createResponse.Content.ReadFromJsonAsync<DataRecordResponse>(TestContext.Current.CancellationToken))!.Id;
+
+        await _hubConnection!.InvokeAsync("Subscribe", tableName, TestContext.Current.CancellationToken);
+        _receivedUpdatedMessages.Clear();
+
+        for (var i = 1; i <= changes; i++)
+        {
+            var patch = await _httpClient.PatchAsJsonAsync($"/api/data/{tableName}/{recordId}", new Dictionary<string, object?>
+            {
+                ["value"] = i
+            }, TestContext.Current.CancellationToken);
+            patch.EnsureSuccessStatusCode();
+        }
+
+        var timeout = Task.Delay(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+        while (_receivedUpdatedMessages.Count < changes && !timeout.IsCompleted)
+        {
+            await Task.Delay(100, TestContext.Current.CancellationToken);
+        }
+
+        _receivedUpdatedMessages.Should().HaveCount(changes, "every committed change is broadcast once");
+        _receivedUpdatedMessages.Select(m => m.Timestamp).Should().BeInAscendingOrder(
+            "the trigger stamps each notification at its own commit and the service must not reorder them");
+        _receivedUpdatedMessages.Select(m => Convert.ToInt32(m.Data["value"]!.ToString(), CultureInfo.InvariantCulture)).Should().BeInAscendingOrder(
+            "a row read back in handling order can only ever show a state at or after the notifying commit");
     }
 
     [Fact]

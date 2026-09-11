@@ -72,6 +72,35 @@
 
 ### Fixed
 
+- **A row wider than a NOTIFY payload could not be written.** The change-notification trigger put
+  the whole row into the `pg_notify` payload, and PostgreSQL caps a payload at 8,000 bytes — the
+  error raised inside the AFTER ROW trigger and aborted the statement, so a `text` value of a few
+  thousand characters answered `500` and was never stored, subscribers or not. The trigger now
+  sends only the row's key and the service reads the row back when it handles the notification,
+  through the same door `GET /api/data/{table}/{id}` uses — so `data` in a `RecordCreated` /
+  `RecordUpdated` event and in a webhook delivery now carries exactly what that request would
+  return (logical names, system columns, decrypted values), and there is no width at which a
+  write starts failing. Two consequences are documented under WebSocket: `data` is the row as it
+  stands when read back, not the image the notifying statement wrote, and a row deleted before
+  the read arrives with an empty `data`. A webhook `filter` is compared against that row as it
+  would appear on the wire, so a filter written from a REST response matches the row it was
+  written from — the matcher used to compare only the payload's own JSON values and would have
+  matched nothing once the row was read back
+  (Verified-by: MorphHubTests.A_row_wider_than_a_notify_payload_is_stored_and_broadcast_whole,
+  WebhookFilterMatcherTests.Matches_RowReadBackAsClrValues_ComparesAsItWouldOnTheWire).
+- **Consecutive changes could be broadcast out of commit order.** Notifications were handled inside
+  the database driver's event handler — an `async void` — so the handlers for two commits overlapped
+  on their awaits and either could reach subscribers and webhooks first. PostgreSQL delivers
+  notifications in commit order and a subscriber has nothing else to tell two changes to one row
+  apart; the service now hands every notification to a bounded queue and one consumer handles them
+  in that order, which also puts backpressure on a bulk write instead of starting a handler per
+  row. The listener's connection now sends a keepalive after 30 idle seconds, so an idle drop is
+  noticed and repaired before the next change instead of by it
+  (Verified-by: MorphHubTests.Consecutive_changes_to_one_row_are_broadcast_in_commit_order).
+- **`docs/API.md` promised every subscriber every change; delivery is at most once.** The
+  WebSocket section now states the delivery contract as it is — commit order, at most once, no
+  redelivery across a listener or connection reconnect, no gap signal — and how to catch up
+  (`_updated_at`; deletions leave nothing to catch up from).
 - **The .NET client's real-time subscription never received a change.** `MorphDB.Client`'s
   `RealtimeClient` listened for a `ReceiveChange` event carrying three strings, which the hub has
   never sent — it broadcasts `RecordCreated`, `RecordUpdated` and `RecordDeleted`, one message
