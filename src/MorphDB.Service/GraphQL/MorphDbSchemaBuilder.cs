@@ -24,7 +24,6 @@ public static class MorphDbSchemaBuilder
             // Root types
             .AddQueryType<Query>()
             .AddMutationType<Mutation>()
-            .AddSubscriptionType<MorphDbSubscription>()
             // Type extensions (extend root Query and Mutation)
             .AddTypeExtension<MorphDbQuery>()
             .AddTypeExtension<MorphDbMutation>()
@@ -32,7 +31,7 @@ public static class MorphDbSchemaBuilder
             // each closed generic after its CLR shape -- MutationResultOfRecordNode, and worse,
             // MutationResultOfIReadOnlyListOfRecordNode, which puts a .NET interface name in a
             // published schema. Naming them here keeps the wire independent of the CLR types that
-            // happen to implement it, the same way the subscription root does.
+            // happen to implement it.
             .AddType(new ObjectType<MutationResult<RecordNode>>(d => d.Name("RecordMutationResult")))
             .AddType(new ObjectType<MutationResult<IReadOnlyList<RecordNode>>>(d => d.Name("RecordListMutationResult")))
             .AddType(new ObjectType<MutationResult<bool>>(d => d.Name("BooleanMutationResult")))
@@ -40,8 +39,6 @@ public static class MorphDbSchemaBuilder
             .AddDataLoader<TableByNameDataLoader>()
             .AddDataLoader<TableByIdDataLoader>()
             .AddDataLoader<RecordByIdDataLoader>()
-            .AddDataLoader<RelatedRecordsDataLoader>()
-            // In-memory subscriptions
-            .AddInMemorySubscriptions();
+            .AddDataLoader<RelatedRecordsDataLoader>();
     }
 }

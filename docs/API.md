@@ -501,59 +501,6 @@ mutation {
 }
 ```
 
-### Subscribing
-
-Subscriptions are per table and per event kind, and the table is again an argument.
-
-```graphql
-subscription {
-  onRecordCreated(table: "customers") {
-    table
-    changeType
-    record { id data createdAt updatedAt }
-    timestamp
-  }
-}
-```
-
-```graphql
-subscription {
-  onRecordUpdated(table: "customers") {
-    table
-    changeType
-    record { id data }
-    timestamp
-  }
-}
-```
-
-```graphql
-subscription {
-  onRecordChanged(table: "customers") {
-    table
-    changeType
-    record { id data }
-    timestamp
-  }
-}
-```
-
-Deletions carry the id of the row that is gone rather than its contents:
-
-```graphql
-subscription {
-  onRecordDeleted(table: "customers") {
-    table
-    recordId
-    timestamp
-  }
-}
-```
-
-`changeType` is `CREATED`, `UPDATED` or `DELETED`. The SignalR hub described under
-[WebSocket (Real-time)](#websocket-real-time) is a separate surface with its own payload shape;
-the two are not the same wire.
-
 ---
 
 ## OData
@@ -660,8 +607,7 @@ There is no error event. A hub method that fails answers the caller's invocation
 — the same request/response shape as a REST error — and a connection that cannot be scoped to a
 project is refused at connect. Nothing arrives out of band.
 
-`operation` is `INSERT`, `UPDATE` or `DELETE` — upper case, and not the same vocabulary as the
-GraphQL subscription's `changeType`. A deletion carries the id of the row that is gone and no
+`operation` is `INSERT`, `UPDATE` or `DELETE`, upper case. A deletion carries the id of the row that is gone and no
 `data`. There is no before-image on any event. `data` is the row as `GET /api/data/{table}/{id}` would
 serve it — the same logical column names, the same system columns, decrypted the same way — read
 back by key once the change has been notified. It is the row as it stands at that read, not the

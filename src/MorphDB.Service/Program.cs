@@ -148,7 +148,6 @@ try
     // Add HTTP context accessor for project context
     builder.Services.AddHttpContextAccessor();
     builder.Services.AddScoped<IProjectContextAccessor, HttpProjectContextAccessor>();
-    builder.Services.AddScoped<ISubscriptionEventSender, HotChocolateSubscriptionEventSender>();
 
     // Add OData services for dynamic EDM model generation
     builder.Services.AddSingleton<IEdmModelProvider>(sp =>
@@ -285,7 +284,7 @@ try
     // audit logging). A no-op with no trusted proxies configured (TrustedProxyOptions).
     app.UseConfiguredForwardedHeaders();
     app.UseHttpsRedirection();
-    app.UseWebSockets(); // Required for GraphQL subscriptions
+    app.UseWebSockets(); // The real-time hub's WebSocket transport (SignalR)
     app.UseSecurityContext();
     app.UseSecretAuthentication(); // Enforces secrets when one is injected; before rate limiting and
                                    // audit logging so a denial is still counted and still recorded

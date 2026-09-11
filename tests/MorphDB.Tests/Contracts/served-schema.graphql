@@ -1,7 +1,6 @@
 schema {
   query: Query
   mutation: Mutation
-  subscription: Subscription
 }
 
 type Query {
@@ -52,17 +51,6 @@ type Mutation {
     @cost(weight: "10")
 }
 
-type Subscription {
-  "Subscribes to record creation events for a specific table"
-  onRecordCreated(table: String!): RecordChangeEvent!
-  "Subscribes to record update events for a specific table"
-  onRecordUpdated(table: String!): RecordChangeEvent!
-  "Subscribes to record deletion events for a specific table"
-  onRecordDeleted(table: String!): RecordDeleteEvent!
-  "Subscribes to all record changes for a specific table"
-  onRecordChanged(table: String!): RecordChangeEvent!
-}
-
 type AggregateMetadata {
   rowsScanned: Long!
   executionTimeMs: Float!
@@ -104,23 +92,10 @@ type PageInfo {
   totalCount: Int!
 }
 
-type RecordChangeEvent {
-  table: String!
-  changeType: ChangeType!
-  record: RecordNode!
-  timestamp: DateTime!
-}
-
 type RecordConnection {
   edges: [RecordEdge!]!
   pageInfo: PageInfo!
   totalCount: Int!
-}
-
-type RecordDeleteEvent {
-  table: String!
-  recordId: UUID!
-  timestamp: DateTime!
 }
 
 type RecordEdge {
@@ -198,12 +173,6 @@ enum AggregateFunction {
   MIN
   MAX
   COUNT_DISTINCT
-}
-
-enum ChangeType {
-  CREATED
-  UPDATED
-  DELETED
 }
 
 "The `Any` scalar type represents any valid GraphQL value."

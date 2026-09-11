@@ -36,12 +36,15 @@ public class GraphQlSchemaContractTests
         var sdl = await ServedSchemaAsync();
 
         // Query and Mutation are named by their own CLR types and have always read this way.
-        // Subscription is named by the class that carries the resolvers, so it is the one that
-        // moves if someone renames a class -- which is exactly what this pins.
         sdl.Should().Contain("type Query {");
         sdl.Should().Contain("type Mutation {");
-        sdl.Should().Contain("type Subscription {");
-        sdl.Should().Contain("subscription: Subscription");
+
+        // There is no subscription root. One was served for a while -- four fields, documented
+        // with examples -- that nothing ever published to: the server's only change stream is
+        // the SignalR hub. A subscription type that appears here again is a promise being made
+        // that the schema cannot keep unless something feeds it.
+        sdl.Should().NotContain("type Subscription {");
+        sdl.Should().NotContain("subscription:");
     }
 
     [Fact]
@@ -74,9 +77,11 @@ public class GraphQlSchemaContractTests
             sdl.Should().Contain(field);
         }
 
+        // The four change-stream fields that used to be here were never published to; they are
+        // gone, and the real-time contract lives on the SignalR hub alone.
         foreach (var field in new[] { "onRecordCreated(", "onRecordUpdated(", "onRecordDeleted(", "onRecordChanged(" })
         {
-            sdl.Should().Contain(field);
+            sdl.Should().NotContain(field);
         }
     }
 

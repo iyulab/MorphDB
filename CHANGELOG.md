@@ -63,6 +63,14 @@
 
 ### Removed
 
+- **The GraphQL subscription root — `onRecordCreated`, `onRecordUpdated`, `onRecordDeleted` and
+  `onRecordChanged`.** The schema served them, `docs/API.md` documented them with examples, and a
+  sender for them was registered — and nothing ever called it: no write, through any door, published
+  a single event, so a documented subscription connected and then received nothing, with no error
+  to explain it. The fields, the type, the in-memory subscription provider and the sender are gone,
+  and with them the last real-time surface that was not the SignalR hub. Nothing that worked
+  changes: no event was ever delivered through them
+  (Verified-by: GraphQlSchemaContractTests.The_operations_clients_call_are_all_present).
 - **The real-time hub's `OnError` client event.** `IMorphHubClient` declared it and `docs/API.md`
   documented it with a `code`/`message` payload, and the server never sent it: no code path called
   it, and no client — this project's own included — listened for it. A hub method that fails
