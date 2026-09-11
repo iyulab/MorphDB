@@ -30,6 +30,13 @@
   binder. The parameter and the options type are gone from the hub and from the .NET, TypeScript
   and Python clients; `subscribe` there now takes a table name and a callback. A subscription was
   already per table and nothing narrower — no filtering behaviour is lost, because none existed.
+- **`ChangeNotification` in the .NET client loses `OldData`, and its `RecordId` is nullable.** `OldData`
+  was documented as the row before an update and was never set — no event carries a before-image —
+  so a consumer reading it always saw `null`; it is gone rather than kept as a field that lies.
+  `RecordId` is `Guid?`, as it is on the event, instead of a `Guid` that read `Guid.Empty` whenever
+  no id was carried. Code that references `OldData`, or assigns `RecordId` to a non-nullable `Guid`,
+  stops compiling until it is adjusted; nothing that compiled ever observed a different value, since
+  the client's real-time callback had never been invoked (see Fixed).
 
 ### Deprecated
 
@@ -76,8 +83,7 @@
   arrival. A test now drives the whole path against a running server, and a second one holds the
   event names the client registers to the hub's client interface
   (Verified-by: RealtimeClientTests.An_insert_reaches_the_subscriber_with_the_row_it_created).
-  Two adjustments to `ChangeNotification` ride along: `RecordId` is nullable, as it is on the
-  event, and `OldData` is gone — no event carries a before-image, so it was never set.
+  The two `ChangeNotification` model changes that ride along are listed under Breaking.
 - **The client's `HttpMessageHandler` option did not reach the real-time connection.** It is
   documented for proxy and test scenarios and every REST call honoured it; the hub connection built
   its own handler and went around whatever the option named. It now uses the same handler, without
