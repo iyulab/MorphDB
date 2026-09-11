@@ -16,19 +16,15 @@ public sealed class ChangeNotification
     public required ChangeOperation Operation { get; init; }
 
     /// <summary>
-    /// Record ID.
+    /// Record ID, when the change names one.
     /// </summary>
-    public Guid RecordId { get; init; }
+    public Guid? RecordId { get; init; }
 
     /// <summary>
-    /// Record data (for insert and update).
+    /// The row as it is after an insert or update, keyed by logical column name. <c>null</c> for a
+    /// delete — the row is gone, and no event carries a before-image.
     /// </summary>
     public IDictionary<string, object?>? Data { get; init; }
-
-    /// <summary>
-    /// Previous data (for update operations).
-    /// </summary>
-    public IDictionary<string, object?>? OldData { get; init; }
 
     /// <summary>
     /// Project ID.
@@ -36,7 +32,7 @@ public sealed class ChangeNotification
     public Guid ProjectId { get; init; }
 
     /// <summary>
-    /// Timestamp of the change.
+    /// When the change happened, as the server recorded it.
     /// </summary>
     public DateTimeOffset Timestamp { get; init; }
 }

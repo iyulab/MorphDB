@@ -58,6 +58,23 @@
 
 ### Fixed
 
+- **The .NET client's real-time subscription never received a change.** `MorphDB.Client`'s
+  `RealtimeClient` listened for a `ReceiveChange` event carrying three strings, which the hub has
+  never sent — it broadcasts `RecordCreated`, `RecordUpdated` and `RecordDeleted`, one message
+  object each, as `docs/API.md` has said all along. `Subscribe` succeeded and then nothing arrived,
+  with no error, and no test drove the client's side of this door. The client now listens for the
+  three events the hub sends, the change kind comes from the event rather than from parsing a
+  string, `Data` values arrive as .NET values the same way every REST response's do, and the
+  event's own timestamp and record id are passed through instead of being reconstructed on
+  arrival. A test now drives the whole path against a running server, and a second one holds the
+  event names the client registers to the hub's client interface
+  (Verified-by: RealtimeClientTests.An_insert_reaches_the_subscriber_with_the_row_it_created).
+  Two adjustments to `ChangeNotification` ride along: `RecordId` is nullable, as it is on the
+  event, and `OldData` is gone — no event carries a before-image, so it was never set.
+- **The client's `HttpMessageHandler` option did not reach the real-time connection.** It is
+  documented for proxy and test scenarios and every REST call honoured it; the hub connection built
+  its own handler and went around whatever the option named. It now uses the same handler, without
+  taking over its lifetime.
 - **An `X-Project-Id` that failed to parse was answered as if it had never been sent.** The header
   and an authenticated claim both collapsed into the same `Guid?`, so "no project id" and "a project
   id that is not a GUID" produced the identical `400 MISSING_PROJECT` — a caller who mistyped their
