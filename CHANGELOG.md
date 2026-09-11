@@ -228,6 +228,13 @@
   event vocabulary, payload fields — from the binding model, the enum, and the delivery
   serializer, so the documentation cannot drift from them again.
 
+### Dependencies
+
+- ASP.NET Core packages to 10.0.12 (JWT bearer, SignalR client, MVC testing, Redis cache),
+  `Microsoft.NET.Test.Sdk` to 18.10.0, and `StackExchange.Redis` to 3.2.0 — the last carries a
+  security fix (CVE-2026-62900) and moves cluster discovery from `CLUSTER NODES` to `CLUSTER SLOTS`;
+  the cache is an optional dependency and no code here touches either. No behavior change.
+
 ## 0.11.1
 
 A hotfix on `0.11.0`, carrying only the fixes below.
