@@ -45,6 +45,13 @@
 
 ### Removed
 
+- **The real-time hub's `OnError` client event.** `IMorphHubClient` declared it and `docs/API.md`
+  documented it with a `code`/`message` payload, and the server never sent it: no code path called
+  it, and no client — this project's own included — listened for it. A hub method that fails
+  answers the caller's invocation with the failure, and a connection that cannot be scoped to a
+  project is refused at connect, so there was nothing for an out-of-band error event to carry. The
+  interface method, its message type, and the documentation row are gone; a client that registered
+  a handler for it loses a handler that never fired.
 - The `FluentValidation.AspNetCore` dependency of the service, which no code used and which its
   authors have deprecated, along with three package pins nothing referenced (`FluentValidation`,
   `Humanizer.Core`, `CsvHelper`). No behaviour changes; the container image simply carries less.

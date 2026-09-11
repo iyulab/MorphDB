@@ -655,7 +655,10 @@ else, and every subscriber to a table receives every change to it. Filter on the
 | `RecordDeleted` | `table` `recordId` `timestamp` |
 | `Subscribed` | `tableName` |
 | `Unsubscribed` | `tableName` |
-| `OnError` | `code` `message` |
+
+There is no error event. A hub method that fails answers the caller's invocation with the failure
+— the same request/response shape as a REST error — and a connection that cannot be scoped to a
+project is refused at connect. Nothing arrives out of band.
 
 `operation` is `INSERT`, `UPDATE` or `DELETE` — upper case, and not the same vocabulary as the
 GraphQL subscription's `changeType`. A deletion carries the id of the row that is gone and no

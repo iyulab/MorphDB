@@ -185,11 +185,6 @@ public interface IMorphHubClient
     /// Called when successfully unsubscribed from a table.
     /// </summary>
     Task Unsubscribed(string tableName);
-
-    /// <summary>
-    /// Called when an error occurs.
-    /// </summary>
-    Task OnError(ErrorMessage message);
 }
 
 /// <summary>
@@ -212,15 +207,6 @@ public sealed class RecordDeletedMessage
     public required string Table { get; init; }
     public Guid? RecordId { get; init; }
     public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
-}
-
-/// <summary>
-/// Error message sent to clients.
-/// </summary>
-public sealed class ErrorMessage
-{
-    public required string Code { get; init; }
-    public required string Message { get; init; }
 }
 
 /// <summary>

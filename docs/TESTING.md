@@ -19,7 +19,10 @@ dotnet test --coverlet --coverlet-output-format cobertura           # With cover
 The suite runs on xunit.v3 through the Microsoft.Testing.Platform mode of `dotnet test`
 (`global.json` selects the runner), so the VSTest-era `--filter "FullyQualifiedName~..."` and
 `--collect` switches do not apply; the filter switches above are xunit.v3's own. A filter that
-matches nothing fails the run (exit code 8) rather than passing vacuously.
+matches nothing fails the run (exit code 8) rather than passing vacuously. In this mode `dotnet
+test` forwards every switch it does not own to the test host, and a switch the host does not know
+— `--nologo`, for one — makes it run nothing: exit code 5, `Zero tests ran`, `error: 1`, and no
+message naming the switch. Pass only the switches listed here.
 
 ### Test Organization
 
