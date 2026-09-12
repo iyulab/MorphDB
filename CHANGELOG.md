@@ -248,6 +248,13 @@
   removed with the authentication machinery, and waited for PostgreSQL by a container name compose
   no longer assigns, so that wait always ran its 30 seconds out.
 
+- **A gate on every declared real-time event having a publisher.** The hub's client interface is
+  what the documentation and the supported .NET client are written against, and a method on it
+  with no `Clients….X(…)` call site anywhere in the service compiles perfectly while the event it
+  declares can never arrive. Four contracts of that shape had been found by hand; a test now
+  relates the declared events to the publishing call sites, so the next one fails the build
+  instead of waiting for a subscriber to notice the silence.
+
 ## 0.11.1
 
 A hotfix on `0.11.0`, carrying only the fixes below.
