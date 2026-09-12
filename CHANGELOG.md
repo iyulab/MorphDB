@@ -228,6 +228,12 @@
   event vocabulary, payload fields — from the binding model, the enum, and the delivery
   serializer, so the documentation cannot drift from them again.
 
+- **The delivery section now states that a subscription can receive a change committed before it
+  was made.** Subscribers are resolved when a change is delivered, not when it committed, so a
+  subscription made while the service is working through a backlog receives what is still in it.
+  The documented order (read first, subscribe second) was previously written as if the two could
+  not overlap.
+
 ### Dependencies
 
 - ASP.NET Core packages to 10.0.12 (JWT bearer, SignalR client, MVC testing, Redis cache),

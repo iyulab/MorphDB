@@ -623,6 +623,14 @@ database listener or your connection is reconnecting is not delivered later, and
 that a gap occurred. To catch up after a reconnect, re-read the table — `_updated_at` finds the
 rows inserted or updated since a point in time; a deletion leaves no trace to catch up from.
 
+A subscription can also deliver a change that committed *before* it was made. Notifications are
+queued and delivered by one consumer, and the subscribers of a table are resolved when a change is
+delivered rather than when it committed — so a subscription made while the service is working
+through a backlog receives what is still in that backlog. Read the table first and subscribe
+second, and treat the first events after subscribing as possibly overlapping what the read
+returned; both carry the row as it stood when the change was read back, so applying one twice
+leaves the same state.
+
 ---
 
 ## Webhook
