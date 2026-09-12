@@ -240,6 +240,9 @@
   `Microsoft.NET.Test.Sdk` to 18.10.0, and `StackExchange.Redis` to 3.2.0 — the last carries a
   security fix (CVE-2026-62900) and moves cluster discovery from `CLUSTER NODES` to `CLUSTER SLOTS`;
   the cache is an optional dependency and no code here touches either. No behavior change.
+- `HotChocolate.AspNetCore` and `HotChocolate.Data` to 16.6.6. Two patches on the same line; the
+  only listed change is a diagnostics span on the persisted-operation endpoint, which this server
+  does not expose. No behavior change.
 
 ### Internal
 
