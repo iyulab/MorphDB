@@ -9,7 +9,7 @@
     <PackageVersion Include="SqlKata" Version="4.0.1" />
     <PackageVersion Include="SqlKata.Execution" Version="4.0.1" />
     <!-- Data Access -->
-    <PackageVersion Include="Dapper" Version="2.1.79" />
+    <PackageVersion Include="Dapper" Version="2.1.86" />
     <!-- API Frameworks -->
     <!-- 16.x: Any carries a parsed JSON value in both directions (see GraphQlAny). 15.1.14+ had
          closed GHSA-qr3m-xw4c-jqw3 in the transitive HotChocolate.Language; 16 carries it forward. -->
@@ -49,7 +49,7 @@
     <!-- Testing -->
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.12" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.0" />
-    <PackageVersion Include="xunit.v3" Version="4.0.0" />
+    <PackageVersion Include="xunit.v3" Version="4.0.1" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />
     <PackageVersion Include="coverlet.MTP" Version="10.0.1" />
     <PackageVersion Include="Moq" Version="4.20.72" />

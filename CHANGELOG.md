@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased
+## 0.12.0
+
+A minor on the `0.11.x` line — the first release cut from `main` since `0.11.1` shipped as a
+hotfix, so `main`'s declared version catches up with what is published. Four things break, all on
+the real-time and export surfaces, and each removes a member that no code path ever honoured: a
+webhook delivery is camelCase like every other response, an export request has no `filter` or
+`orderBy`, the `Subscribe` hub method takes one argument, and the .NET client's
+`ChangeNotification` drops the never-set `OldData`. The larger share of the release is fixes to
+the real-time path — a row wider than a NOTIFY payload, out-of-order broadcast, the .NET client's
+subscription that never fired — and to the reference, which now describes the surface the server
+actually has. What a `0.11.x` client can still do against this server is in `docs/COMPATIBILITY.md`.
 
 ### Breaking
 
@@ -236,6 +246,7 @@
 
 ### Dependencies
 
+- `Dapper` to 2.1.86 and `xunit.v3` to 4.0.1 — patch releases; no behavior change.
 - ASP.NET Core packages to 10.0.12 (JWT bearer, SignalR client, MVC testing, Redis cache),
   `Microsoft.NET.Test.Sdk` to 18.10.0, and `StackExchange.Redis` to 3.2.0 — the last carries a
   security fix (CVE-2026-62900) and moves cluster discovery from `CLUSTER NODES` to `CLUSTER SLOTS`;

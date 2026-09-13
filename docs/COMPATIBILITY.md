@@ -26,6 +26,7 @@ do not use it. The supported clients are the REST/GraphQL API itself and `MorphD
 
 | Server | `MorphDB.Client` | Notes |
 |--------|------------------|-------|
+| 0.12.x | 0.12.x | Wire changes on the real-time and export surfaces: an export request that names `filter` or `orderBy` is refused (`400`), the `Subscribe` hub method takes one argument, and a webhook delivery is camelCase (`recordId`). A `0.11.x` client works against a `0.12.x` server for every REST and GraphQL call except an export that sets `filter`/`orderBy` — those members were never applied and are now rejected; its `SubscribeAsync`, which sent two arguments and never received a change, is now refused by the hub's binder instead of silently succeeding — real-time needs the `0.12.x` client. |
 | 0.9.x – 0.11.x | 0.11.x | Verified compatible range — Docker-tested against the full live contract suite (2026-09-03). No wire-breaking change since 0.7.0 has narrowed this span; pin a version anyway, since a future minor may. |
 | 0.7.x | 0.7.x | Project scoping via `X-Project-Id`. `X-Tenant-Id` is gone — 0.6.x clients cannot talk to a 0.7.x server. |
 | 0.6.x | 0.6.x | Last version speaking `X-Tenant-Id`. |
