@@ -30,7 +30,7 @@ do not use it. The supported clients are the REST/GraphQL API itself and `MorphD
 | 0.7.x | 0.7.x | Project scoping via `X-Project-Id`. `X-Tenant-Id` is gone — 0.6.x clients cannot talk to a 0.7.x server. |
 | 0.6.x | 0.6.x | Last version speaking `X-Tenant-Id`. |
 
-Current downstream pair: `Formbase.* 0.9.0` ↔ MorphDB `0.11.x`. Formbase's own
+Current downstream pair: `Formbase.* 0.10.0` ↔ MorphDB `0.11.x`. Formbase's own
 [CHANGELOG](https://github.com/iyulab/formbase/blob/main/CHANGELOG.md) is the source of truth for
 its full pairing history — this file states MorphDB's own compatibility contract, not a mirror of a
 downstream project's release notes (an earlier drift here was exactly two documents holding the
