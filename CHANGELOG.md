@@ -9,6 +9,14 @@
   neither is used here. The Redis patch fixes a buffer-size assumption in its writer. No behavior
   change.
 
+### Internal
+
+- The CI and release workflows run the Node.js 24 majors of the actions they use (`actions/checkout`
+  v7, `actions/setup-dotnet` v6, `actions/setup-node` v7, `actions/upload-artifact` v7,
+  `codecov/codecov-action` v7, `docker/build-push-action` v7, `docker/login-action` v4,
+  `docker/setup-buildx-action` v4). The Node.js 20 majors ran only because the runner forced them
+  onto Node.js 24; no input any step passes changed meaning.
+
 ## 0.12.0
 
 A minor on the `0.11.x` line — the first release cut from `main` since `0.11.1` shipped as a
