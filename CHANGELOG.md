@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Dependencies
+
+- `Polly` to 8.8.0 and `StackExchange.Redis` to 3.2.1. Polly's release adds
+  `EnableReloadsWithMonitor()` and changes what `FaultGenerator` returns when it generates no fault —
+  neither is used here. The Redis patch fixes a buffer-size assumption in its writer. No behavior
+  change.
+
 ## 0.12.0
 
 A minor on the `0.11.x` line — the first release cut from `main` since `0.11.1` shipped as a
