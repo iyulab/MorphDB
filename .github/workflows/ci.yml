@@ -27,10 +27,10 @@ jobs:
     # ConnectionStrings env vars that used to sit here were leftovers no test ever read.
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -44,7 +44,7 @@ jobs:
         run: dotnet test --no-build --configuration Release --verbosity normal --coverlet --coverlet-output-format cobertura --results-directory ./coverage
 
       - name: Upload coverage
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v7
         with:
           directory: ./coverage
           fail_ci_if_error: false
@@ -61,10 +61,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
@@ -79,7 +79,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # Published text must not name something only an insider can look up. Needs no dotnet, so
       # it runs before the SDK is set up and fails the job in seconds when it fails.
@@ -90,7 +90,7 @@ jobs:
           must-contain: 'API.md'
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
