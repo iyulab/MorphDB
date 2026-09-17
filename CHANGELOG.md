@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.12.1
+
+A patch: no surface moves. It carries two dependency patches and runs the Node.js 24 majors of the
+actions the workflows already used. The downstream pair line now names Formbase `0.10.1`, whose
+release moved that project onto the `0.12.x` line.
 
 ### Dependencies
 
