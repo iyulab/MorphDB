@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Dependencies
+
+- `StackExchange.Redis` to 3.2.15. The release's behavior changes are to connection groups, Sentinel
+  and cluster topologies, and `IServer.Execute`; the schema cache holds a single
+  `ConnectionMultiplexer` and uses none of them. No behavior change.
+- `Microsoft.NET.Test.Sdk` to 18.10.1 (tests only).
+
 ## 0.12.1
 
 A patch: no surface moves. It carries two dependency patches and runs the Node.js 24 majors of the
