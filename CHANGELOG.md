@@ -4,9 +4,17 @@
 
 ### Dependencies
 
-- `StackExchange.Redis` to 3.2.15. The release's behavior changes are to connection groups, Sentinel
-  and cluster topologies, and `IServer.Execute`; the schema cache holds a single
-  `ConnectionMultiplexer` and uses none of them. No behavior change.
+- `StackExchange.Redis` to 3.3.0. 3.2.15's behavior changes are to connection groups, Sentinel and
+  cluster topologies, and `IServer.Execute`; 3.3.0 adds server-native maintenance notifications,
+  which the release states are opt-in and which nothing here opts into. The schema cache holds a
+  single `ConnectionMultiplexer` and uses none of it. No behavior change.
+- The OpenTelemetry packages to 1.19.0 (and the Prometheus exporter to its matching
+  `1.19.0-beta.1`), kept on one version across the round so the exporters and the API they bind to
+  stay in step. The release is allocation reductions, an added `AlwaysRecordSampler`, and fixes to
+  histogram bucket scaling, wildcard name matching, lazy logger-provider builds and `tracestate`
+  parsing; no instrumentation this project registers changes shape.
+- `System.IdentityModel.Tokens.Jwt` to 8.23.0. A minor of the same line; token validation here uses
+  the standard parameters and the suite passes unchanged.
 - `Microsoft.NET.Test.Sdk` to 18.10.1 (tests only).
 
 ## 0.12.1
