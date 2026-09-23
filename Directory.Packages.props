@@ -9,7 +9,7 @@
     <PackageVersion Include="SqlKata" Version="4.0.1" />
     <PackageVersion Include="SqlKata.Execution" Version="4.0.1" />
     <!-- Data Access -->
-    <PackageVersion Include="Dapper" Version="2.1.86" />
+    <PackageVersion Include="Dapper" Version="2.1.89" />
     <!-- API Frameworks -->
     <!-- 16.x: Any carries a parsed JSON value in both directions (see GraphQlAny). 15.1.14+ had
          closed GHSA-qr3m-xw4c-jqw3 in the transitive HotChocolate.Language; 16 carries it forward. -->

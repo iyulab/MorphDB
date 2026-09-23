@@ -16,6 +16,8 @@
   matching, lazy logger-provider builds and `tracestate` parsing; 1.19.1 fixes an exception, and a
   related memory exhaustion, when a provider is built with many wildcard source or meter patterns.
   No instrumentation this project registers changes shape.
+- `Dapper` to 2.1.89. The release fully strong-name signs the assemblies on every platform and suppresses
+  trim and AOT diagnostics in its fallback paths; no query path changes.
 - `System.IdentityModel.Tokens.Jwt` to 8.23.0. A minor of the same line; token validation here uses
   the standard parameters and the suite passes unchanged.
 - `Microsoft.NET.Test.Sdk` to 18.10.1 (tests only).
