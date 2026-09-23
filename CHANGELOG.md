@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Docs
+
+- README ("Which package") and `docs/ARCHITECTURE.md` now say what "embedded" means: running the
+  engine in-process with no server in front, against PostgreSQL. The previous wording ("with no
+  provider", "against its own database") read as if `MorphDB.Core` were an interface for plugging in
+  another storage engine. It is not: PostgreSQL is the only engine, by design.
+
 ### Dependencies
 
 - `StackExchange.Redis` to 3.3.1. 3.2.15's behavior changes are to connection groups, Sentinel and

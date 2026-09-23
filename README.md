@@ -63,15 +63,21 @@ point** — if you are talking to a running server, it is the only one you need.
 | Package | For | |
 |---|---|---|
 | **`MorphDB.Client`** | Talking to a MorphDB server over HTTP | **Start here** |
-| `MorphDB.Core` | Embedding MorphDB in your own process — the abstractions, models and exceptions, with no provider | Advanced |
-| `MorphDB.Npgsql` | The PostgreSQL implementation of those abstractions, for the same embedded use | Advanced |
+| `MorphDB.Core` | Embedding MorphDB in your own process — the engine's contracts, models and exceptions | Advanced |
+| `MorphDB.Npgsql` | The implementation of those contracts, for the same embedded use | Advanced |
 
 The last two exist because the engine is a library before it is a service: they let a .NET host run
-schema and data operations in-process against its own database, without a server in front. That is a
+schema and data operations in-process against its own PostgreSQL, without a server in front. That is a
 narrower path than the client and it is not what the API documentation describes — `docs/API.md` is
 the wire contract, which an embedded host does not use.
 
 All three move together on one version, so an embedded host upgrades as one unit.
+
+"Embedded" here means no server process in front, not a different storage engine. PostgreSQL is the
+only engine MorphDB runs on, by design: projects are PostgreSQL schemas, change notification is
+`LISTEN`/`NOTIFY`, and schema changes are serialized with advisory locks. `MorphDB.Core` is split
+from `MorphDB.Npgsql` to keep the engine's contracts apart from their implementation, not as an
+interface for plugging in another database.
 
 Run with PostgreSQL using docker-compose:
 

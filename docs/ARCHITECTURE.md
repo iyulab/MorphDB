@@ -76,6 +76,9 @@ Benefits:
 - Interface definitions (`ISchemaManager`, `IMorphDataService`)
 - Domain models (`TableMetadata`, `ColumnMetadata`)
 - Data type abstractions (`MorphDataType`)
+- Not a provider interface: several contracts are defined in PostgreSQL terms (advisory locks,
+  notification triggers), and `MorphDB.Npgsql` is the only implementation. PostgreSQL is the engine by
+  design, not a default — see the constitution's scope section.
 
 ### MorphDB.Npgsql
 - PostgreSQL-specific DDL/DML operations
