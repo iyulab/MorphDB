@@ -20,7 +20,7 @@
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.2.3" />
     <!-- Caching -->
     <PackageVersion Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.12" />
-    <PackageVersion Include="StackExchange.Redis" Version="3.3.0" />
+    <PackageVersion Include="StackExchange.Redis" Version="3.3.1" />
     <!-- Authentication & Security -->
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.12" />
     <PackageVersion Include="System.IdentityModel.Tokens.Jwt" Version="8.23.0" />
@@ -35,13 +35,13 @@
          error. The line is >=1.16.0, which is what closes GHSA-g94r-2vxg-569j (Api) and
          GHSA-4625/mr8r/q834 (OTLP exporter). Prometheus has never shipped a stable package, so it
          tracks the same version on its -beta.1 line. -->
-    <PackageVersion Include="OpenTelemetry.Api" Version="1.19.0" />
-    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.19.0" />
+    <PackageVersion Include="OpenTelemetry.Api" Version="1.19.1" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.19.1" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.19.0" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.19.0" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.19.0" />
-    <PackageVersion Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.19.0-beta.1" />
-    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.19.0" />
+    <PackageVersion Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.19.1-beta.1" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.19.1" />
     <!-- Utilities -->
     <PackageVersion Include="Polly" Version="8.8.0" />
     <!-- Bulk Operations -->
