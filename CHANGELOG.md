@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.12.3
+
+A patch: no surface moves. The packages now carry their XML documentation (and `MorphDB.Core` and
+`MorphDB.Npgsql` a readme), the client quick start compiles as written, and the Docker release no longer
+republishes a version already in the registry.
 
 ### Added
 
