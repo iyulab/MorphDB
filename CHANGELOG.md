@@ -23,6 +23,7 @@
 ### Dependencies
 
 - `HotChocolate.AspNetCore` and `HotChocolate.Data` to 16.6.7 (patch). The served schema is unchanged.
+- `Moq` to 4.21.0 (tests only; its only dependency is still `Castle.Core`).
 
 ## 0.12.2
 
