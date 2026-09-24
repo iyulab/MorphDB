@@ -16,6 +16,11 @@
 
 ### Changed
 
+- The Docker release no longer republishes a version that is already in the registry. A push that
+  changed `Directory.Build.props` without changing `<Version>` used to rebuild that version from the
+  pushed commit and move its image tags onto code never released under that number; the release now
+  checks the registry first, publishes nothing when the tag exists, and fails rather than guesses when
+  the registry cannot be asked. The NuGet release was already idempotent.
 - The GraphQL schema no longer takes descriptions from XML documentation files. None came from there
   before, because no documentation file was produced; with the packages now carrying one, leaving it on
   would have added a description to the published schema. The served schema is unchanged.
