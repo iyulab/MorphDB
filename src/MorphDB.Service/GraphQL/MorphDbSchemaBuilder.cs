@@ -21,6 +21,11 @@ public static class MorphDbSchemaBuilder
     public static IRequestExecutorBuilder AddMorphDbTypes(this IRequestExecutorBuilder builder)
     {
         return builder
+            // Descriptions in the published schema are written where the schema is declared, never
+            // lifted from XML documentation files. Left on, the server reads whatever documentation
+            // file sits beside each referenced assembly, so whether a library's package ships one --
+            // a packaging decision -- would silently change the schema anyone introspects.
+            .ModifyOptions(options => options.UseXmlDocumentation = false)
             // Root types
             .AddQueryType<Query>()
             .AddMutationType<Mutation>()

@@ -51,6 +51,7 @@ public sealed class ProjectClient
     /// <param name="status">Lifecycle status to filter by. Null lists every status.</param>
     /// <param name="page">Page number, 1-based.</param>
     /// <param name="pageSize">Rows per page. The server clamps this to 100.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     public async Task<PagedResponse<ProjectInfo>> ListAsync(
         string? status = null,
         int page = 1,

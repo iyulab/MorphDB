@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- The packages carry their XML documentation, so an IDE shows each member's comment from the package.
+  `MorphDB.Core` and `MorphDB.Npgsql` also carry a readme, so their registry pages say what they are
+  for (embedding the engine) and point a server client to `MorphDB.Client`.
+
+### Fixed
+
+- The `MorphDB.Client` quick start compiles as written: it now imports `MorphDB.Client.Models`, names
+  the unique-column flag `Unique` (the property is not `IsUnique`), and its subscription example awaits
+  work of its own instead of an undefined `store`. CI compiles it against freshly packed packages.
+
+### Changed
+
+- The GraphQL schema no longer takes descriptions from XML documentation files. None came from there
+  before, because no documentation file was produced; with the packages now carrying one, leaving it on
+  would have added a description to the published schema. The served schema is unchanged.
+
 ## 0.12.2
 
 A patch: no surface moves. It states in the README and the architecture notes that PostgreSQL is

@@ -62,8 +62,8 @@ public sealed partial class CheckValidator : IValidator
 
     /// <summary>
     /// Evaluates a check expression that may contain AND/OR compound expressions.
-    /// Supports: field > value, field >= value, field < value, field <= value,
-    ///           field1 > field2, field1 < field2, etc.
+    /// Supports: field &gt; value, field &gt;= value, field &lt; value, field &lt;= value,
+    ///           field1 &gt; field2, field1 &lt; field2, etc.
     /// Also supports: expr1 AND expr2, expr1 OR expr2, and nested expressions.
     /// </summary>
     private static bool EvaluateCheckExpression(

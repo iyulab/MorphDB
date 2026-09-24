@@ -10,8 +10,10 @@ dotnet add package MorphDB.Client
 
 ## Quick Start
 
+<!-- snippet: compile packages="MorphDB.Client" -->
 ```csharp
 using MorphDB.Client;
+using MorphDB.Client.Models;
 
 // Create client
 var client = new MorphDBClient("http://localhost:5000", new MorphDBClientOptions
@@ -31,7 +33,7 @@ await client.Schema.CreateTableAsync(new CreateTableRequest
     Columns = new[]
     {
         new CreateColumnRequest { Name = "name", Type = "text" },
-        new CreateColumnRequest { Name = "email", Type = "text", IsUnique = true },
+        new CreateColumnRequest { Name = "email", Type = "text", Unique = true },
         new CreateColumnRequest { Name = "age", Type = "integer" }
     }
 });
@@ -56,7 +58,7 @@ var adults = await client.Data.QueryAsync("users", new QueryRequest
 // for the callback's task, so the callback can await its own work
 await client.Realtime.SubscribeAsync("users", async change =>
 {
-    await store.WriteAsync(change.TableName, change.RecordId, change.Data);
+    await File.AppendAllTextAsync("changes.log", $"{change.Operation} {change.TableName} {change.RecordId}{Environment.NewLine}");
 });
 
 // A callback with nothing to await takes the plain form

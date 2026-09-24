@@ -4,6 +4,8 @@
     <RootNamespace>MorphDB.Service</RootNamespace>
     <Description>MorphDB API Service</Description>
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+    <!-- Not a package (the web SDK does not pack), so no API documentation file (src/Directory.Build.props). -->
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
 
   <ItemGroup>

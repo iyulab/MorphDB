@@ -17,7 +17,7 @@ namespace MorphDB.Npgsql.Encryption;
 ///   [Version: 1 byte][KeyVersion: 2 bytes][Nonce: 12 bytes][Tag: 16 bytes][Ciphertext: N bytes]
 ///
 /// Encrypted format (string):
-///   $MORPH$v1$<base64(binary)>
+///   $MORPH$v1$&lt;base64(binary)&gt;
 ///
 /// Features:
 /// - AES-256-GCM authenticated encryption (confidentiality + integrity)

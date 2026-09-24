@@ -25,9 +25,10 @@
   </PropertyGroup>
 
   <!--
-    NuGet packaging metadata shared by every packable project (only MorphDB.Client today; inert
-    otherwise). PackageReadmeFile/the README item itself stay per-project (MorphDB.Client.csproj)
-    since its published package documents the SDK, not the server this repo-root README covers.
+    NuGet packaging metadata shared by every packable project. MorphDB.Client, MorphDB.Core and
+    MorphDB.Npgsql are packed and published; the service (web SDK) is not. PackageReadmeFile and the
+    README item stay per-project, since each package's page describes that package, not the server
+    this repo-root README covers.
   -->
   <PropertyGroup>
     <PackageProjectUrl>https://github.com/iyulab/morphdb</PackageProjectUrl>
