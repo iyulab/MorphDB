@@ -20,6 +20,10 @@
   before, because no documentation file was produced; with the packages now carrying one, leaving it on
   would have added a description to the published schema. The served schema is unchanged.
 
+### Dependencies
+
+- `HotChocolate.AspNetCore` and `HotChocolate.Data` to 16.6.7 (patch). The served schema is unchanged.
+
 ## 0.12.2
 
 A patch: no surface moves. It states in the README and the architecture notes that PostgreSQL is
