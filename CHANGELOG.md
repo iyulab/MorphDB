@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.12.2
+
+A patch: no surface moves. It states in the README and the architecture notes that PostgreSQL is
+the only engine the embedded mode runs against, and carries a round of dependency patches with no
+behavior change.
 
 ### Docs
 
