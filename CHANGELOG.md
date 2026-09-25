@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- `MorphDB.Client` no longer packs on every build (`GeneratePackageOnBuild`); like `MorphDB.Core` and
+  `MorphDB.Npgsql`, it is packed only by `dotnet pack`, which the release workflow runs after the
+  build. The package's contents are unchanged. Packing on build left a package in `bin/` on every
+  `dotnet build` and `dotnet test`, and made a single `dotnet pack -o` on a clean tree fail with NU5026.
+
 ## 0.12.3
 
 A patch: no surface moves. The packages now carry their XML documentation (and `MorphDB.Core` and
