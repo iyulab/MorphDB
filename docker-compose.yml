@@ -39,7 +39,10 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U morph -d morphdb"]
+      # Over TCP on purpose. While the image runs its init scripts it serves only the Unix socket and
+      # then restarts, and a socket probe answers ready during that window -- so a dependent service
+      # started on this health check would reach a server that is about to go away.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U morph -d morphdb"]
       interval: 10s
       timeout: 5s
       retries: 5

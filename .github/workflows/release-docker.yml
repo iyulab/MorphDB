@@ -145,7 +145,7 @@ jobs:
           docker network create morphdb-verify
           docker run -d --name verify-db --network morphdb-verify \
             -e POSTGRES_USER=morph -e POSTGRES_PASSWORD=morph -e POSTGRES_DB=morphdb \
-            --health-cmd 'pg_isready -U morph -d morphdb' --health-interval 2s --health-retries 15 \
+            --health-cmd 'pg_isready -h 127.0.0.1 -U morph -d morphdb' --health-interval 2s --health-retries 15 \
             postgres:16-alpine
           for _ in $(seq 30); do
             [ "$(docker inspect -f '{{.State.Health.Status}}' verify-db)" = healthy ] && break

@@ -147,7 +147,7 @@ if ($Headless) {
         Write-Step "Waiting for PostgreSQL..."
         $ready = $false
         for ($i = 0; $i -lt 30; $i++) {
-            docker compose -p $Project exec -T postgres pg_isready -U morph -d morphdb 2>&1 | Out-Null
+            docker compose -p $Project exec -T postgres pg_isready -h 127.0.0.1 -U morph -d morphdb 2>&1 | Out-Null
             if ($LASTEXITCODE -eq 0) { $ready = $true; break }
             Start-Sleep -Seconds 1
         }
@@ -307,7 +307,7 @@ if (-not $SkipDocker) {
     Write-Step "Waiting for PostgreSQL..."
     $maxAttempts = 30
     for ($i = 0; $i -lt $maxAttempts; $i++) {
-        docker compose exec -T postgres pg_isready -U morph -d morphdb 2>&1 | Out-Null
+        docker compose exec -T postgres pg_isready -h 127.0.0.1 -U morph -d morphdb 2>&1 | Out-Null
         if ($LASTEXITCODE -eq 0) {
             Write-Step "PostgreSQL is ready"
             break

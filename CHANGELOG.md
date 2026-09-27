@@ -10,6 +10,10 @@
   as the official image does once after running its init scripts. That answer, and the other answers
   Npgsql marks transient, are now waited out within the same 60-second window; bad credentials, a
   missing database and schema faults still stop startup at once.
+- The PostgreSQL health checks in `docker-compose.yml`, `docker-compose.test.yml`, the README's compose
+  example and `scripts/start-dev.ps1` ask over TCP. Asked over the Unix socket they reported the
+  database ready while the image was still running its init scripts on a socket-only server that
+  restarts afterwards.
 
 ### Changed
 

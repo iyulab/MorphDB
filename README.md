@@ -106,7 +106,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U morph -d morphdb"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U morph -d morphdb"]
       interval: 10s
       timeout: 5s
       retries: 5
