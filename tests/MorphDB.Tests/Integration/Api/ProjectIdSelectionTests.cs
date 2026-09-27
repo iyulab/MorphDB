@@ -122,6 +122,55 @@ public class ProjectIdSelectionTests
         }
     }
 
+    /// <summary>
+    /// Schema names use only the first eight hex digits of the id, so an id that differs from a taken
+    /// one only further along asks for its schemas. That used to reach the caller as an internal error
+    /// from the unique constraint — an answer that names neither the cause nor what to change.
+    /// </summary>
+    [Fact]
+    public async Task An_id_sharing_its_first_eight_digits_with_a_project_is_a_conflict_naming_that_project()
+    {
+        var first = Guid.NewGuid();
+        (await CreateAsync(first)).EnsureSuccessStatusCode();
+
+        var sibling = SiblingOf(first);
+        var response = await CreateAsync(sibling);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict, await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var error = (await response.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken))!;
+        error.Code.Should().Be("DUPLICATE_PROJECT_SCHEMA");
+        error.Message.Should().Contain(first.ToString()).And.Contain("first 8 hex digits");
+        (await _client.GetAsync($"/api/projects/{sibling}", TestContext.Current.CancellationToken)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    /// <summary>
+    /// The same collision met by racing callers passes the check and lands on the constraint instead;
+    /// the answer must not depend on which path refused them.
+    /// </summary>
+    [Fact]
+    public async Task Racing_ids_that_share_their_schemas_are_answered_in_terms_of_the_schema()
+    {
+        var first = Guid.NewGuid();
+        var ids = new[] { first, SiblingOf(first), SiblingOf(SiblingOf(first)) };
+
+        var responses = await Task.WhenAll(ids.Select(CreateAsync));
+
+        responses.Count(r => r.StatusCode == HttpStatusCode.Created).Should().Be(1, "the schemas can hold one project");
+        foreach (var refused in responses.Where(r => r.StatusCode != HttpStatusCode.Created))
+        {
+            refused.StatusCode.Should().Be(HttpStatusCode.Conflict, await refused.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+            (await refused.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken))!.Code.Should().Be("DUPLICATE_PROJECT_SCHEMA");
+        }
+    }
+
+    /// <summary>The same first eight hex digits, a different id: the last digit is rotated.</summary>
+    private static Guid SiblingOf(Guid id)
+    {
+        var text = id.ToString();
+        var last = Convert.ToInt32(text[^1].ToString(), 16);
+        return Guid.Parse(text[..^1] + ((last + 1) % 16).ToString("x", System.Globalization.CultureInfo.InvariantCulture));
+    }
+
     private Task<HttpResponseMessage> CreateAsync(Guid projectId) =>
         _client.PostAsJsonAsync("/api/projects", new { ProjectId = projectId, Name = UniqueName() });
 

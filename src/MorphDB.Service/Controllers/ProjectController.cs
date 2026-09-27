@@ -109,6 +109,15 @@ public sealed class ProjectController : ControllerBase
                 Code = ex.ErrorCode
             });
         }
+        catch (DuplicateProjectSchemaException ex)
+        {
+            return Conflict(new ErrorResponse
+            {
+                Error = ex.ErrorCode,
+                Message = ex.Message,
+                Code = ex.ErrorCode
+            });
+        }
         catch (DuplicateProjectIdException ex)
         {
             return Conflict(new ErrorResponse

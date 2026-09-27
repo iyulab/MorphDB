@@ -14,6 +14,10 @@
   example and `scripts/start-dev.ps1` ask over TCP. Asked over the Unix socket they reported the
   database ready while the image was still running its init scripts on a socket-only server that
   restarts afterwards.
+- Creating a project under an id whose first eight hex digits match another project's answers
+  `409 DUPLICATE_PROJECT_SCHEMA`, naming the project that holds the schemas, instead of `500`. A
+  project's schemas are named from those digits, so two such ids ask for the same schemas; ids created
+  together as UUIDv7 share them for about a minute. The API reference now states the constraint.
 
 ### Changed
 

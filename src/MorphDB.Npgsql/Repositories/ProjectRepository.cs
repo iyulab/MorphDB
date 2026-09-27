@@ -42,6 +42,16 @@ public sealed partial class ProjectRepository : IProjectRepository
             throw new DuplicateProjectIdException(projectId);
         }
 
+        // A chosen id can also differ from a taken one and still ask for its schemas, since schema
+        // names use only the id's first eight hex digits. Say so before the insert does, naming the
+        // project that holds them; the catch below answers the same collision for a race or a
+        // generated id.
+        if (request.ProjectId is not null
+            && await FindProjectBySystemSchemaAsync(schemaNames.SystemSchema, cancellationToken) is { } holder)
+        {
+            throw new DuplicateProjectSchemaException(projectId, schemaNames.SystemSchema, holder);
+        }
+
         // Check slug availability
         if (!await IsSlugAvailableAsync(slug, cancellationToken))
         {
@@ -88,6 +98,13 @@ public sealed partial class ProjectRepository : IProjectRepository
             // names as well, and answering "that id is taken" to a slug collision would name the
             // wrong field as the one to change.
             throw new DuplicateProjectIdException(projectId);
+        }
+        catch (PostgresException ex) when (IsSchemaNameCollision(ex))
+        {
+            throw new DuplicateProjectSchemaException(
+                projectId,
+                ex.ConstraintName!.Contains("data_schema", StringComparison.Ordinal) ? schemaNames.DataSchema : schemaNames.SystemSchema,
+                conflictingProjectId: null);
         }
     }
 
@@ -241,6 +258,20 @@ public sealed partial class ProjectRepository : IProjectRepository
     private static bool IsProjectIdCollision(PostgresException ex) =>
         ex.SqlState == PostgresErrorCodes.UniqueViolation
         && ex.ConstraintName?.EndsWith("_pkey", StringComparison.Ordinal) == true;
+
+    private static bool IsSchemaNameCollision(PostgresException ex) =>
+        ex.SqlState == PostgresErrorCodes.UniqueViolation
+        && (ex.ConstraintName?.EndsWith("_system_schema_key", StringComparison.Ordinal) == true
+            || ex.ConstraintName?.EndsWith("_data_schema_key", StringComparison.Ordinal) == true);
+
+    /// <summary>The project, deleted ones included, whose system schema is <paramref name="systemSchema"/>.</summary>
+    private async Task<Guid?> FindProjectBySystemSchemaAsync(string systemSchema, CancellationToken cancellationToken)
+    {
+        const string sql = "SELECT project_id FROM morphdb._morph_projects WHERE system_schema = @SystemSchema";
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        return await connection.QuerySingleOrDefaultAsync<Guid?>(sql, new { SystemSchema = systemSchema });
+    }
 
     /// <summary>
     /// Whether the id is taken, deleted projects included. Deleting a project sets its status

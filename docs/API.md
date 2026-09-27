@@ -61,6 +61,12 @@ one is created and every other is a conflict, so the reply does not depend on wh
 first. Omit the field and MorphDB generates one, which is what an application creating projects on
 the fly should keep doing.
 
+A project's schemas are named from the **first eight hex digits** of its id, so a chosen id must differ
+from every other project's in those digits — `0197c0de-…-0001` and `0197c0de-…-0002` ask for the same
+schemas, and the second is refused with `409 DUPLICATE_PROJECT_SCHEMA`, naming the project that holds
+them. Time-ordered ids (UUIDv7) share those digits for about a minute, so ids created together need
+varying elsewhere than their tail.
+
 ## REST API
 
 ### Schema Management (DDL)
@@ -1230,6 +1236,7 @@ fixed string — internal exception text never reaches the wire) and retrying ma
 | 409 | `DUPLICATE_NAME` | Creating a table/column under a name that is taken |
 | 409 | `DUPLICATE_SLUG` | Creating a project under a slug that is taken |
 | 409 | `DUPLICATE_PROJECT_ID` | Creating a project under an id that is taken — only reachable when the request chooses the id. A deleted project still holds its id |
+| 409 | `DUPLICATE_PROJECT_SCHEMA` | Creating a project under an id whose first eight hex digits match another project's — schema names come from those digits. Choose an id that differs in them |
 | 409 | `SCHEMA_VERSION_CONFLICT` | An optimistic schema update lost the race |
 | 409 | `LOCK_ACQUISITION_FAILED` | A concurrent schema operation holds the lock — retry |
 | 500 | `INTERNAL_ERROR` | Our defect, logged on the server — never your request's fault |

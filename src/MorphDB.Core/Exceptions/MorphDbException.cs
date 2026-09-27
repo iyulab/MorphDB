@@ -207,6 +207,38 @@ public class DuplicateProjectIdException : MorphDbException
 }
 
 /// <summary>
+/// Thrown when a project is created under an id whose schema names another project already uses.
+/// <para>
+/// A project's schemas are named from the first eight hex digits of its id, so two different ids that
+/// share those digits ask for the same schemas. The collision is the caller's to resolve — choose an
+/// id that differs in its first eight digits — and it is a conflict rather than an internal error,
+/// because nothing is wrong with the server and retrying the same request cannot succeed. Time-ordered
+/// ids (UUIDv7) share those digits for about a minute, which makes this reachable in practice.
+/// </para>
+/// </summary>
+public class DuplicateProjectSchemaException : MorphDbException
+{
+    public Guid ProjectId { get; }
+
+    public string SchemaName { get; }
+
+    /// <summary>The project that already uses <see cref="SchemaName"/>, when it could be read.</summary>
+    public Guid? ConflictingProjectId { get; }
+
+    public DuplicateProjectSchemaException(Guid projectId, string schemaName, Guid? conflictingProjectId)
+        : base(
+            "DUPLICATE_PROJECT_SCHEMA",
+            $"Project id '{projectId}' maps to schema '{schemaName}', which "
+            + (conflictingProjectId is { } other ? $"project '{other}'" : "another project")
+            + " already uses. Schema names come from the first 8 hex digits of the id; choose an id that differs in them.")
+    {
+        ProjectId = projectId;
+        SchemaName = schemaName;
+        ConflictingProjectId = conflictingProjectId;
+    }
+}
+
+/// <summary>
 /// Thrown when a resource is not found.
 /// </summary>
 public class NotFoundException : MorphDbException
