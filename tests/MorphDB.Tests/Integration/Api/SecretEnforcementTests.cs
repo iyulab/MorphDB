@@ -4,6 +4,8 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.Routing.Patterns;
 using Microsoft.Extensions.DependencyInjection;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Models;
@@ -346,6 +348,62 @@ public class SecretEnforcementTests
         (await master.PatchAsJsonAsync($"/api/projects/{target.Id}", new { Name = "renamed_by_master" }, ct)).StatusCode.Should().Be(HttpStatusCode.OK);
         (await master.DeleteAsync($"/api/projects/{target.Id}", ct)).StatusCode.Should().Be(HttpStatusCode.NoContent);
     }
+
+    // (9) The checks above name the routes that exist today. A route added later that takes its
+    // project from the path would be as open as these were unless it remembers to ask — so this
+    // walks every endpoint the service maps and addresses each one that carries a project in its
+    // path at another project, with every method it answers.
+    [Fact]
+    public async Task Every_route_that_takes_its_project_from_the_path_refuses_a_secret_confined_elsewhere()
+    {
+        var master = EnforcedClient(MasterSecret);
+        var other = await CreateProjectAsync(master);
+        var confined = EnforcedClient(await IssueAsync(master, "confined-every-route", "reader", _fixture.Api.ProjectId));
+        var ct = TestContext.Current.CancellationToken;
+
+        var endpoints = _fixture.Api.WithMasterSecret(MasterSecret).Services
+            .GetRequiredService<EndpointDataSource>().Endpoints
+            .OfType<RouteEndpoint>()
+            .Where(e => TakesProjectFromPath(e.RoutePattern))
+            .ToList();
+        endpoints.Should().NotBeEmpty("the project and audit routes take their project from the path");
+
+        var open = new List<string>();
+        foreach (var endpoint in endpoints)
+        {
+            var path = "/" + string.Concat(endpoint.RoutePattern.PathSegments.Select(segment =>
+                "/" + string.Concat(segment.Parts.Select(part => part switch
+                {
+                    RoutePatternLiteralPart literal => literal.Content,
+                    RoutePatternParameterPart { Name: "id" or "projectId" } => other.Id.ToString(),
+                    RoutePatternParameterPart { Name: "slug" } => other.Slug,
+                    RoutePatternParameterPart => Guid.NewGuid().ToString(),
+                    _ => string.Empty,
+                })))).TrimStart('/');
+            foreach (var method in endpoint.Metadata.GetMetadata<IHttpMethodMetadata>()?.HttpMethods ?? ["GET"])
+            {
+                using var request = new HttpRequestMessage(new HttpMethod(method), path);
+                if (method is "POST" or "PUT" or "PATCH")
+                {
+                    request.Content = JsonContent.Create(new { name = "confined_probe" });
+                }
+
+                var response = await confined.SendAsync(request, ct);
+                if (response.StatusCode != HttpStatusCode.Forbidden)
+                {
+                    open.Add($"{method} {path} -> {(int)response.StatusCode}");
+                }
+            }
+        }
+
+        open.Should().BeEmpty("a secret confined to one project must not reach another through any route's path");
+        (await master.GetAsync($"/api/projects/{other.Id}", ct)).StatusCode.Should().Be(HttpStatusCode.OK, "nothing the probe sent changed the project");
+    }
+
+    private static bool TakesProjectFromPath(RoutePattern pattern) =>
+        pattern.Parameters.Any(p => p.Name == "projectId")
+        || (pattern.RawText?.StartsWith("api/projects/", StringComparison.OrdinalIgnoreCase) == true
+            && pattern.Parameters.Any(p => p.Name is "id" or "slug"));
 
     private static async Task<ProjectApiResponse> CreateProjectAsync(HttpClient master)
     {
