@@ -188,6 +188,7 @@ try
         ?? new SecretOptions();
     builder.Services.AddSingleton(secretOptions);
     builder.Services.AddSingleton<ISecretService, SecretService>();
+    builder.Services.AddSingleton<ProjectAccess>();
 
     // Add rate limiting
     builder.Services.Configure<RateLimitConfig>(builder.Configuration.GetSection("RateLimiting"));

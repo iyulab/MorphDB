@@ -3,6 +3,7 @@ using MorphDB.Core.Abstractions;
 using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
 using MorphDB.Service.Models.Api;
+using MorphDB.Service.Security;
 
 namespace MorphDB.Service.Controllers;
 
@@ -53,13 +54,16 @@ internal static partial class ProjectControllerLogs
 public sealed class ProjectController : ControllerBase
 {
     private readonly IProjectService _projectService;
+    private readonly ProjectAccess _access;
     private readonly ILogger<ProjectController> _logger;
 
     public ProjectController(
         IProjectService projectService,
+        ProjectAccess access,
         ILogger<ProjectController> logger)
     {
         _projectService = projectService;
+        _access = access;
         _logger = logger;
     }
 
@@ -74,10 +78,12 @@ public sealed class ProjectController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status409Conflict)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> CreateProject(
         [FromBody] CreateProjectApiRequest request,
         CancellationToken cancellationToken)
     {
+        _access.RequireMaster();
         ProjectControllerLogs.CreatingProject(_logger, request.Name);
 
         try
@@ -165,13 +171,27 @@ public sealed class ProjectController : ControllerBase
             status = parsedStatus;
         }
 
-        var projects = await _projectService.ListProjectsAsync(
-            status,
-            offset,
-            pageSize,
-            cancellationToken);
+        IReadOnlyList<Project> projects;
+        int totalCount;
+        if (_access.ConfinedTo is { } confinedTo)
+        {
+            // A confined secret sees the one project it is confined to — listing is not addressing
+            // another project, so it narrows rather than refuses.
+            var own = await _projectService.GetProjectAsync(confinedTo, cancellationToken);
+            var visible = own is not null && (status is null || own.Status == status) ? new[] { own } : [];
+            projects = visible.Skip(offset).Take(pageSize).ToList();
+            totalCount = visible.Length;
+        }
+        else
+        {
+            projects = await _projectService.ListProjectsAsync(
+                status,
+                offset,
+                pageSize,
+                cancellationToken);
 
-        var totalCount = await _projectService.CountProjectsAsync(status, cancellationToken);
+            totalCount = await _projectService.CountProjectsAsync(status, cancellationToken);
+        }
 
         var response = new PagedResponse<ProjectApiResponse>
         {
@@ -196,10 +216,12 @@ public sealed class ProjectController : ControllerBase
     [HttpGet("{id:guid}")]
     [ProducesResponseType(typeof(ProjectApiResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetProject(
         Guid id,
         CancellationToken cancellationToken)
     {
+        _access.RequireAccessTo(id);
         ProjectControllerLogs.GettingProject(_logger, id);
 
         var project = await _projectService.GetProjectAsync(id, cancellationToken);
@@ -226,6 +248,7 @@ public sealed class ProjectController : ControllerBase
     [HttpGet("slug/{slug}")]
     [ProducesResponseType(typeof(ProjectApiResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetProjectBySlug(
         string slug,
         CancellationToken cancellationToken)
@@ -233,6 +256,13 @@ public sealed class ProjectController : ControllerBase
         ProjectControllerLogs.GettingProjectBySlug(_logger, slug);
 
         var project = await _projectService.GetProjectBySlugAsync(slug, cancellationToken);
+
+        // A confined secret gets the same answer for a slug that is someone else's and one that does
+        // not exist, as the header check gives for any other project id.
+        if (_access.ConfinedTo is { } confinedTo && project?.ProjectId != confinedTo)
+        {
+            throw new ForbiddenException("This secret is confined to a different project.");
+        }
 
         if (project is null)
         {
@@ -258,11 +288,13 @@ public sealed class ProjectController : ControllerBase
     [ProducesResponseType(typeof(ProjectApiResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> UpdateProject(
         Guid id,
         [FromBody] UpdateProjectApiRequest request,
         CancellationToken cancellationToken)
     {
+        _access.RequireMaster();
         ProjectControllerLogs.UpdatingProject(_logger, id);
 
         try
@@ -309,10 +341,12 @@ public sealed class ProjectController : ControllerBase
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status500InternalServerError)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> DeleteProject(
         Guid id,
         CancellationToken cancellationToken)
     {
+        _access.RequireMaster();
         ProjectControllerLogs.DeletingProject(_logger, id);
 
         try
@@ -350,10 +384,12 @@ public sealed class ProjectController : ControllerBase
     [HttpGet("{id:guid}/stats")]
     [ProducesResponseType(typeof(ProjectStatsApiResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetProjectStats(
         Guid id,
         CancellationToken cancellationToken)
     {
+        _access.RequireAccessTo(id);
         ProjectControllerLogs.GettingProjectStats(_logger, id);
 
         try
@@ -381,10 +417,12 @@ public sealed class ProjectController : ControllerBase
     [HttpGet("{id:guid}/health")]
     [ProducesResponseType(typeof(SchemaHealthApiResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> ValidateProjectHealth(
         Guid id,
         CancellationToken cancellationToken)
     {
+        _access.RequireAccessTo(id);
         ProjectControllerLogs.ValidatingProjectHealth(_logger, id);
 
         try

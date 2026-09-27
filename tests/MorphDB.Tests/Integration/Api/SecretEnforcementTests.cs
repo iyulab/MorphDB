@@ -287,6 +287,75 @@ public class SecretEnforcementTests
             "to NULL would silently match nothing and look like a working policy");
     }
 
+    // (8) The project routes take their project from the path, not the header. The header check alone
+    // let a secret confined to one project name its own project in the header and then read, rename,
+    // create and delete others through /api/projects/{id}. Confinement has to hold wherever the
+    // project comes from, and managing projects is administration, not data access.
+    [Fact]
+    public async Task A_confined_secret_cannot_reach_another_project_through_its_path()
+    {
+        var master = EnforcedClient(MasterSecret);
+        var other = await CreateProjectAsync(master);
+        var confined = EnforcedClient(await IssueAsync(master, "confined-routes", "reader", _fixture.Api.ProjectId));
+        var ct = TestContext.Current.CancellationToken;
+
+        (await confined.GetAsync($"/api/projects/{other.Id}", ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await confined.GetAsync($"/api/projects/{other.Id}/stats", ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await confined.GetAsync($"/api/projects/{other.Id}/health", ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await confined.GetAsync($"/api/projects/{other.Id}/audit/logs", ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await confined.GetAsync($"/api/projects/slug/{other.Slug}", ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await confined.GetAsync($"/api/projects/slug/no-such-slug-{Guid.NewGuid():N}", ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden,
+            "an unknown slug and someone else's must not be told apart");
+
+        (await confined.GetAsync($"/api/projects/{_fixture.Api.ProjectId}", ct)).StatusCode.Should().Be(HttpStatusCode.OK,
+            "its own project stays readable");
+
+        (await master.GetAsync($"/api/projects/{other.Id}", ct)).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task A_confined_secret_lists_only_its_own_project()
+    {
+        var master = EnforcedClient(MasterSecret);
+        await CreateProjectAsync(master);
+        var confined = EnforcedClient(await IssueAsync(master, "confined-list", "reader", _fixture.Api.ProjectId));
+
+        var page = await confined.GetFromJsonAsync<PagedResponse<ProjectApiResponse>>("/api/projects", TestContext.Current.CancellationToken);
+
+        page!.Data.Select(p => p.Id).Should().Equal(_fixture.Api.ProjectId);
+        page.Pagination.TotalCount.Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(null)]   // an issued secret for every project
+    [InlineData("own")]  // confined to the fixture project — even its own project is not its to manage
+    public async Task Only_the_master_secret_creates_changes_or_deletes_projects(string? confinement)
+    {
+        var master = EnforcedClient(MasterSecret);
+        var target = await CreateProjectAsync(master);
+        var issued = EnforcedClient(await IssueAsync(master, $"manage-{confinement ?? "all"}", "writer",
+            confinement is null ? null : _fixture.Api.ProjectId));
+        var ct = TestContext.Current.CancellationToken;
+
+        (await issued.PostAsJsonAsync("/api/projects", new { Name = UniqueProjectName() }, ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await issued.PatchAsJsonAsync($"/api/projects/{target.Id}", new { Name = "renamed" }, ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await issued.DeleteAsync($"/api/projects/{target.Id}", ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await issued.DeleteAsync($"/api/projects/{_fixture.Api.ProjectId}", ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        (await master.GetAsync($"/api/projects/{target.Id}", ct)).StatusCode.Should().Be(HttpStatusCode.OK, "nothing was deleted");
+        (await master.PatchAsJsonAsync($"/api/projects/{target.Id}", new { Name = "renamed_by_master" }, ct)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await master.DeleteAsync($"/api/projects/{target.Id}", ct)).StatusCode.Should().Be(HttpStatusCode.NoContent);
+    }
+
+    private static async Task<ProjectApiResponse> CreateProjectAsync(HttpClient master)
+    {
+        var response = await master.PostAsJsonAsync("/api/projects", new { Name = UniqueProjectName() });
+        response.StatusCode.Should().Be(HttpStatusCode.Created, await response.Content.ReadAsStringAsync());
+        return (await response.Content.ReadFromJsonAsync<ProjectApiResponse>())!;
+    }
+
+    private static string UniqueProjectName() => $"secproj_{Guid.NewGuid():N}"[..28];
+
     private static async Task<string> IssueAsync(
         HttpClient master,
         string name,

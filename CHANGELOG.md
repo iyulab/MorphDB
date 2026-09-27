@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Security
+
+- A secret confined to one project could reach other projects through the routes that take the
+  project from their path rather than the `X-Project-Id` header: it could read, rename and delete
+  another project, read its statistics, health and audit log, list every project, and create new
+  ones. Confinement now holds on those routes too — another project's id or slug is answered
+  `403 FORBIDDEN`, and listing returns only the secret's own project. Creating, renaming and deleting
+  projects now takes the master secret: an issued secret that created or managed projects is answered
+  `403 FORBIDDEN`. Deployments without a master secret are unaffected.
+
 ### Fixed
 
 - The service no longer exits at startup when it reaches a PostgreSQL that is still starting up. The

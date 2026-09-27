@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using MorphDB.Core.Abstractions;
 using MorphDB.Service.Models.Api;
+using MorphDB.Service.Security;
 
 namespace MorphDB.Service.Controllers;
 
@@ -29,13 +30,16 @@ internal static partial class AuditControllerLogs
 public sealed class AuditController : ControllerBase
 {
     private readonly IAuditService _auditService;
+    private readonly ProjectAccess _access;
     private readonly ILogger<AuditController> _logger;
 
     public AuditController(
         IAuditService auditService,
+        ProjectAccess access,
         ILogger<AuditController> logger)
     {
         _auditService = auditService;
+        _access = access;
         _logger = logger;
     }
 
@@ -49,11 +53,13 @@ public sealed class AuditController : ControllerBase
     [HttpGet("logs")]
     [ProducesResponseType(typeof(AuditLogPageApiResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> QueryLogs(
         Guid projectId,
         [FromQuery] AuditLogQueryParameters parameters,
         CancellationToken cancellationToken)
     {
+        _access.RequireAccessTo(projectId);
         AuditControllerLogs.QueryingAuditLogs(_logger, projectId);
 
         var query = new AuditLogQuery
@@ -91,11 +97,13 @@ public sealed class AuditController : ControllerBase
     [HttpGet("logs/{logId:guid}")]
     [ProducesResponseType(typeof(AuditLogEntryApiResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetLog(
         Guid projectId,
         Guid logId,
         CancellationToken cancellationToken)
     {
+        _access.RequireAccessTo(projectId);
         AuditControllerLogs.GettingAuditLog(_logger, logId, projectId);
 
         var entry = await _auditService.GetByIdAsync(projectId, logId, cancellationToken);
@@ -124,12 +132,14 @@ public sealed class AuditController : ControllerBase
     [HttpGet("stats")]
     [ProducesResponseType(typeof(AuditStatsApiResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetStats(
         Guid projectId,
         [FromQuery] DateTimeOffset? from,
         [FromQuery] DateTimeOffset? to,
         CancellationToken cancellationToken)
     {
+        _access.RequireAccessTo(projectId);
         AuditControllerLogs.GettingAuditStats(_logger, projectId);
 
         var stats = await _auditService.GetStatsAsync(projectId, fromDate: from, toDate: to, cancellationToken);

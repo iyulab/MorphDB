@@ -33,6 +33,13 @@ public sealed class SecurityContext
     public bool IsAuthenticated { get; set; }
 
     /// <summary>
+    /// Gets or sets the project the authenticating secret is confined to, or null when it is not
+    /// confined. A route that takes its project from somewhere other than the request's project
+    /// header compares against this.
+    /// </summary>
+    public Guid? ConfinedToProjectId { get; set; }
+
+    /// <summary>
     /// Gets or sets whether RLS should be bypassed (trusted in-process callers).
     /// </summary>
     public bool BypassRls { get; set; }

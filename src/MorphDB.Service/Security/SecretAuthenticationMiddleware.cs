@@ -98,6 +98,7 @@ public sealed class SecretAuthenticationMiddleware
             // subject to the same policies an anonymous caller is, with {{role}} now filled in.
             BypassRls = string.Equals(secret.Role, SecretRoles.Master, StringComparison.Ordinal),
             Role = secret.Role,
+            ConfinedToProjectId = secret.ProjectId,
             UserId = secret.SecretId == Guid.Empty ? null : secret.SecretId.ToString()
         });
 

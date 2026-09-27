@@ -988,6 +988,11 @@ Authorization: Bearer mdb_<secret>
 A request with no secret or an unrecognized one is answered `401 UNAUTHENTICATED`. A recognized
 secret that may not do what was asked is answered `403 FORBIDDEN`.
 
+**Managing projects takes the master secret.** Creating, renaming and deleting a project
+(`POST /api/projects`, `PATCH` and `DELETE /api/projects/{id}`) is administration rather than data
+access, like issuing secrets: an issued secret — whatever its role, confined or not — is answered
+`403 FORBIDDEN`, even for its own project. Reading projects stays open to issued secrets.
+
 **This includes `/graphql` and `/hubs/morph`** — a boundary that held on REST and not on the other
 two would not be a boundary. It has a consequence worth knowing before you turn enforcement on:
 
@@ -1023,7 +1028,10 @@ DELETE /api/security/secrets/{secretId}        # Revoke
   from the policies that reference it through `{{role}}` (see below). The names `master` and
   `service` are reserved and are refused with `400 VALIDATION_ERROR`.
 - **`projectId`** — `null` for every project, or a project id to confine the secret to it. A
-  confined secret addressing another project is answered `403 FORBIDDEN`.
+  confined secret addressing another project is answered `403 FORBIDDEN` — whether the request names
+  the project in `X-Project-Id` or in its path (`/api/projects/{id}`, `/stats`, `/health`, the
+  project's audit log, or a slug that is not its own project's). Listing projects returns only its
+  own.
 
 The response carries the plaintext **once**. It is stored only as a hash; if it is lost, issue
 another and revoke the old one. Revocation keeps the row so audit records retain a name for it.
