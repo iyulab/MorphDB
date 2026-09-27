@@ -245,12 +245,15 @@ public static partial class ServiceCollectionExtensions
     /// <summary>
     /// True when the failure is the database not being reachable yet, as opposed to a fault in the
     /// schema itself. Npgsql reports a refused or unresolvable endpoint as a transient
-    /// <see cref="NpgsqlException"/> wrapping a socket error; a <see cref="PostgresException"/> means
-    /// the server answered and rejected something, which retrying cannot fix.
+    /// <see cref="NpgsqlException"/> wrapping a socket error. A <see cref="PostgresException"/> means
+    /// the server answered; most such answers reject something retrying cannot fix (bad credentials,
+    /// a missing database), but a server that is still starting up or shutting down answers
+    /// <c>57P03</c>, which Npgsql marks transient. That is the state a database passes through on every
+    /// restart, and the window a dependent service starting beside it lands in, so it is retried.
     /// </summary>
-    private static bool IsDatabaseUnreachable(Exception exception) => exception switch
+    internal static bool IsDatabaseUnreachable(Exception exception) => exception switch
     {
-        PostgresException => false,
+        PostgresException postgres => postgres.IsTransient,
         NpgsqlException { IsTransient: true } => true,
         NpgsqlException => exception.InnerException is SocketException or TimeoutException,
         SocketException => true,

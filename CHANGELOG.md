@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Fixed
+
+- The service no longer exits at startup when it reaches a PostgreSQL that is still starting up. The
+  startup wait retried an unreachable database but treated every answer from the server as final,
+  including `57P03` ("the database system is starting up"), which a server gives while it restarts —
+  as the official image does once after running its init scripts. That answer, and the other answers
+  Npgsql marks transient, are now waited out within the same 60-second window; bad credentials, a
+  missing database and schema faults still stop startup at once.
+
 ### Changed
 
 - `MorphDB.Client` no longer packs on every build (`GeneratePackageOnBuild`); like `MorphDB.Core` and
