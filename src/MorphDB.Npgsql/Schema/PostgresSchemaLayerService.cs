@@ -1,6 +1,7 @@
 using Dapper;
 using Microsoft.Extensions.Logging;
 using MorphDB.Core.Abstractions;
+using MorphDB.Core.Exceptions;
 using MorphDB.Npgsql.Ddl;
 using Npgsql;
 
@@ -14,17 +15,29 @@ public sealed partial class PostgresSchemaLayerService : ISchemaLayerService
 {
     private readonly NpgsqlDataSource _dataSource;
     private readonly ISchemaNameResolver _schemaNameResolver;
+    private readonly IProjectRepository _projectRepository;
     private readonly ILogger<PostgresSchemaLayerService> _logger;
 
     public PostgresSchemaLayerService(
         NpgsqlDataSource dataSource,
         ISchemaNameResolver schemaNameResolver,
+        IProjectRepository projectRepository,
         ILogger<PostgresSchemaLayerService> logger)
     {
         _dataSource = dataSource;
         _schemaNameResolver = schemaNameResolver;
+        _projectRepository = projectRepository;
         _logger = logger;
     }
+
+    /// <summary>
+    /// The project's recorded schema names. A name computed from the id would be wrong for a project
+    /// created under the earlier naming rule, and operating on it would miss — or, for a drop, spare —
+    /// the project's real schemas.
+    /// </summary>
+    private async Task<SchemaNames> RecordedSchemaNamesAsync(Guid projectId, CancellationToken cancellationToken) =>
+        await _projectRepository.GetSchemaNamesAsync(projectId, cancellationToken)
+        ?? throw new ProjectNotFoundException(projectId);
 
     /// <inheritdoc/>
     public async Task EnsureGlobalSchemaAsync(CancellationToken cancellationToken = default)
@@ -56,7 +69,7 @@ public sealed partial class PostgresSchemaLayerService : ISchemaLayerService
             throw new ArgumentException("Project id must not be empty.", nameof(projectId));
         }
 
-        var schemaNames = _schemaNameResolver.GetSchemaNames(projectId);
+        var schemaNames = await RecordedSchemaNamesAsync(projectId, cancellationToken);
 
         LogProvisioningSchemas(_logger, projectId, schemaNames.SystemSchema, schemaNames.DataSchema);
 
@@ -104,7 +117,7 @@ public sealed partial class PostgresSchemaLayerService : ISchemaLayerService
         Guid projectId,
         CancellationToken cancellationToken = default)
     {
-        var schemaNames = _schemaNameResolver.GetSchemaNames(projectId);
+        var schemaNames = await RecordedSchemaNamesAsync(projectId, cancellationToken);
 
         LogDroppingSchemas(_logger, projectId, schemaNames.SystemSchema, schemaNames.DataSchema);
 
@@ -154,7 +167,7 @@ public sealed partial class PostgresSchemaLayerService : ISchemaLayerService
         Guid projectId,
         CancellationToken cancellationToken = default)
     {
-        var schemaNames = _schemaNameResolver.GetSchemaNames(projectId);
+        var schemaNames = await RecordedSchemaNamesAsync(projectId, cancellationToken);
 
         var systemExists = await SchemaExistsAsync(schemaNames.SystemSchema, cancellationToken);
         var dataExists = await SchemaExistsAsync(schemaNames.DataSchema, cancellationToken);
@@ -202,7 +215,7 @@ public sealed partial class PostgresSchemaLayerService : ISchemaLayerService
         Guid projectId,
         CancellationToken cancellationToken = default)
     {
-        var schemaNames = _schemaNameResolver.GetSchemaNames(projectId);
+        var schemaNames = await RecordedSchemaNamesAsync(projectId, cancellationToken);
 
         var systemStats = await GetSchemaStatsAsync(schemaNames.SystemSchema, cancellationToken);
         var dataStats = await GetSchemaStatsAsync(schemaNames.DataSchema, cancellationToken);
@@ -240,7 +253,9 @@ public sealed partial class PostgresSchemaLayerService : ISchemaLayerService
                 n.nspname AS schema_name,
                 COUNT(DISTINCT c.relname) FILTER (WHERE c.relkind = 'r') AS table_count,
                 COALESCE(SUM(pg_total_relation_size(c.oid)) FILTER (WHERE c.relkind = 'r'), 0) AS size_bytes,
-                (SELECT min(s.statime) FROM pg_stat_user_tables s WHERE s.schemaname = n.nspname) AS created_at
+                (SELECT min(s.statime) FROM pg_stat_user_tables s WHERE s.schemaname = n.nspname) AS created_at,
+                (SELECT p.project_id FROM morphdb._morph_projects p
+                 WHERE p.system_schema = n.nspname OR p.data_schema = n.nspname) AS project_id
             FROM pg_namespace n
             LEFT JOIN pg_class c ON c.relnamespace = n.oid
             WHERE n.nspname LIKE 'p_%_sys'
@@ -254,21 +269,13 @@ public sealed partial class PostgresSchemaLayerService : ISchemaLayerService
 
         return results.Select(r =>
         {
-            var schemaType = _schemaNameResolver.GetSchemaType(r.SchemaName);
-            Guid? projectId = null;
-            if (schemaType is SchemaType.ProjectSystem or SchemaType.ProjectData)
-            {
-                if (_schemaNameResolver.TryParseSchemaName(r.SchemaName, out var parsedProjectId))
-                {
-                    projectId = parsedProjectId;
-                }
-            }
-
             return new ManagedSchemaInfo
             {
                 SchemaName = r.SchemaName,
-                SchemaType = schemaType,
-                ProjectId = projectId,
+                SchemaType = _schemaNameResolver.GetSchemaType(r.SchemaName),
+                // Read from the project records, not parsed from the name: a name from the earlier
+                // eight-digit rule carries only part of the id.
+                ProjectId = r.ProjectId,
                 TableCount = r.TableCount,
                 SizeBytes = r.SizeBytes,
                 CreatedAt = r.CreatedAt ?? DateTimeOffset.MinValue
@@ -282,7 +289,7 @@ public sealed partial class PostgresSchemaLayerService : ISchemaLayerService
         CancellationToken cancellationToken = default)
     {
         var issues = new List<SchemaHealthIssue>();
-        var schemaNames = _schemaNameResolver.GetSchemaNames(projectId);
+        var schemaNames = await RecordedSchemaNamesAsync(projectId, cancellationToken);
 
         // Check if schemas exist
         var existence = await ProjectSchemasExistAsync(projectId, cancellationToken);
@@ -384,6 +391,7 @@ public sealed partial class PostgresSchemaLayerService : ISchemaLayerService
         public int TableCount { get; init; }
         public long SizeBytes { get; init; }
         public DateTimeOffset? CreatedAt { get; init; }
+        public Guid? ProjectId { get; init; }
     }
 
     // LoggerMessage delegates for high-performance logging

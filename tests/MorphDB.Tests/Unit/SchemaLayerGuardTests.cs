@@ -1,5 +1,6 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using MorphDB.Npgsql.Repositories;
 using MorphDB.Npgsql.Schema;
 using Npgsql;
 
@@ -15,9 +16,12 @@ public class SchemaLayerGuardTests
     [Fact]
     public async Task Provisioning_the_empty_project_id_is_refused()
     {
+        var dataSource = NpgsqlDataSource.Create("Host=localhost;Database=never_reached;Username=x;Password=x");
+        var resolver = new PostgresSchemaNameResolver();
         var service = new PostgresSchemaLayerService(
-            NpgsqlDataSource.Create("Host=localhost;Database=never_reached;Username=x;Password=x"),
-            new PostgresSchemaNameResolver(),
+            dataSource,
+            resolver,
+            new ProjectRepository(dataSource, resolver),
             NullLogger<PostgresSchemaLayerService>.Instance);
 
         var act = () => service.ProvisionProjectSchemasAsync(Guid.Empty);

@@ -3,43 +3,38 @@ using MorphDB.Core.Models;
 namespace MorphDB.Core.Abstractions;
 
 /// <summary>
-/// Resolves PostgreSQL schema names for projects following the naming convention:
-/// - System schema: p_{projectId8char}_sys
-/// - Data schema: p_{projectId8char}_dat
-///
-/// Example: For project ID "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-/// - System: p_a1b2c3d4_sys
-/// - Data: p_a1b2c3d4_dat
+/// The naming rule for a project's PostgreSQL schemas, and the parsing of names it produced.
+/// <para>
+/// A new project's schemas are named from its whole id — <c>p_{32 hex digits}_sys</c> for the system
+/// schema and <c>p_{32 hex digits}_dat</c> for the data schema — so two projects never ask for the same
+/// schemas. The rule applies when a project is created; the names are then recorded with the project
+/// and every later operation reads the recorded ones through
+/// <see cref="IProjectRepository.GetSchemaNamesAsync"/>. A project created before the rule changed keeps
+/// the schemas it was given (named from the first eight hex digits of its id), which is why nothing
+/// here computes a name for an existing project.
+/// </para>
 /// </summary>
 public interface ISchemaNameResolver
 {
     /// <summary>
-    /// Gets the system schema name for a project.
-    /// System schema contains metadata tables: _tables, _columns, _indexes, etc.
+    /// The schema names a project created under <paramref name="projectId"/> is given. Only the code
+    /// creating the project calls this; everything else reads the recorded names.
     /// </summary>
-    string GetSystemSchema(Guid projectId);
+    SchemaNames NameSchemasForNewProject(Guid projectId);
 
     /// <summary>
-    /// Gets the data schema name for a project.
-    /// Data schema contains user-defined data tables with logical names directly.
-    /// </summary>
-    string GetDataSchema(Guid projectId);
-
-    /// <summary>
-    /// Gets both schema names for a project.
-    /// </summary>
-    SchemaNames GetSchemaNames(Guid projectId);
-
-    /// <summary>
-    /// Parses a schema name and extracts the project ID if it's a valid MorphDB schema.
+    /// Recovers the project id from a schema name this rule produced for a new project.
     /// </summary>
     /// <param name="schemaName">The schema name to parse.</param>
-    /// <param name="projectId">The extracted project ID if parsing succeeds.</param>
-    /// <returns>True if the schema name is a valid MorphDB schema.</returns>
+    /// <param name="projectId">The project id the name was made from, when parsing succeeds.</param>
+    /// <returns>
+    /// True for a name carrying a whole id. A name from the earlier eight-digit rule carries only part
+    /// of the id and returns false — the project it belongs to is found through its recorded names.
+    /// </returns>
     bool TryParseSchemaName(string schemaName, out Guid projectId);
 
     /// <summary>
-    /// Determines the schema type from a schema name.
+    /// Determines the schema type from a schema name — either naming rule.
     /// </summary>
     SchemaType GetSchemaType(string schemaName);
 
@@ -47,16 +42,6 @@ public interface ISchemaNameResolver
     /// Generates a fully qualified object name (schema.object).
     /// </summary>
     string QualifyName(string schemaName, string objectName);
-
-    /// <summary>
-    /// Generates a fully qualified table name for data tables.
-    /// </summary>
-    string QualifyDataTable(Guid projectId, string tableName);
-
-    /// <summary>
-    /// Generates a fully qualified table name for system tables.
-    /// </summary>
-    string QualifySystemTable(Guid projectId, string tableName);
 
     /// <summary>
     /// Validates that a schema name follows MorphDB naming conventions.

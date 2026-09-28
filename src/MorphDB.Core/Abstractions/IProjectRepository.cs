@@ -61,6 +61,20 @@ public interface IProjectRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// The schema names recorded for a project when it was created, deleted projects included, or
+    /// <see langword="null"/> when no project was ever created under the id.
+    /// <para>
+    /// These — not a name computed from the id — are the project's schemas: the naming rule has changed
+    /// once already (<see cref="ISchemaNameResolver"/>), and a project keeps the schemas it was given.
+    /// A project's row outlives its deletion and its names never change, so the answer for an id is
+    /// fixed once it exists.
+    /// </para>
+    /// </summary>
+    Task<SchemaNames?> GetSchemaNamesAsync(
+        Guid projectId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Checks if a slug is available.
     /// </summary>
     Task<bool> IsSlugAvailableAsync(

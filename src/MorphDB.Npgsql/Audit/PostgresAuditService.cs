@@ -5,6 +5,7 @@ using Dapper;
 using Microsoft.Extensions.Logging;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Audit;
+using MorphDB.Core.Exceptions;
 using Npgsql;
 
 namespace MorphDB.Npgsql.Audit;
@@ -17,7 +18,6 @@ namespace MorphDB.Npgsql.Audit;
 public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposable
 {
     private readonly NpgsqlDataSource _dataSource;
-    private readonly ISchemaNameResolver _schemaNameResolver;
     private readonly IPiiMaskingService _piiMaskingService;
     private readonly IProjectRepository _projectRepository;
     private readonly ILogger<PostgresAuditService> _logger;
@@ -30,13 +30,11 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
 
     public PostgresAuditService(
         NpgsqlDataSource dataSource,
-        ISchemaNameResolver schemaNameResolver,
         IPiiMaskingService piiMaskingService,
         IProjectRepository projectRepository,
         ILogger<PostgresAuditService> logger)
     {
         _dataSource = dataSource;
-        _schemaNameResolver = schemaNameResolver;
         _piiMaskingService = piiMaskingService;
         _projectRepository = projectRepository;
         _logger = logger;
@@ -50,6 +48,11 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
 
         _processorTask = ProcessEventsAsync(_cts.Token);
     }
+
+    /// <summary>The project's recorded system schema holds its audit log — see <see cref="IProjectRepository.GetSchemaNamesAsync"/>.</summary>
+    private async Task<SchemaNames> RecordedSchemaNamesAsync(Guid projectId, CancellationToken cancellationToken) =>
+        await _projectRepository.GetSchemaNamesAsync(projectId, cancellationToken)
+        ?? throw new ProjectNotFoundException(projectId);
 
     /// <inheritdoc/>
     public async Task LogAsync(AuditEvent auditEvent, CancellationToken cancellationToken = default)
@@ -79,7 +82,7 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
         AuditLogQuery query,
         CancellationToken cancellationToken = default)
     {
-        var schemaNames = _schemaNameResolver.GetSchemaNames(projectId);
+        var schemaNames = await RecordedSchemaNamesAsync(projectId, cancellationToken);
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
 
@@ -175,7 +178,7 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
         Guid logId,
         CancellationToken cancellationToken = default)
     {
-        var schemaNames = _schemaNameResolver.GetSchemaNames(projectId);
+        var schemaNames = await RecordedSchemaNamesAsync(projectId, cancellationToken);
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
 
@@ -239,7 +242,7 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
         DateTimeOffset? toDate = null,
         CancellationToken cancellationToken = default)
     {
-        var schemaNames = _schemaNameResolver.GetSchemaNames(projectId);
+        var schemaNames = await RecordedSchemaNamesAsync(projectId, cancellationToken);
         var actualFrom = fromDate ?? DateTimeOffset.UtcNow.AddDays(-30);
         var actualTo = toDate ?? DateTimeOffset.UtcNow;
 
@@ -334,7 +337,7 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
             return 0;
         }
 
-        var schemaNames = _schemaNameResolver.GetSchemaNames(projectId);
+        var schemaNames = await RecordedSchemaNamesAsync(projectId, cancellationToken);
         var cutoff = DateTimeOffset.UtcNow.AddDays(-retentionDays.Value);
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
@@ -420,7 +423,7 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
 
             try
             {
-                var schemaNames = _schemaNameResolver.GetSchemaNames(projectId);
+                var schemaNames = await RecordedSchemaNamesAsync(projectId, cancellationToken);
 
                 await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
 

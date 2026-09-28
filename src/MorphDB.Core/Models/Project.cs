@@ -2,9 +2,11 @@ namespace MorphDB.Core.Models;
 
 /// <summary>
 /// Represents a project with isolated PostgreSQL schemas for system and data layers.
-/// Each project has two schemas:
-/// - System schema (p_{id8}_sys): Contains metadata tables (_tables, _columns, etc.)
-/// - Data schema (p_{id8}_dat): Contains user-defined data tables
+/// Each project has two schemas, named when it is created and recorded here:
+/// - System schema (p_{id}_sys): Contains metadata tables (_tables, _columns, etc.)
+/// - Data schema (p_{id}_dat): Contains user-defined data tables
+/// A new project's {id} is its whole id as 32 hex digits; a project created before that rule keeps
+/// the first-eight-digit names it was given.
 /// </summary>
 public sealed class Project
 {
@@ -24,14 +26,14 @@ public sealed class Project
     public required string Slug { get; init; }
 
     /// <summary>
-    /// PostgreSQL schema name for system/metadata tables.
-    /// Format: p_{first8charsOfProjectId}_sys
+    /// PostgreSQL schema name for system/metadata tables, as recorded when the project was created.
+    /// Format: p_{projectIdAs32HexDigits}_sys (earlier projects: p_{first8HexDigits}_sys)
     /// </summary>
     public required string SystemSchema { get; init; }
 
     /// <summary>
-    /// PostgreSQL schema name for user data tables.
-    /// Format: p_{first8charsOfProjectId}_dat
+    /// PostgreSQL schema name for user data tables, as recorded when the project was created.
+    /// Format: p_{projectIdAs32HexDigits}_dat (earlier projects: p_{first8HexDigits}_dat)
     /// </summary>
     public required string DataSchema { get; init; }
 

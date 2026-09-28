@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 using Dapper;
 using MorphDB.Core.Abstractions;
@@ -16,6 +17,10 @@ public sealed partial class ProjectRepository : IProjectRepository
     private readonly ISchemaNameResolver _schemaNameResolver;
     private const string ProjectsTable = "morphdb._morph_projects";
 
+    // Recorded names never change and a project's row is never removed (DeleteAsync sets a status),
+    // so an entry, once read, stays true for the life of the database — nothing to invalidate.
+    private readonly ConcurrentDictionary<Guid, SchemaNames> _schemaNames = new();
+
     public ProjectRepository(
         NpgsqlDataSource dataSource,
         ISchemaNameResolver schemaNameResolver)
@@ -31,7 +36,7 @@ public sealed partial class ProjectRepository : IProjectRepository
     {
         var projectId = request.ProjectId ?? Guid.NewGuid();
         var slug = request.Slug ?? GenerateSlug(request.Name);
-        var schemaNames = _schemaNameResolver.GetSchemaNames(projectId);
+        var schemaNames = _schemaNameResolver.NameSchemasForNewProject(projectId);
 
         // Only a caller that chose the id can collide here — a generated one cannot, so this costs a
         // query nobody needed until the id became something a request can carry. The catch below
@@ -40,16 +45,6 @@ public sealed partial class ProjectRepository : IProjectRepository
         if (request.ProjectId is not null && await ProjectIdExistsAsync(projectId, cancellationToken))
         {
             throw new DuplicateProjectIdException(projectId);
-        }
-
-        // A chosen id can also differ from a taken one and still ask for its schemas, since schema
-        // names use only the id's first eight hex digits. Say so before the insert does, naming the
-        // project that holds them; the catch below answers the same collision for a race or a
-        // generated id.
-        if (request.ProjectId is not null
-            && await FindProjectBySystemSchemaAsync(schemaNames.SystemSchema, cancellationToken) is { } holder)
-        {
-            throw new DuplicateProjectSchemaException(projectId, schemaNames.SystemSchema, holder);
         }
 
         // Check slug availability
@@ -85,6 +80,7 @@ public sealed partial class ProjectRepository : IProjectRepository
                 Status = (int)ProjectStatus.Provisioning
             });
 
+            _schemaNames.TryAdd(projectId, schemaNames);
             return MapToProject(entity);
         }
         catch (PostgresException ex) when (IsProjectIdCollision(ex))
@@ -98,13 +94,6 @@ public sealed partial class ProjectRepository : IProjectRepository
             // names as well, and answering "that id is taken" to a slug collision would name the
             // wrong field as the one to change.
             throw new DuplicateProjectIdException(projectId);
-        }
-        catch (PostgresException ex) when (IsSchemaNameCollision(ex))
-        {
-            throw new DuplicateProjectSchemaException(
-                projectId,
-                ex.ConstraintName!.Contains("data_schema", StringComparison.Ordinal) ? schemaNames.DataSchema : schemaNames.SystemSchema,
-                conflictingProjectId: null);
         }
     }
 
@@ -259,18 +248,30 @@ public sealed partial class ProjectRepository : IProjectRepository
         ex.SqlState == PostgresErrorCodes.UniqueViolation
         && ex.ConstraintName?.EndsWith("_pkey", StringComparison.Ordinal) == true;
 
-    private static bool IsSchemaNameCollision(PostgresException ex) =>
-        ex.SqlState == PostgresErrorCodes.UniqueViolation
-        && (ex.ConstraintName?.EndsWith("_system_schema_key", StringComparison.Ordinal) == true
-            || ex.ConstraintName?.EndsWith("_data_schema_key", StringComparison.Ordinal) == true);
-
-    /// <summary>The project, deleted ones included, whose system schema is <paramref name="systemSchema"/>.</summary>
-    private async Task<Guid?> FindProjectBySystemSchemaAsync(string systemSchema, CancellationToken cancellationToken)
+    /// <inheritdoc/>
+    public async Task<SchemaNames?> GetSchemaNamesAsync(
+        Guid projectId,
+        CancellationToken cancellationToken = default)
     {
-        const string sql = "SELECT project_id FROM morphdb._morph_projects WHERE system_schema = @SystemSchema";
+        if (_schemaNames.TryGetValue(projectId, out var cached))
+        {
+            return cached;
+        }
+
+        const string sql = """
+            SELECT system_schema, data_schema
+            FROM morphdb._morph_projects
+            WHERE project_id = @ProjectId
+            """;
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-        return await connection.QuerySingleOrDefaultAsync<Guid?>(sql, new { SystemSchema = systemSchema });
+        var row = await connection.QuerySingleOrDefaultAsync<SchemaNamesRow>(sql, new { ProjectId = projectId });
+        if (row is null)
+        {
+            return null;
+        }
+
+        return _schemaNames.GetOrAdd(projectId, new SchemaNames(row.SystemSchema, row.DataSchema));
     }
 
     /// <summary>
@@ -383,6 +384,13 @@ public sealed partial class ProjectRepository : IProjectRepository
     private static partial Regex MultipleDashPattern();
 
     // Entity class for Dapper mapping
+    /// <summary>Settable properties, not a positional record — see <c>SecurityPolicyService.PolicyRecord</c>.</summary>
+    private sealed class SchemaNamesRow
+    {
+        public string SystemSchema { get; init; } = default!;
+        public string DataSchema { get; init; } = default!;
+    }
+
     private sealed class ProjectEntity
     {
         public Guid ProjectId { get; init; }

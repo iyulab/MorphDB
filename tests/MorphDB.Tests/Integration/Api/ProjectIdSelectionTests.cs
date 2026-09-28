@@ -1,7 +1,12 @@
 using System.Net;
 using System.Net.Http.Json;
+using Dapper;
+using Microsoft.Extensions.DependencyInjection;
+using MorphDB.Core.Abstractions;
+using MorphDB.Core.Models;
 using MorphDB.Service.Models.Api;
 using MorphDB.Tests.Fixtures;
+using Npgsql;
 
 namespace MorphDB.Tests.Integration.Api;
 
@@ -123,44 +128,106 @@ public class ProjectIdSelectionTests
     }
 
     /// <summary>
-    /// Schema names use only the first eight hex digits of the id, so an id that differs from a taken
-    /// one only further along asks for its schemas. That used to reach the caller as an internal error
-    /// from the unique constraint — an answer that names neither the cause nor what to change.
+    /// Schema names used to come from only the first eight hex digits of the id, so an id differing
+    /// from a taken one only further along asked for its schemas and was refused — and time-ordered
+    /// ids (UUIDv7) share those digits for about a minute. A new project's schemas are named from the
+    /// whole id, so such ids are simply two projects.
     /// </summary>
     [Fact]
-    public async Task An_id_sharing_its_first_eight_digits_with_a_project_is_a_conflict_naming_that_project()
+    public async Task Ids_sharing_their_first_eight_digits_are_two_projects_with_their_own_schemas()
     {
         var first = Guid.NewGuid();
-        (await CreateAsync(first)).EnsureSuccessStatusCode();
-
         var sibling = SiblingOf(first);
-        var response = await CreateAsync(sibling);
 
-        response.StatusCode.Should().Be(HttpStatusCode.Conflict, await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
-        var error = (await response.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken))!;
-        error.Code.Should().Be("DUPLICATE_PROJECT_SCHEMA");
-        error.Message.Should().Contain(first.ToString()).And.Contain("first 8 hex digits");
-        (await _client.GetAsync($"/api/projects/{sibling}", TestContext.Current.CancellationToken)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        var responses = await Task.WhenAll(new[] { first, sibling }.Select(CreateAsync));
+
+        foreach (var response in responses)
+        {
+            response.StatusCode.Should().Be(HttpStatusCode.Created, await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        }
+
+        var firstNames = await RecordedSchemaNamesAsync(first);
+        var siblingNames = await RecordedSchemaNamesAsync(sibling);
+        firstNames.SystemSchema.Should().Be($"p_{first:N}_sys");
+        siblingNames.SystemSchema.Should().Be($"p_{sibling:N}_sys");
+
+        foreach (var id in new[] { first, sibling })
+        {
+            var health = await _client.GetFromJsonAsync<SchemaHealthApiResponse>($"/api/projects/{id}/health", TestContext.Current.CancellationToken);
+            health!.IsHealthy.Should().BeTrue($"project {id} has both of its own schemas");
+        }
     }
 
     /// <summary>
-    /// The same collision met by racing callers passes the check and lands on the constraint instead;
-    /// the answer must not depend on which path refused them.
+    /// A project created before the naming rule changed keeps the eight-digit schemas it was given —
+    /// nothing renames a deployed database's schemas. Every operation must therefore read the names
+    /// recorded with the project; one that computed them from the id would look for schemas that do
+    /// not exist (health: missing) and, on delete, leave the real ones behind.
     /// </summary>
     [Fact]
-    public async Task Racing_ids_that_share_their_schemas_are_answered_in_terms_of_the_schema()
+    public async Task A_project_recorded_under_the_earlier_eight_digit_names_is_operated_on_through_them()
     {
-        var first = Guid.NewGuid();
-        var ids = new[] { first, SiblingOf(first), SiblingOf(SiblingOf(first)) };
+        var legacy = Guid.NewGuid();
+        var legacyNames = new SchemaNames($"p_{legacy:N}"[..10] + "_sys", $"p_{legacy:N}"[..10] + "_dat");
+        await RecordLegacyProjectAsync(legacy, legacyNames);
 
-        var responses = await Task.WhenAll(ids.Select(CreateAsync));
+        var health = await _client.GetFromJsonAsync<SchemaHealthApiResponse>($"/api/projects/{legacy}/health", TestContext.Current.CancellationToken);
+        health!.IsHealthy.Should().BeTrue(string.Join("; ", health.Issues.Select(i => i.Message)));
 
-        responses.Count(r => r.StatusCode == HttpStatusCode.Created).Should().Be(1, "the schemas can hold one project");
-        foreach (var refused in responses.Where(r => r.StatusCode != HttpStatusCode.Created))
-        {
-            refused.StatusCode.Should().Be(HttpStatusCode.Conflict, await refused.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
-            (await refused.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken))!.Code.Should().Be("DUPLICATE_PROJECT_SCHEMA");
-        }
+        var deleted = await _client.DeleteAsync($"/api/projects/{legacy}", TestContext.Current.CancellationToken);
+        deleted.IsSuccessStatusCode.Should().BeTrue(await deleted.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+
+        await using var connection = new NpgsqlConnection(_fixture.Postgres.ConnectionString);
+        var remaining = await connection.ExecuteScalarAsync<int>(
+            "SELECT count(*) FROM pg_namespace WHERE nspname IN (@System, @Data)",
+            new { System = legacyNames.SystemSchema, Data = legacyNames.DataSchema });
+        remaining.Should().Be(0, "deleting the project drops the schemas it actually has");
+    }
+
+    /// <summary>
+    /// Stands up a project the way a pre-change version left it: provisioned schemas under the
+    /// eight-digit names and a row recording them. The schemas come from a project provisioned by
+    /// the current code, renamed — so their contents are exactly what provisioning creates.
+    /// </summary>
+    private async Task RecordLegacyProjectAsync(Guid legacy, SchemaNames legacyNames)
+    {
+        var template = Guid.NewGuid();
+        (await CreateAsync(template)).EnsureSuccessStatusCode();
+        var templateNames = await RecordedSchemaNamesAsync(template);
+
+        await using var connection = new NpgsqlConnection(_fixture.Postgres.ConnectionString);
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(TestContext.Current.CancellationToken);
+        await connection.ExecuteAsync($"""ALTER SCHEMA "{templateNames.SystemSchema}" RENAME TO "{legacyNames.SystemSchema}" """, transaction: transaction);
+        await connection.ExecuteAsync($"""ALTER SCHEMA "{templateNames.DataSchema}" RENAME TO "{legacyNames.DataSchema}" """, transaction: transaction);
+        await connection.ExecuteAsync(
+            "UPDATE morphdb._morph_projects SET status = @Deleted WHERE project_id = @Template",
+            new { Deleted = (int)ProjectStatus.Deleted, Template = template },
+            transaction);
+        await connection.ExecuteAsync(
+            """
+            INSERT INTO morphdb._morph_projects (project_id, name, slug, system_schema, data_schema, settings, status, created_at, updated_at)
+            VALUES (@Id, @Name, @Slug, @System, @Data, '{}'::jsonb, @Active, NOW(), NOW())
+            """,
+            new
+            {
+                Id = legacy,
+                Name = UniqueName(),
+                Slug = $"legacy-{legacy:N}",
+                System = legacyNames.SystemSchema,
+                Data = legacyNames.DataSchema,
+                Active = (int)ProjectStatus.Active,
+            },
+            transaction);
+        await transaction.CommitAsync(TestContext.Current.CancellationToken);
+    }
+
+    private async Task<SchemaNames> RecordedSchemaNamesAsync(Guid projectId)
+    {
+        using var scope = _fixture.Api.Services.CreateScope();
+        var names = await scope.ServiceProvider.GetRequiredService<IProjectRepository>()
+            .GetSchemaNamesAsync(projectId, TestContext.Current.CancellationToken);
+        return names ?? throw new InvalidOperationException($"no project recorded under {projectId}");
     }
 
     /// <summary>The same first eight hex digits, a different id: the last digit is rotated.</summary>

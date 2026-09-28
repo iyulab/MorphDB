@@ -15,8 +15,11 @@ public interface ISchemaLayerService
     Task EnsureGlobalSchemaAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Creates both system and data schemas for a new project.
+    /// Creates both system and data schemas for a new project, under the names recorded with it —
+    /// the project must already be recorded (<see cref="IProjectRepository.CreateAsync"/>).
     /// Also creates the required system tables in the system schema.
+    /// Every per-project operation here works on the recorded names; an id with no project recorded
+    /// is answered with <see cref="MorphDB.Core.Exceptions.ProjectNotFoundException"/>.
     /// </summary>
     /// <param name="projectId">The project ID.</param>
     /// <param name="cancellationToken">Cancellation token.</param>

@@ -24,13 +24,23 @@
   example and `scripts/start-dev.ps1` ask over TCP. Asked over the Unix socket they reported the
   database ready while the image was still running its init scripts on a socket-only server that
   restarts afterwards.
-- Creating a project under an id whose first eight hex digits match another project's answers
-  `409 DUPLICATE_PROJECT_SCHEMA`, naming the project that holds the schemas, instead of `500`. A
-  project's schemas are named from those digits, so two such ids ask for the same schemas; ids created
-  together as UUIDv7 share them for about a minute. The API reference now states the constraint.
 
 ### Changed
 
+- A new project's schemas are named from its whole id (`p_<32 hex digits>_sys` / `_dat`) instead of
+  its first eight hex digits, so ids that share those digits — UUIDv7 ids created within about a minute
+  of each other, for one — are separate projects rather than a failed create. Existing projects keep
+  their schemas: every operation (provisioning, deletion, statistics, health, audit) now reads the names
+  recorded with the project instead of recomputing them from the id, so nothing in a deployed database
+  is renamed.
+- **Breaking (`MorphDB.Core`)**: `ISchemaNameResolver` names schemas for a new project only —
+  `GetSchemaNames` becomes `NameSchemasForNewProject`, and `GetSystemSchema`, `GetDataSchema`,
+  `QualifyDataTable` and `QualifySystemTable` are gone, since a name computed from an existing project's
+  id can be wrong for it. Read a project's schemas with the new `IProjectRepository.GetSchemaNamesAsync`.
+  `TryParseSchemaName` now recovers an id only from a whole-id name; for an eight-digit name it returns
+  `false` instead of a made-up id. `ISchemaLayerService.ListManagedSchemasAsync` reports each schema's
+  real project id from the project records. `PostgresSchemaLayerService` takes an `IProjectRepository`,
+  and `PostgresAuditService` no longer takes an `ISchemaNameResolver`.
 - `MorphDB.Client` no longer packs on every build (`GeneratePackageOnBuild`); like `MorphDB.Core` and
   `MorphDB.Npgsql`, it is packed only by `dotnet pack`, which the release workflow runs after the
   build. The package's contents are unchanged. Packing on build left a package in `bin/` on every

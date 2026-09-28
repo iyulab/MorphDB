@@ -148,7 +148,7 @@ public class AuditRetentionContractTests
     /// </summary>
     private async Task SeedAuditEntryAsync(Guid projectId, TimeSpan age)
     {
-        var schema = SystemSchemaFor(projectId);
+        var schema = await SystemSchemaForAsync(projectId);
         await using var connection = new NpgsqlConnection(_fixture.Postgres.ConnectionString);
         await connection.ExecuteAsync(
             $"""
@@ -164,16 +164,17 @@ public class AuditRetentionContractTests
 
     private async Task<int> CountAuditEntriesAsync(Guid projectId)
     {
-        var schema = SystemSchemaFor(projectId);
+        var schema = await SystemSchemaForAsync(projectId);
         await using var connection = new NpgsqlConnection(_fixture.Postgres.ConnectionString);
         return await connection.ExecuteScalarAsync<int>(
             $"""SELECT count(*) FROM "{schema}"."_audit_logs" """);
     }
 
-    private string SystemSchemaFor(Guid projectId)
+    private async Task<string> SystemSchemaForAsync(Guid projectId)
     {
         using var scope = _fixture.Api.Services.CreateScope();
-        return scope.ServiceProvider.GetRequiredService<ISchemaNameResolver>()
-            .GetSchemaNames(projectId).SystemSchema;
+        var names = await scope.ServiceProvider.GetRequiredService<IProjectRepository>()
+            .GetSchemaNamesAsync(projectId, TestContext.Current.CancellationToken);
+        return names!.Value.SystemSchema;
     }
 }

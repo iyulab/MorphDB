@@ -43,9 +43,11 @@ public sealed class PostgresFixture : IAsyncLifetime
         // silently diverged. It then called DdlBuilder directly, which was closer but still skipped
         // the pre-bootstrap migration step production runs first. Calling the same service method
         // start-up calls is what makes a broken bootstrap path turn tests red.
+        var resolver = new PostgresSchemaNameResolver();
         var schemaLayer = new PostgresSchemaLayerService(
             DataSource,
-            new PostgresSchemaNameResolver(),
+            resolver,
+            new ProjectRepository(DataSource, resolver),
             NullLogger<PostgresSchemaLayerService>.Instance);
         await schemaLayer.EnsureGlobalSchemaAsync();
     }

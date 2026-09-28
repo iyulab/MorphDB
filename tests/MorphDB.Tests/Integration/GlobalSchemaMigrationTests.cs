@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Moq;
+using MorphDB.Npgsql.Repositories;
 using MorphDB.Npgsql.Schema;
 using Npgsql;
 
@@ -311,9 +312,11 @@ public class GlobalSchemaMigrationTests
     private static async Task EnsureGlobalSchemaAsync(CleanDatabase db)
     {
         await using var dataSource = NpgsqlDataSource.Create(db.ConnectionString);
+        var resolver = new PostgresSchemaNameResolver();
         var service = new PostgresSchemaLayerService(
             dataSource,
-            new PostgresSchemaNameResolver(),
+            resolver,
+            new ProjectRepository(dataSource, resolver),
             new Mock<ILogger<PostgresSchemaLayerService>>().Object);
 
         await service.EnsureGlobalSchemaAsync();

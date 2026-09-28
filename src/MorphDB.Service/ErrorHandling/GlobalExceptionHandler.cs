@@ -53,7 +53,6 @@ internal sealed class GlobalExceptionHandler : IExceptionHandler
             DuplicateNameException d => (StatusCodes.Status409Conflict, "Conflict", d.ErrorCode),
             DuplicateSlugException ds => (StatusCodes.Status409Conflict, "Conflict", ds.ErrorCode),
             DuplicateProjectIdException dp => (StatusCodes.Status409Conflict, "Conflict", dp.ErrorCode),
-            DuplicateProjectSchemaException dps => (StatusCodes.Status409Conflict, "Conflict", dps.ErrorCode),
             ProjectNotFoundException p => (StatusCodes.Status404NotFound, "NotFound", p.ErrorCode),
             SchemaVersionConflictException s => (StatusCodes.Status409Conflict, "Conflict", s.ErrorCode),
             LockAcquisitionException l => (StatusCodes.Status409Conflict, "Conflict", l.ErrorCode),

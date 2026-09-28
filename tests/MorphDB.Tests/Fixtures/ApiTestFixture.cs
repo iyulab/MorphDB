@@ -271,11 +271,13 @@ public sealed class ApiTestFixture : IAsyncLifetime
         var shortId = ProjectId.ToString("N")[..8];
 
         var resolver = new PostgresSchemaNameResolver();
+        var repository = new ProjectRepository(_postgresFixture.DataSource, resolver);
         var projectService = new ProjectService(
-            new ProjectRepository(_postgresFixture.DataSource, resolver),
+            repository,
             new PostgresSchemaLayerService(
                 _postgresFixture.DataSource,
                 resolver,
+                repository,
                 Microsoft.Extensions.Logging.Abstractions.NullLogger<PostgresSchemaLayerService>.Instance),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<ProjectService>.Instance);
 

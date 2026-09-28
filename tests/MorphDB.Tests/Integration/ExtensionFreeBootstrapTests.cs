@@ -1,7 +1,9 @@
 using Microsoft.Extensions.Logging;
 using Moq;
+using MorphDB.Core.Abstractions;
 using MorphDB.Core.Models;
 using MorphDB.Npgsql.Ddl;
+using MorphDB.Npgsql.Repositories;
 using MorphDB.Npgsql.Schema;
 using Npgsql;
 using Testcontainers.PostgreSql;
@@ -73,9 +75,12 @@ public class ExtensionFreeBootstrapTests
         try
         {
             await using var dataSource = NpgsqlDataSource.Create(container.GetConnectionString());
+            var resolver = new PostgresSchemaNameResolver();
+            var repository = new ProjectRepository(dataSource, resolver);
             var service = new PostgresSchemaLayerService(
                 dataSource,
-                new PostgresSchemaNameResolver(),
+                resolver,
+                repository,
                 new Mock<ILogger<PostgresSchemaLayerService>>().Object);
 
             await service.EnsureGlobalSchemaAsync(TestContext.Current.CancellationToken);
@@ -83,7 +88,12 @@ public class ExtensionFreeBootstrapTests
             await using var connection = await dataSource.OpenConnectionAsync(TestContext.Current.CancellationToken);
             var before = await ReadExtensionsAsync(connection);
 
-            var names = await service.ProvisionProjectSchemasAsync(Guid.NewGuid(), TestContext.Current.CancellationToken);
+            // Provisioning reads the names recorded with the project, so the project is recorded first —
+            // the order ProjectService.CreateProjectAsync runs them in.
+            var project = await repository.CreateAsync(
+                new CreateProjectRequest { Name = "Extension-free provisioning" },
+                TestContext.Current.CancellationToken);
+            var names = await service.ProvisionProjectSchemasAsync(project.ProjectId, TestContext.Current.CancellationToken);
 
             var after = await ReadExtensionsAsync(connection);
             after.Should().BeEquivalentTo(
