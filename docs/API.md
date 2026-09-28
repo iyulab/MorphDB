@@ -2,9 +2,9 @@
 
 > **This document describes `main`, which is ahead of what you can run.** Anything here the
 > published image does not serve yet carries a **Since x.y.z** marker naming the release that will
-> bring it. Everything else is in the published version, **0.13.0** — the one the README pins.
+> bring it. Everything else is in the published version, **0.13.1** — the one the README pins.
 > To read the reference for a release rather than for `main`, open this file at its tag:
-> `docs/API.md` at `v0.13.0`.
+> `docs/API.md` at `v0.13.1`.
 >
 > The marker is one-directional by nature: it can say that a documented behaviour is unreleased,
 > and no check can find a behaviour someone forgot to mark. What is held is that a marker names a
@@ -226,8 +226,8 @@ GET /api/data/customers?filter=grade:eq:VIP&orderBy=_created_at:desc&page=1&page
 | `contains` | String contains | `name:contains:john` |
 | `startswith` | String starts with | `email:startswith:admin` |
 | `endswith` | String ends with | `file:endswith:.pdf` |
-| `isnull` | Column has no value — takes none **Since 0.13.1** | `closedAt:isnull` |
-| `isnotnull` | Column has a value — takes none **Since 0.13.1** | `closedAt:isnotnull` |
+| `isnull` | Column has no value — takes none | `closedAt:isnull` |
+| `isnotnull` | Column has a value — takes none | `closedAt:isnotnull` |
 
 One `filter` parameter is one condition; repeat the parameter for more, and every condition applies:
 `?filter=score:gte:20&filter=score:lt:40`. Only the first two colons separate, so a value may contain

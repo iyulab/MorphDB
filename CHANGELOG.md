@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.13.1
+
+A patch: `isnull` and `isnotnull` filters, which the .NET client already offered, now work against the
+server, and `IMorphQuery.Where` no longer drops a condition it does not apply.
 
 ### Fixed
 
