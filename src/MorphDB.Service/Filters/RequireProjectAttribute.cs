@@ -8,18 +8,19 @@ using MorphDB.Service.Services;
 namespace MorphDB.Service.Filters;
 
 /// <summary>
-/// Marks a controller whose every action is scoped to a project, and answers the request that did not
-/// say which one before the action runs — or that named one that does not exist, once the action's
-/// own answer says so.
+/// Marks a controller whose every action is scoped to a project, and answers — before the action
+/// runs — the request that did not say which project, or that named one that does not exist or has
+/// been deleted.
 /// <para>
-/// Deciding the first ahead of the action matters for a reason beyond tidiness: several of these
-/// actions end in a blanket <c>catch (Exception)</c>, which would swallow the failure and return a
-/// generic 400 with no error code. A filter that runs first cannot be caught by the code it precedes.
+/// Deciding ahead of the action matters for a reason beyond tidiness: several of these actions end in
+/// a blanket <c>catch (Exception)</c>, which would swallow the failure and return a generic 400 with
+/// no error code. A filter that runs first cannot be caught by the code it precedes.
 /// </para>
 /// <para>
-/// What it replaces: each action used to carry its own catch block recognising the failure by
-/// searching the exception message for the header name — which made the wording of a message part of
-/// the public contract, and let any unrelated exception mentioning the same header take that branch.
+/// The check is <see cref="IProjectRepository.ExistsAsync"/>: an instance forgets its cached "yes"
+/// when it changes a project's status, so a delete takes effect there at once, and within seconds on
+/// any other instance serving the same database. Without the check, schema writes never looked the project up at all, so an id that was never
+/// created — or one that had been deleted — could still create tables and write rows.
 /// </para>
 /// </summary>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false)]
@@ -33,7 +34,7 @@ public sealed class RequireProjectAttribute : Attribute, IFilterFactory
             serviceProvider.GetRequiredService<IProjectRepository>());
 }
 
-internal sealed class RequireProjectFilter : IActionFilter, IAsyncExceptionFilter
+internal sealed class RequireProjectFilter : IAsyncActionFilter
 {
     private readonly IProjectContextAccessor _projectContext;
     private readonly IProjectRepository _projectRepository;
@@ -44,66 +45,40 @@ internal sealed class RequireProjectFilter : IActionFilter, IAsyncExceptionFilte
         _projectRepository = projectRepository;
     }
 
-    public void OnActionExecuting(ActionExecutingContext context)
+    public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
-        if (_projectContext.ProjectIdOrNull is not null)
-        {
-            return;
-        }
-
-        // The exception type owns the wording — duplicating the literal here once let the two
-        // drift, and the filter briefly advertised an API key the server never asks for. Which type
-        // to instantiate follows the accessor's own distinction: a header that failed to parse said
-        // something and gets told what; a request that said nothing gets asked to say something.
-        MorphDbException error = _projectContext.MalformedProjectIdHeaderValue is { } raw
-            ? new MalformedProjectIdException(raw)
-            : new MissingProjectException();
-        context.Result = new BadRequestObjectResult(new ErrorResponse
-        {
-            Error = "BadRequest",
-            Message = error.Message,
-            Code = error.ErrorCode
-        });
-    }
-
-    public void OnActionExecuted(ActionExecutedContext context)
-    {
-    }
-
-    /// <summary>
-    /// A table lookup inside a project that does not exist answers <c>TABLE_NOT_FOUND</c> — true of
-    /// the table, but not the mistake a caller who mistyped a project id made. Checked only here, on
-    /// the error path a request already took, so a request whose project and table both exist pays
-    /// no extra query.
-    /// </summary>
-    public async Task OnExceptionAsync(ExceptionContext context)
-    {
-        if (context.ExceptionHandled || context.Exception is not TableNotFoundException)
-        {
-            return;
-        }
-
-        // OnActionExecuting already turned an absent or malformed project id away before the action
-        // ran, so reaching here with no id would mean the action ran without one — nothing this
-        // filter can diagnose further.
         if (_projectContext.ProjectIdOrNull is not { } projectId)
         {
+            // The exception type owns the wording — duplicating the literal here once let the two
+            // drift, and the filter briefly advertised an API key the server never asks for. Which
+            // type to instantiate follows the accessor's own distinction: a header that failed to
+            // parse said something and gets told what; a request that said nothing gets asked to say
+            // something.
+            MorphDbException missing = _projectContext.MalformedProjectIdHeaderValue is { } raw
+                ? new MalformedProjectIdException(raw)
+                : new MissingProjectException();
+            context.Result = new BadRequestObjectResult(new ErrorResponse
+            {
+                Error = "BadRequest",
+                Message = missing.Message,
+                Code = missing.ErrorCode
+            });
             return;
         }
 
-        var project = await _projectRepository.GetByIdAsync(projectId, context.HttpContext.RequestAborted);
-        if (project is not null)
+        // A deleted project's rows are still in its tables, and must not stay reachable.
+        if (!await _projectRepository.ExistsAsync(projectId, context.HttpContext.RequestAborted))
         {
+            var notFound = new ProjectNotFoundException(projectId);
+            context.Result = new NotFoundObjectResult(new ErrorResponse
+            {
+                Error = "NotFound",
+                Message = notFound.Message,
+                Code = notFound.ErrorCode
+            });
             return;
         }
 
-        var error = new ProjectNotFoundException(projectId);
-        context.ExceptionHandled = true;
-        context.Result = new NotFoundObjectResult(new ErrorResponse
-        {
-            Error = "NotFound",
-            Message = error.Message,
-            Code = error.ErrorCode
-        });
+        await next();
     }
 }

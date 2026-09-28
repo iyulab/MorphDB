@@ -23,6 +23,16 @@ public interface IProjectRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Whether a project with this id exists and has not been deleted — the question every
+    /// project-scoped request asks before it acts. Cheaper than <see cref="GetByIdAsync"/>, and an
+    /// implementation may answer "yes" from a short-lived cache; it must answer "no" from the store, and
+    /// forget a cached "yes" when it changes the project's status.
+    /// </summary>
+    Task<bool> ExistsAsync(
+        Guid projectId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Gets a project by its slug.
     /// </summary>
     Task<Project?> GetBySlugAsync(

@@ -17,6 +17,7 @@ using MorphDB.Npgsql.Repositories;
 using MorphDB.Npgsql.Schema;
 using MorphDB.Npgsql.Security;
 using MorphDB.Npgsql.Services;
+using MorphDB.Service.Models.Api;
 using Npgsql;
 
 namespace MorphDB.Tests.Fixtures;
@@ -184,6 +185,22 @@ public sealed class ApiTestFixture : IAsyncLifetime
         var client = _factory!.CreateClient();
         client.DefaultRequestHeaders.Add("X-Project-Id", projectId.ToString());
         return client;
+    }
+
+    /// <summary>
+    /// Creates a project through the API and returns a client scoped to it — for tests that need a
+    /// second project. A project-scoped request must name a project that exists, so an arbitrary
+    /// <see cref="Guid.NewGuid"/> is not a second project; it is a request the server refuses.
+    /// </summary>
+    public async Task<HttpClient> CreateClientWithNewProjectAsync(CancellationToken cancellationToken = default)
+    {
+        var response = await Client.PostAsJsonAsync(
+            "/api/projects",
+            new CreateProjectApiRequest { Name = $"proj_{Guid.NewGuid():N}"[..28] },
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+        var project = await response.Content.ReadFromJsonAsync<ProjectApiResponse>(cancellationToken);
+        return CreateClientWithProject(project!.Id);
     }
 
     /// <summary>

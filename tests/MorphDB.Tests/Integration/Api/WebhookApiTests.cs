@@ -535,8 +535,8 @@ public class WebhookApiTests
     public async Task Webhook_DifferentProjects_ShouldBeIsolated()
     {
         // Arrange
-        var project1Client = _fixture.Api.CreateClientWithProject(Guid.NewGuid());
-        var project2Client = _fixture.Api.CreateClientWithProject(Guid.NewGuid());
+        var project1Client = await _fixture.Api.CreateClientWithNewProjectAsync(TestContext.Current.CancellationToken);
+        var project2Client = await _fixture.Api.CreateClientWithNewProjectAsync(TestContext.Current.CancellationToken);
 
         // Create table for project 1
         var tableName1 = $"project1_table_{Guid.NewGuid():N}"[..30];

@@ -553,8 +553,8 @@ public class ViewApiTests
     {
         // Arrange
         var viewName = "shared_view_name";
-        var project1Client = _fixture.Api.CreateClientWithProject(Guid.NewGuid());
-        var project2Client = _fixture.Api.CreateClientWithProject(Guid.NewGuid());
+        var project1Client = await _fixture.Api.CreateClientWithNewProjectAsync(TestContext.Current.CancellationToken);
+        var project2Client = await _fixture.Api.CreateClientWithNewProjectAsync(TestContext.Current.CancellationToken);
 
         // Create base tables for each project
         var table1Request = new CreateTableApiRequest
@@ -596,7 +596,7 @@ public class ViewApiTests
         }, TestContext.Current.CancellationToken);
 
         // Create a client for a different project
-        var otherProjectClient = _fixture.Api.CreateClientWithProject(Guid.NewGuid());
+        var otherProjectClient = await _fixture.Api.CreateClientWithNewProjectAsync(TestContext.Current.CancellationToken);
 
         // Act
         var response = await otherProjectClient.GetAsync($"/api/views/{viewName}", TestContext.Current.CancellationToken);

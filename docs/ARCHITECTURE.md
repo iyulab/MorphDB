@@ -138,23 +138,34 @@ PostgresDataService
 
 ## Multi-Tenancy
 
-Each project has isolated data in a separate PostgreSQL schema:
+Projects share one set of physical tables; a project is a column and a set of policies, not a
+schema of its own:
 
 ```
-morphdb (shared)
-├── _morph_tables
+morphdb (shared control plane)
+├── _morph_projects      every project, its recorded schema names and status
+├── _morph_tables        table metadata, with the owning project_id
 ├── _morph_columns
 └── ...
 
-project_abc123 (project-specific)
-├── tbl_a7f3b2c1 (customers)
-├── tbl_b8c4d5e6 (orders)
+public (shared data)
+├── tbl_a7f3b2c1         project A's "customers" — rows carry project_id, row-level security reads it
+├── tbl_b8c4d5e6         project B's "customers" — physical names are unique across all projects
 └── ...
 
-project_xyz789 (project-specific)
-├── tbl_a7f3b2c1 (products)
-└── ...
+p_<project id>_sys (per project)
+└── _audit_logs          the project's audit trail
+
+p_<project id>_dat (per project)
+                         created with the project, not used today
 ```
+
+A request names its project in `X-Project-Id`, and every project-scoped route refuses one that names
+no project — never created, or deleted — with `404 PROJECT_NOT_FOUND` before doing anything. The instance that deletes a project stops
+serving it at once; another instance on the same database remembers a project's existence for at most
+ten seconds, so it follows within that. Deleting
+a project drops its two per-project schemas and marks it deleted; its tables in the shared schema
+stay, unreachable through the API.
 
 ## Request Scoping
 

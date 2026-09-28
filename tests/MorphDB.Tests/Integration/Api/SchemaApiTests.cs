@@ -317,8 +317,8 @@ public class SchemaApiTests
     {
         // Arrange
         var tableName = "shared_name";
-        var project1Client = _fixture.Api.CreateClientWithProject(Guid.NewGuid());
-        var project2Client = _fixture.Api.CreateClientWithProject(Guid.NewGuid());
+        var project1Client = await _fixture.Api.CreateClientWithNewProjectAsync(TestContext.Current.CancellationToken);
+        var project2Client = await _fixture.Api.CreateClientWithNewProjectAsync(TestContext.Current.CancellationToken);
 
         var request = new CreateTableApiRequest
         {

@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **Projects**: every project-scoped route — schema, data, views, webhooks, aggregation, batch, bulk,
+  hierarchy and transactions — answers `404 PROJECT_NOT_FOUND` when `X-Project-Id` names a project that
+  was never created or has been deleted, before the request does anything. Until now only a request
+  that failed to find a table was answered that way; creating a table did not look the project up, so a
+  mistyped or deleted project id could still create tables and read and write rows. Create a project
+  with `POST /api/projects` before scoping requests to it. A delete takes effect at once on the instance
+  that handled it, and within ten seconds on any other instance serving the same database.
+  (Verified-by: ProjectScopeContractTests.A_deleted_project_is_refused_on_the_routes_it_used_to_answer)
+
+### Added
+
+- **`MorphDB.Core`**: `IProjectRepository.ExistsAsync` — whether a project exists and has not been
+  deleted. A custom implementation of the interface has to add it.
+
+### Fixed
+
+- **Docs**: `docs/ARCHITECTURE.md` described each project as a PostgreSQL schema holding its own tables.
+  Project tables live in one shared schema, told apart by a `project_id` column and row-level security;
+  the per-project schemas hold the audit log, and the data schema is created but unused.
+
 ## 0.13.1
 
 A patch: `isnull` and `isnotnull` filters, which the .NET client already offered, now work against the

@@ -210,6 +210,22 @@ public class SecretEnforcementTests
             "a project column that no check reads is a boundary that exists only in the schema");
     }
 
+    [Fact]
+    public async Task A_secret_confined_to_a_deleted_project_is_told_the_project_is_gone()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var master = EnforcedClient(MasterSecret);
+        var project = await CreateProjectAsync(master);
+        var confined = await IssueAsync(master, "confined-deleted", "reader", project.Id);
+        (await master.DeleteAsync($"/api/projects/{project.Id}", ct)).StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var response = await EnforcedClient(confined, project.Id).GetAsync("/api/schema/tables", ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound,
+            "the secret is still valid for its project; the project is what no longer exists");
+        (await response.Content.ReadFromJsonAsync<ErrorResponse>(ct))!.Code.Should().Be("PROJECT_NOT_FOUND");
+    }
+
     // (7) A placeholder existing is not the same as it being filled. The role has to survive the
     // whole way from the issued secret to the WHERE clause row-level security builds -- which is a
     // different proposition from 'SecurityContext has a Role property', and the one that matters.

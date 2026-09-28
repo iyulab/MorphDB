@@ -104,4 +104,63 @@ public class ProjectScopeContractTests
         var error = await response.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
         error!.Code.Should().Be("PROJECT_NOT_FOUND");
     }
+
+    /// <summary>
+    /// Deleting a project used to drop its (empty) schemas and leave everything else serving: its
+    /// tables and rows stayed where they were, and a request scoped to the deleted id kept reading,
+    /// writing, and creating tables. A deleted project is no project — every scoped route says so.
+    /// </summary>
+    [Fact]
+    public async Task A_deleted_project_is_refused_on_the_routes_it_used_to_answer()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var client = await _fixture.Api.CreateClientWithNewProjectAsync(ct);
+        var projectId = Guid.Parse(client.DefaultRequestHeaders.GetValues("X-Project-Id").Single());
+        var table = $"del_{Guid.NewGuid():N}"[..24];
+        (await client.PostAsJsonAsync("/api/schema/tables", new CreateTableApiRequest
+        {
+            Name = table,
+            Columns = [new CreateColumnApiRequest { Name = "label", Type = "text", Nullable = true }]
+        }, ct)).StatusCode.Should().Be(HttpStatusCode.Created);
+
+        (await _fixture.Api.Client.DeleteAsync($"/api/projects/{projectId}", ct)).StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var responses = new[]
+        {
+            await client.PostAsJsonAsync($"/api/data/{table}", new Dictionary<string, object?> { ["label"] = "after" }, ct),
+            await client.GetAsync($"/api/data/{table}", ct),
+            await client.GetAsync("/api/schema/tables", ct),
+            await client.PostAsJsonAsync("/api/schema/tables", new CreateTableApiRequest
+            {
+                Name = $"del2_{Guid.NewGuid():N}"[..24],
+                Columns = [new CreateColumnApiRequest { Name = "label", Type = "text", Nullable = true }]
+            }, ct),
+        };
+
+        foreach (var response in responses)
+        {
+            response.StatusCode.Should().Be(HttpStatusCode.NotFound, response.RequestMessage!.RequestUri!.ToString());
+            (await response.Content.ReadFromJsonAsync<ErrorResponse>(ct))!.Code.Should().Be("PROJECT_NOT_FOUND");
+        }
+    }
+
+    /// <summary>
+    /// Schema writes never looked the project up, so a mistyped id created tables in a project that
+    /// did not exist — and a service configured with that id ran against it without an error.
+    /// </summary>
+    [Fact]
+    public async Task A_project_that_was_never_created_cannot_create_tables()
+    {
+        using var client = _fixture.Api.CreateClientWithProject(Guid.NewGuid());
+
+        var response = await client.PostAsJsonAsync("/api/schema/tables", new CreateTableApiRequest
+        {
+            Name = $"ghost_{Guid.NewGuid():N}"[..24],
+            Columns = [new CreateColumnApiRequest { Name = "label", Type = "text", Nullable = true }]
+        }, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await response.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken))!.Code
+            .Should().Be("PROJECT_NOT_FOUND");
+    }
 }

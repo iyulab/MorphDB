@@ -21,7 +21,9 @@ X-Project-Id: <project id>
 
 A request that omits it is answered with `400` and the code `MISSING_PROJECT`; a request that sends
 it but not as a GUID gets `400 INVALID_PROJECT_ID` instead — the two are distinguished because only
-the second one told the caller something it can act on.
+the second one told the caller something it can act on. **Since 0.14.0**, a well-formed id that names no project (never
+created, or deleted) is answered `404 PROJECT_NOT_FOUND` before the request does anything, so create
+the project (`POST /api/projects`) before scoping requests to it.
 
 ### What this is not
 
@@ -1249,7 +1251,7 @@ fixed string — internal exception text never reaches the wire) and retrying ma
 | 404 | `RELATION_NOT_FOUND` | The relation id does not exist |
 | 404 | `WEBHOOK_NOT_FOUND` | The webhook id does not exist |
 | 404 | `RECORD_NOT_FOUND` | The record id does not exist in the table |
-| 404 | `PROJECT_NOT_FOUND` | The project id does not exist |
+| 404 | `PROJECT_NOT_FOUND` | The project id does not exist, or the project was deleted |
 | 404 | `VIEW_NOT_FOUND` | The view does not exist |
 | 404 | `JOB_NOT_FOUND` | The bulk job does not exist |
 | 404 | `AUDIT_LOG_NOT_FOUND` | The audit log entry does not exist |

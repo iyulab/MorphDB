@@ -21,12 +21,23 @@ public sealed partial class ProjectRepository : IProjectRepository
     // so an entry, once read, stays true for the life of the database — nothing to invalidate.
     private readonly ConcurrentDictionary<Guid, SchemaNames> _schemaNames = new();
 
+    // Existence is not like the names above: deleting a project changes it. Every project-scoped
+    // request asks it, so a "yes" is remembered briefly and forgotten the moment this instance changes
+    // the project's status. Another instance that deletes the project cannot reach this memory, which
+    // is what bounds the window to ActiveFor there. A "no" is never remembered — a project created a
+    // moment later must be usable at once.
+    private static readonly TimeSpan ActiveFor = TimeSpan.FromSeconds(10);
+    private readonly ConcurrentDictionary<Guid, DateTimeOffset> _activeUntil = new();
+    private readonly TimeProvider _timeProvider;
+
     public ProjectRepository(
         NpgsqlDataSource dataSource,
-        ISchemaNameResolver schemaNameResolver)
+        ISchemaNameResolver schemaNameResolver,
+        TimeProvider? timeProvider = null)
     {
         _dataSource = dataSource;
         _schemaNameResolver = schemaNameResolver;
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     /// <inheritdoc/>
@@ -116,6 +127,42 @@ public sealed partial class ProjectRepository : IProjectRepository
         });
 
         return entity is null ? null : MapToProject(entity);
+    }
+
+    /// <inheritdoc/>
+    public async Task<bool> ExistsAsync(
+        Guid projectId,
+        CancellationToken cancellationToken = default)
+    {
+        var now = _timeProvider.GetUtcNow();
+        if (_activeUntil.TryGetValue(projectId, out var until) && now < until)
+        {
+            return true;
+        }
+
+        const string sql = """
+            SELECT EXISTS(
+                SELECT 1 FROM morphdb._morph_projects
+                WHERE project_id = @ProjectId AND status != @DeletedStatus)
+            """;
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        var exists = await connection.ExecuteScalarAsync<bool>(new CommandDefinition(sql, new
+        {
+            ProjectId = projectId,
+            DeletedStatus = (int)ProjectStatus.Deleted
+        }, cancellationToken: cancellationToken));
+
+        if (exists)
+        {
+            _activeUntil[projectId] = now + ActiveFor;
+        }
+        else
+        {
+            _activeUntil.TryRemove(projectId, out _);
+        }
+
+        return exists;
     }
 
     /// <inheritdoc/>
@@ -228,6 +275,8 @@ public sealed partial class ProjectRepository : IProjectRepository
             ProjectId = projectId,
             Status = (int)status
         });
+
+        _activeUntil.TryRemove(projectId, out _);
     }
 
     /// <inheritdoc/>
