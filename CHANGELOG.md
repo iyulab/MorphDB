@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.13.0
+
+A minor release with breaking changes, and fixes that change what earlier releases wrote. Check your data
+if you used either of these on 0.12.3 or earlier: a bulk delete (`DELETE /api/batch/data/{table}`) with
+more than one filter condition removed every row the **first** condition selected; a bulk update
+(`PATCH /api/batch/data/{table}`) with a filter could write the filter's value instead of the one in
+`data`. A query with several conditions answered wider than asked, and a secret confined to one project
+could manage other projects through routes that name the project in their path. `filter` now takes one
+condition per parameter, and `MorphDB.Core`'s `ISchemaNameResolver` names schemas for new projects only.
 
 ### Security
 
