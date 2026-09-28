@@ -248,13 +248,13 @@ public class ErrorSurfaceContractTests
         (body.Message ?? "").Should().NotContain("col_", "physical column names are not contract");
     }
 
+    private static readonly string[] ScoreBelowFifty = ["score:lt:50"];
+
     /// <summary>
     /// The bulk UPDATE door stays a single SQL statement (not per-row pipeline). Its parameter
     /// preparation has always rejected unknown columns — this pins that the contract holds there
     /// too, so it cannot regress toward the executor's historical silent skip.
     /// </summary>
-    private static readonly string[] ScoreBelowFifty = ["score:lt:50"];
-
     [Fact]
     public async Task BatchUpdate_WithUnknownField_IsA400()
     {
