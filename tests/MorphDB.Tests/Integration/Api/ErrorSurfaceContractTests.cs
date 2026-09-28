@@ -253,6 +253,8 @@ public class ErrorSurfaceContractTests
     /// preparation has always rejected unknown columns — this pins that the contract holds there
     /// too, so it cannot regress toward the executor's historical silent skip.
     /// </summary>
+    private static readonly string[] ScoreBelowFifty = ["score:lt:50"];
+
     [Fact]
     public async Task BatchUpdate_WithUnknownField_IsA400()
     {
@@ -264,7 +266,7 @@ public class ErrorSurfaceContractTests
         var response = await _client.PatchAsJsonAsync($"/api/batch/data/{table}", new
         {
             data = new Dictionary<string, object?> { ["scoer_typo"] = 100 },
-            filter = "score:lt:50"
+            filter = ScoreBelowFifty
         }, TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);

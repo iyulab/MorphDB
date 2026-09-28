@@ -96,10 +96,7 @@ public sealed class DataController : ControllerBase
             }
 
             // Apply filters
-            if (!string.IsNullOrEmpty(query.Filter))
-            {
-                morphQuery = ApplyFilters(morphQuery, query.Filter);
-            }
+            morphQuery = FilterExpressions.Apply(morphQuery, query.Filter);
 
             // Apply search across text columns
             if (!string.IsNullOrEmpty(query.Search))
@@ -532,40 +529,6 @@ public sealed class DataController : ControllerBase
         };
     }
 
-    private static IMorphQuery ApplyFilters(IMorphQuery query, string filterExpression)
-    {
-        // Parse filter expression: column:operator:value,column2:operator2:value2
-        var filters = filterExpression.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var isFirst = true;
-
-        foreach (var filter in filters)
-        {
-            var parts = filter.Split(':', 3);
-            if (parts.Length != 3)
-            {
-                throw new ArgumentException(
-                    $"Invalid filter format: '{filter}'. Expected format: 'column:operator:value'. " +
-                    $"For OData syntax, use the /odata endpoint with $filter parameter instead.");
-            }
-
-            var column = parts[0].Trim();
-            var op = ApiModelExtensions.ParseFilterOperator(parts[1].Trim());
-            var value = ParseFilterValue(parts[2].Trim());
-
-            if (isFirst)
-            {
-                query = query.Where(column, op, value);
-                isFirst = false;
-            }
-            else
-            {
-                query = query.AndWhere(column, op, value);
-            }
-        }
-
-        return query;
-    }
-
     private static IMorphQuery ApplyOrdering(IMorphQuery query, string orderExpression)
     {
         // Parse order expression: column:asc,column2:desc
@@ -661,37 +624,6 @@ public sealed class DataController : ControllerBase
             // Unknown state values are ignored (no filter applied)
             _ => query
         };
-    }
-
-    private static object ParseFilterValue(string value)
-    {
-        // Try to parse as various types
-        if (bool.TryParse(value, out var boolValue))
-            return boolValue;
-
-        if (int.TryParse(value, out var intValue))
-            return intValue;
-
-        if (long.TryParse(value, out var longValue))
-            return longValue;
-
-        if (decimal.TryParse(value, out var decimalValue))
-            return decimalValue;
-
-        if (Guid.TryParse(value, out var guidValue))
-            return guidValue;
-
-        if (DateTime.TryParse(value, out var dateValue))
-            return dateValue;
-
-        // Remove quotes if present
-        if (value.StartsWith('"') && value.EndsWith('"'))
-            return value[1..^1];
-
-        if (value.StartsWith('\'') && value.EndsWith('\''))
-            return value[1..^1];
-
-        return value;
     }
 
     #endregion

@@ -233,6 +233,16 @@ public sealed class ViewQueryBuilder
         var fieldPhysical = await TranslateColumnNameAsync(filter.Field, baseTable, tableQualifiers, cancellationToken);
         var valueExpr = FormatFilterValue(filter.Value, filter.Operator);
 
+        // contains/startswith/endswith match the value literally and ignore case, as they do on the
+        // data and aggregate endpoints; the pattern is built here so the value's own % and _ are escaped.
+        var likeValue = filter.Operator switch
+        {
+            FilterOperator.Contains => FormatFilterValue(LikePattern.Contains(filter.Value), FilterOperator.Equals),
+            FilterOperator.StartsWith => FormatFilterValue(LikePattern.StartsWith(filter.Value), FilterOperator.Equals),
+            FilterOperator.EndsWith => FormatFilterValue(LikePattern.EndsWith(filter.Value), FilterOperator.Equals),
+            _ => valueExpr,
+        };
+
         return filter.Operator switch
         {
             FilterOperator.Equals => $"{fieldPhysical} = {valueExpr}",
@@ -248,9 +258,7 @@ public sealed class ViewQueryBuilder
             FilterOperator.IsNull => $"{fieldPhysical} IS NULL",
             FilterOperator.IsNotNull => $"{fieldPhysical} IS NOT NULL",
             FilterOperator.Between => $"{fieldPhysical} BETWEEN {valueExpr}",
-            FilterOperator.Contains => $"{fieldPhysical} LIKE '%' || {valueExpr} || '%'",
-            FilterOperator.StartsWith => $"{fieldPhysical} LIKE {valueExpr} || '%'",
-            FilterOperator.EndsWith => $"{fieldPhysical} LIKE '%' || {valueExpr}",
+            FilterOperator.Contains or FilterOperator.StartsWith or FilterOperator.EndsWith => $"{fieldPhysical} ILIKE {likeValue}",
             _ => throw new NotSupportedException($"Filter operator '{filter.Operator}' is not supported.")
         };
     }

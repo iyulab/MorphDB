@@ -4,6 +4,7 @@ using MorphDB.Core.Abstractions;
 using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
 using MorphDB.Core.Security;
+using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Repositories;
 using Npgsql;
 using SqlKata.Compilers;
@@ -218,13 +219,13 @@ public sealed class PostgresAggregationService : IAggregationService
                 query.WhereRaw($"LOWER({column}) LIKE LOWER(?)", value?.ToString() ?? "");
                 break;
             case FilterOperator.Contains:
-                query.WhereLike(column, $"%{value}%");
+                query.WhereLike(column, LikePattern.Contains(value));
                 break;
             case FilterOperator.StartsWith:
-                query.WhereLike(column, $"{value}%");
+                query.WhereLike(column, LikePattern.StartsWith(value));
                 break;
             case FilterOperator.EndsWith:
-                query.WhereLike(column, $"%{value}");
+                query.WhereLike(column, LikePattern.EndsWith(value));
                 break;
             case FilterOperator.In:
                 if (value is IEnumerable<object> inValues)

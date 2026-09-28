@@ -235,7 +235,7 @@ public class BatchApiTests
         var updateRequest = new BulkUpdateRequest
         {
             Data = new Dictionary<string, object?> { ["score"] = 100 },
-            Filter = "score:lt:50"
+            Filter = ["score:lt:50"]
         };
 
         // Act

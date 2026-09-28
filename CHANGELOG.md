@@ -14,6 +14,21 @@
 
 ### Fixed
 
+- **Data**: a query with several `filter` parameters applied only the first. The .NET client — and so
+  every caller using it — sends one parameter per condition, and the endpoint read a single string, so
+  every further condition was dropped and the answer came back wider than asked, with `200`. Every
+  condition now applies. The same held for `DELETE /api/batch/data/{table}`: a bulk delete with two
+  conditions deleted every row the first one selected.
+- **Data**: a bulk update (`PATCH /api/batch/data/{table}`) wrote the value its filter compared against
+  instead of the value in `data` whenever the two shared a parameter slot — its SET and WHERE
+  parameters were numbered from the same counter. They are now named apart.
+- **Data**: `contains`, `startswith` and `endswith` matched `%` and `_` in the value as wildcards, so
+  `contains:a_b` also found "axb". They now match the value literally on the data, aggregate and view
+  endpoints, and on views they now ignore case as they already did elsewhere.
+- **Data**: a malformed condition in a bulk update or delete was skipped, widening what was written; it
+  is now refused with `400`, as the data query already did. Filter values are read with the invariant
+  culture on the server, and the .NET client writes them the same way (instants with their offset), so
+  a decimal or an instant means the same whatever culture either side runs in.
 - The service no longer exits at startup when it reaches a PostgreSQL that is still starting up. The
   startup wait retried an unreachable database but treated every answer from the server as final,
   including `57P03` ("the database system is starting up"), which a server gives while it restarts —
@@ -27,6 +42,10 @@
 
 ### Changed
 
+- `filter` is one condition per parameter: a comma no longer separates conditions inside one value
+  (it could not be told apart from a comma in the value). Repeat the parameter instead — which is what
+  the .NET client already sends. `PATCH /api/batch/data/{table}` takes `filter` as a list of conditions
+  instead of one string.
 - A new project's schemas are named from its whole id (`p_<32 hex digits>_sys` / `_dat`) instead of
   its first eight hex digits, so ids that share those digits — UUIDv7 ids created within about a minute
   of each other, for one — are separate projects rather than a failed create. Existing projects keep

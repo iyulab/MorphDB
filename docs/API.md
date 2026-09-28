@@ -227,6 +227,18 @@ GET /api/data/customers?filter=grade:eq:VIP&orderBy=_created_at:desc&page=1&page
 | `startswith` | String starts with | `email:startswith:admin` |
 | `endswith` | String ends with | `file:endswith:.pdf` |
 
+One `filter` parameter is one condition; repeat the parameter for more, and every condition applies:
+`?filter=score:gte:20&filter=score:lt:40`. Only the first two colons separate, so a value may contain
+colons and commas. `contains`, `startswith` and `endswith` ignore case and match the value literally —
+`label:contains:50%` finds the text "50%", and `_` is an underscore, not a wildcard (`like`/`ilike` are
+the operators that take a pattern). Numbers and instants are read the same on every server (invariant
+culture; an instant keeps its offset). A malformed condition is refused with `400` rather than skipped,
+since a dropped condition widens the result — and, for a bulk update or delete, the rows written.
+
+The same conditions select rows for `DELETE /api/batch/data/{table}?filter=…` (repeatable, at least one
+required) and for `PATCH /api/batch/data/{table}`, whose body carries them as a list:
+`{ "data": { "grade": "VIP" }, "filter": ["score:gte:90", "status:eq:active"] }`.
+
 An operator outside this list is answered with `400` listing the supported set — it is never
 silently coerced. (`in`/`isnull` were documented here once but no server ever accepted them — on
 this parameter or anywhere else; the operator vocabulary above is the whole set, on every surface.)

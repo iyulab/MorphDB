@@ -202,11 +202,16 @@ public sealed class PostgresDataService : IMorphDataService
         // Get physical WHERE clause SQL from the query
         var (whereSql, whereParams) = await whereClause.GetPhysicalWhereClauseAsync(cancellationToken);
 
-        // Merge parameters
+        // Merge parameters. The SET values are named set0, set1, … and the WHERE bindings p0, p1, … —
+        // when both used p{n}, the filter's value overwrote the one being written, so a bulk update set
+        // its rows to the value it had filtered on. A collision is a defect, not something to resolve.
         var valuesDict = (IDictionary<string, object?>)values;
         foreach (var (key, value) in whereParams)
         {
-            valuesDict[key] = value;
+            if (!valuesDict.TryAdd(key, value))
+            {
+                throw new InvalidOperationException($"Bulk update parameter '{key}' is bound twice.");
+            }
         }
 
         var sql = DmlBuilder.BuildBatchUpdate(table.PhysicalName, setColumns, whereSql);
@@ -412,13 +417,13 @@ public sealed class PostgresDataService : IMorphDataService
             if (column.IsPrimaryKey)
                 continue;
 
-            var paramName = $"@p{paramIndex}";
+            var paramName = $"@set{paramIndex}";
             var paramExpr = TypeMapper.IsJsonbType(column.DataType) ? $"{paramName}::jsonb" : paramName;
             setColumns.Add((column.PhysicalName, paramExpr));
 
             // Convert value to database type
             var dbValue = TypeMapper.ToDbValue(value, column.DataType);
-            valuesDict[$"p{paramIndex}"] = dbValue;
+            valuesDict[$"set{paramIndex}"] = dbValue;
 
             paramIndex++;
         }

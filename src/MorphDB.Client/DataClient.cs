@@ -204,7 +204,7 @@ public sealed class DataClient
             foreach (var filter in request.Filters)
             {
                 var op = GetOperatorString(filter.Operator);
-                var value = filter.Value?.ToString() ?? "";
+                var value = FormatFilterValue(filter.Value);
                 parts.Add($"filter={Uri.EscapeDataString($"{filter.Column}:{op}:{value}")}");
             }
         }
@@ -223,6 +223,21 @@ public sealed class DataClient
 
         return parts.Count > 0 ? "?" + string.Join("&", parts) : string.Empty;
     }
+
+    /// <summary>
+    /// A filter value as the server reads it back: numbers and instants in the invariant culture (an
+    /// instant round-trips with its offset), so the query means the same whatever culture the caller
+    /// runs in.
+    /// </summary>
+    private static string FormatFilterValue(object? value) => value switch
+    {
+        null => string.Empty,
+        DateTimeOffset instant => instant.ToString("O", CultureInfo.InvariantCulture),
+        DateTime dateTime => dateTime.ToString("O", CultureInfo.InvariantCulture),
+        bool flag => flag ? "true" : "false",
+        IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture),
+        _ => value.ToString() ?? string.Empty,
+    };
 
     private static string GetOperatorString(FilterOperator op) => op switch
     {

@@ -922,9 +922,9 @@ public sealed record DataQueryParameters
     public string? Select { get; init; }
 
     /// <summary>
-    /// Filter expression (column:op:value format).
+    /// Filter conditions, one <c>column:op:value</c> per repeated <c>filter</c> parameter; all apply.
     /// </summary>
-    public string? Filter { get; init; }
+    public string[]? Filter { get; init; }
 
     /// <summary>
     /// Order by columns (column:asc or column:desc).
@@ -1775,7 +1775,7 @@ public sealed record QueryFilterConditionApiRequest
     public required string Column { get; init; }
 
     /// <summary>
-    /// Filter operator: eq, neq, gt, gte, lt, lte, like, ilike, contains, starts-with, ends-with, in, not-in, is-null, is-not-null, between.
+    /// Filter operator: eq, neq, gt, gte, lt, lte, like, ilike, contains, startswith, endswith.
     /// </summary>
     public required string Operator { get; init; }
 

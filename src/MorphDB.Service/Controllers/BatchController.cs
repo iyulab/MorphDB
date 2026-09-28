@@ -164,10 +164,7 @@ public sealed class BatchController : ControllerBase
 
         // Build filter query
         var query = _dataService.Query(projectId).From(table);
-        if (!string.IsNullOrEmpty(request.Filter))
-        {
-            query = ApplyFilter(query, request.Filter);
-        }
+        query = FilterExpressions.Apply(query, request.Filter);
 
         var affected = await _dataService.UpdateBatchAsync(projectId, table, request.Data, query, cancellationToken);
 
@@ -195,16 +192,16 @@ public sealed class BatchController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> BulkDelete(
         string table,
-        [FromQuery] string? filter,
+        [FromQuery] string[]? filter,
         CancellationToken cancellationToken = default)
     {
         var projectId = GetProjectId();
 
         // Build filter query
         var query = _dataService.Query(projectId).From(table);
-        if (!string.IsNullOrEmpty(filter))
+        if (FilterExpressions.Any(filter))
         {
-            query = ApplyFilter(query, filter);
+            query = FilterExpressions.Apply(query, filter);
         }
         else
         {
@@ -542,64 +539,6 @@ public sealed class BatchController : ControllerBase
         };
     }
 
-    private static IMorphQuery ApplyFilter(IMorphQuery query, string filterExpression)
-    {
-        var filters = filterExpression.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var isFirst = true;
-
-        foreach (var filter in filters)
-        {
-            var parts = filter.Split(':', 3);
-            if (parts.Length != 3)
-                continue;
-
-            var column = parts[0].Trim();
-            var op = ApiModelExtensions.ParseFilterOperator(parts[1].Trim());
-            var value = ParseFilterValue(parts[2].Trim());
-
-            if (isFirst)
-            {
-                query = query.Where(column, op, value);
-                isFirst = false;
-            }
-            else
-            {
-                query = query.AndWhere(column, op, value);
-            }
-        }
-
-        return query;
-    }
-
-    private static object ParseFilterValue(string value)
-    {
-        if (bool.TryParse(value, out var boolValue))
-            return boolValue;
-
-        if (int.TryParse(value, out var intValue))
-            return intValue;
-
-        if (long.TryParse(value, out var longValue))
-            return longValue;
-
-        if (decimal.TryParse(value, out var decimalValue))
-            return decimalValue;
-
-        if (Guid.TryParse(value, out var guidValue))
-            return guidValue;
-
-        if (DateTime.TryParse(value, out var dateValue))
-            return dateValue;
-
-        if (value.StartsWith('"') && value.EndsWith('"'))
-            return value[1..^1];
-
-        if (value.StartsWith('\'') && value.EndsWith('\''))
-            return value[1..^1];
-
-        return value;
-    }
-
     #endregion
 }
 
@@ -609,7 +548,9 @@ public sealed class BatchController : ControllerBase
 public sealed record BulkUpdateRequest
 {
     public required IDictionary<string, object?> Data { get; init; }
-    public string? Filter { get; init; }
+
+    /// <summary>Conditions selecting the rows to update, one <c>column:operator:value</c> each; all apply.</summary>
+    public IReadOnlyList<string>? Filter { get; init; }
 }
 
 /// <summary>

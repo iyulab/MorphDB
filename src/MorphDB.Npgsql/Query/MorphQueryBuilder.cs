@@ -1068,21 +1068,21 @@ internal sealed class MorphQuery : IMorphQuery
                     query.WhereLike(column, value?.ToString() ?? "", caseSensitive: false);
                 break;
             case FilterOperator.Contains:
-                var containsPattern = $"%{value}%";
+                var containsPattern = LikePattern.Contains(value);
                 if (isOr)
                     query.OrWhereLike(column, containsPattern, caseSensitive: false);
                 else
                     query.WhereLike(column, containsPattern, caseSensitive: false);
                 break;
             case FilterOperator.StartsWith:
-                var startsWithPattern = $"{value}%";
+                var startsWithPattern = LikePattern.StartsWith(value);
                 if (isOr)
                     query.OrWhereLike(column, startsWithPattern, caseSensitive: false);
                 else
                     query.WhereLike(column, startsWithPattern, caseSensitive: false);
                 break;
             case FilterOperator.EndsWith:
-                var endsWithPattern = $"%{value}";
+                var endsWithPattern = LikePattern.EndsWith(value);
                 if (isOr)
                     query.OrWhereLike(column, endsWithPattern, caseSensitive: false);
                 else
@@ -1118,9 +1118,9 @@ internal sealed class MorphQuery : IMorphQuery
             FilterOperator.Like => ("LIKE", value),
             FilterOperator.NotLike => ("NOT LIKE", value),
             FilterOperator.ILike => ("ILIKE", value),
-            FilterOperator.Contains => ("ILIKE", $"%{value}%"),
-            FilterOperator.StartsWith => ("ILIKE", $"{value}%"),
-            FilterOperator.EndsWith => ("ILIKE", $"%{value}"),
+            FilterOperator.Contains => ("ILIKE", LikePattern.Contains(value)),
+            FilterOperator.StartsWith => ("ILIKE", LikePattern.StartsWith(value)),
+            FilterOperator.EndsWith => ("ILIKE", LikePattern.EndsWith(value)),
             _ => ("=", value)
         };
     }
