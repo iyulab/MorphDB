@@ -37,18 +37,35 @@ internal static class FilterExpressions
     public static bool Any(IEnumerable<string>? expressions) =>
         expressions?.Any(e => !string.IsNullOrWhiteSpace(e)) == true;
 
-    public static (string Column, FilterOperator Operator, object Value) Parse(string expression)
+    public static (string Column, FilterOperator Operator, object? Value) Parse(string expression)
     {
         var parts = expression.Split(':', 3);
-        if (parts.Length != 3 || string.IsNullOrWhiteSpace(parts[0]))
+        if (parts.Length >= 2 && !string.IsNullOrWhiteSpace(parts[0]))
         {
-            throw new ArgumentException(
-                $"Invalid filter format: '{expression}'. Expected 'column:operator:value' — one condition " +
-                "per filter parameter; repeat the parameter for more. For OData syntax, use the /odata " +
-                "endpoint with $filter instead.");
+            var op = ApiModelExtensions.ParseFilterOperator(parts[1].Trim());
+            if (op is FilterOperator.IsNull or FilterOperator.IsNotNull)
+            {
+                // Takes no value: `column:isnull` or `column:isnull:`. A value has no reading here, and
+                // ignoring it would answer a question the caller did not ask.
+                if (parts.Length == 3 && parts[2].Trim().Length > 0)
+                {
+                    throw new ArgumentException(
+                        $"Invalid filter format: '{expression}'. '{parts[1].Trim()}' takes no value — write '{parts[0].Trim()}:{parts[1].Trim()}'.");
+                }
+
+                return (parts[0].Trim(), op, null);
+            }
+
+            if (parts.Length == 3)
+            {
+                return (parts[0].Trim(), op, ParseValue(parts[2].Trim()));
+            }
         }
 
-        return (parts[0].Trim(), ApiModelExtensions.ParseFilterOperator(parts[1].Trim()), ParseValue(parts[2].Trim()));
+        throw new ArgumentException(
+            $"Invalid filter format: '{expression}'. Expected 'column:operator:value' ('column:isnull' and " +
+            "'column:isnotnull' take no value) — one condition per filter parameter; repeat the parameter " +
+            "for more. For OData syntax, use the /odata endpoint with $filter instead.");
     }
 
     /// <summary>

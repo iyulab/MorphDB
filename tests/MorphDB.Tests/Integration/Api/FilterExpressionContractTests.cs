@@ -136,6 +136,65 @@ public class FilterExpressionContractTests
             "the rows every filter selects get the written value — not the value a filter compared against");
     }
 
+    [Theory]
+    [InlineData("score:isnull:")]
+    [InlineData("score:isnull")]
+    public async Task Isnull_selects_the_rows_whose_column_is_empty(string filter)
+    {
+        var table = await SeedAsync();
+
+        var names = await QueryNamesAsync(table, filter);
+
+        names.Should().BeEquivalentTo(["e", "f", "g", "h"]);
+    }
+
+    [Fact]
+    public async Task Isnotnull_selects_the_rows_whose_column_has_a_value_and_combines_with_others()
+    {
+        var table = await SeedAsync();
+
+        (await QueryNamesAsync(table, "score:isnotnull:")).Should().BeEquivalentTo(["a", "b", "c", "d"]);
+        (await QueryNamesAsync(table, "score:isnotnull:", "label:eq:odd")).Should().BeEquivalentTo(["c", "d"]);
+    }
+
+    [Fact]
+    public async Task A_value_on_a_valueless_operator_is_refused()
+    {
+        var table = await SeedAsync();
+
+        var response = await _client.GetAsync($"/api/data/{table}?filter=score:isnull:0", TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest,
+            "'is null, and also 0' has no reading — dropping the value would answer a different question");
+    }
+
+    [Fact]
+    public async Task Bulk_delete_by_isnull_removes_only_the_empty_rows()
+    {
+        var table = await SeedAsync();
+
+        var response = await _client.DeleteAsync($"/api/batch/data/{table}?filter=score:isnull:", TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        (await QueryNamesAsync(table)).Should().BeEquivalentTo(["a", "b", "c", "d"]);
+    }
+
+    [Fact]
+    public async Task Aggregate_counts_by_isnull()
+    {
+        var table = await SeedAsync();
+
+        var response = await _client.PostAsJsonAsync($"/api/data/{table}/aggregate", new AggregationApiRequest
+        {
+            Aggregations = [new AggregationColumnApiRequest { Function = "count", Alias = "n" }],
+            Filter = [new QueryFilterConditionApiRequest { Column = "score", Operator = "isnull" }],
+        }, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        var result = await response.Content.ReadFromJsonAsync<AggregationApiResponse>(TestContext.Current.CancellationToken);
+        Int64(result!.Data[0]["n"]).Should().Be(4);
+    }
+
     private async Task<string> SeedAsync()
     {
         var table = $"filter_{Guid.NewGuid():N}"[..30];

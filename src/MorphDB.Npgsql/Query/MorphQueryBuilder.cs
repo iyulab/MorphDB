@@ -580,8 +580,7 @@ internal sealed class MorphQuery : IMorphQuery
         // HAVING
         foreach (var condition in _havingConditions)
         {
-            var (sqlOp, value) = GetSqlOperator(condition.Operator, condition.Value);
-            query.HavingRaw($"{condition.Column} {sqlOp} ?", value);
+            ApplyHaving(query, condition.Column, condition.Operator, condition.Value);
         }
 
         // LIMIT/OFFSET
@@ -698,8 +697,7 @@ internal sealed class MorphQuery : IMorphQuery
         {
             var physicalColumn = GetPhysicalColumnNameOrSelf(condition.Column, table);
             var columnRef = useBaseTableAlias ? $"base_table.{physicalColumn}" : physicalColumn;
-            var (sqlOp, value) = GetSqlOperator(condition.Operator, condition.Value);
-            query.HavingRaw($"{columnRef} {sqlOp} ?", value);
+            ApplyHaving(query, columnRef, condition.Operator, condition.Value);
         }
 
         // LIMIT/OFFSET
@@ -1088,6 +1086,24 @@ internal sealed class MorphQuery : IMorphQuery
                 else
                     query.WhereLike(column, endsWithPattern, caseSensitive: false);
                 break;
+            case FilterOperator.IsNull:
+                if (isOr)
+                    query.OrWhereNull(column);
+                else
+                    query.WhereNull(column);
+                break;
+            case FilterOperator.IsNotNull:
+                if (isOr)
+                    query.OrWhereNotNull(column);
+                else
+                    query.WhereNotNull(column);
+                break;
+            default:
+                // A condition this switch does not apply used to be dropped without a word, so the query
+                // came back wider than asked. In, NotIn and Between carry a list or a range and have their
+                // own methods (WhereIn, WhereNotIn); through Where they are refused.
+                throw new NotSupportedException(
+                    $"Where does not take the operator {op}; use the method for it (WhereIn, WhereNotIn) instead.");
         }
     }
 
@@ -1103,6 +1119,23 @@ internal sealed class MorphQuery : IMorphQuery
             AggregateFunction.Max => $"MAX({column})",
             _ => column
         };
+    }
+
+    private static void ApplyHaving(SqlKataQuery query, string column, FilterOperator op, object? value)
+    {
+        switch (op)
+        {
+            case FilterOperator.IsNull:
+                query.HavingRaw($"{column} IS NULL");
+                break;
+            case FilterOperator.IsNotNull:
+                query.HavingRaw($"{column} IS NOT NULL");
+                break;
+            default:
+                var (sqlOp, sqlValue) = GetSqlOperator(op, value);
+                query.HavingRaw($"{column} {sqlOp} ?", sqlValue);
+                break;
+        }
     }
 
     private static (string Op, object? Value) GetSqlOperator(FilterOperator op, object? value)
@@ -1121,7 +1154,8 @@ internal sealed class MorphQuery : IMorphQuery
             FilterOperator.Contains => ("ILIKE", LikePattern.Contains(value)),
             FilterOperator.StartsWith => ("ILIKE", LikePattern.StartsWith(value)),
             FilterOperator.EndsWith => ("ILIKE", LikePattern.EndsWith(value)),
-            _ => ("=", value)
+            // Falling back to "=" turned an operator this map does not know into a different condition.
+            _ => throw new NotSupportedException($"HAVING does not take the operator {op}.")
         };
     }
 

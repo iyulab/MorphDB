@@ -165,6 +165,21 @@ public class QueryBuilderTests
     }
 
     [Fact]
+    public async Task Query_WhereIn_through_Where_is_refused_not_dropped()
+    {
+        var (projectId, table) = await SetupTestTableWithDataAsync();
+
+        var act = () => _dataService.Query(projectId)
+            .From(table.LogicalName)
+            .SelectAll()
+            .Where("name", FilterOperator.In, new object[] { "Alice" })
+            .ToListAsync(TestContext.Current.CancellationToken);
+
+        // Dropped, the condition would return every row — a wider answer than asked, without a word.
+        await act.Should().ThrowAsync<NotSupportedException>();
+    }
+
+    [Fact]
     public async Task Query_WhereGreaterThan_ShouldFilterCorrectly()
     {
         // Arrange

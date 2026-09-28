@@ -43,7 +43,10 @@ public interface IMorphQuery
     IMorphQuery SelectAll();
 
     /// <summary>
-    /// Adds a WHERE condition.
+    /// Adds a WHERE condition. <see cref="FilterOperator.IsNull"/> and <see cref="FilterOperator.IsNotNull"/>
+    /// ignore <paramref name="value"/>. <see cref="FilterOperator.In"/>, <see cref="FilterOperator.NotIn"/> and
+    /// <see cref="FilterOperator.Between"/> are refused with <see cref="NotSupportedException"/> — use
+    /// <see cref="WhereIn"/> or <see cref="WhereNotIn"/>.
     /// </summary>
     IMorphQuery Where(string column, FilterOperator op, object? value);
 

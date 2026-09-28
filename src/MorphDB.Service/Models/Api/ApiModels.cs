@@ -422,7 +422,7 @@ public sealed record RollupFilterApiRequest
     public required string Field { get; init; }
 
     /// <summary>
-    /// The comparison operator: eq, neq, gt, gte, lt, lte, contains, starts-with, ends-with, is-null, is-not-null, in, not-in.
+    /// The comparison operator: eq, neq, gt, gte, lt, lte, like, ilike, contains, startswith, endswith, isnull, isnotnull.
     /// </summary>
     public required string Operator { get; init; }
 
@@ -1775,7 +1775,8 @@ public sealed record QueryFilterConditionApiRequest
     public required string Column { get; init; }
 
     /// <summary>
-    /// Filter operator: eq, neq, gt, gte, lt, lte, like, ilike, contains, startswith, endswith.
+    /// Filter operator: eq, neq, gt, gte, lt, lte, like, ilike, contains, startswith, endswith, isnull, isnotnull
+    /// (the last two take no value).
     /// </summary>
     public required string Operator { get; init; }
 
@@ -2163,11 +2164,13 @@ public static class ApiModelExtensions
             "contains" => FilterOperator.Contains,
             "startswith" => FilterOperator.StartsWith,
             "endswith" => FilterOperator.EndsWith,
+            "isnull" => FilterOperator.IsNull,
+            "isnotnull" => FilterOperator.IsNotNull,
             // An unknown operator used to fall back to Equals silently — the caller's typo became a
             // different query with no signal. Failing loudly is the contract boundary doing its job.
             _ => throw new ArgumentException(
                 $"Unknown filter operator '{op}'. Supported operators: eq, neq, gt, gte, lt, lte, " +
-                "like, ilike, contains, startswith, endswith.")
+                "like, ilike, contains, startswith, endswith, isnull, isnotnull.")
         };
     }
 }

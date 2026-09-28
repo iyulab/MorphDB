@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Data**: `isnull` and `isnotnull` are accepted as filter operators (`?filter=closedAt:isnull`), on the data
+  query, bulk delete and bulk update, and in aggregation and rollup filters. `MorphDB.Client` has offered
+  `FilterOperator.IsNull` and `IsNotNull` all along, but the server answered them `400`. Both take no value;
+  a value after them is refused with `400`.
+- **`MorphDB.Core`**: `IMorphQuery.Where` dropped a condition whose operator it did not apply (`IsNull`,
+  `IsNotNull`, `In`, `NotIn`, `Between`), so the query returned more rows than asked. `IsNull` and `IsNotNull`
+  now apply; `In`, `NotIn` and `Between` throw `NotSupportedException` — use `WhereIn`/`WhereNotIn`. A
+  `HAVING` condition with an operator it did not know was compared with `=` instead; it now applies `isnull`
+  and `isnotnull` and refuses the rest.
+
 ## 0.13.0
 
 A minor release with breaking changes, and fixes that change what earlier releases wrote. Check your data

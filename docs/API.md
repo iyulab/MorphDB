@@ -226,12 +226,15 @@ GET /api/data/customers?filter=grade:eq:VIP&orderBy=_created_at:desc&page=1&page
 | `contains` | String contains | `name:contains:john` |
 | `startswith` | String starts with | `email:startswith:admin` |
 | `endswith` | String ends with | `file:endswith:.pdf` |
+| `isnull` | Column has no value — takes none **Since 0.13.1** | `closedAt:isnull` |
+| `isnotnull` | Column has a value — takes none **Since 0.13.1** | `closedAt:isnotnull` |
 
 One `filter` parameter is one condition; repeat the parameter for more, and every condition applies:
 `?filter=score:gte:20&filter=score:lt:40`. Only the first two colons separate, so a value may contain
 colons and commas. `contains`, `startswith` and `endswith` ignore case and match the value literally —
 `label:contains:50%` finds the text "50%", and `_` is an underscore, not a wildcard (`like`/`ilike` are
-the operators that take a pattern). Numbers and instants are read the same on every server (invariant
+the operators that take a pattern). `isnull` and `isnotnull` take no value — `closedAt:isnull` (or
+`closedAt:isnull:`); a value after them is refused with `400`. Numbers and instants are read the same on every server (invariant
 culture; an instant keeps its offset). A malformed condition is refused with `400` rather than skipped,
 since a dropped condition widens the result — and, for a bulk update or delete, the rows written.
 
