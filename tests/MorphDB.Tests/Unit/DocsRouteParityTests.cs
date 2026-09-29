@@ -116,7 +116,11 @@ public partial class DocsRouteParityTests
     private static string StripConstraints(string template)
         => RouteConstraint().Replace(template, "{$1}");
 
-    private static IReadOnlyList<string> DocumentedRoutes()
+    /// <summary>
+    /// Every <c>VERB /path</c> the API reference documents under <c>/api</c> and <c>/odata</c> —
+    /// shared with <c>DocumentedRoutesAnswerTests</c>, which calls them.
+    /// </summary>
+    internal static IReadOnlyList<string> DocumentedRoutes()
         => DocumentedRoute()
             .Matches(DocsFiles.ReadApiReference())
             .Select(m => $"{m.Groups["verb"].Value} {m.Groups["path"].Value.TrimEnd('/')}")
