@@ -2,9 +2,9 @@
 
 > **This document describes `main`, which is ahead of what you can run.** Anything here the
 > published image does not serve yet carries a **Since x.y.z** marker naming the release that will
-> bring it. Everything else is in the published version, **0.13.1** — the one the README pins.
+> bring it. Everything else is in the published version, **0.14.0** — the one the README pins.
 > To read the reference for a release rather than for `main`, open this file at its tag:
-> `docs/API.md` at `v0.13.1`.
+> `docs/API.md` at `v0.14.0`.
 >
 > The marker is one-directional by nature: it can say that a documented behaviour is unreleased,
 > and no check can find a behaviour someone forgot to mark. What is held is that a marker names a
@@ -21,7 +21,7 @@ X-Project-Id: <project id>
 
 A request that omits it is answered with `400` and the code `MISSING_PROJECT`; a request that sends
 it but not as a GUID gets `400 INVALID_PROJECT_ID` instead — the two are distinguished because only
-the second one told the caller something it can act on. **Since 0.14.0**, a well-formed id that names no project (never
+the second one told the caller something it can act on. A well-formed id that names no project (never
 created, or deleted) is answered `404 PROJECT_NOT_FOUND` before the request does anything, so create
 the project (`POST /api/projects`) before scoping requests to it. The same holds on GraphQL (an
 error with `extensions.code` `PROJECT_NOT_FOUND`, and no field resolves), OData, and the real-time hub
@@ -585,7 +585,7 @@ The connection is scoped the same way every other request is, by `X-Project-Id` 
 at *connect* time, not per subscription. A connection that names no project is refused rather than
 served a stream that would stay empty forever, and — the same distinction REST/GraphQL make — a
 header that was sent but is not a GUID is refused for that reason, not reported as if none were sent.
-**Since 0.14.0**, a connection naming a project that does not exist, or was deleted, is refused too.
+A connection naming a project that does not exist, or was deleted, is refused too.
 
 That header has to ride the HTTP request that establishes the connection, which a browser cannot
 do on the WebSocket transport. Ask for a transport that carries headers:

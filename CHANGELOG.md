@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.14.0
+
+A minor release with breaking changes. A request scoped to a project that was never created or has been
+deleted is now refused with `404 PROJECT_NOT_FOUND` on every project-scoped surface — until now a mistyped
+or deleted project id could still create tables and read and write rows. The schema history and changelog
+routes, which answered `500` on every call, work again. A custom implementation of `IProjectRepository` or
+`IChangeLogger` has to follow their signature changes.
 
 ### Changed
 
@@ -14,6 +20,8 @@
   with `POST /api/projects` before scoping requests to it. A delete takes effect at once on the instance
   that handled it, and within ten seconds on any other instance serving the same database.
   (Verified-by: ProjectScopeContractTests.A_deleted_project_is_refused_on_the_routes_it_used_to_answer)
+- **`MorphDB.Npgsql`**: `IChangeLogger.GetChangelogAsync` takes the project id as its first argument and
+  returns that project's changes only. A custom implementation of the interface has to add it.
 
 ### Added
 
