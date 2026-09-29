@@ -21,9 +21,10 @@ public interface IChangeLogger
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Gets the global changelog across all tables.
+    /// Gets the changelog across one project's tables, newest first.
     /// </summary>
     Task<IReadOnlyList<SchemaChangeEntry>> GetChangelogAsync(
+        Guid projectId,
         int limit = 100,
         int offset = 0,
         CancellationToken cancellationToken = default);

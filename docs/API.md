@@ -139,7 +139,7 @@ nothing behind it holds.
 ```yaml
 # Schema Changelog
 GET    /api/schema/tables/{name}/history       # Table change history
-GET    /api/schema/changelog                   # Global schema changelog
+GET    /api/schema/changelog                   # Schema changelog across this project's tables
 ```
 
 ### Column types

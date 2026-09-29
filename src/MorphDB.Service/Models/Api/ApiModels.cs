@@ -2021,10 +2021,34 @@ public sealed record SchemaChangeApiResponse
         TableId = entry.TableId,
         Operation = entry.Operation.ToString(),
         SchemaVersion = entry.SchemaVersion,
-        Changes = entry.Changes,
+        Changes = WithoutPhysicalNames(entry.Changes),
         PerformedBy = entry.PerformedBy,
         PerformedAt = entry.PerformedAt
     };
+
+    /// <summary>
+    /// Earlier releases recorded physical table and column names in a change's details, and those
+    /// rows are still in the log. A physical name is never part of an answer, so the property is
+    /// dropped on the way out rather than trusted to be absent.
+    /// </summary>
+    private static object WithoutPhysicalNames(object changes)
+    {
+        if (changes is not System.Text.Json.JsonElement { ValueKind: System.Text.Json.JsonValueKind.Object } element)
+        {
+            return changes;
+        }
+
+        var kept = new System.Text.Json.Nodes.JsonObject();
+        foreach (var property in element.EnumerateObject())
+        {
+            if (!property.Name.Equals("physicalName", StringComparison.OrdinalIgnoreCase))
+            {
+                kept[property.Name] = System.Text.Json.Nodes.JsonNode.Parse(property.Value.GetRawText());
+            }
+        }
+
+        return kept;
+    }
 }
 
 #endregion

@@ -818,7 +818,7 @@ public sealed class SchemaController : ControllerBase
     }
 
     /// <summary>
-    /// Gets the global schema changelog across all tables.
+    /// Gets the schema changelog across the current project's tables.
     /// </summary>
     [HttpGet("changelog")]
     [ProducesResponseType(typeof(IReadOnlyList<SchemaChangeApiResponse>), StatusCodes.Status200OK)]
@@ -828,6 +828,7 @@ public sealed class SchemaController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         var changelog = await _changeLogger.GetChangelogAsync(
+            _projectContext.ProjectId,
             Math.Clamp(limit, 1, 500),
             Math.Max(offset, 0),
             cancellationToken);

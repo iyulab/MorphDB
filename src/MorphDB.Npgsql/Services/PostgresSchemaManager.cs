@@ -321,7 +321,6 @@ public sealed class PostgresSchemaManager : ISchemaManager
             Changes = new
             {
                 LogicalName = request.LogicalName,
-                PhysicalName = physicalTableName,
                 ColumnCount = columns.Count
             }
         }, cancellationToken);
@@ -464,8 +463,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
             SchemaVersion = currentVersion,
             Changes = new
             {
-                LogicalName = table.LogicalName,
-                PhysicalName = table.PhysicalName
+                LogicalName = table.LogicalName
             }
         }, cancellationToken);
     }
@@ -603,8 +601,8 @@ public sealed class PostgresSchemaManager : ISchemaManager
             SchemaVersion = currentVersion + 1,
             Changes = new
             {
+                ColumnId = insertedColumn.ColumnId,
                 column.LogicalName,
-                column.PhysicalName,
                 DataType = request.DataType.ToString(),
                 IsVirtual = isVirtualColumn
             }
@@ -891,8 +889,8 @@ public sealed class PostgresSchemaManager : ISchemaManager
             SchemaVersion = currentVersion + 1,
             Changes = new
             {
-                column.LogicalName,
-                column.PhysicalName
+                ColumnId = columnId,
+                column.LogicalName
             }
         }, cancellationToken);
     }

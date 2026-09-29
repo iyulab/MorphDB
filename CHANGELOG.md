@@ -22,6 +22,11 @@
 
 ### Fixed
 
+- **Schema**: `GET /api/schema/tables/{name}/history` and `GET /api/schema/changelog` answered `500` on
+  every call. Both now answer. The changelog lists the current project's changes only — it read the log
+  across every project — and no change carries a physical table or column name any more, including
+  changes recorded by earlier releases.
+  (Verified-by: SchemaChangelogApiTests.The_changelog_lists_this_projects_changes_and_no_other_projects)
 - **Docs**: `docs/ARCHITECTURE.md` described each project as a PostgreSQL schema holding its own tables.
   Project tables live in one shared schema, told apart by a `project_id` column and row-level security;
   the per-project schemas hold the audit log, and the data schema is created but unused.

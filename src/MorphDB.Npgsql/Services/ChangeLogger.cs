@@ -68,19 +68,22 @@ public sealed class ChangeLogger : IChangeLogger
     }
 
     public async Task<IReadOnlyList<SchemaChangeEntry>> GetChangelogAsync(
+        Guid projectId,
         int limit = 100,
         int offset = 0,
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-            SELECT change_id, table_id, operation, schema_version, changes, performed_by, performed_at
-            FROM morphdb._morph_changelog
-            ORDER BY performed_at DESC
+            SELECT c.change_id, c.table_id, c.operation, c.schema_version, c.changes, c.performed_by, c.performed_at
+            FROM morphdb._morph_changelog c
+            JOIN morphdb._morph_tables t ON t.table_id = c.table_id
+            WHERE t.project_id = @ProjectId
+            ORDER BY c.performed_at DESC
             LIMIT @Limit OFFSET @Offset
             """;
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-        var rows = await connection.QueryAsync<ChangeLogRow>(sql, new { Limit = limit, Offset = offset });
+        var rows = await connection.QueryAsync<ChangeLogRow>(sql, new { ProjectId = projectId, Limit = limit, Offset = offset });
 
         return rows.Select(MapToEntry).ToList();
     }
@@ -93,7 +96,7 @@ public sealed class ChangeLogger : IChangeLogger
         SchemaVersion = row.schema_version,
         Changes = JsonSerializer.Deserialize<object>(row.changes) ?? new { },
         PerformedBy = row.performed_by,
-        PerformedAt = row.performed_at
+        PerformedAt = new DateTimeOffset(DateTime.SpecifyKind(row.performed_at, DateTimeKind.Utc))
     };
 
     private sealed record ChangeLogRow(
@@ -103,5 +106,7 @@ public sealed class ChangeLogger : IChangeLogger
         int schema_version,
         string changes,
         string? performed_by,
-        DateTimeOffset performed_at);
+        // TIMESTAMPTZ reads back as a UTC DateTime; a DateTimeOffset here left Dapper with no
+        // constructor to match, and both changelog routes answered 500 on every call.
+        DateTime performed_at);
 }
