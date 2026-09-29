@@ -89,7 +89,8 @@ public class RequireProjectFilterTests
         var ran = await RunAsync(filter, context);
 
         ran.Should().BeFalse();
-        var result = context.Result.Should().BeOfType<NotFoundObjectResult>().Subject;
+        var result = context.Result.Should().BeOfType<JsonResult>().Subject;
+        result.StatusCode.Should().Be(StatusCodes.Status404NotFound);
         var body = result.Value.Should().BeOfType<ErrorResponse>().Subject;
         body.Code.Should().Be("PROJECT_NOT_FOUND");
     }
@@ -102,7 +103,7 @@ public class RequireProjectFilterTests
         var ran = await RunAsync(filter, context);
 
         ran.Should().BeFalse();
-        context.Result.Should().BeOfType<BadRequestObjectResult>();
+        context.Result.Should().BeOfType<JsonResult>().Which.StatusCode.Should().Be(StatusCodes.Status400BadRequest);
         _projectRepository.Verify(r => r.ExistsAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

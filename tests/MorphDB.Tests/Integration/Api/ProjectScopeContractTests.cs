@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using MorphDB.Service.Models.Api;
 using MorphDB.Tests.Fixtures;
 
@@ -162,5 +163,46 @@ public class ProjectScopeContractTests
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await response.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken))!.Code
             .Should().Be("PROJECT_NOT_FOUND");
+    }
+
+    /// <summary>
+    /// GraphQL and OData read the project id themselves rather than through the REST filter, so a
+    /// deleted project's tables stayed readable and writable on those two surfaces after every REST
+    /// route had stopped serving them.
+    /// </summary>
+    [Fact]
+    public async Task A_deleted_project_is_refused_on_graphql_and_odata_too()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var client = await _fixture.Api.CreateClientWithNewProjectAsync(ct);
+        var projectId = Guid.Parse(client.DefaultRequestHeaders.GetValues("X-Project-Id").Single());
+        var table = $"gdel_{Guid.NewGuid():N}"[..24];
+        (await client.PostAsJsonAsync("/api/schema/tables", new CreateTableApiRequest
+        {
+            Name = table,
+            Columns = [new CreateColumnApiRequest { Name = "label", Type = "text", Nullable = true }]
+        }, ct)).StatusCode.Should().Be(HttpStatusCode.Created);
+        (await _fixture.Api.Client.DeleteAsync($"/api/projects/{projectId}", ct)).StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        foreach (var query in new[]
+        {
+            "query { tables { name } }",
+            $$"""mutation { createRecord(table: "{{table}}", data: {label: "after"}) { success } }""",
+        })
+        {
+            var response = await client.PostAsJsonAsync("/graphql", new { query }, ct);
+            using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+            body.RootElement.TryGetProperty("errors", out var errors).Should().BeTrue(query);
+            errors[0].GetProperty("extensions").GetProperty("code").GetString().Should().Be("PROJECT_NOT_FOUND", query);
+            body.RootElement.TryGetProperty("data", out var data).Should().BeFalse(
+                $"no field may resolve for a project that is gone: {query} -> {data}");
+        }
+
+        foreach (var route in new[] { $"/odata/{table}", "/odata/$metadata" })
+        {
+            var odata = await client.GetAsync(route, ct);
+            odata.StatusCode.Should().Be(HttpStatusCode.NotFound, $"{route} — the XML-only $metadata must not turn the refusal into 406");
+            (await odata.Content.ReadFromJsonAsync<ErrorResponse>(ct))!.Code.Should().Be("PROJECT_NOT_FOUND");
+        }
     }
 }

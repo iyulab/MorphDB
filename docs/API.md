@@ -23,7 +23,9 @@ A request that omits it is answered with `400` and the code `MISSING_PROJECT`; a
 it but not as a GUID gets `400 INVALID_PROJECT_ID` instead — the two are distinguished because only
 the second one told the caller something it can act on. **Since 0.14.0**, a well-formed id that names no project (never
 created, or deleted) is answered `404 PROJECT_NOT_FOUND` before the request does anything, so create
-the project (`POST /api/projects`) before scoping requests to it.
+the project (`POST /api/projects`) before scoping requests to it. The same holds on GraphQL (an
+error with `extensions.code` `PROJECT_NOT_FOUND`, and no field resolves), OData, and the real-time hub
+(the connection is refused).
 
 ### What this is not
 
@@ -583,6 +585,7 @@ The connection is scoped the same way every other request is, by `X-Project-Id` 
 at *connect* time, not per subscription. A connection that names no project is refused rather than
 served a stream that would stay empty forever, and — the same distinction REST/GraphQL make — a
 header that was sent but is not a GUID is refused for that reason, not reported as if none were sent.
+**Since 0.14.0**, a connection naming a project that does not exist, or was deleted, is refused too.
 
 That header has to ride the HTTP request that establishes the connection, which a browser cannot
 do on the WebSocket transport. Ask for a transport that carries headers:

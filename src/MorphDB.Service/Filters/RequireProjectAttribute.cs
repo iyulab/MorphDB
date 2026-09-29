@@ -57,28 +57,33 @@ internal sealed class RequireProjectFilter : IAsyncActionFilter
             MorphDbException missing = _projectContext.MalformedProjectIdHeaderValue is { } raw
                 ? new MalformedProjectIdException(raw)
                 : new MissingProjectException();
-            context.Result = new BadRequestObjectResult(new ErrorResponse
-            {
-                Error = "BadRequest",
-                Message = missing.Message,
-                Code = missing.ErrorCode
-            });
+            context.Result = Refusal(StatusCodes.Status400BadRequest, "BadRequest", missing);
             return;
         }
 
         // A deleted project's rows are still in its tables, and must not stay reachable.
         if (!await _projectRepository.ExistsAsync(projectId, context.HttpContext.RequestAborted))
         {
-            var notFound = new ProjectNotFoundException(projectId);
-            context.Result = new NotFoundObjectResult(new ErrorResponse
-            {
-                Error = "NotFound",
-                Message = notFound.Message,
-                Code = notFound.ErrorCode
-            });
+            context.Result = Refusal(StatusCodes.Status404NotFound, "NotFound", new ProjectNotFoundException(projectId));
             return;
         }
 
         await next();
     }
+
+    /// <summary>
+    /// A <see cref="JsonResult"/>, not an object result: an action that produces something other than
+    /// JSON (OData's <c>$metadata</c> is XML-only) would otherwise have the error envelope negotiated
+    /// against its own media type, and the caller would get <c>406</c> instead of the refusal.
+    /// </summary>
+    private static JsonResult Refusal(int status, string error, MorphDbException exception) =>
+        new(new ErrorResponse
+        {
+            Error = error,
+            Message = exception.Message,
+            Code = exception.ErrorCode
+        })
+        {
+            StatusCode = status
+        };
 }

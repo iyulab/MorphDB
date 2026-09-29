@@ -160,6 +160,7 @@ try
     builder.Services
         .AddGraphQLServer()
         .AddMorphDbTypes()
+        .AddHttpRequestInterceptor(ProjectExistence.RequireAsync)
         .ModifyRequestOptions(opt => opt.IncludeExceptionDetails = builder.Environment.IsDevelopment());
 
     // Add real-time services (SignalR + PostgreSQL LISTEN/NOTIFY)

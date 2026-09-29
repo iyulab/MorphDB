@@ -106,6 +106,18 @@ public sealed class MorphHubTests : IAsyncLifetime
         await AssertRefusedAsync(connection);
     }
 
+    [Fact]
+    public async Task Connect_ToAProjectThatDoesNotExist_ShouldBeRefused()
+    {
+        await using var connection = BuildConnectionWithHeaders(
+            new Dictionary<string, string> { ["X-Project-Id"] = Guid.NewGuid().ToString() });
+
+        var message = await AssertRefusedAsync(connection);
+
+        message.Should().Contain("Project not found",
+            "a connection to a project that does not exist would subscribe and then hear nothing");
+    }
+
     /// <summary>
     /// The same malformed/missing distinction REST and GraphQL make on `X-Project-Id` must hold at
     /// connect time too — a header that was sent but does not parse is a different problem than a

@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using Microsoft.AspNetCore.SignalR;
+using MorphDB.Core.Abstractions;
+using MorphDB.Core.Exceptions;
 using MorphDB.Service.Services;
 
 namespace MorphDB.Service.Realtime;
@@ -12,11 +14,13 @@ public sealed partial class MorphHub : Hub<IMorphHubClient>
 {
     private readonly ILogger<MorphHub> _logger;
     private readonly SubscriptionManager _subscriptionManager;
+    private readonly IProjectRepository _projectRepository;
 
-    public MorphHub(ILogger<MorphHub> logger, SubscriptionManager subscriptionManager)
+    public MorphHub(ILogger<MorphHub> logger, SubscriptionManager subscriptionManager, IProjectRepository projectRepository)
     {
         _logger = logger;
         _subscriptionManager = subscriptionManager;
+        _projectRepository = projectRepository;
     }
 
     /// <summary>
@@ -25,6 +29,14 @@ public sealed partial class MorphHub : Hub<IMorphHubClient>
     public override async Task OnConnectedAsync()
     {
         var projectId = GetProjectId();
+
+        // The same refusal every other project-scoped surface gives: a connection to a project that
+        // does not exist, or was deleted, would subscribe successfully and then hear nothing.
+        if (!await _projectRepository.ExistsAsync(projectId, Context.ConnectionAborted))
+        {
+            throw new ProjectNotFoundException(projectId);
+        }
+
         LogClientConnected(_logger, Context.ConnectionId, projectId);
 
         await Groups.AddToGroupAsync(Context.ConnectionId, $"project:{projectId}");

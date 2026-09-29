@@ -6,6 +6,7 @@ using MorphDB.Core.Abstractions;
 using MorphDB.Core.Models;
 using MorphDB.Core.Pipeline;
 using MorphDB.Npgsql.Repositories;
+using MorphDB.Service.Filters;
 using MorphDB.Service.Services;
 
 namespace MorphDB.Service.OData;
@@ -16,6 +17,7 @@ namespace MorphDB.Service.OData;
 /// </summary>
 [Route("odata")]
 [ApiController]
+[RequireProject]
 public sealed partial class MorphODataController : ControllerBase
 {
     private readonly IEdmModelProvider _modelProvider;

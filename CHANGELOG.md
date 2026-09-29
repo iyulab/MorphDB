@@ -4,9 +4,11 @@
 
 ### Changed
 
-- **Projects**: every project-scoped route — schema, data, views, webhooks, aggregation, batch, bulk,
-  hierarchy and transactions — answers `404 PROJECT_NOT_FOUND` when `X-Project-Id` names a project that
-  was never created or has been deleted, before the request does anything. Until now only a request
+- **Projects**: every project-scoped request — the schema, data, views, webhooks, aggregation, batch,
+  bulk, hierarchy and transaction routes, GraphQL, and OData — answers `404 PROJECT_NOT_FOUND` when
+  `X-Project-Id` names a project that was never created or has been deleted, before the request does
+  anything (on GraphQL, an error with that code and no data), and the real-time hub refuses such a
+  connection. Until now only a request
   that failed to find a table was answered that way; creating a table did not look the project up, so a
   mistyped or deleted project id could still create tables and read and write rows. Create a project
   with `POST /api/projects` before scoping requests to it. A delete takes effect at once on the instance
