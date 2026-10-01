@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Packages carry the license text.** `MorphDB.Client`, `MorphDB.Core` and `MorphDB.Npgsql` now ship
+  `LICENSE` at their root beside the `Apache-2.0` license expression, so redistributing a package carries
+  the license copy the license requires and tooling that collects third-party notices finds the text.
+
 ## 0.14.0
 
 A minor release with breaking changes. A request scoped to a project that was never created or has been
