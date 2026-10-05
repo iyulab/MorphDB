@@ -23,7 +23,7 @@ public sealed class ViewClient
     {
         var response = await _httpClient.GetAsync("/api/views", cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<IReadOnlyList<ViewInfo>>(MorphDBJson.Options, cancellationToken)
+        return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.IReadOnlyListViewInfo, cancellationToken)
             ?? [];
     }
 
@@ -40,7 +40,7 @@ public sealed class ViewClient
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             return null;
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<ViewInfo>(MorphDBJson.Options, cancellationToken);
+        return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.ViewInfo, cancellationToken);
     }
 
     /// <summary>
@@ -50,9 +50,9 @@ public sealed class ViewClient
         CreateViewRequest request,
         CancellationToken cancellationToken = default)
     {
-        var response = await _httpClient.PostAsJsonAsync("/api/views", request, MorphDBJson.Options, cancellationToken);
+        var response = await _httpClient.PostAsJsonAsync("/api/views", request, MorphDBJsonContext.Default.CreateViewRequest, cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<ViewInfo>(MorphDBJson.Options, cancellationToken)
+        return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.ViewInfo, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize view response");
     }
 
@@ -96,7 +96,7 @@ public sealed class ViewClient
             $"/api/views/{Uri.EscapeDataString(viewName)}/data{queryString}",
             cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<PagedResponse<DataRecord>>(MorphDBJson.Options, cancellationToken)
+        return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.PagedResponseDataRecord, cancellationToken)
             ?? new PagedResponse<DataRecord> { Data = [], Pagination = new PaginationInfo() };
     }
 

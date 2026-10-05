@@ -274,7 +274,7 @@ public sealed class RealtimeClient : IAsyncDisposable
     /// <summary>
     /// The <c>RecordCreated</c> / <c>RecordUpdated</c> payload, as the hub sends it.
     /// </summary>
-    private sealed class RecordChangedMessage
+    internal sealed class RecordChangedMessage
     {
         public required string Table { get; init; }
         public Guid? RecordId { get; init; }
@@ -286,7 +286,7 @@ public sealed class RealtimeClient : IAsyncDisposable
     /// <summary>
     /// The <c>RecordDeleted</c> payload, as the hub sends it — no <c>Data</c>, because the row is gone.
     /// </summary>
-    private sealed class RecordDeletedMessage
+    internal sealed class RecordDeletedMessage
     {
         public required string Table { get; init; }
         public Guid? RecordId { get; init; }

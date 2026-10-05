@@ -7,6 +7,13 @@
     <Title>MorphDB .NET Client SDK</Title>
     <Description>Official .NET client SDK for MorphDB - a PostgreSQL-based dynamic schema database service</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!--
+      Trim and Native AOT safe: every request and response goes through generated serialization
+      metadata (MorphDBJsonContext), never reflection. This turns on the trim, AOT and single-file
+      analyzers, so a reflection path added later fails the build here rather than in a host that
+      trims; tests/MorphDB.Client.AotSmoke proves the whole graph by publishing and running it.
+    -->
+    <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
 
   <ItemGroup>

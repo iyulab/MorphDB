@@ -34,9 +34,9 @@ public sealed class ProjectClient
         CreateProjectRequest request,
         CancellationToken cancellationToken = default)
     {
-        var response = await _httpClient.PostAsJsonAsync("/api/projects", request, MorphDBJson.Options, cancellationToken);
+        var response = await _httpClient.PostAsJsonAsync("/api/projects", request, MorphDBJsonContext.Default.CreateProjectRequest, cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<ProjectInfo>(MorphDBJson.Options, cancellationToken)
+        return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.ProjectInfo, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize project response");
     }
 
@@ -70,7 +70,7 @@ public sealed class ProjectClient
 
         var response = await _httpClient.GetAsync($"/api/projects?{string.Join('&', query)}", cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<PagedResponse<ProjectInfo>>(MorphDBJson.Options, cancellationToken)
+        return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.PagedResponseProjectInfo, cancellationToken)
             ?? new PagedResponse<ProjectInfo> { Data = [], Pagination = new PaginationInfo() };
     }
 
@@ -85,7 +85,7 @@ public sealed class ProjectClient
         if (response.StatusCode == HttpStatusCode.NotFound)
             return null;
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<ProjectInfo>(MorphDBJson.Options, cancellationToken);
+        return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.ProjectInfo, cancellationToken);
     }
 
     /// <summary>
@@ -101,7 +101,7 @@ public sealed class ProjectClient
         if (response.StatusCode == HttpStatusCode.NotFound)
             return null;
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<ProjectInfo>(MorphDBJson.Options, cancellationToken);
+        return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.ProjectInfo, cancellationToken);
     }
 
     /// <summary>
@@ -119,10 +119,10 @@ public sealed class ProjectClient
         var response = await _httpClient.PatchAsJsonAsync(
             $"/api/projects/{projectId}",
             request,
-            MorphDBJson.Options,
+            MorphDBJsonContext.Default.UpdateProjectRequest,
             cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<ProjectInfo>(MorphDBJson.Options, cancellationToken)
+        return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.ProjectInfo, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize project response");
     }
 
@@ -146,7 +146,7 @@ public sealed class ProjectClient
     {
         var response = await _httpClient.GetAsync($"/api/projects/{projectId}/stats", cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<ProjectStats>(MorphDBJson.Options, cancellationToken)
+        return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.ProjectStats, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize project statistics response");
     }
 
@@ -159,7 +159,7 @@ public sealed class ProjectClient
     {
         var response = await _httpClient.GetAsync($"/api/projects/{projectId}/health", cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<SchemaHealthReport>(MorphDBJson.Options, cancellationToken)
+        return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.SchemaHealthReport, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize schema health response");
     }
 }

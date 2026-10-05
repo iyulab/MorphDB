@@ -31,7 +31,7 @@ public sealed class DataClient
             $"/api/data/{Uri.EscapeDataString(tableName)}{queryString}",
             cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<PagedResponse<DataRecord>>(MorphDBJson.Options, cancellationToken)
+        return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.PagedResponseDataRecord, cancellationToken)
             ?? new PagedResponse<DataRecord> { Data = [], Pagination = new PaginationInfo() };
     }
 
@@ -49,7 +49,7 @@ public sealed class DataClient
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             return null;
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<DataRecord>(MorphDBJson.Options, cancellationToken);
+        return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.DataRecord, cancellationToken);
     }
 
     /// <summary>
@@ -63,10 +63,10 @@ public sealed class DataClient
         var response = await _httpClient.PostAsJsonAsync(
             $"/api/data/{Uri.EscapeDataString(tableName)}",
             data,
-            MorphDBJson.Options,
+            MorphDBJsonContext.Default.IDictionaryStringObject,
             cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<DataRecord>(MorphDBJson.Options, cancellationToken)
+        return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.DataRecord, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize record response");
     }
 
@@ -82,10 +82,10 @@ public sealed class DataClient
         var response = await _httpClient.PatchAsJsonAsync(
             $"/api/data/{Uri.EscapeDataString(tableName)}/{id}",
             data,
-            MorphDBJson.Options,
+            MorphDBJsonContext.Default.IDictionaryStringObject,
             cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<DataRecord>(MorphDBJson.Options, cancellationToken)
+        return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.DataRecord, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize record response");
     }
 
@@ -114,10 +114,10 @@ public sealed class DataClient
         var response = await _httpClient.PutAsJsonAsync(
             $"/api/data/{Uri.EscapeDataString(tableName)}",
             data,
-            MorphDBJson.Options,
+            MorphDBJsonContext.Default.IDictionaryStringObject,
             cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<DataRecord>(MorphDBJson.Options, cancellationToken)
+        return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.DataRecord, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize record response");
     }
 
@@ -137,48 +137,30 @@ public sealed class DataClient
         var response = await _httpClient.PostAsJsonAsync(
             $"/api/data/{Uri.EscapeDataString(tableName)}/aggregate",
             apiRequest,
-            MorphDBJson.Options,
+            MorphDBJsonContext.Default.AggregateWireRequest,
             cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<AggregationResponse>(MorphDBJson.Options, cancellationToken)
+        return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.AggregationResponse, cancellationToken)
             ?? new AggregationResponse { Data = [] };
     }
 
-    private static object MapToApiRequest(AggregationRequest request)
-    {
-        return new
-        {
-            aggregations = request.Aggregations.Select(a => new
-            {
-                function = GetAggregateFunctionString(a.Function),
-                column = a.Column,
-                alias = a.Alias,
-                distinct = a.Distinct,
-                limit = a.Limit,
-                orderBy = a.OrderBy
-            }).ToList(),
-            groupBy = request.GroupBy,
-            filter = request.Filter?.Select(f => new
-            {
-                column = f.Column,
-                @operator = GetOperatorString(f.Operator),
-                value = f.Value
-            }).ToList(),
-            having = request.Having?.Select(h => new
-            {
-                alias = h.Alias,
-                @operator = GetOperatorString(h.Operator),
-                value = h.Value
-            }).ToList(),
-            orderBy = request.OrderBy?.Select(o => new
-            {
-                column = o.Column,
-                direction = o.Descending ? "desc" : "asc"
-            }).ToList(),
-            limit = request.Limit,
-            offset = request.Offset
-        };
-    }
+    private static AggregateWireRequest MapToApiRequest(AggregationRequest request) => new(
+        Aggregations: request.Aggregations
+            .Select(a => new AggregateWireColumn(
+                GetAggregateFunctionString(a.Function), a.Column, a.Alias, a.Distinct, a.Limit, a.OrderBy))
+            .ToList(),
+        GroupBy: request.GroupBy,
+        Filter: request.Filter?
+            .Select(f => new AggregateWireFilter(f.Column, GetOperatorString(f.Operator), f.Value))
+            .ToList(),
+        Having: request.Having?
+            .Select(h => new AggregateWireHaving(h.Alias, GetOperatorString(h.Operator), h.Value))
+            .ToList(),
+        OrderBy: request.OrderBy?
+            .Select(o => new AggregateWireOrder(o.Column, o.Descending ? "desc" : "asc"))
+            .ToList(),
+        Limit: request.Limit,
+        Offset: request.Offset);
 
     private static string GetAggregateFunctionString(AggregateFunction function) => function switch
     {

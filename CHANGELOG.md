@@ -10,6 +10,22 @@
   response's `pagination` carries `offset` when the request gave one, and `hasNext`/`hasPrevious` follow
   it. Below zero, or beside a `page` other than 1, it is refused (`400 VALIDATION_ERROR`).
   `QueryRequest.Offset` in the client.
+- **`MorphDB.Client` is trim and Native AOT compatible.** The package declares `IsAotCompatible`, and
+  every request and response is serialized through compile-time generated metadata instead of reflection,
+  so a host that trims or publishes as Native AOT gets no trim or AOT warnings from the client and the
+  same behavior as any other host. The real-time hub's payloads go through the same metadata. Request
+  bodies are byte-for-byte what they were.
+
+### Changed
+
+- **A record value must be a JSON-shaped value.** Values in a record dictionary, a batch or transaction
+  operation's `Data`, and an aggregate filter's or having condition's `Value` are written as before when
+  they are strings, characters, booleans, numbers (any integral or floating-point type, `decimal`, and
+  enums as their underlying number), `DateTime`, `DateTimeOffset`, `DateOnly`, `TimeOnly`, `TimeSpan`,
+  `Guid`, `byte[]` (base64), `JsonElement`, `JsonDocument`, `JsonNode`, dictionaries with string keys,
+  or lists of these. Any other type — an arbitrary object, whose public properties used to be
+  serialized by reflection, or a dictionary whose keys are not strings — now throws
+  `NotSupportedException` naming the type.
 
 ## 0.15.0
 

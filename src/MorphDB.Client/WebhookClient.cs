@@ -23,7 +23,7 @@ public sealed class WebhookClient
     {
         var response = await _httpClient.GetAsync("/api/webhooks", cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<List<WebhookInfo>>(MorphDBJson.Options, cancellationToken) ?? [];
+        return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.ListWebhookInfo, cancellationToken) ?? [];
     }
 
     /// <summary>
@@ -35,7 +35,7 @@ public sealed class WebhookClient
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
             return null;
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<WebhookInfo>(MorphDBJson.Options, cancellationToken);
+        return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.WebhookInfo, cancellationToken);
     }
 
     /// <summary>
@@ -45,7 +45,7 @@ public sealed class WebhookClient
     {
         var response = await _httpClient.GetAsync($"/api/webhooks?tableName={Uri.EscapeDataString(tableName)}", cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<List<WebhookInfo>>(MorphDBJson.Options, cancellationToken) ?? [];
+        return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.ListWebhookInfo, cancellationToken) ?? [];
     }
 
     /// <summary>
@@ -53,9 +53,9 @@ public sealed class WebhookClient
     /// </summary>
     public async Task<WebhookInfo> CreateAsync(CreateWebhookRequest request, CancellationToken cancellationToken = default)
     {
-        var response = await _httpClient.PostAsJsonAsync("/api/webhooks", request, MorphDBJson.Options, cancellationToken);
+        var response = await _httpClient.PostAsJsonAsync("/api/webhooks", request, MorphDBJsonContext.Default.CreateWebhookRequest, cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<WebhookInfo>(MorphDBJson.Options, cancellationToken)
+        return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.WebhookInfo, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize webhook response");
     }
 
@@ -80,7 +80,7 @@ public sealed class WebhookClient
         var url = string.Create(CultureInfo.InvariantCulture, $"/api/webhooks/{webhookId}/deliveries?page={page}&pageSize={pageSize}");
         var response = await _httpClient.GetAsync(url, cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<List<WebhookDelivery>>(MorphDBJson.Options, cancellationToken) ?? [];
+        return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.ListWebhookDelivery, cancellationToken) ?? [];
     }
 
     /// <summary>

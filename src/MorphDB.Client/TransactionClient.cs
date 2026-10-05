@@ -26,10 +26,10 @@ public sealed class TransactionClient
         var response = await _httpClient.PostAsJsonAsync(
             "/api/batch/transaction",
             request,
-            MorphDBJson.Options,
+            MorphDBJsonContext.Default.TransactionRequest,
             cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<TransactionResponse>(MorphDBJson.Options, cancellationToken)
+        return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.TransactionResponse, cancellationToken)
             ?? new TransactionResponse { Success = false, Error = "Failed to deserialize response" };
     }
 
@@ -46,7 +46,7 @@ public sealed class TransactionClient
             null,
             cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<FinalizeResponse>(MorphDBJson.Options, cancellationToken)
+        return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.FinalizeResponse, cancellationToken)
             ?? new FinalizeResponse();
     }
 
@@ -61,10 +61,10 @@ public sealed class TransactionClient
         var response = await _httpClient.PostAsJsonAsync(
             $"/api/data/{Uri.EscapeDataString(tableName)}/finalize",
             request,
-            MorphDBJson.Options,
+            MorphDBJsonContext.Default.FinalizeRequest,
             cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync<FinalizeResponse>(MorphDBJson.Options, cancellationToken)
+        return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.FinalizeResponse, cancellationToken)
             ?? new FinalizeResponse();
     }
 
