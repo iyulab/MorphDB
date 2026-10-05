@@ -100,6 +100,30 @@ jobs:
       - name: Run security scan
         uses: iyulab/dotnet-ci-actions/vulnerability-scan@00faf7ff62b88e11fbf88edfedcf73bdc5f2eebe # main, 2026-08-31
 
+  # Publishes a client consumer as Native AOT and runs it. The client's own analyzers see only its
+  # code; the publish sees the whole graph a trimmed host compiles (the SignalR client included) and
+  # fails on any trim or AOT warning, and running the executable proves the serialization paths work
+  # without reflection.
+  aot-smoke:
+    name: Native AOT Smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Publish as Native AOT
+        run: dotnet publish tests/MorphDB.Client.AotSmoke/MorphDB.Client.AotSmoke.csproj --configuration Release --runtime linux-x64 --output aot-smoke
+
+      - name: Run the AOT executable
+        run: ./aot-smoke/MorphDB.Client.AotSmoke
+
   # Packs the solution and checks what a package consumer receives: each package's contents
   # (XML documentation, readme, license) and whether the client README's quick start compiles
   # against exactly the packages that README tells a reader to install. The repository's own build

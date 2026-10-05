@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Publishes a MorphDB.Client consumer as a Native AOT executable and runs it. The client's analyzers
+    (IsAotCompatible) see its own code at build time; only a real AOT publish sees the whole graph a
+    host compiles, the SignalR client included, and only running the result proves the reflection-free
+    serialization paths work. Not a test project: `dotnet test` does not run it; CI publishes and
+    executes it. TreatWarningsAsErrors (Directory.Build.props) turns any trim or AOT warning the publish
+    reports into a failed publish.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\MorphDB.Client\MorphDB.Client.csproj" />
+  </ItemGroup>
+
+</Project>
