@@ -1719,7 +1719,7 @@ public sealed record AggregationApiRequest
 public sealed record AggregationColumnApiRequest
 {
     /// <summary>
-    /// Aggregation function: count, sum, avg, min, max.
+    /// Aggregation function: count, countDistinct, sum, avg, min, max, arrayAgg.
     /// </summary>
     public required string Function { get; init; }
 
@@ -1739,6 +1739,16 @@ public sealed record AggregationColumnApiRequest
     public bool Distinct { get; init; }
 
     /// <summary>
+    /// For arrayAgg only: at most this many values per group, the first in ascending order.
+    /// </summary>
+    public int? Limit { get; init; }
+
+    /// <summary>
+    /// For arrayAgg only: the column whose ascending order the array follows; the collected column by default.
+    /// </summary>
+    public string? OrderBy { get; init; }
+
+    /// <summary>
     /// Converts to core AggregationColumn model.
     /// </summary>
     public AggregationColumn ToModel() => new()
@@ -1746,7 +1756,9 @@ public sealed record AggregationColumnApiRequest
         Function = ParseAggregateFunction(Function),
         Column = Column,
         Alias = Alias,
-        Distinct = Distinct
+        Distinct = Distinct,
+        Limit = Limit,
+        OrderBy = OrderBy
     };
 
     private static AggregateFunction ParseAggregateFunction(string function)
@@ -1759,6 +1771,7 @@ public sealed record AggregationColumnApiRequest
             "avg" or "average" => AggregateFunction.Avg,
             "min" => AggregateFunction.Min,
             "max" => AggregateFunction.Max,
+            "arrayagg" or "array_agg" or "array-agg" => AggregateFunction.ArrayAgg,
             _ => throw new ArgumentException($"Unknown aggregate function: {function}")
         };
     }

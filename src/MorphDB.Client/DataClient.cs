@@ -153,7 +153,9 @@ public sealed class DataClient
                 function = GetAggregateFunctionString(a.Function),
                 column = a.Column,
                 alias = a.Alias,
-                distinct = a.Distinct
+                distinct = a.Distinct,
+                limit = a.Limit,
+                orderBy = a.OrderBy
             }).ToList(),
             groupBy = request.GroupBy,
             filter = request.Filter?.Select(f => new
@@ -186,7 +188,8 @@ public sealed class DataClient
         AggregateFunction.Avg => "avg",
         AggregateFunction.Min => "min",
         AggregateFunction.Max => "max",
-        _ => "count"
+        AggregateFunction.ArrayAgg => "arrayAgg",
+        _ => throw new ArgumentOutOfRangeException(nameof(function), function, "Unsupported aggregate function.")
     };
 
     private static string BuildQueryString(QueryRequest? request)

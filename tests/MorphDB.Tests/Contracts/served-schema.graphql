@@ -147,6 +147,8 @@ input AggregationInput {
   column: String
   alias: String!
   distinct: Boolean
+  limit: Int
+  orderBy: String
 }
 
 input FilterInput {
@@ -173,6 +175,7 @@ enum AggregateFunction {
   MIN
   MAX
   COUNT_DISTINCT
+  ARRAY_AGG
 }
 
 "The `Any` scalar type represents any valid GraphQL value."

@@ -69,6 +69,18 @@ public sealed class AggregationColumn
     public bool Distinct { get; init; }
 
     /// <summary>
+    /// For <see cref="AggregateFunction.ArrayAgg"/> only: at most this many values per group, the first
+    /// in ascending order. Null keeps every value.
+    /// </summary>
+    public int? Limit { get; init; }
+
+    /// <summary>
+    /// For <see cref="AggregateFunction.ArrayAgg"/> only: the column whose ascending order the array
+    /// follows. Null orders by the collected column itself.
+    /// </summary>
+    public string? OrderBy { get; init; }
+
+    /// <summary>
     /// Creates a new aggregation column.
     /// </summary>
     public AggregationColumn() { }
@@ -141,6 +153,21 @@ public sealed class AggregationColumn
         Column = column,
         Alias = alias
     };
+
+    /// <summary>
+    /// Creates an ARRAY_AGG aggregation: the group's values of <paramref name="column"/> in ascending
+    /// order of <paramref name="orderBy"/> (the column itself by default), at most
+    /// <paramref name="limit"/> of them when given. Beside a COUNT in the same request,
+    /// the count says how many there are and the array which ones.
+    /// </summary>
+    public static AggregationColumn ArrayAgg(string column, string alias, int? limit = null, string? orderBy = null) => new()
+    {
+        Function = AggregateFunction.ArrayAgg,
+        Column = column,
+        Alias = alias,
+        Limit = limit,
+        OrderBy = orderBy
+    };
 }
 
 /// <summary>
@@ -164,7 +191,13 @@ public enum AggregateFunction
     Min,
 
     /// <summary>Maximum value.</summary>
-    Max
+    Max,
+
+    /// <summary>
+    /// The group's values of a column as one array, in ascending order — what a count is made of, read
+    /// in the same request as the count. <see cref="AggregationColumn.Limit"/> keeps the first values.
+    /// </summary>
+    ArrayAgg
 }
 
 /// <summary>

@@ -88,6 +88,20 @@ public sealed record AggregationColumn
     /// Whether to use DISTINCT (e.g., COUNT DISTINCT).
     /// </summary>
     public bool Distinct { get; init; }
+
+    /// <summary>
+    /// For <see cref="AggregateFunction.ArrayAgg"/> only: at most this many values per group, the first
+    /// in the array's order. Must be positive; null keeps every value.
+    /// </summary>
+    public int? Limit { get; init; }
+
+    /// <summary>
+    /// For <see cref="AggregateFunction.ArrayAgg"/> only: the column (logical name) whose ascending order
+    /// the array follows -- the order rows were written in, say, rather than the order of the values
+    /// collected. Null orders by the collected column itself. Not with <see cref="Distinct"/>, which
+    /// can only order by the values it keeps.
+    /// </summary>
+    public string? OrderBy { get; init; }
 }
 
 /// <summary>

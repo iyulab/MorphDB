@@ -536,4 +536,110 @@ public class AggregationServiceTests
     }
 
     #endregion
+
+    #region ArrayAgg Tests
+
+    // A group's values in ascending order beside its count, from one statement: the count says how many
+    // rows a group has and the array which ones -- read at the same moment, so they cannot disagree.
+    [Fact]
+    public async Task AggregateAsync_ArrayAggWithGroupBy_ShouldReturnEachGroupsValuesInOrderBesideItsCount()
+    {
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "agg_array_" + Guid.NewGuid().ToString("N")[..8]);
+        await InsertTestDataAsync(projectId, table.LogicalName);
+
+        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, new AggregationRequest
+        {
+            Aggregations =
+            [
+                new AggregationColumn { Function = AggregateFunction.Count, Alias = "count" },
+                new AggregationColumn { Function = AggregateFunction.ArrayAgg, Column = "quantity", Alias = "quantities" }
+            ],
+            GroupBy = ["category"]
+        }, TestContext.Current.CancellationToken);
+
+        Assert.Equal([2, 3, 5], Values(Row(result, "electronics")["quantities"]));
+        Assert.Equal([4, 7, 10], Values(Row(result, "clothing")["quantities"]));
+        Assert.Equal([15, 20], Values(Row(result, "food")["quantities"]));
+        Assert.Equal(3L, Convert.ToInt64(Row(result, "electronics")["count"], CultureInfo.InvariantCulture));
+    }
+
+    [Fact]
+    public async Task AggregateAsync_ArrayAggWithLimit_ShouldKeepTheFirstValuesOnly()
+    {
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "agg_array_lim_" + Guid.NewGuid().ToString("N")[..8]);
+        await InsertTestDataAsync(projectId, table.LogicalName);
+
+        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, new AggregationRequest
+        {
+            Aggregations = [new AggregationColumn { Function = AggregateFunction.ArrayAgg, Column = "quantity", Alias = "quantities", Limit = 2 }],
+            GroupBy = ["category"]
+        }, TestContext.Current.CancellationToken);
+
+        Assert.Equal([2, 3], Values(Row(result, "electronics")["quantities"]));
+        Assert.Equal([15, 20], Values(Row(result, "food")["quantities"]));
+    }
+
+    [Fact]
+    public async Task AggregateAsync_ArrayAggDistinct_ShouldCollectEachValueOnce()
+    {
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "agg_array_dst_" + Guid.NewGuid().ToString("N")[..8]);
+        await InsertTestDataAsync(projectId, table.LogicalName);
+
+        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, new AggregationRequest
+        {
+            Aggregations = [new AggregationColumn { Function = AggregateFunction.ArrayAgg, Column = "status", Alias = "statuses", Distinct = true }],
+            GroupBy = ["category"]
+        }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(["active", "inactive"], ((System.Collections.IEnumerable)Row(result, "electronics")["statuses"]!).Cast<object>().Select(v => v.ToString()));
+        Assert.Equal(["active"], ((System.Collections.IEnumerable)Row(result, "food")["statuses"]!).Cast<object>().Select(v => v.ToString()));
+    }
+
+    // Ordered by another column -- here the amount -- the array follows that column, not its own values.
+    [Fact]
+    public async Task AggregateAsync_ArrayAggOrderedByAnotherColumn_ShouldFollowThatColumn()
+    {
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "agg_array_ord_" + Guid.NewGuid().ToString("N")[..8]);
+        await InsertTestDataAsync(projectId, table.LogicalName);
+
+        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, new AggregationRequest
+        {
+            Aggregations = [new AggregationColumn { Function = AggregateFunction.ArrayAgg, Column = "quantity", Alias = "quantities", OrderBy = "amount", Limit = 2 }],
+            GroupBy = ["category"]
+        }, TestContext.Current.CancellationToken);
+
+        // electronics: amounts 50 (qty 2), 100 (qty 5), 200 (qty 3) -- the two smallest amounts' quantities.
+        Assert.Equal([2, 5], Values(Row(result, "electronics")["quantities"]));
+        // food: amounts 15 (qty 15), 25 (qty 20).
+        Assert.Equal([15, 20], Values(Row(result, "food")["quantities"]));
+    }
+
+    [Theory]
+    [InlineData(AggregateFunction.Count, "quantity", 5, null, false)]
+    [InlineData(AggregateFunction.ArrayAgg, null, null, null, false)]
+    [InlineData(AggregateFunction.ArrayAgg, "quantity", 0, null, false)]
+    [InlineData(AggregateFunction.Count, "quantity", null, "amount", false)]
+    [InlineData(AggregateFunction.ArrayAgg, "quantity", null, "amount", true)]
+    public async Task AggregateAsync_ArrayAggMisuse_ShouldBeRefused(AggregateFunction function, string? column, int? limit, string? orderBy, bool distinct)
+    {
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "agg_array_bad_" + Guid.NewGuid().ToString("N")[..8]);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => _aggregationService.AggregateAsync(projectId, table.LogicalName, new AggregationRequest
+        {
+            Aggregations = [new AggregationColumn { Function = function, Column = column, Alias = "x", Limit = limit, OrderBy = orderBy, Distinct = distinct }]
+        }, TestContext.Current.CancellationToken));
+    }
+
+    private static IDictionary<string, object?> Row(AggregationResult result, string category) =>
+        result.Data.Single(d => d["category"]?.ToString() == category);
+
+    private static int[] Values(object? array) =>
+        ((System.Collections.IEnumerable)array!).Cast<object>().Select(v => Convert.ToInt32(v, CultureInfo.InvariantCulture)).ToArray();
+
+    #endregion
 }

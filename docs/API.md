@@ -451,8 +451,21 @@ query {
 ```
 
 Note that `aggregate` takes *structured* `filter` and `orderBy` inputs while `records` takes
-strings. The two are not interchangeable. Functions are `COUNT`, `SUM`, `AVG`, `MIN`, `MAX` and
-`COUNT_DISTINCT`; `column` is omitted for a plain count.
+strings. The two are not interchangeable. Functions are `COUNT`, `SUM`, `AVG`, `MIN`, `MAX`,
+`COUNT_DISTINCT` and `ARRAY_AGG`; `column` is omitted for a plain count.
+
+`ARRAY_AGG` returns each group's values of `column` as one array, in ascending order, and takes an
+optional `limit` that keeps the first values only. Beside a `COUNT` in the same query it answers which
+rows a count is made of, read in the same statement — so the two cannot disagree, and a count larger
+than the array's length says the array was cut at `limit`. `orderBy` names another column whose
+ascending order the array follows instead (the order rows were written in, say, so a limit keeps the
+earliest). `distinct: true` collects each value once and takes no `orderBy`. `limit` or `orderBy` on any
+other function, or `ARRAY_AGG` without a `column`, is refused (`400`). The REST route
+(`POST /api/data/{table}/aggregate`) takes the same shape, the function written `arrayAgg`:
+
+```json
+{ "function": "arrayAgg", "column": "order_no", "alias": "orders", "limit": 50, "orderBy": "received_at" }
+```
 
 ### Writing rows
 

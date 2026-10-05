@@ -153,6 +153,31 @@ public sealed class PostgresAggregationService : IAggregationService
 
     private static string BuildAggregationSql(TableMetadata table, AggregationColumn agg)
     {
+        if (agg.Limit is not null && agg.Function != AggregateFunction.ArrayAgg)
+        {
+            throw new ArgumentException($"Aggregation '{agg.Alias}': a limit applies to arrayAgg only, not to {agg.Function}.");
+        }
+
+        if (agg.OrderBy is not null && agg.Function != AggregateFunction.ArrayAgg)
+        {
+            throw new ArgumentException($"Aggregation '{agg.Alias}': an order applies to arrayAgg only, not to {agg.Function}.");
+        }
+
+        if (agg.OrderBy is not null && agg.Distinct)
+        {
+            throw new ArgumentException($"Aggregation '{agg.Alias}': a distinct arrayAgg is ordered by the values it keeps; it takes no other order.");
+        }
+
+        if (agg.Limit is <= 0)
+        {
+            throw new ArgumentException($"Aggregation '{agg.Alias}': the limit must be positive, not {agg.Limit}.");
+        }
+
+        if (agg.Function == AggregateFunction.ArrayAgg && agg.Column is null)
+        {
+            throw new ArgumentException($"Aggregation '{agg.Alias}': arrayAgg needs the column whose values it collects.");
+        }
+
         var columnExpr = "*";
 
         if (agg.Column is not null)
@@ -173,8 +198,37 @@ public sealed class PostgresAggregationService : IAggregationService
             AggregateFunction.Avg => $"AVG({columnExpr})",
             AggregateFunction.Min => $"MIN({columnExpr})",
             AggregateFunction.Max => $"MAX({columnExpr})",
+            AggregateFunction.ArrayAgg => BuildArrayAggSql(columnExpr, OrderColumn(table, agg), agg.Limit),
             _ => throw new ArgumentException($"Unsupported aggregate function: {agg.Function}")
         };
+    }
+
+    /// <summary>
+    /// The group's values in ascending order of the order column (the collected column itself unless one
+    /// is named), so the same group yields the same array — and the same first values under a limit,
+    /// which is a slice of the ordered array. <c>DISTINCT</c> rides in front
+    /// of the column expression already, and PostgreSQL accepts it there because the ordering is by
+    /// that same expression.
+    /// </summary>
+    private static string BuildArrayAggSql(string columnExpr, string? orderColumn, int? limit)
+    {
+        var orderBy = orderColumn
+            ?? (columnExpr.StartsWith("DISTINCT ", StringComparison.Ordinal) ? columnExpr["DISTINCT ".Length..] : columnExpr);
+        var aggregate = $"ARRAY_AGG({columnExpr} ORDER BY {orderBy})";
+        // The slice's brackets are escaped: SqlKata reads [..] in a raw expression as a quoted identifier.
+        return limit is { } n ? $@"({aggregate})\[1:{n.ToString(System.Globalization.CultureInfo.InvariantCulture)}\]" : aggregate;
+    }
+
+    private static string? OrderColumn(TableMetadata table, AggregationColumn agg)
+    {
+        if (agg.OrderBy is null)
+        {
+            return null;
+        }
+
+        var column = table.Columns.FirstOrDefault(c => c.LogicalName == agg.OrderBy)
+            ?? throw new ColumnNotFoundException(table.LogicalName, agg.OrderBy);
+        return $"{table.PhysicalName}.{column.PhysicalName}";
     }
 
     private static void ApplyFilterConditions(SqlKataQuery query, TableMetadata table, IReadOnlyList<FilterCondition> filters)

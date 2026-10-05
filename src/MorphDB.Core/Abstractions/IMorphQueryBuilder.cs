@@ -227,5 +227,12 @@ public enum AggregateFunction
     Avg,
     Min,
     Max,
-    CountDistinct
+    CountDistinct,
+
+    /// <summary>
+    /// The group's values of a column as one array, in ascending order of the value — what a count is
+    /// made of, read in the same statement as the count. <see cref="AggregationColumn.Limit"/> keeps the
+    /// first values only; the group's full size is a count beside it.
+    /// </summary>
+    ArrayAgg
 }

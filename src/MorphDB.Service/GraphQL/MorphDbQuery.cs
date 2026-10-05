@@ -251,7 +251,9 @@ public sealed class MorphDbQuery
                 Function = a.Function,
                 Column = a.Column,
                 Alias = a.Alias,
-                Distinct = a.Distinct ?? false
+                Distinct = a.Distinct ?? false,
+                Limit = a.Limit,
+                OrderBy = a.OrderBy
             }).ToList(),
             GroupBy = groupBy ?? [],
             Filter = filter?.Select(f => new FilterCondition
@@ -519,6 +521,16 @@ public sealed class AggregationInput
     /// Whether to use DISTINCT.
     /// </summary>
     public bool? Distinct { get; init; }
+
+    /// <summary>
+    /// For ARRAY_AGG only: at most this many values per group, the first in ascending order.
+    /// </summary>
+    public int? Limit { get; init; }
+
+    /// <summary>
+    /// For ARRAY_AGG only: the column whose ascending order the array follows; the collected column by default.
+    /// </summary>
+    public string? OrderBy { get; init; }
 }
 
 /// <summary>

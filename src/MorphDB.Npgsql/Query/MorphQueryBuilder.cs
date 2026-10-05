@@ -1117,7 +1117,8 @@ internal sealed class MorphQuery : IMorphQuery
             AggregateFunction.Avg => $"AVG({column})",
             AggregateFunction.Min => $"MIN({column})",
             AggregateFunction.Max => $"MAX({column})",
-            _ => column
+            AggregateFunction.ArrayAgg => $"ARRAY_AGG({column} ORDER BY {column})",
+            _ => throw new ArgumentOutOfRangeException(nameof(function), function, "Unsupported aggregate function.")
         };
     }
 

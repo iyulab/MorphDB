@@ -2,8 +2,20 @@
 
 ## Unreleased
 
+### Added
+
+- **`ARRAY_AGG`: which rows a count is made of.** The aggregate query (REST `arrayAgg`, GraphQL
+  `ARRAY_AGG`, `AggregationColumn.ArrayAgg` in the client) returns each group's values of a column as one
+  array in ascending order — of the column itself, or of another column named in `orderBy` — optionally
+  only the first `limit` of them. Read in the same statement as a `COUNT` beside it, the count and its
+  rows cannot disagree. `limit` or `orderBy` on another function, `orderBy` with `distinct`, or
+  `ARRAY_AGG` without a column, is refused with `400`.
+
 ### Fixed
 
+- **The client refuses an aggregate function it cannot send.** `DataClient.AggregateAsync` mapped an
+  unknown `AggregateFunction` to `count` and sent that; it now throws. The server-side query builder's
+  aggregate expression did the same with the bare column; it now throws too.
 - **Packages carry the license text.** `MorphDB.Client`, `MorphDB.Core` and `MorphDB.Npgsql` now ship
   `LICENSE` at their root beside the `Apache-2.0` license expression, so redistributing a package carries
   the license copy the license requires and tooling that collects third-party notices finds the text.
