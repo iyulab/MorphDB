@@ -507,16 +507,20 @@ internal sealed class MorphQuery : IMorphQuery
     }
 
     /// <summary>
+    /// The FROM source, aliased when an alias is given. SqlKata's <c>Query.As</c> names a query for use
+    /// as a subquery or CTE — it does not alias the table in FROM — so a statement that refers to the
+    /// table by an alias (lookup and rollup JOINs use <c>base_table</c>) needs the alias in the source
+    /// itself, or PostgreSQL refuses it as a missing FROM-clause entry.
+    /// </summary>
+    private static string Aliased(string table, string? alias) =>
+        string.IsNullOrEmpty(alias) ? table : $"{table} as {alias}";
+
+    /// <summary>
     /// Builds a SqlKata query using logical names (for debugging/ToSql).
     /// </summary>
     private SqlKataQuery BuildLogicalQuery()
     {
-        var query = new SqlKataQuery(_tableName);
-
-        if (!string.IsNullOrEmpty(_tableAlias))
-        {
-            query.As(_tableAlias);
-        }
+        var query = new SqlKataQuery(Aliased(_tableName, _tableAlias));
 
         // SELECT
         if (_selectAllCalled || (_selectedColumns.Count == 0 && _aggregates.Count == 0))
@@ -604,18 +608,10 @@ internal sealed class MorphQuery : IMorphQuery
     private async Task<SqlKataQuery> BuildPhysicalQueryAsync(CancellationToken cancellationToken)
     {
         var table = await GetTableMetadataAsync(cancellationToken);
-        var query = new SqlKataQuery(table.PhysicalName);
-
-        // Use base_table alias when lookup or rollup expansion is present
+        // Use base_table alias when lookup or rollup expansion is present: their JOINs and select
+        // expressions name the queried table by it.
         var useBaseTableAlias = _lookupExpansion?.HasExpansion == true || _rollupExpansion?.HasExpansion == true;
-        if (useBaseTableAlias)
-        {
-            query.As("base_table");
-        }
-        else if (!string.IsNullOrEmpty(_tableAlias))
-        {
-            query.As(_tableAlias);
-        }
+        var query = new SqlKataQuery(Aliased(table.PhysicalName, useBaseTableAlias ? "base_table" : _tableAlias));
 
         // SELECT - Note: We don't add SELECT here for aggregate queries
         // The calling method (CountAsync, SumAsync, etc.) will handle the aggregate

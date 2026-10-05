@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **A table with a lookup column can be read.** Every read of such a table answered `500`: the lookup's
+  JOIN names the queried table `base_table`, and the query never gave the table that alias in `FROM`, so
+  PostgreSQL refused the statement. Declaring a single lookup column made the whole table unreadable. Rows
+  now carry the looked-up value (null when the row references nothing). Filtering, ordering or grouping
+  by a lookup column is not supported yet and still fails.
+
 ## 0.16.0
 
 A minor release. The data routes take `offset`, so a query can start at any row. `MorphDB.Client` is trim and
