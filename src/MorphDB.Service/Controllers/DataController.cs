@@ -80,6 +80,7 @@ public sealed class DataController : ControllerBase
             // Validate pagination
             var pageSize = Math.Clamp(query.PageSize, 1, Math.Min(1000, MaxPageSize));
             var page = Math.Max(query.Page, 1);
+            var skip = PaginationInfo.Skip(page, pageSize, query.Offset);
 
             // Build query
             var morphQuery = _dataService.Query(projectId).From(table);
@@ -123,7 +124,7 @@ public sealed class DataController : ControllerBase
             var totalCount = await morphQuery.CountAsync(cancellationToken);
 
             // Apply pagination
-            morphQuery = morphQuery.Limit(pageSize).Offset((page - 1) * pageSize);
+            morphQuery = morphQuery.Limit(pageSize).Offset(skip);
 
             // Execute query
             var results = await morphQuery.ToListAsync(cancellationToken);
@@ -139,8 +140,9 @@ public sealed class DataController : ControllerBase
                 Data = records,
                 Pagination = new PaginationInfo
                 {
-                    Page = page,
+                    Page = query.Offset is null ? page : PaginationInfo.PageOf(skip, pageSize),
                     PageSize = pageSize,
+                    Offset = query.Offset,
                     TotalCount = totalCount
                 }
             };
@@ -201,6 +203,7 @@ public sealed class DataController : ControllerBase
             var projectId = GetProjectId();
             var pageSize = Math.Clamp(request.PageSize, 1, Math.Min(1000, MaxPageSize));
             var page = Math.Max(request.Page, 1);
+            var skip = PaginationInfo.Skip(page, pageSize, request.Offset);
 
             var morphQuery = _dataService.Query(projectId).From(table);
 
@@ -227,7 +230,7 @@ public sealed class DataController : ControllerBase
             }
 
             var totalCount = await morphQuery.CountAsync(cancellationToken);
-            morphQuery = morphQuery.Limit(pageSize).Offset((page - 1) * pageSize);
+            morphQuery = morphQuery.Limit(pageSize).Offset(skip);
 
             var results = await morphQuery.ToListAsync(cancellationToken);
             var records = results.Select(r => new DataRecordResponse
@@ -241,8 +244,9 @@ public sealed class DataController : ControllerBase
                 Data = records,
                 Pagination = new PaginationInfo
                 {
-                    Page = page,
+                    Page = request.Offset is null ? page : PaginationInfo.PageOf(skip, pageSize),
                     PageSize = pageSize,
+                    Offset = request.Offset,
                     TotalCount = totalCount
                 }
             });

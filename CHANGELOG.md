@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **A query can start at any row.** The data routes (`GET /api/data/{table}`, `POST
+  /api/data/{table}/query`) take `offset` — rows to skip — instead of `page`, so a slice need not start on a
+  page boundary; the engine always skipped by count, and only the routes did not let a caller say so. The
+  response's `pagination` carries `offset` when the request gave one, and `hasNext`/`hasPrevious` follow
+  it. Below zero, or beside a `page` other than 1, it is refused (`400 VALIDATION_ERROR`).
+  `QueryRequest.Offset` in the client.
+
 ## 0.15.0
 
 A minor release. The aggregate query gains `ARRAY_AGG` — which rows a count is made of, in the same

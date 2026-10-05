@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using MorphDB.Core.Abstractions;
+using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
 using MorphDB.Npgsql.Infrastructure;
 
@@ -38,10 +39,41 @@ public sealed record PaginationInfo
 {
     public int Page { get; init; }
     public int PageSize { get; init; }
+
+    /// <summary>The rows skipped, when the request asked by offset rather than by page; absent otherwise.</summary>
+    public int? Offset { get; init; }
+
     public long TotalCount { get; init; }
     public int TotalPages => PageSize > 0 ? (int)Math.Ceiling((double)TotalCount / PageSize) : 0;
-    public bool HasNext => Page < TotalPages;
-    public bool HasPrevious => Page > 1;
+    public bool HasNext => Offset is { } skipped ? skipped + PageSize < TotalCount : Page < TotalPages;
+    public bool HasPrevious => Offset is { } skipped ? skipped > 0 : Page > 1;
+
+    /// <summary>
+    /// The rows to skip for a request: its offset when it gives one, else the start of its page. An
+    /// offset with a page other than 1 is two answers to one question, and is refused.
+    /// </summary>
+    public static int Skip(int page, int pageSize, int? offset)
+    {
+        if (offset is null)
+        {
+            return (page - 1) * pageSize;
+        }
+
+        if (offset < 0)
+        {
+            throw new ValidationException("offset", $"must not be negative, not {offset}.");
+        }
+
+        if (page != 1)
+        {
+            throw new ValidationException("offset", "give either an offset or a page, not both.");
+        }
+
+        return offset.Value;
+    }
+
+    /// <summary>The page the first returned row falls on, for a request by offset.</summary>
+    public static int PageOf(int skipped, int pageSize) => skipped / pageSize + 1;
 }
 
 #endregion
@@ -940,6 +972,12 @@ public sealed record DataQueryParameters
     /// Page size (default: 50, max: 1000).
     /// </summary>
     public int PageSize { get; init; } = 50;
+
+    /// <summary>
+    /// Rows to skip before the first one returned, instead of <see cref="Page"/> — a slice that does not
+    /// start on a page boundary. Not with a page other than 1.
+    /// </summary>
+    public int? Offset { get; init; }
 
     /// <summary>
     /// Full-text search query. Searches across all text-type columns using case-insensitive matching.
@@ -1943,6 +1981,12 @@ public sealed record ComplexQueryApiRequest
 
     public int Page { get; init; } = 1;
     public int PageSize { get; init; } = 20;
+
+    /// <summary>
+    /// Rows to skip before the first one returned, instead of <see cref="Page"/> — a slice that does not
+    /// start on a page boundary. Not with a page other than 1.
+    /// </summary>
+    public int? Offset { get; init; }
 }
 
 /// <summary>

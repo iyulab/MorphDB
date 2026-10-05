@@ -224,6 +224,9 @@ public sealed class DataClient
         if (request.PageSize != 50)
             parts.Add(string.Create(CultureInfo.InvariantCulture, $"pageSize={request.PageSize}"));
 
+        if (request.Offset is { } offset)
+            parts.Add(string.Create(CultureInfo.InvariantCulture, $"offset={offset}"));
+
         return parts.Count > 0 ? "?" + string.Join("&", parts) : string.Empty;
     }
 

@@ -31,6 +31,12 @@ public sealed class QueryRequest
     /// Page size. Default is 50.
     /// </summary>
     public int PageSize { get; init; } = 50;
+
+    /// <summary>
+    /// Rows to skip before the first one returned, instead of <see cref="Page"/> — a slice that does not
+    /// start on a page boundary. The server refuses it beside a page other than 1. Needs a 0.16.0 server.
+    /// </summary>
+    public int? Offset { get; init; }
 }
 
 /// <summary>
@@ -177,6 +183,11 @@ public sealed class PaginationInfo
     /// Page size.
     /// </summary>
     public int PageSize { get; init; }
+
+    /// <summary>
+    /// The rows skipped, when the query asked by offset; null when it asked by page.
+    /// </summary>
+    public int? Offset { get; init; }
 
     /// <summary>
     /// Total number of items.

@@ -214,6 +214,7 @@ GET /api/data/customers?filter=grade:eq:VIP&orderBy=_created_at:desc&page=1&page
 | `state` | Row state filter (if enabled) | `valid`, `draft`, `error`, `all` |
 | `page` | Page number | `1` |
 | `pageSize` | Records per page (max 1000) | `20` |
+| `offset` | Rows to skip, instead of `page` — a slice that need not start on a page boundary. Refused (`400`) below zero or beside a `page` other than 1; the response's `pagination` then carries `offset` | `5` |
 
 #### Filter Operators
 
@@ -283,9 +284,10 @@ X-Project-Id: <project id>
   out, so the envelope `id` of every row is that row's own.
 - `orderBy` — optional `column` or `column:desc` entries.
 - `page` / `pageSize` — 1-based; `pageSize` is clamped to the server maximum.
+- `offset` — rows to skip instead of `page`, as on the `GET` route.
 
 The response is the same paged envelope as `GET /api/data/{table}`:
-`{ "data": [...], "pagination": { "page", "pageSize", "totalCount", "totalPages", "hasNext", "hasPrevious" } }`.
+`{ "data": [...], "pagination": { "page", "pageSize", "offset", "totalCount", "totalPages", "hasNext", "hasPrevious" } }` — `offset` only when the request gave one.
 These examples run verbatim in the contract suite (`ComplexQueryApiTests`) — if the wire shape
 drifts, the suite fails before the docs lie.
 
