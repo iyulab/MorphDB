@@ -7,7 +7,7 @@ using MorphDB.Tests.Fixtures;
 namespace MorphDB.Tests.Integration.Api;
 
 /// <summary>
-/// A table with a lookup column is read through the data routes, each row carrying the looked-up value.
+/// A table with a lookup or rollup column is read through the data routes, each row carrying the derived value.
 /// <para>
 /// Every read of such a table used to fail: the lookup JOIN names the queried table <c>base_table</c>,
 /// and the query never gave it that alias in FROM (SqlKata's <c>Query.As</c> names a subquery, it does
@@ -81,5 +81,49 @@ public sealed class LookupReadTests
         using var filtered = JsonDocument.Parse(await client.GetStringAsync($"/api/data/{orders}?filter=status:eq:open", ct));
         filtered.RootElement.GetProperty("data").GetArrayLength().Should().Be(1);
         filtered.RootElement.GetProperty("data")[0].GetProperty("data").GetProperty("customer_grade").GetString().Should().Be("A");
+    }
+
+    [Fact]
+    public async Task A_table_with_a_rollup_column_reads_and_carries_the_rolled_up_value()
+    {
+        // The rollup expansion names the queried table base_table through the same path as a lookup,
+        // and failed the same way before the table was aliased in FROM.
+        var ct = TestContext.Current.CancellationToken;
+        var client = _fixture.Api.Client;
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var customers = $"ru_cust_{suffix}";
+        var orders = $"ru_ord_{suffix}";
+
+        (await client.PostAsJsonAsync("/api/schema/tables", new CreateTableApiRequest
+        {
+            Name = customers,
+            Columns = [new CreateColumnApiRequest { Name = "code", Type = "text", Nullable = false }],
+        }, ct)).StatusCode.Should().Be(HttpStatusCode.Created);
+        (await client.PostAsJsonAsync("/api/schema/tables", new CreateTableApiRequest
+        {
+            Name = orders,
+            Columns =
+            [
+                new CreateColumnApiRequest { Name = "customer_id", Type = "uuid", Nullable = true },
+                new CreateColumnApiRequest { Name = "amount", Type = "integer", Nullable = true },
+            ],
+        }, ct)).StatusCode.Should().Be(HttpStatusCode.Created);
+        (await client.PostAsJsonAsync($"/api/schema/tables/{customers}/columns", new AddColumnApiRequest
+        {
+            Name = "order_total",
+            Type = "integer",
+            Nullable = true,
+            Rollup = new RollupConfigApiRequest { Relation = orders, TargetTable = orders, ForeignKeyColumn = "customer_id", SourceColumn = "amount", Aggregation = "sum" },
+        }, ct)).StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var customer = await client.PostAsJsonAsync($"/api/data/{customers}", new Dictionary<string, object?> { ["code"] = "C-1" }, ct);
+        var customerId = (await customer.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("id").GetString();
+        await client.PostAsJsonAsync($"/api/data/{orders}", new Dictionary<string, object?> { ["customer_id"] = customerId, ["amount"] = 5 }, ct);
+        await client.PostAsJsonAsync($"/api/data/{orders}", new Dictionary<string, object?> { ["customer_id"] = customerId, ["amount"] = 7 }, ct);
+
+        var read = await client.GetAsync($"/api/data/{customers}", ct);
+        read.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var page = JsonDocument.Parse(await read.Content.ReadAsStringAsync(ct));
+        page.RootElement.GetProperty("data")[0].GetProperty("data").GetProperty("order_total").GetInt64().Should().Be(12);
     }
 }

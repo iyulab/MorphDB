@@ -4,11 +4,12 @@
 
 ### Fixed
 
-- **A table with a lookup column can be read.** Every read of such a table answered `500`: the lookup's
-  JOIN names the queried table `base_table`, and the query never gave the table that alias in `FROM`, so
-  PostgreSQL refused the statement. Declaring a single lookup column made the whole table unreadable. Rows
-  now carry the looked-up value (null when the row references nothing). Filtering, ordering or grouping
-  by a lookup column is not supported yet and still fails.
+- **A table with a lookup or rollup column can be read.** Every read of such a table answered `500`: the
+  lookup JOIN and the rollup expression name the queried table `base_table`, and the query never gave the
+  table that alias in `FROM`, so PostgreSQL refused the statement — declaring a single lookup or rollup
+  column made the whole table unreadable. Rows now carry the derived value (a lookup reads null when the
+  row references nothing). Filtering, ordering or grouping by a lookup column is not supported yet and
+  still fails.
 
 ## 0.16.0
 
