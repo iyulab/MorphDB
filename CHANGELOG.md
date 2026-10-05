@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.16.0
+
+A minor release. The data routes take `offset`, so a query can start at any row. `MorphDB.Client` is trim and
+Native AOT compatible — every request and response goes through generated serialization metadata, with request bodies
+unchanged. Two behavior changes: a record value of a type that is not JSON-shaped now throws `NotSupportedException`
+in the client, and a server configuration that would encrypt columns is refused at startup, because column encryption
+does not round-trip (see Fixed).
 
 ### Added
 
