@@ -173,7 +173,7 @@ public sealed class DataClient
             orderBy = request.OrderBy?.Select(o => new
             {
                 column = o.Column,
-                descending = o.Descending
+                direction = o.Descending ? "desc" : "asc"
             }).ToList(),
             limit = request.Limit,
             offset = request.Offset

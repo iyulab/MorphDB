@@ -50,5 +50,15 @@ public class AggregationClientTests(ApiIntegrationFixture fixture)
         Assert.Equal(["r1", "r2"], ((IEnumerable<object?>)a["refs"]!).Select(v => v?.ToString()));
         var b = response.Data.Single(row => Equals(row["category"], "b"));
         Assert.Equal(["r9"], ((IEnumerable<object?>)b["refs"]!).Select(v => v?.ToString()));
+
+        // A descending order reaches the service as one: the client used to send it under a name the
+        // service does not read, so every descending aggregate came back ascending.
+        var ordered = await client.Data.AggregateAsync(table, new AggregationRequest
+        {
+            Aggregations = [AggregationColumn.Count("n")],
+            GroupBy = ["category"],
+            OrderBy = [new AggregationOrderBy { Column = "category", Descending = true }],
+        }, ct);
+        Assert.Equal(["b", "a"], ordered.Data.Select(row => row["category"]?.ToString()));
     }
 }

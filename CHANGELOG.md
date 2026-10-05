@@ -13,6 +13,9 @@
 
 ### Fixed
 
+- **A descending aggregate order from the client is descending.** `DataClient.AggregateAsync` sent
+  `AggregationOrderBy.Descending` as `descending`, a field the service does not read, so every ordered
+  aggregate came back ascending. It now sends `direction`.
 - **The client refuses an aggregate function it cannot send.** `DataClient.AggregateAsync` mapped an
   unknown `AggregateFunction` to `count` and sent that; it now throws. The server-side query builder's
   aggregate expression did the same with the bare column; it now throws too.
