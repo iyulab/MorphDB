@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.15.0
+
+A minor release. The aggregate query gains `ARRAY_AGG` — which rows a count is made of, in the same
+statement as the count — and the client's descending aggregate order now reaches the server. Packages
+carry the license text, and the release workflow can recover a release push that failed before
+publishing. No breaking change.
 
 ### Added
 
