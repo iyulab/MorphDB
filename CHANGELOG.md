@@ -27,6 +27,16 @@
   serialized by reflection, or a dictionary whose keys are not strings — now throws
   `NotSupportedException` naming the type.
 
+### Fixed
+
+- **A configuration that would encrypt columns is refused at startup instead of failing every write.**
+  Column encryption does not round-trip: with a master key and `EncryptAllByDefault` (the default), every
+  write to a table with a non-text column — the system `_version` column included — answered `500`, a text
+  column read back as ciphertext, a filter on it matched nothing, and rotation and validation reported no
+  encrypted column. The service now refuses that configuration when it starts, naming the reason. A key
+  with `EncryptAllByDefault` off encrypts nothing and is still accepted. The API reference's "Column
+  encryption" section now says the feature is not available rather than describing it as working.
+
 ## 0.15.0
 
 A minor release. The aggregate query gains `ARRAY_AGG` — which rows a count is made of, in the same

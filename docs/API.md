@@ -1076,31 +1076,28 @@ an anonymous caller is — with `{{role}}` now resolving to something.
 
 ## Column encryption
 
-Values can be encrypted at rest. The API never shows ciphertext: a row is encrypted when it is
-written and decrypted when it is read, on every surface, so a consumer sees the same values with
-encryption on or off. What changes is what is stored.
+**Not available in this release.** Encrypting column values does not yet round-trip: a column whose
+storage type is not text — the system `_version` column among them — cannot hold the ciphertext, so
+writes fail; record queries return the ciphertext instead of the value; a filter on an encrypted
+column matches nothing; and rotation and validation do not see the encrypted columns. A
+configuration that would encrypt is therefore refused when the service starts, with that reason.
 
-**Turning it on.** Encryption is active only when a master key is configured — `Encryption:MasterKey`
-(`Encryption__MasterKey` as an environment variable), a base64-encoded 32-byte key for AES-256-GCM.
-With no key, nothing is encrypted and the routes below answer `503`. The other settings in the
-`Encryption` section:
+**Settings.** The `Encryption` section (`Encryption__MasterKey` and so on as environment variables):
 
 | Setting | Default | Meaning |
 |---------|---------|---------|
-| `KeyVersion` | `1` | The version new values are encrypted under; raise it and rotate to re-encrypt |
+| `MasterKey` | empty | A base64-encoded 32-byte key. Empty: encryption is off and the routes below answer `503` |
+| `Enabled` | `true` | With a key, whether encryption is on |
+| `EncryptAllByDefault` | `true` | With a key and `Enabled`, `true` is refused at startup. `false` encrypts nothing — no request field marks a column encrypted — and is accepted |
+| `KeyVersion` | `1` | The key version values would be encrypted under |
 | `Algorithm` | `AES-256-GCM` | Recorded with the data for forward compatibility |
-| `EncryptAllByDefault` | `true` | Encrypt every column of an encryptable type unless excluded |
 | `ExcludedColumns` | the system columns | Logical names never encrypted |
 
-**Which columns.** With `EncryptAllByDefault`, every column whose type is `text`, `longtext`,
-`email`, `phone`, `url`, `json`, `integer`, `biginteger` or `decimal` is encrypted, except the
-excluded names; other types (dates, booleans, uuids, selections, relations) are stored in clear.
-The column metadata also carries a per-column encrypted flag that the writer honours, but **no
-request field sets it** — the API exposes no way to mark one column encrypted and leave another
-in clear, so in practice the choice is the `EncryptAllByDefault` setting for the whole service.
+So the configurations a service starts with encrypt nothing: no key (routes answer `503`), a key with
+`Enabled` off, or a key with `EncryptAllByDefault` off (routes answer, and report no encrypted value).
 
-**Key rotation.** All under `/api/security`, scoped by `X-Project-Id` like the rest of the API, and
-`503` while encryption is not enabled:
+**Routes.** All under `/api/security`, scoped by `X-Project-Id` like the rest of the API, and `503`
+while encryption is not enabled:
 
 | Route | Does |
 |-------|------|

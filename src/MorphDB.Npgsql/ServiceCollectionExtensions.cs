@@ -77,6 +77,22 @@ public static partial class ServiceCollectionExtensions
         // Register encryption services (if configured)
         if (options.EncryptionOptions is not null && !string.IsNullOrEmpty(options.EncryptionOptions.MasterKey))
         {
+            // Encrypting columns does not round-trip yet: a column whose storage type is not text
+            // (including the system _version column) cannot hold the ciphertext, so every write fails;
+            // record queries return the ciphertext instead of the value; a filter on an encrypted
+            // column matches nothing; and rotation and validation count no encrypted column at all.
+            // A configuration that would encrypt is refused here, at startup, with the reason — not
+            // left to answer each write with an internal error. A key with EncryptAllByDefault off
+            // encrypts nothing (no request can mark a column encrypted) and is still accepted.
+            if (options.EncryptionOptions.Enabled && options.EncryptionOptions.EncryptAllByDefault)
+            {
+                throw new InvalidOperationException(
+                    "Column encryption is not available in this release: values do not round-trip " +
+                    "(non-text columns cannot store the ciphertext, record queries return it undecrypted, " +
+                    "and key rotation does not see the encrypted columns). Remove Encryption:MasterKey, " +
+                    "or set Encryption:EncryptAllByDefault to false, which encrypts nothing.");
+            }
+
             services.Configure<DataEncryptionOptions>(opt =>
             {
                 opt.Enabled = options.EncryptionOptions.Enabled;

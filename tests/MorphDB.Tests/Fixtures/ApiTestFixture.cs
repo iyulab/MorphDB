@@ -9,9 +9,11 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Audit;
+using MorphDB.Core.Encryption;
 using MorphDB.Core.Models;
 using MorphDB.Core.Security;
 using MorphDB.Npgsql.Audit;
+using MorphDB.Npgsql.Encryption;
 using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Repositories;
 using MorphDB.Npgsql.Schema;
@@ -255,6 +257,33 @@ public sealed class ApiTestFixture : IAsyncLifetime
     /// <summary>
     /// Gets the service provider of the configured (unenforced) server.
     /// </summary>
+    /// <summary>
+    /// A host with column encryption on — the services the service registers when a master key is
+    /// configured, under <paramref name="options"/>. Each call is a host of its own, so a test can
+    /// write under one key version and read or rotate under another; the caller disposes it.
+    /// </summary>
+    public WebApplicationFactory<Program> WithEncryption(DataEncryptionOptions options) =>
+        _factory!.WithWebHostBuilder(builder =>
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<Microsoft.Extensions.Options.IConfigureOptions<DataEncryptionOptions>>();
+                services.Configure<DataEncryptionOptions>(configured =>
+                {
+                    configured.Enabled = options.Enabled;
+                    configured.MasterKey = options.MasterKey;
+                    configured.KeyVersion = options.KeyVersion;
+                    configured.Algorithm = options.Algorithm;
+                    configured.EncryptAllByDefault = options.EncryptAllByDefault;
+                    configured.ExcludedColumns = options.ExcludedColumns;
+                });
+                services.RemoveAll<IKeyDerivationService>();
+                services.AddSingleton<IKeyDerivationService, HkdfKeyDerivationService>();
+                services.RemoveAll<IDataEncryptionService>();
+                services.AddSingleton<IDataEncryptionService, AesGcmDataEncryptionService>();
+                services.RemoveAll<IKeyRotationService>();
+                services.AddSingleton<IKeyRotationService, KeyRotationService>();
+            }));
+
     public IServiceProvider Services => _factory!.Services;
 
     /// <summary>
