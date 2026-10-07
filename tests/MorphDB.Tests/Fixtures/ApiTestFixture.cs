@@ -56,7 +56,13 @@ public sealed class ApiTestFixture : IAsyncLifetime
                 {
                     config.AddInMemoryCollection(new Dictionary<string, string?>
                     {
-                        ["ConnectionStrings:MorphDB"] = _postgresFixture.ConnectionString
+                        ["ConnectionStrings:MorphDB"] = _postgresFixture.ConnectionString,
+
+                        // Every API test shares this host's one project, so the production per-project
+                        // budget (1,000 requests a minute) is a function of how fast the runner is, not
+                        // of anything a test asserts — on a fast runner the suite exhausts it and
+                        // unrelated tests answer 429. The limiter has its own tests.
+                        ["RateLimiting:Enabled"] = "false"
                     });
                 });
 

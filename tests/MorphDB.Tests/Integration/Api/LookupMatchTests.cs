@@ -121,12 +121,17 @@ public sealed class LookupMatchTests
         }, ct));
         await CreatedAsync(_client.PostAsJsonAsync("/api/schema/relations", new CreateRelationApiRequest
         {
-            Name = $"ref_code_{s}", SourceTable = refs, SourceColumn = "code_ref", TargetTable = codes, TargetColumn = "code",
+            Name = $"ref_code_{s}",
+            SourceTable = refs,
+            SourceColumn = "code_ref",
+            TargetTable = codes,
+            TargetColumn = "code",
             Type = "many-to-one",
         }, ct));
         await CreatedAsync(_client.PostAsJsonAsync($"/api/schema/tables/{refs}/columns", new AddColumnApiRequest
         {
-            Name = "code_label", Type = "text",
+            Name = "code_label",
+            Type = "text",
             Lookup = new LookupConfigApiRequest { RelationColumn = "code_ref", TargetTable = codes, TargetColumn = "label" },
         }, ct));
 
@@ -147,7 +152,8 @@ public sealed class LookupMatchTests
 
         var response = await _client.PostAsJsonAsync($"/api/schema/tables/{notes}/columns", new AddColumnApiRequest
         {
-            Name = "bad_lookup", Type = "text",
+            Name = "bad_lookup",
+            Type = "text",
             Lookup = new LookupConfigApiRequest { RelationColumn = "about", TargetTable = versions, TargetColumn = "title", MatchColumn = matchColumn, OrderBy = orderBy },
         }, ct);
 
@@ -170,7 +176,11 @@ public sealed class LookupMatchTests
             Type = "text",
             Lookup = new ClientModels.LookupConfig
             {
-                RelationColumn = "about", TargetTable = versions, TargetColumn = "title", MatchColumn = "doc_key", OrderBy = "version desc",
+                RelationColumn = "about",
+                TargetTable = versions,
+                TargetColumn = "title",
+                MatchColumn = "doc_key",
+                OrderBy = "version desc",
             },
         }, ct);
 

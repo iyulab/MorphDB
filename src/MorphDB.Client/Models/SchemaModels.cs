@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace MorphDB.Client.Models;
 
 // These models mirror the server schema wire contract (MorphDB.Service ApiModels:
@@ -98,16 +100,19 @@ public sealed class CreateColumnRequest
     /// Declares a lookup column: the value of a column of another table, read through this
     /// table's <see cref="LookupConfig.RelationColumn"/>. The column is derived (computed on read).
     /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public LookupConfig? Lookup { get; init; }
 
     /// <summary>
     /// Declares a rollup column: a summary of the rows of another table that point at this row.
     /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public RollupConfig? Rollup { get; init; }
 
     /// <summary>
     /// Declares a formula column: an expression over this row's stored columns.
     /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public FormulaConfig? Formula { get; init; }
 }
 
@@ -154,16 +159,19 @@ public sealed class AddColumnRequest
     /// Declares a lookup column: the value of a column of another table, read through this
     /// table's <see cref="LookupConfig.RelationColumn"/>. The column is derived (computed on read).
     /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public LookupConfig? Lookup { get; init; }
 
     /// <summary>
     /// Declares a rollup column: a summary of the rows of another table that point at this row.
     /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public RollupConfig? Rollup { get; init; }
 
     /// <summary>
     /// Declares a formula column: an expression over this row's stored columns.
     /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public FormulaConfig? Formula { get; init; }
 }
 

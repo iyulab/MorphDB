@@ -62,18 +62,31 @@ public sealed class DerivedColumnDeclarationTests
 
         await AddRollupAsync(customers, "big_total", new RollupConfigApiRequest
         {
-            Relation = orders, TargetTable = orders, ForeignKeyColumn = "customer_id", SourceColumn = "amount", Aggregation = "sum",
+            Relation = orders,
+            TargetTable = orders,
+            ForeignKeyColumn = "customer_id",
+            SourceColumn = "amount",
+            Aggregation = "sum",
             Filter = new RollupFilterApiRequest { Field = "amount", Operator = "gt", Value = 4 },
         }, HttpStatusCode.Created);
         await AddRollupAsync(customers, "quoted_count", new RollupConfigApiRequest
         {
-            Relation = orders, TargetTable = orders, ForeignKeyColumn = "customer_id", SourceColumn = "amount", Aggregation = "countValues",
+            Relation = orders,
+            TargetTable = orders,
+            ForeignKeyColumn = "customer_id",
+            SourceColumn = "amount",
+            Aggregation = "countValues",
             Filter = new RollupFilterApiRequest { Field = "note", Operator = "eq", Value = "it's quoted" },
         }, HttpStatusCode.Created);
         await AddRollupAsync(customers, "amounts_desc", new RollupConfigApiRequest
         {
-            Relation = orders, TargetTable = orders, ForeignKeyColumn = "customer_id", SourceColumn = "note", Aggregation = "stringConcat",
-            Delimiter = "|", OrderBy = "amount desc",
+            Relation = orders,
+            TargetTable = orders,
+            ForeignKeyColumn = "customer_id",
+            SourceColumn = "note",
+            Aggregation = "stringConcat",
+            Delimiter = "|",
+            OrderBy = "amount desc",
         }, HttpStatusCode.Created);
 
         var row = await GetDataAsync($"/api/data/{customers}/{c1}");
@@ -92,7 +105,11 @@ public sealed class DerivedColumnDeclarationTests
 
         var body = await AddRollupAsync(customers, "ordered", new RollupConfigApiRequest
         {
-            Relation = orders, TargetTable = orders, ForeignKeyColumn = "customer_id", SourceColumn = "amount", Aggregation = "arrayValues",
+            Relation = orders,
+            TargetTable = orders,
+            ForeignKeyColumn = "customer_id",
+            SourceColumn = "amount",
+            Aggregation = "arrayValues",
             OrderBy = orderBy,
         }, HttpStatusCode.BadRequest);
 
@@ -108,7 +125,11 @@ public sealed class DerivedColumnDeclarationTests
         // A string that would close the predicate if it were pasted is just a value that matches nothing.
         await AddRollupAsync(customers, "hostile_count", new RollupConfigApiRequest
         {
-            Relation = orders, TargetTable = orders, ForeignKeyColumn = "customer_id", SourceColumn = "amount", Aggregation = "countValues",
+            Relation = orders,
+            TargetTable = orders,
+            ForeignKeyColumn = "customer_id",
+            SourceColumn = "amount",
+            Aggregation = "countValues",
             Filter = new RollupFilterApiRequest { Field = "note", Operator = "eq", Value = "x' OR '1'='1" },
         }, HttpStatusCode.Created);
         (await GetDataAsync($"/api/data/{customers}/{c1}")).GetProperty("hostile_count").GetInt64().Should().Be(0);
@@ -116,14 +137,22 @@ public sealed class DerivedColumnDeclarationTests
         // A value with no literal form is refused.
         var body = await AddRollupAsync(customers, "object_value", new RollupConfigApiRequest
         {
-            Relation = orders, TargetTable = orders, ForeignKeyColumn = "customer_id", SourceColumn = "amount", Aggregation = "sum",
+            Relation = orders,
+            TargetTable = orders,
+            ForeignKeyColumn = "customer_id",
+            SourceColumn = "amount",
+            Aggregation = "sum",
             Filter = new RollupFilterApiRequest { Field = "amount", Operator = "eq", Value = new { nested = 1 } },
         }, HttpStatusCode.BadRequest);
         body.Should().Contain("INVALID_EXPRESSION");
 
         var unknownField = await AddRollupAsync(customers, "unknown_field", new RollupConfigApiRequest
         {
-            Relation = orders, TargetTable = orders, ForeignKeyColumn = "customer_id", SourceColumn = "amount", Aggregation = "sum",
+            Relation = orders,
+            TargetTable = orders,
+            ForeignKeyColumn = "customer_id",
+            SourceColumn = "amount",
+            Aggregation = "sum",
             Filter = new RollupFilterApiRequest { Field = "no_such", Operator = "eq", Value = 1 },
         }, HttpStatusCode.BadRequest);
         unknownField.Should().Contain("INVALID_EXPRESSION");
@@ -137,7 +166,8 @@ public sealed class DerivedColumnDeclarationTests
 
         var response = await _client.PostAsJsonAsync($"/api/schema/tables/{orders}/columns", new AddColumnApiRequest
         {
-            Name = "ghost", Type = "text",
+            Name = "ghost",
+            Type = "text",
             Lookup = new LookupConfigApiRequest { RelationColumn = "customer_id", TargetTable = "no_such_table", TargetColumn = "code" },
         }, ct);
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **A column request without a derived column sends the same body as before.** The `0.17.0` client wrote
+  `"lookup": null`, `"rollup": null` and `"formula": null` into every column it declared; unset ones are
+  now left out.
+
 ## 0.17.0
 
 A minor release about derived columns and the reads around them. A lookup, rollup or formula column now

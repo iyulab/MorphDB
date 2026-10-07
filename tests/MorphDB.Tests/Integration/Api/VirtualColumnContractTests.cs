@@ -64,7 +64,8 @@ public sealed class VirtualColumnContractTests
         }, ct));
         await CreatedAsync(_client.PostAsJsonAsync($"/api/schema/tables/{customers}/columns", new AddColumnApiRequest
         {
-            Name = "order_total", Type = "integer",
+            Name = "order_total",
+            Type = "integer",
             Rollup = new RollupConfigApiRequest { Relation = orders, TargetTable = orders, ForeignKeyColumn = "customer_id", SourceColumn = "amount", Aggregation = "sum" },
         }, ct));
         await CreatedAsync(_client.PostAsJsonAsync("/api/schema/tables", new CreateTableApiRequest
@@ -203,7 +204,8 @@ public sealed class VirtualColumnContractTests
 
         var added = await _client.PostAsJsonAsync($"/api/schema/tables/{table}/columns", new AddColumnApiRequest
         {
-            Name = "computed", Type = "integer",
+            Name = "computed",
+            Type = "integer",
             Formula = new FormulaConfigApiRequest { Formula = formula, ReturnType = "integer" },
         }, ct);
 
