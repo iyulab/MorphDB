@@ -333,10 +333,11 @@ public sealed record LookupConfigApiRequest
     public string? OrderBy { get; init; }
 
     /// <summary>
-    /// What a read does while the target table does not exist: <c>fail</c> (default — the lookup
-    /// is refused when declared and fails reads, naming the target) or <c>null</c> (the lookup reads
-    /// null until the target table exists). A target that exists without the read or matched column
-    /// fails either way.
+    /// What a read does while the target cannot answer the declaration — the table absent, or
+    /// without the read, matched or ordering column: <c>fail</c> (default — the lookup is refused when
+    /// declared and fails reads, naming what is missing) or <c>null</c> (the lookup reads null until
+    /// the target answers). A relation column this table lacks, or an order that is not a column
+    /// list, is refused either way.
     /// </summary>
     public string? WhenTargetMissing { get; init; }
 
@@ -701,7 +702,7 @@ public sealed record LookupConfigApiResponse
     public string? OrderBy { get; init; }
 
     /// <summary>
-    /// What a read does while the target table does not exist: <c>fail</c> or <c>null</c>.
+    /// What a read does while the target cannot answer the declaration: <c>fail</c> or <c>null</c>.
     /// </summary>
     public required string WhenTargetMissing { get; init; }
 

@@ -124,10 +124,10 @@ public sealed class LookupValidationResult
     public string? MatchColumnPhysical { get; init; }
 
     /// <summary>
-    /// Whether the target table does not exist and the lookup reads null meanwhile
+    /// Whether the target cannot answer the declaration and the lookup reads null meanwhile
     /// (<see cref="LookupTargetMissing.Null"/>). Only <see cref="RelationColumn"/> is set then.
     /// </summary>
-    public bool IsTargetAbsent { get; init; }
+    public bool IsTargetMissing { get; init; }
 
     public static LookupValidationResult Valid(
         TableMetadata targetTable,
@@ -142,10 +142,10 @@ public sealed class LookupValidationResult
             MatchColumnPhysical = matchColumnPhysical
         };
 
-    public static LookupValidationResult TargetAbsent(ColumnMetadata relationColumn) => new()
+    public static LookupValidationResult TargetMissing(ColumnMetadata relationColumn) => new()
     {
         IsValid = true,
-        IsTargetAbsent = true,
+        IsTargetMissing = true,
         RelationColumn = relationColumn
     };
 

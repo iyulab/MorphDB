@@ -48,9 +48,9 @@ public sealed class PostgresLookupResolver : ILookupResolver
                     $"Lookup column '{lookup.ColumnName}' cannot be computed: {string.Join(" ", validation.Errors)}");
             }
 
-            // A target that does not exist yet, under WhenTargetMissing = Null: no row matches, so
-            // the column reads null — typed as declared, so a filter or sort over it still plans.
-            if (validation.IsTargetAbsent)
+            // A target that cannot answer yet, under WhenTargetMissing = Null: no row matches, so the
+            // column reads null — typed as declared, so a filter or sort over it still plans.
+            if (validation.IsTargetMissing)
             {
                 selectExpressions[lookup.ColumnName] = lookup.DataType is { } type
                     ? $"NULL::{TypeMapper.ToNativeType(type)}"
@@ -82,17 +82,26 @@ public sealed class PostgresLookupResolver : ILookupResolver
         LookupColumnConfig config,
         CancellationToken cancellationToken = default)
     {
-        var errors = new List<string>();
-
-        // Find relation column in source table
+        // What is wrong on this side fails whatever the target: the relation column and the shape of
+        // the order are this declaration's own.
         var relationColumn = sourceTable.Columns
             .FirstOrDefault(c => c.LogicalName == config.RelationColumn);
 
         if (relationColumn == null)
         {
-            errors.Add($"Relation column '{config.RelationColumn}' not found in table '{sourceTable.LogicalName}'.");
-            return LookupValidationResult.Invalid([.. errors]);
+            return LookupValidationResult.Invalid(
+                $"Relation column '{config.RelationColumn}' not found in table '{sourceTable.LogicalName}'.");
         }
+
+        var syntaxErrors = DeclaredOrder.SyntaxErrors(config.OrderBy).ToArray();
+        if (syntaxErrors.Length > 0)
+        {
+            return LookupValidationResult.Invalid(syntaxErrors);
+        }
+
+        // What the target cannot answer — the table, or a column the declaration names in it — fails,
+        // or under WhenTargetMissing = Null reads as no match until the target answers.
+        var targetErrors = new List<string>();
 
         // Get target table — the table in hand when the lookup reads its own table (it may not be
         // stored yet: a table is checked while it is being declared)
@@ -100,49 +109,49 @@ public sealed class PostgresLookupResolver : ILookupResolver
             ? sourceTable
             : await _metadataRepository.GetTableByNameAsync(projectId, config.TargetTable, includeColumns: true, cancellationToken);
 
+        ColumnMetadata? targetColumn = null;
+        string? matchPhysical = null;
+
         if (targetTable == null)
         {
-            if (config.WhenTargetMissing == LookupTargetMissing.Null)
+            targetErrors.Add($"Target table '{config.TargetTable}' not found.");
+        }
+        else
+        {
+            // The column read must be stored: a derived column of the target is computed by its own read.
+            targetColumn = targetTable.Columns
+                .FirstOrDefault(c => c.LogicalName == config.TargetColumn && !c.IsDerived);
+
+            if (targetColumn == null)
             {
-                return LookupValidationResult.TargetAbsent(relationColumn);
+                targetErrors.Add($"Target column '{config.TargetColumn}' is not a stored column of '{config.TargetTable}'.");
             }
 
-            errors.Add($"Target table '{config.TargetTable}' not found.");
-            return LookupValidationResult.Invalid([.. errors]);
+            // The value is matched against the named column, else the target column of the relation
+            // declared on the relation column, else the target's _id. Whether the two types compare is
+            // PostgreSQL's to say when the lookup is declared.
+            var matchName = config.MatchColumn
+                ?? (relationColumn.ForeignKey is { } fk && fk.TargetTable == targetTable.LogicalName ? fk.TargetColumn : null)
+                ?? "_id";
+            var matchColumn = targetTable.Columns.FirstOrDefault(c => c.LogicalName == matchName && !c.IsDerived);
+            matchPhysical = matchColumn?.PhysicalName ?? (SystemColumns.IsSystemColumn(matchName) ? matchName : null);
+
+            if (matchPhysical == null)
+            {
+                targetErrors.Add($"Match column '{matchName}' is not a stored column of '{config.TargetTable}'.");
+            }
+
+            targetErrors.AddRange(DeclaredOrder.ColumnErrors(config.OrderBy, targetTable));
         }
 
-        // The column read must be stored: a derived column of the target is computed by its own read.
-        var targetColumn = targetTable.Columns
-            .FirstOrDefault(c => c.LogicalName == config.TargetColumn && !c.IsDerived);
-
-        if (targetColumn == null)
+        if (targetErrors.Count > 0)
         {
-            errors.Add($"Target column '{config.TargetColumn}' is not a stored column of '{config.TargetTable}'.");
-            return LookupValidationResult.Invalid([.. errors]);
+            return config.WhenTargetMissing == LookupTargetMissing.Null
+                ? LookupValidationResult.TargetMissing(relationColumn)
+                : LookupValidationResult.Invalid([.. targetErrors]);
         }
 
-        // The value is matched against the named column, else the target column of the relation
-        // declared on the relation column, else the target's _id. Whether the two types compare is
-        // PostgreSQL's to say when the lookup is declared.
-        var matchName = config.MatchColumn
-            ?? (relationColumn.ForeignKey is { } fk && fk.TargetTable == targetTable.LogicalName ? fk.TargetColumn : null)
-            ?? "_id";
-        var matchColumn = targetTable.Columns.FirstOrDefault(c => c.LogicalName == matchName && !c.IsDerived);
-        var matchPhysical = matchColumn?.PhysicalName ?? (SystemColumns.IsSystemColumn(matchName) ? matchName : null);
-
-        if (matchPhysical == null)
-        {
-            errors.Add($"Match column '{matchName}' is not a stored column of '{config.TargetTable}'.");
-        }
-
-        errors.AddRange(DeclaredOrder.Errors(config.OrderBy, targetTable));
-
-        if (errors.Count > 0)
-        {
-            return LookupValidationResult.Invalid([.. errors]);
-        }
-
-        return LookupValidationResult.Valid(targetTable, targetColumn, relationColumn, matchPhysical!);
+        return LookupValidationResult.Valid(targetTable!, targetColumn!, relationColumn, matchPhysical!);
     }
 
     public async Task<ColumnMetadata?> GetTargetColumnMetadataAsync(

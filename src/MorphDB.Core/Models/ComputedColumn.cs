@@ -67,27 +67,31 @@ public sealed class LookupColumnConfig
     public string? OrderBy { get; init; }
 
     /// <summary>
-    /// What a read does while the target table does not exist. Default <see cref="LookupTargetMissing.Fail"/>.
+    /// What a read does while the target cannot answer this declaration — the table absent, or without
+    /// the read, matched or ordering column. Default <see cref="LookupTargetMissing.Fail"/>.
     /// </summary>
     public LookupTargetMissing WhenTargetMissing { get; init; }
 }
 
 /// <summary>
-/// What a lookup does while its target table does not exist.
+/// What a lookup does while its target cannot answer the declaration: the target table does not
+/// exist, or exists without the read, matched or ordering column.
 /// </summary>
 public enum LookupTargetMissing
 {
     /// <summary>
-    /// The lookup is refused when declared and fails every read that needs it, naming the target.
+    /// The lookup is refused when declared and fails every read that needs it, naming what is missing.
     /// </summary>
     Fail = 0,
 
     /// <summary>
-    /// The lookup is accepted and reads null — no target row matches — until the target table
-    /// exists, from then on reading the target as usual. For a writer that builds tables in an order
-    /// it does not control, or rebuilds a target by dropping and recreating it. Only the table's
-    /// absence is covered: a target that exists without the read or matched column still fails,
-    /// because that is a declaration that no longer fits its target, not a target not yet there.
+    /// The lookup is accepted and reads null — no target row matches — until the target answers the
+    /// declaration, from then on reading it as usual. For a writer that builds tables in an order it
+    /// does not control, or rebuilds a target by dropping and recreating it: a target not yet built
+    /// and one redeclared but not yet rebuilt are the same passing state. What is wrong on the
+    /// declaring side — a relation column this table lacks, an order that is not a column list —
+    /// still fails. A misspelt target column also reads null rather than failing, so a writer that
+    /// opts in checks its declarations against the targets it declares.
     /// </summary>
     Null = 1
 }

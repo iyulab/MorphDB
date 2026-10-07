@@ -15,8 +15,10 @@ namespace MorphDB.Tests.Integration.Api;
 /// writer builds in an order it does not control, or rebuilds by dropping and recreating it. Without
 /// it, a lookup is refused when declared and fails reads, naming the target.
 /// <para>
-/// Only the table's absence is covered: a target that exists without the read column is a
-/// declaration that no longer fits its target, and is refused either way.
+/// "Missing" is the target not answering the declaration right now: the table absent, or present
+/// without the read, matched or ordering column — a target redeclared and not yet rebuilt is in the
+/// same passing state as one not yet built. What is wrong on the declaring side — a relation column
+/// this table lacks, an order that is not a column list — is refused either way.
 /// </para>
 /// </summary>
 [Collection("API")]
@@ -133,18 +135,99 @@ public sealed class LookupTargetMissingTests
         (await response.Content.ReadAsStringAsync(ct)).Should().Contain(customers);
     }
 
+    private async Task CreateTableAsync(string name, params string[] textColumns)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var response = await _client.PostAsJsonAsync("/api/schema/tables", new CreateTableApiRequest
+        {
+            Name = name,
+            Columns = [.. textColumns.Select(c => new CreateColumnApiRequest { Name = c, Type = "text" })],
+        }, ct);
+        response.StatusCode.Should().Be(HttpStatusCode.Created, await response.Content.ReadAsStringAsync(ct));
+    }
+
     [Fact]
-    public async Task A_target_that_exists_without_the_read_column_is_refused_even_with_the_option()
+    public async Task By_default_a_target_without_the_read_column_is_refused()
+    {
+        var customers = $"ltm_cust_{Suffix()}";
+        await CreateTableAsync(customers, "code");
+
+        await CreateOrdersAsync(customers, whenTargetMissing: null, HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task A_target_column_added_later_reads_null_until_it_exists_then_its_value()
     {
         var ct = TestContext.Current.CancellationToken;
         var customers = $"ltm_cust_{Suffix()}";
+        await CreateTableAsync(customers, "code");
+        var orders = await CreateOrdersAsync(customers, "null", HttpStatusCode.Created);
+        await InsertAsync(orders, new { customer_code = "C-1" });
+
+        (await ListAsync(orders)).Single().GetProperty("customer_grade").ValueKind.Should().Be(JsonValueKind.Null,
+            "a target not yet in the declared shape answers no match, as an absent one does");
+
+        (await _client.PostAsJsonAsync($"/api/schema/tables/{customers}/columns",
+            new AddColumnApiRequest { Name = "grade", Type = "text" }, ct)).StatusCode.Should().Be(HttpStatusCode.Created);
+        await InsertAsync(customers, new { code = "C-1", grade = "gold" });
+
+        (await ListAsync(orders)).Single().GetProperty("customer_grade").GetString().Should().Be("gold");
+    }
+
+    [Theory]
+    [InlineData(false, null, "a target without the matched column (code)")]
+    [InlineData(true, "rank desc", "an order over a column the target does not have")]
+    public async Task A_target_that_cannot_answer_the_declaration_reads_null(bool targetHasCode, string? orderBy, string why)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var customers = $"ltm_cust_{Suffix()}";
+        if (targetHasCode)
+        {
+            await CreateCustomersAsync(customers, ("C-1", "gold"));
+        }
+        else
+        {
+            await CreateTableAsync(customers, "grade");
+            await InsertAsync(customers, new { grade = "gold" });
+        }
+
+        var orders = $"ltm_ord_{Suffix()}";
+        var lookup = GradeLookup(customers, "null") with { OrderBy = orderBy };
         (await _client.PostAsJsonAsync("/api/schema/tables", new CreateTableApiRequest
         {
-            Name = customers,
-            Columns = [new CreateColumnApiRequest { Name = "code", Type = "text" }],
-        }, ct)).StatusCode.Should().Be(HttpStatusCode.Created);
+            Name = orders,
+            Columns =
+            [
+                new CreateColumnApiRequest { Name = "customer_code", Type = "text" },
+                new CreateColumnApiRequest { Name = "customer_grade", Type = "text", Lookup = lookup },
+            ],
+        }, ct)).StatusCode.Should().Be(HttpStatusCode.Created, why);
+        await InsertAsync(orders, new { customer_code = "C-1" });
 
-        await CreateOrdersAsync(customers, "null", HttpStatusCode.BadRequest);
+        (await ListAsync(orders)).Single().GetProperty("customer_grade").ValueKind.Should().Be(JsonValueKind.Null, why);
+    }
+
+    [Theory]
+    [InlineData("missing_relation", null, "a relation column this table does not have")]
+    [InlineData("customer_code", "grade sideways", "an order that is not a column list")]
+    public async Task What_is_wrong_on_this_side_is_refused_even_with_the_option(string relationColumn, string? orderBy, string why)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var response = await _client.PostAsJsonAsync("/api/schema/tables", new CreateTableApiRequest
+        {
+            Name = $"ltm_ord_{Suffix()}",
+            Columns =
+            [
+                new CreateColumnApiRequest { Name = "customer_code", Type = "text" },
+                new CreateColumnApiRequest
+                {
+                    Name = "customer_grade", Type = "text",
+                    Lookup = GradeLookup($"ltm_none_{Suffix()}", "null") with { RelationColumn = relationColumn, OrderBy = orderBy },
+                },
+            ],
+        }, ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest, why);
     }
 
     [Fact]

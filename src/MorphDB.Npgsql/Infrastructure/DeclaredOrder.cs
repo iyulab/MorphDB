@@ -12,7 +12,14 @@ namespace MorphDB.Npgsql.Infrastructure;
 internal static class DeclaredOrder
 {
     /// <summary>What is wrong with <paramref name="order"/> over <paramref name="target"/>; empty when it is a valid order.</summary>
-    public static IEnumerable<string> Errors(string? order, TableMetadata target)
+    public static IEnumerable<string> Errors(string? order, TableMetadata target) =>
+        SyntaxErrors(order).Concat(ColumnErrors(order, target));
+
+    /// <summary>
+    /// What is wrong with <paramref name="order"/> whatever the target: it is not a list of
+    /// <c>column [asc|desc]</c> terms. Empty when it is one, or when there is no order.
+    /// </summary>
+    public static IEnumerable<string> SyntaxErrors(string? order)
     {
         if (string.IsNullOrWhiteSpace(order))
             yield break;
@@ -25,10 +32,24 @@ internal static class DeclaredOrder
                 yield return $"Order '{order}' is not a list of 'column [asc|desc]'.";
                 yield break;
             }
+        }
+    }
 
-            if (Column(target, parts[0]) is null)
+    /// <summary>
+    /// The columns a well-formed <paramref name="order"/> names that <paramref name="target"/> does
+    /// not store. Empty for an order with syntax errors — those are <see cref="SyntaxErrors"/>.
+    /// </summary>
+    public static IEnumerable<string> ColumnErrors(string? order, TableMetadata target)
+    {
+        if (string.IsNullOrWhiteSpace(order) || SyntaxErrors(order).Any())
+            yield break;
+
+        foreach (var term in order.Split(','))
+        {
+            var name = term.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries)[0];
+            if (Column(target, name) is null)
             {
-                yield return $"Order column '{parts[0]}' is not a stored column of '{target.LogicalName}'.";
+                yield return $"Order column '{name}' is not a stored column of '{target.LogicalName}'.";
             }
         }
     }

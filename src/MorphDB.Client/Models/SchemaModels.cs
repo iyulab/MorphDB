@@ -452,9 +452,9 @@ public sealed class LookupConfig
     public string? OrderBy { get; init; }
 
     /// <summary>
-    /// What a read does while the target table does not exist: <c>"fail"</c> (default — the lookup
-    /// is refused when declared and fails reads) or <c>"null"</c> (it reads null until the target
-    /// table exists). A target that exists without the read or matched column fails either way.
+    /// What a read does while the target cannot answer the declaration — the table absent, or
+    /// without the read, matched or ordering column: <c>"fail"</c> (default — the lookup is refused
+    /// when declared and fails reads) or <c>"null"</c> (it reads null until the target answers).
     /// </summary>
     public string? WhenTargetMissing { get; init; }
 }
