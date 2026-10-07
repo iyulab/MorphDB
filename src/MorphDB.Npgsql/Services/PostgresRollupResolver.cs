@@ -1,6 +1,8 @@
 using MorphDB.Core.Abstractions;
+using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
 using MorphDB.Npgsql.Ddl;
+using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Repositories;
 
 namespace MorphDB.Npgsql.Services;
@@ -30,59 +32,37 @@ public sealed class PostgresRollupResolver : IRollupResolver
         }
 
         var subqueryExpressions = new Dictionary<string, string>();
-        var subqueries = new List<RollupSubqueryInfo>();
 
         // Get primary key column from source table
         var pkColumn = sourceTable.Columns
-            .FirstOrDefault(c => c.IsPrimaryKey || c.LogicalName == "_id");
-
-        if (pkColumn == null)
-        {
-            return new RollupQueryExpansion();
-        }
+            .FirstOrDefault(c => c.IsPrimaryKey || c.LogicalName == "_id")
+            ?? throw new SchemaException("INVALID_EXPRESSION", $"Table '{sourceTable.LogicalName}' has no primary key to roll up into.");
 
         foreach (var rollup in rollupColumns)
         {
+            // A rollup that cannot be computed fails the read that needs it, naming why. It used to
+            // be skipped, so the column silently disappeared from every row.
             var validation = await ValidateRollupConfigAsync(
                 projectId, sourceTable, rollup.Config, cancellationToken);
 
             if (!validation.IsValid)
-                continue;
-
-            var targetTable = validation.TargetTable!;
-            var fkColumn = validation.ForeignKeyColumn!;
-            var sourceColumn = validation.SourceColumn;
-
-            // Build the correlated subquery
-            var subquery = BuildAggregationSubquery(
-                targetTable.PhysicalName,
-                fkColumn.PhysicalName,
-                pkColumn.PhysicalName,
-                sourceColumn?.PhysicalName,
-                rollup.Config);
-
-            subqueryExpressions[rollup.ColumnName] = subquery;
-
-            // Add structured info for query builder
-            subqueries.Add(new RollupSubqueryInfo
             {
-                ColumnName = rollup.ColumnName,
-                TargetTablePhysical = targetTable.PhysicalName,
-                TargetTableLogical = targetTable.LogicalName,
-                ForeignKeyColumnPhysical = fkColumn.PhysicalName,
-                SourceColumnPhysical = sourceColumn?.PhysicalName ?? "*",
-                ParentKeyColumnPhysical = pkColumn.PhysicalName,
-                Aggregation = rollup.Config.Aggregation,
-                FilterClause = BuildFilterClause(rollup.Config.Filter, targetTable),
-                OrderByClause = rollup.Config.OrderBy,
-                Delimiter = rollup.Config.Delimiter
-            });
+                throw new SchemaException(
+                    "INVALID_EXPRESSION",
+                    $"Rollup column '{rollup.ColumnName}' cannot be computed: {string.Join(" ", validation.Errors)}");
+            }
+
+            subqueryExpressions[rollup.ColumnName] = BuildAggregationSubquery(
+                validation.TargetTable!,
+                validation.ForeignKeyColumn!.PhysicalName,
+                pkColumn.PhysicalName,
+                validation.SourceColumn?.PhysicalName,
+                rollup.Config);
         }
 
         return new RollupQueryExpansion
         {
-            SubqueryExpressions = subqueryExpressions,
-            Subqueries = subqueries
+            SubqueryExpressions = subqueryExpressions
         };
     }
 
@@ -94,9 +74,11 @@ public sealed class PostgresRollupResolver : IRollupResolver
     {
         var errors = new List<string>();
 
-        // Get target table
-        var targetTable = await _metadataRepository.GetTableByNameAsync(
-            projectId, config.TargetTable, includeColumns: true, cancellationToken);
+        // Get target table — the table in hand when the rollup reads its own table (it may not be
+        // stored yet: a table is checked while it is being declared)
+        var targetTable = config.TargetTable == sourceTable.LogicalName
+            ? sourceTable
+            : await _metadataRepository.GetTableByNameAsync(projectId, config.TargetTable, includeColumns: true, cancellationToken);
 
         if (targetTable == null)
         {
@@ -143,6 +125,9 @@ public sealed class PostgresRollupResolver : IRollupResolver
             errors.Add($"Foreign key column '{config.ForeignKeyColumn}' should be a UUID, Relation, or integer type.");
         }
 
+        errors.AddRange(FilterErrors(config.Filter, targetTable));
+        errors.AddRange(OrderErrors(config.OrderBy, targetTable));
+
         if (errors.Count > 0)
         {
             return RollupValidationResult.Invalid([.. errors]);
@@ -152,38 +137,35 @@ public sealed class PostgresRollupResolver : IRollupResolver
     }
 
     private static string BuildAggregationSubquery(
-        string targetTablePhysical,
+        TableMetadata targetTable,
         string fkColumnPhysical,
         string pkColumnPhysical,
         string? sourceColumnPhysical,
         RollupColumnConfig config)
     {
-        var quotedTarget = DdlBuilder.QuoteIdentifier(targetTablePhysical);
+        var quotedTarget = DdlBuilder.QuoteIdentifier(targetTable.PhysicalName);
         var quotedFk = DdlBuilder.QuoteIdentifier(fkColumnPhysical);
         var quotedPk = DdlBuilder.QuoteIdentifier(pkColumnPhysical);
         var quotedSource = sourceColumnPhysical != null && sourceColumnPhysical != "*"
-            ? DdlBuilder.QuoteIdentifier(sourceColumnPhysical)
+            ? $"sub.{DdlBuilder.QuoteIdentifier(sourceColumnPhysical)}"
             : null;
 
-        // Build the aggregate expression
-        var aggregateExpr = BuildAggregateExpression(config.Aggregation, quotedSource, config);
+        var orderBy = BuildOrderByClause(config.OrderBy, targetTable);
+        var aggregateExpr = BuildAggregateExpression(config.Aggregation, quotedSource, config, orderBy);
 
-        // Build WHERE clause for correlation
         var whereClause = $"sub.{quotedFk} = base_table.{quotedPk}";
-
-        // Add filter if present
         var filterClause = config.Filter != null
-            ? $" AND {BuildSimpleFilter(config.Filter)}"
+            ? $" AND {BuildFilter(config.Filter, targetTable)}"
             : "";
 
-        // Build the correlated subquery
         return $"(SELECT {aggregateExpr} FROM {quotedTarget} AS sub WHERE {whereClause}{filterClause})";
     }
 
     private static string BuildAggregateExpression(
         RollupAggregation aggregation,
         string? quotedColumn,
-        RollupColumnConfig config)
+        RollupColumnConfig config,
+        string orderBy)
     {
         return aggregation switch
         {
@@ -194,8 +176,8 @@ public sealed class PostgresRollupResolver : IRollupResolver
             RollupAggregation.Average => $"AVG({quotedColumn})",
             RollupAggregation.Min => $"MIN({quotedColumn})",
             RollupAggregation.Max => $"MAX({quotedColumn})",
-            RollupAggregation.StringConcat => BuildStringAgg(quotedColumn!, config),
-            RollupAggregation.ArrayValues => $"ARRAY_AGG({quotedColumn}{BuildOrderByClause(config.OrderBy)})",
+            RollupAggregation.StringConcat => $"STRING_AGG({quotedColumn}::text, {SqlLiteral.Render(config.Delimiter ?? ", ")}{orderBy})",
+            RollupAggregation.ArrayValues => $"ARRAY_AGG({quotedColumn}{orderBy})",
             RollupAggregation.PercentChecked => $"ROUND(100.0 * COUNT(CASE WHEN {quotedColumn} = true THEN 1 END) / NULLIF(COUNT(*), 0), 2)",
             RollupAggregation.PercentUnchecked => $"ROUND(100.0 * COUNT(CASE WHEN {quotedColumn} = false THEN 1 END) / NULLIF(COUNT(*), 0), 2)",
             RollupAggregation.EarliestDate => $"MIN({quotedColumn})",
@@ -207,74 +189,108 @@ public sealed class PostgresRollupResolver : IRollupResolver
         };
     }
 
-    private static string BuildStringAgg(string quotedColumn, RollupColumnConfig config)
-    {
-        var delimiter = config.Delimiter ?? ", ";
-        var escapedDelimiter = delimiter.Replace("'", "''");
-        var orderBy = BuildOrderByClause(config.OrderBy);
-        return $"STRING_AGG({quotedColumn}::text, '{escapedDelimiter}'{orderBy})";
-    }
-
-    private static string BuildOrderByClause(string? orderBy)
+    /// <summary>
+    /// The order a <c>stringConcat</c> or <c>arrayValues</c> rollup collects its values in:
+    /// comma-separated <c>column [asc|desc]</c> terms over the target table's stored columns. It is
+    /// parsed, never pasted — it used to reach SQL as the caller wrote it, in logical names.
+    /// </summary>
+    private static string BuildOrderByClause(string? orderBy, TableMetadata targetTable)
     {
         if (string.IsNullOrWhiteSpace(orderBy))
             return "";
-        return $" ORDER BY {orderBy}";
+
+        var terms = ParseOrder(orderBy).Select(t =>
+        {
+            var column = StoredColumn(targetTable, t.Column)!;
+            return $"sub.{DdlBuilder.QuoteIdentifier(column.PhysicalName)}{(t.Descending ? " DESC" : " ASC")}";
+        });
+        return $" ORDER BY {string.Join(", ", terms)}";
     }
 
-    private static string? BuildFilterClause(RollupFilter? filter, TableMetadata targetTable)
+    private static IEnumerable<string> OrderErrors(string? orderBy, TableMetadata targetTable)
     {
-        if (filter == null)
-            return null;
+        if (string.IsNullOrWhiteSpace(orderBy))
+            yield break;
 
-        var column = targetTable.Columns
-            .FirstOrDefault(c => c.LogicalName == filter.Field);
+        foreach (var term in orderBy.Split(','))
+        {
+            var parts = term.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length is < 1 or > 2 ||
+                (parts.Length == 2 && !parts[1].Equals("asc", StringComparison.OrdinalIgnoreCase) && !parts[1].Equals("desc", StringComparison.OrdinalIgnoreCase)))
+            {
+                yield return $"Order '{orderBy}' is not a list of 'column [asc|desc]'.";
+                yield break;
+            }
 
-        if (column == null)
-            return null;
-
-        return BuildSimpleFilter(filter);
+            if (StoredColumn(targetTable, parts[0]) is null)
+            {
+                yield return $"Order column '{parts[0]}' is not a stored column of '{targetTable.LogicalName}'.";
+            }
+        }
     }
 
-    private static string BuildSimpleFilter(RollupFilter filter)
+    private static IEnumerable<(string Column, bool Descending)> ParseOrder(string orderBy) =>
+        orderBy.Split(',').Select(term =>
+        {
+            var parts = term.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            return (parts[0], parts.Length == 2 && parts[1].Equals("desc", StringComparison.OrdinalIgnoreCase));
+        });
+
+    private static IEnumerable<string> FilterErrors(RollupFilter? filter, TableMetadata targetTable)
     {
-        var quotedField = DdlBuilder.QuoteIdentifier(filter.Field);
-        var value = FormatFilterValue(filter.Value);
+        if (filter is null)
+            yield break;
+
+        if (StoredColumn(targetTable, filter.Field) is null)
+        {
+            yield return $"Filter column '{filter.Field}' is not a stored column of '{targetTable.LogicalName}'.";
+            yield break;
+        }
+
+        string? error = null;
+        try
+        {
+            _ = BuildFilter(filter, targetTable);
+        }
+        catch (ValidationException ex)
+        {
+            error = $"Filter value: {ex.Message}";
+        }
+
+        if (error is not null)
+            yield return error;
+    }
+
+    /// <summary>
+    /// The filter as SQL over the target table: its column by physical name, its value a rendered
+    /// literal (<see cref="SqlLiteral"/>). The field used to be emitted in its logical name — so a
+    /// filtered rollup could never run — and the value as raw text.
+    /// </summary>
+    private static string BuildFilter(RollupFilter filter, TableMetadata targetTable)
+    {
+        var column = $"sub.{DdlBuilder.QuoteIdentifier(StoredColumn(targetTable, filter.Field)!.PhysicalName)}";
 
         return filter.Operator switch
         {
-            FilterOperator.Equals => $"sub.{quotedField} = {value}",
-            FilterOperator.NotEquals => $"sub.{quotedField} <> {value}",
-            FilterOperator.GreaterThan => $"sub.{quotedField} > {value}",
-            FilterOperator.GreaterThanOrEquals => $"sub.{quotedField} >= {value}",
-            FilterOperator.LessThan => $"sub.{quotedField} < {value}",
-            FilterOperator.LessThanOrEquals => $"sub.{quotedField} <= {value}",
-            FilterOperator.Contains => $"sub.{quotedField} ILIKE '%' || {value} || '%'",
-            FilterOperator.StartsWith => $"sub.{quotedField} ILIKE {value} || '%'",
-            FilterOperator.EndsWith => $"sub.{quotedField} ILIKE '%' || {value}",
-            FilterOperator.IsNull => $"sub.{quotedField} IS NULL",
-            FilterOperator.IsNotNull => $"sub.{quotedField} IS NOT NULL",
-            FilterOperator.In => $"sub.{quotedField} = ANY({value})",
-            FilterOperator.NotIn => $"NOT (sub.{quotedField} = ANY({value}))",
-            _ => $"sub.{quotedField} = {value}"
+            FilterOperator.Equals => $"{column} = {SqlLiteral.Render(filter.Value)}",
+            FilterOperator.NotEquals => $"{column} <> {SqlLiteral.Render(filter.Value)}",
+            FilterOperator.GreaterThan => $"{column} > {SqlLiteral.Render(filter.Value)}",
+            FilterOperator.GreaterThanOrEquals => $"{column} >= {SqlLiteral.Render(filter.Value)}",
+            FilterOperator.LessThan => $"{column} < {SqlLiteral.Render(filter.Value)}",
+            FilterOperator.LessThanOrEquals => $"{column} <= {SqlLiteral.Render(filter.Value)}",
+            FilterOperator.Contains => $"{column} ILIKE {SqlLiteral.Render(LikePattern.Contains(filter.Value))}",
+            FilterOperator.StartsWith => $"{column} ILIKE {SqlLiteral.Render(LikePattern.StartsWith(filter.Value))}",
+            FilterOperator.EndsWith => $"{column} ILIKE {SqlLiteral.Render(LikePattern.EndsWith(filter.Value))}",
+            FilterOperator.IsNull => $"{column} IS NULL",
+            FilterOperator.IsNotNull => $"{column} IS NOT NULL",
+            FilterOperator.In => SqlLiteral.RenderList(filter.Value) is { Count: > 0 } values ? $"{column} IN ({string.Join(", ", values)})" : "FALSE",
+            FilterOperator.NotIn => SqlLiteral.RenderList(filter.Value) is { Count: > 0 } values ? $"{column} NOT IN ({string.Join(", ", values)})" : "TRUE",
+            _ => throw new ValidationException("operator", $"a rollup filter does not take '{filter.Operator}'.")
         };
     }
 
-    private static string FormatFilterValue(object? value)
-    {
-        if (value == null)
-            return "NULL";
-
-        return value switch
-        {
-            string s => $"'{s.Replace("'", "''")}'",
-            bool b => b ? "true" : "false",
-            DateTime dt => $"'{dt:yyyy-MM-dd HH:mm:ss}'::timestamptz",
-            DateTimeOffset dto => $"'{dto:yyyy-MM-dd HH:mm:ss}'::timestamptz",
-            Guid g => $"'{g}'::uuid",
-            _ => value.ToString() ?? "NULL"
-        };
-    }
+    private static ColumnMetadata? StoredColumn(TableMetadata table, string logicalName) =>
+        table.Columns.FirstOrDefault(c => c.LogicalName == logicalName && !c.IsDerived);
 
     private static bool IsAggregationCompatible(RollupAggregation aggregation, MorphDataType dataType)
     {

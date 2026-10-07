@@ -23,6 +23,10 @@ public sealed class PostgresSchemaManager : ISchemaManager
     private readonly IProjectRepository _projectRepository;
     private readonly SchemaManagerOptions _options;
 
+    private readonly ILookupResolver _lookupResolver;
+    private readonly IRollupResolver _rollupResolver;
+    private readonly IFormulaResolver _formulaResolver;
+
     public PostgresSchemaManager(
         NpgsqlDataSource dataSource,
         IMetadataRepository repository,
@@ -32,6 +36,10 @@ public sealed class PostgresSchemaManager : ISchemaManager
         IProjectRepository projectRepository,
         SchemaManagerOptions? options = null)
     {
+        // The resolvers a read computes derived columns with — a declaration is checked by the same.
+        _lookupResolver = new PostgresLookupResolver(repository);
+        _rollupResolver = new PostgresRollupResolver(repository);
+        _formulaResolver = new PostgresFormulaResolver();
         _dataSource = dataSource;
         _repository = repository;
         _lockManager = lockManager;
@@ -292,14 +300,10 @@ public sealed class PostgresSchemaManager : ISchemaManager
                 await connection.ExecuteAsync(new CommandDefinition(indexSql, transaction: transaction, cancellationToken: cancellationToken));
             }
 
-            // A formula is checked against the table it computes over before the table exists for
-            // anyone: one that cannot run refuses the whole declaration.
-            foreach (var col in columns.Where(c => c.FormulaConfig is not null))
-            {
-                var formula = col.FormulaConfig!.Formula;
-                var sql = Infrastructure.FormulaSql.Translate(formula, col.LogicalName, columns);
-                await Infrastructure.FormulaSql.VerifyAsync(connection, transaction, physicalTableName, col.LogicalName, formula, sql, cancellationToken);
-            }
+            // Lookup, rollup and formula columns are checked by planning the read that computes them,
+            // before the table exists for anyone: one that cannot run refuses the whole declaration.
+            await Query.TableSource.VerifyAsync(
+                connection, transaction, tableMetadata, _lookupResolver, _rollupResolver, _formulaResolver, cancellationToken);
 
             await transaction.CommitAsync(cancellationToken);
         }
@@ -598,12 +602,20 @@ public sealed class PostgresSchemaManager : ISchemaManager
             }
         }
 
-        if (column.FormulaConfig is not null)
+        if (isVirtualColumn)
         {
-            var formula = column.FormulaConfig.Formula;
-            var sql = Infrastructure.FormulaSql.Translate(formula, column.LogicalName, table.Columns);
+            // Checked by planning the read that would compute it, with the column in place.
+            var declared = new TableMetadata
+            {
+                TableId = table.TableId,
+                ProjectId = table.ProjectId,
+                LogicalName = table.LogicalName,
+                PhysicalName = table.PhysicalName,
+                Columns = [.. table.Columns, column]
+            };
             await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-            await Infrastructure.FormulaSql.VerifyAsync(connection, null, table.PhysicalName, column.LogicalName, formula, sql, cancellationToken);
+            await Query.TableSource.VerifyAsync(
+                connection, null, declared, _lookupResolver, _rollupResolver, _formulaResolver, cancellationToken);
         }
 
         // Insert metadata and increment version

@@ -895,6 +895,43 @@ Cloud SQL and RDS, where `CREATE EXTENSION` is gated behind a server-parameter a
 
 ---
 
+## Rollup columns
+
+A rollup column summarises the rows of another table that point at this row — the count of a
+customer's orders, their total. It is declared like any other column, with a `rollup` object:
+
+```json
+{
+  "name": "open_total",
+  "type": "decimal",
+  "rollup": {
+    "relation": "customer_orders",
+    "targetTable": "orders",
+    "foreignKeyColumn": "customer_id",
+    "sourceColumn": "amount",
+    "aggregation": "sum",
+    "filter": { "field": "status", "operator": "eq", "value": "open" }
+  }
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `targetTable` | The table whose rows are summarised. It must exist when the rollup is declared. |
+| `foreignKeyColumn` | The target's column holding this row's `_id`. |
+| `sourceColumn` | The target's column the aggregation reads; `*` for `count`. |
+| `aggregation` | `count` `countValues` `countEmpty` `sum` `average` `min` `max` `stringConcat` `arrayValues` `percentChecked` `percentUnchecked` `earliestDate` `latestDate` `dateRange` `allTrue` `anyTrue`. |
+| `filter` | Optional: only target rows where `field` (a stored column of the target) compares to `value` — `eq` `neq` `gt` `gte` `lt` `lte` `contains` `startswith` `endswith` `isnull` `isnotnull`. The value is a string, number, boolean or null; it is stored as a literal, never as SQL text. |
+| `orderBy` | For `stringConcat` and `arrayValues`: the order values are collected in, as comma-separated `column [asc|desc]` terms over the target's stored columns. |
+| `delimiter` | For `stringConcat`: the separator (default `, `). |
+
+**Checked when declared.** A lookup, rollup or formula column is checked by planning the read that
+would compute it, when it is declared: a target table or column that does not exist, a filter or
+order naming something the target does not have, an order that is not a column list, or a value
+with no literal form is refused with `400 INVALID_EXPRESSION` and the reason. A table declared with
+such a column is not created. Its targets therefore come first — declare the summarised table, then
+the rollup (a table may name itself as a lookup's or rollup's target).
+
 ## Formula columns
 
 A formula column is declared like any other column — in `POST /api/schema/tables` or

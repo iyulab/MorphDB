@@ -1,4 +1,5 @@
 using MorphDB.Core.Abstractions;
+using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
 using MorphDB.Npgsql.Ddl;
 using MorphDB.Npgsql.Repositories;
@@ -12,7 +13,6 @@ namespace MorphDB.Npgsql.Services;
 public sealed class PostgresLookupResolver : ILookupResolver
 {
     private readonly IMetadataRepository _metadataRepository;
-    private int _aliasCounter;
 
     public PostgresLookupResolver(IMetadataRepository metadataRepository)
     {
@@ -34,6 +34,7 @@ public sealed class PostgresLookupResolver : ILookupResolver
         var joins = new List<LookupJoinInfo>();
         var selectExpressions = new Dictionary<string, string>();
         var tableAliases = new Dictionary<string, string>();
+        var aliasCounter = 0;
 
         foreach (var lookup in lookupColumns)
         {
@@ -41,15 +42,22 @@ public sealed class PostgresLookupResolver : ILookupResolver
             var validation = await ValidateLookupConfigAsync(
                 projectId, sourceTable, lookup.Config, cancellationToken);
 
+            // A lookup that cannot be computed fails the read that needs it, naming why. It used to
+            // be skipped, so the column silently disappeared from every row.
             if (!validation.IsValid)
-                continue;
+            {
+                throw new SchemaException(
+                    "INVALID_EXPRESSION",
+                    $"Lookup column '{lookup.ColumnName}' cannot be computed: {string.Join(" ", validation.Errors)}");
+            }
 
             var targetTable = validation.TargetTable!;
             var targetColumn = validation.TargetColumn!;
             var relationColumn = validation.RelationColumn!;
 
             // Generate unique alias for this join
-            var alias = GenerateTableAlias(targetTable.LogicalName);
+            // Aliases are numbered per read: a counter on this shared resolver grew without end.
+            var alias = $"lkp_{++aliasCounter}";
             tableAliases[targetTable.LogicalName] = alias;
 
             // Find target PK column
@@ -57,7 +65,11 @@ public sealed class PostgresLookupResolver : ILookupResolver
                 .FirstOrDefault(c => c.IsPrimaryKey || c.LogicalName == "_id");
 
             if (pkColumn == null)
-                continue;
+            {
+                throw new SchemaException(
+                    "INVALID_EXPRESSION",
+                    $"Lookup column '{lookup.ColumnName}' cannot be computed: table '{targetTable.LogicalName}' has no primary key.");
+            }
 
             // Build LEFT JOIN clause (raw SQL format)
             var joinClause = $"LEFT JOIN {DdlBuilder.QuoteIdentifier(targetTable.PhysicalName)} AS {alias} " +
@@ -106,9 +118,11 @@ public sealed class PostgresLookupResolver : ILookupResolver
             return LookupValidationResult.Invalid([.. errors]);
         }
 
-        // Get target table
-        var targetTable = await _metadataRepository.GetTableByNameAsync(
-            projectId, config.TargetTable, includeColumns: true, cancellationToken);
+        // Get target table — the table in hand when the lookup reads its own table (it may not be
+        // stored yet: a table is checked while it is being declared)
+        var targetTable = config.TargetTable == sourceTable.LogicalName
+            ? sourceTable
+            : await _metadataRepository.GetTableByNameAsync(projectId, config.TargetTable, includeColumns: true, cancellationToken);
 
         if (targetTable == null)
         {
@@ -156,13 +170,5 @@ public sealed class PostgresLookupResolver : ILookupResolver
 
         return targetTable.Columns
             .FirstOrDefault(c => c.LogicalName == config.TargetColumn);
-    }
-
-    private string GenerateTableAlias(string tableName)
-    {
-        _aliasCounter++;
-        // Use first few chars of table name + counter for readability
-        var prefix = tableName.Length > 3 ? tableName[..3] : tableName;
-        return $"lkp_{prefix}_{_aliasCounter}";
     }
 }

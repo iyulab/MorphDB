@@ -48,6 +48,8 @@ public class RollupFieldTests
         var uniqueSuffix = Guid.NewGuid().ToString("N")[..8];
 
         // Create parent table (customers) with rollup column
+        await CreateTargetAsync(projectId, "rollup_orders_" + uniqueSuffix);
+
         var customersTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
             ProjectId = projectId,
@@ -73,28 +75,6 @@ public class RollupFieldTests
                         SourceColumn = "*",
                         Aggregation = RollupAggregation.Count
                     }
-                }
-            ]
-        }, TestContext.Current.CancellationToken);
-
-        // Create child table (orders) that references customers
-        var ordersTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
-        {
-            ProjectId = projectId,
-            LogicalName = "rollup_orders_" + uniqueSuffix,
-            Columns =
-            [
-                new CreateColumnRequest
-                {
-                    LogicalName = "customer_id",
-                    DataType = MorphDataType.Uuid,
-                    IsNullable = false
-                },
-                new CreateColumnRequest
-                {
-                    LogicalName = "amount",
-                    DataType = MorphDataType.Decimal,
-                    IsNullable = false
                 }
             ]
         }, TestContext.Current.CancellationToken);
@@ -126,6 +106,8 @@ public class RollupFieldTests
         var uniqueSuffix = Guid.NewGuid().ToString("N")[..8];
 
         // Create parent table with rollup
+        await CreateTargetAsync(projectId, "rollup_persist_items_" + uniqueSuffix);
+
         var parentTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
             ProjectId = projectId,
@@ -266,6 +248,8 @@ public class RollupFieldTests
         var uniqueSuffix = Guid.NewGuid().ToString("N")[..8];
 
         // Create parent table with multiple rollups
+        await CreateTargetAsync(projectId, "multirollup_items_" + uniqueSuffix);
+
         var parentTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
             ProjectId = projectId,
@@ -365,6 +349,8 @@ public class RollupFieldTests
         var uniqueSuffix = Guid.NewGuid().ToString("N")[..8];
 
         // Create table with rollup
+        await CreateTargetAsync(projectId, "physical_rollup_child_" + uniqueSuffix);
+
         var parentTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
             ProjectId = projectId,
@@ -435,6 +421,8 @@ public class RollupFieldTests
         var uniqueSuffix = Guid.NewGuid().ToString("N")[..8];
 
         // Create parent table with StringConcat rollup
+        await CreateTargetAsync(projectId, "concat_tags_" + uniqueSuffix);
+
         var parentTable = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
             ProjectId = projectId,
@@ -482,6 +470,8 @@ public class RollupFieldTests
         var uniqueSuffix = Guid.NewGuid().ToString("N")[..8];
 
         // Test a few different aggregation types
+        await CreateTargetAsync(projectId, "agg_items_" + uniqueSuffix);
+
         var table = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
             ProjectId = projectId,
@@ -549,4 +539,27 @@ public class RollupFieldTests
         var allTrueCol = table.Columns.First(c => c.LogicalName == "all_true");
         allTrueCol.RollupConfig!.Aggregation.Should().Be(RollupAggregation.AllTrue);
     }
+
+    /// <summary>
+    /// A rollup's target table, created before the table that rolls it up: a rollup is checked
+    /// against its target when it is declared, so the target has to exist.
+    /// </summary>
+    private Task<TableMetadata> CreateTargetAsync(Guid projectId, string name) =>
+        _schemaManager.CreateTableAsync(new CreateTableRequest
+        {
+            ProjectId = projectId,
+            LogicalName = name,
+            Columns =
+            [
+                new CreateColumnRequest { LogicalName = "parent_id", DataType = MorphDataType.Uuid },
+                new CreateColumnRequest { LogicalName = "customer_id", DataType = MorphDataType.Uuid },
+                new CreateColumnRequest { LogicalName = "amount", DataType = MorphDataType.Decimal },
+                new CreateColumnRequest { LogicalName = "score", DataType = MorphDataType.Decimal },
+                new CreateColumnRequest { LogicalName = "status", DataType = MorphDataType.Text },
+                new CreateColumnRequest { LogicalName = "tag_name", DataType = MorphDataType.Text },
+                new CreateColumnRequest { LogicalName = "is_complete", DataType = MorphDataType.Boolean },
+                new CreateColumnRequest { LogicalName = "is_valid", DataType = MorphDataType.Boolean },
+                new CreateColumnRequest { LogicalName = "created_at", DataType = MorphDataType.DateTime },
+            ]
+        }, TestContext.Current.CancellationToken);
 }

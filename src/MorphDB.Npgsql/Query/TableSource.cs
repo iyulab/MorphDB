@@ -1,7 +1,9 @@
+using Dapper;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
 using MorphDB.Npgsql.Infrastructure;
+using Npgsql;
 using SqlKata.Compilers;
 using SqlKataQuery = SqlKata.Query;
 
@@ -41,6 +43,9 @@ internal sealed class TableSource
 
     /// <summary>What the statement calls the table (unquoted).</summary>
     public string Name { get; }
+
+    /// <summary>Whether the table has derived columns, read through a derived table.</summary>
+    public bool IsDerived => _derived is not null;
 
     /// <summary>Puts the source in the FROM clause of <paramref name="query"/>.</summary>
     public void ApplyFrom(SqlKataQuery query)
@@ -91,6 +96,46 @@ internal sealed class TableSource
         }
 
         return SystemColumns.IsSystemColumn(logicalName) ? $"{Name}.{logicalName}" : null;
+    }
+
+    /// <summary>
+    /// Proves every lookup, rollup and formula column of <paramref name="table"/> can be computed, by
+    /// building the source a read would build and asking PostgreSQL to plan reading it. The check a
+    /// declaration passes is therefore the read itself — a derived column that would fail every read
+    /// is refused when it is declared, with <c>INVALID_EXPRESSION</c> and the reason.
+    /// </summary>
+    public static async Task VerifyAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        TableMetadata table,
+        ILookupResolver lookupResolver,
+        IRollupResolver rollupResolver,
+        IFormulaResolver formulaResolver,
+        CancellationToken cancellationToken)
+    {
+        var source = await CreateAsync(table.ProjectId, table, alias: null, lookupResolver, rollupResolver, formulaResolver, cancellationToken);
+        if (!source.IsDerived)
+        {
+            return;
+        }
+
+        var query = new SqlKataQuery();
+        source.ApplyFrom(query);
+        query.Select($"{source.Name}.*");
+        var compiled = new PostgresCompiler().Compile(query);
+
+        try
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                "EXPLAIN " + compiled.Sql, compiled.NamedBindings, transaction, cancellationToken: cancellationToken));
+        }
+        catch (PostgresException ex)
+        {
+            var derived = string.Join(", ", source._derivedColumns.Order(StringComparer.Ordinal).Select(c => $"'{c}'"));
+            throw new SchemaException(
+                "INVALID_EXPRESSION",
+                $"A derived column of '{table.LogicalName}' ({derived}) cannot be computed: {ex.MessageText}.");
+        }
     }
 
     /// <summary>

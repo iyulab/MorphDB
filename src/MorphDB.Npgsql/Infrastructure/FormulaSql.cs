@@ -1,15 +1,12 @@
-using Dapper;
 using MorphDB.Core.Exceptions;
 using MorphDB.Core.Formula;
 using MorphDB.Core.Models;
-using MorphDB.Npgsql.Ddl;
-using Npgsql;
 
 namespace MorphDB.Npgsql.Infrastructure;
 
 /// <summary>
-/// The one rule for turning a formula column into SQL, used both where a formula is declared (to
-/// refuse one that cannot run) and where it is read (to compute it).
+/// The one rule for turning a formula column into SQL. Reads compute a formula with it, and a
+/// declaration is checked by building that same read (<see cref="Query.TableSource.VerifyAsync"/>).
 /// <para>
 /// A formula computes over the stored and system columns of its own row, the way a PostgreSQL
 /// generated column does — not over another lookup, rollup or formula column. Its expression names
@@ -58,33 +55,6 @@ internal static class FormulaSql
         }
 
         return sql;
-    }
-
-    /// <summary>
-    /// Proves the translated expression runs against the table by asking PostgreSQL to plan it —
-    /// a type mismatch or a function PostgreSQL does not have is refused at declaration rather than
-    /// failing every read of the table afterwards.
-    /// </summary>
-    public static async Task VerifyAsync(
-        NpgsqlConnection connection,
-        NpgsqlTransaction? transaction,
-        string physicalTableName,
-        string columnName,
-        string formula,
-        string sql,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            await connection.ExecuteAsync(new CommandDefinition(
-                $"EXPLAIN SELECT ({sql}) FROM {DdlBuilder.QuoteIdentifier(physicalTableName)} AS {TableAlias}",
-                transaction: transaction,
-                cancellationToken: cancellationToken));
-        }
-        catch (PostgresException ex)
-        {
-            throw Invalid(columnName, formula, ex.MessageText);
-        }
     }
 
     private static SchemaException Invalid(string columnName, string formula, string reason) =>

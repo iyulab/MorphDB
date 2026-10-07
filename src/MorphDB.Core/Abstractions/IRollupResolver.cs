@@ -70,71 +70,11 @@ public sealed class RollupQueryExpansion
     public IReadOnlyDictionary<string, string> SubqueryExpressions { get; init; } =
         new Dictionary<string, string>();
 
-    /// <summary>
-    /// Structured subquery information for query builder integration.
-    /// </summary>
-    public IReadOnlyList<RollupSubqueryInfo> Subqueries { get; init; } = [];
 
     /// <summary>
     /// Whether any rollup expansion was generated.
     /// </summary>
-    public bool HasExpansion => SubqueryExpressions.Count > 0 || Subqueries.Count > 0;
-}
-
-/// <summary>
-/// Structured information for a rollup subquery.
-/// </summary>
-public sealed class RollupSubqueryInfo
-{
-    /// <summary>
-    /// The logical column name.
-    /// </summary>
-    public required string ColumnName { get; init; }
-
-    /// <summary>
-    /// Physical name of the target table (child table).
-    /// </summary>
-    public required string TargetTablePhysical { get; init; }
-
-    /// <summary>
-    /// Logical name of the target table.
-    /// </summary>
-    public required string TargetTableLogical { get; init; }
-
-    /// <summary>
-    /// Physical name of the foreign key column in the target table.
-    /// </summary>
-    public required string ForeignKeyColumnPhysical { get; init; }
-
-    /// <summary>
-    /// Physical name of the source column to aggregate.
-    /// </summary>
-    public required string SourceColumnPhysical { get; init; }
-
-    /// <summary>
-    /// Physical name of the primary key column in the parent table.
-    /// </summary>
-    public required string ParentKeyColumnPhysical { get; init; }
-
-    /// <summary>
-    /// The aggregation function to apply.
-    /// </summary>
-    public required RollupAggregation Aggregation { get; init; }
-
-    /// <summary>
-    /// Optional SQL WHERE clause for filtering (without the WHERE keyword).
-    /// </summary>
-    public string? FilterClause { get; init; }
-
-    /// <summary>
-    /// Optional SQL ORDER BY clause (without the ORDER BY keyword).
-    /// </summary>
-    public string? OrderByClause { get; init; }
-
-    /// <summary>
-    /// Delimiter for STRING_AGG operations.
-    /// </summary>
-    public string? Delimiter { get; init; }
+    public bool HasExpansion => SubqueryExpressions.Count > 0;
 }
 
 /// <summary>

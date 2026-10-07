@@ -462,6 +462,25 @@ public class FormulaFieldTests
         var uniqueSuffix = Guid.NewGuid().ToString("N")[..8];
 
         // Create parent table with lookup, rollup, and formula columns
+        // The lookup's and the rollup's targets exist first: derived columns are checked against
+        // them when they are declared.
+        await _schemaManager.CreateTableAsync(new CreateTableRequest
+        {
+            ProjectId = projectId,
+            LogicalName = "categories_" + uniqueSuffix,
+            Columns = [new CreateColumnRequest { LogicalName = "name", DataType = MorphDataType.Text }]
+        }, TestContext.Current.CancellationToken);
+        await _schemaManager.CreateTableAsync(new CreateTableRequest
+        {
+            ProjectId = projectId,
+            LogicalName = "sales_" + uniqueSuffix,
+            Columns =
+            [
+                new CreateColumnRequest { LogicalName = "product_id", DataType = MorphDataType.Uuid },
+                new CreateColumnRequest { LogicalName = "amount", DataType = MorphDataType.Decimal }
+            ]
+        }, TestContext.Current.CancellationToken);
+
         var table = await _schemaManager.CreateTableAsync(new CreateTableRequest
         {
             ProjectId = projectId,

@@ -4,6 +4,12 @@
 
 ### Changed
 
+- **A lookup or rollup column is checked when declared**, by planning the read that computes it (as a
+  formula already is): a target table or column that does not exist, a rollup filter or order naming
+  something the target lacks, an order that is not a `column [asc|desc]` list, or a filter value with
+  no literal form is refused with `400 INVALID_EXPRESSION`. A rollup's target must therefore exist
+  before the rollup is declared. A table may name itself as a lookup's or rollup's target.
+
 - **A formula that cannot be computed is refused when declared.** Its expression is parsed, translated
   and planned against the table at declaration; an unknown column or function, a reference to another
   lookup, rollup or formula column, or an expression PostgreSQL cannot type is refused with
@@ -21,6 +27,16 @@
   showed (the number is still read); responses now carry the name instead of the number.
 
 ### Fixed
+
+- **A rollup's order and filter value no longer reach SQL as the declared text.** The `orderBy` of a
+  `stringConcat`/`arrayValues` rollup was pasted into the statement verbatim, and a filter value was
+  written as raw text — a string sent as JSON arrived unquoted. The order is now parsed into columns
+  and directions, and a value is rendered as a literal of its type or refused.
+- **A filtered rollup works.** The filter's column was emitted in its declared name instead of the
+  table's column name, so a rollup with a filter failed every read of its table.
+- **A lookup or rollup that cannot be computed is no longer dropped silently.** One whose target did
+  not resolve was skipped, so the column vanished from every row without a word; it is refused when
+  declared, and one stored before this check fails the read that needs it, naming the column.
 
 - **A single-record read honours row-level security.** `GET /api/data/{table}/{id}`, GraphQL `record`
   and OData `/{entitySet}({key})` read a row by its own statement and never applied the table's
