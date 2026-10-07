@@ -94,6 +94,21 @@ public sealed class CreateColumnRequest
     /// Check constraint expression.
     /// </summary>
     public string? Check { get; init; }
+    /// <summary>
+    /// Declares a lookup column: the value of a column of another table, read through this
+    /// table's <see cref="LookupConfig.RelationColumn"/>. The column is derived (computed on read).
+    /// </summary>
+    public LookupConfig? Lookup { get; init; }
+
+    /// <summary>
+    /// Declares a rollup column: a summary of the rows of another table that point at this row.
+    /// </summary>
+    public RollupConfig? Rollup { get; init; }
+
+    /// <summary>
+    /// Declares a formula column: an expression over this row's stored columns.
+    /// </summary>
+    public FormulaConfig? Formula { get; init; }
 }
 
 /// <summary>
@@ -135,6 +150,21 @@ public sealed class AddColumnRequest
     /// Check constraint expression.
     /// </summary>
     public string? Check { get; init; }
+    /// <summary>
+    /// Declares a lookup column: the value of a column of another table, read through this
+    /// table's <see cref="LookupConfig.RelationColumn"/>. The column is derived (computed on read).
+    /// </summary>
+    public LookupConfig? Lookup { get; init; }
+
+    /// <summary>
+    /// Declares a rollup column: a summary of the rows of another table that point at this row.
+    /// </summary>
+    public RollupConfig? Rollup { get; init; }
+
+    /// <summary>
+    /// Declares a formula column: an expression over this row's stored columns.
+    /// </summary>
+    public FormulaConfig? Formula { get; init; }
 }
 
 /// <summary>
@@ -278,6 +308,15 @@ public sealed class ColumnInfo
     /// Whether this is a derived/virtual column (lookup, rollup, formula).
     /// </summary>
     public bool IsDerived { get; init; }
+
+    /// <summary>The lookup this column reads, when it is a lookup column.</summary>
+    public LookupConfig? Lookup { get; init; }
+
+    /// <summary>The rollup this column computes, when it is a rollup column.</summary>
+    public RollupConfig? Rollup { get; init; }
+
+    /// <summary>The formula this column computes, when it is a formula column.</summary>
+    public FormulaConfig? Formula { get; init; }
 }
 
 /// <summary>
@@ -376,4 +415,91 @@ public sealed class RelationInfo
     /// Whether cascade behaviour is handled by the application layer, as stored.
     /// </summary>
     public bool VirtualCascade { get; init; }
+}
+
+/// <summary>
+/// A lookup column's declaration (mirrors the server's lookup object).
+/// </summary>
+public sealed class LookupConfig
+{
+    /// <summary>The column of this table whose value names the target row.</summary>
+    public required string RelationColumn { get; init; }
+
+    /// <summary>The table the value is read from.</summary>
+    public required string TargetTable { get; init; }
+
+    /// <summary>The target's column whose value is read.</summary>
+    public required string TargetColumn { get; init; }
+
+    /// <summary>
+    /// The target column the relation column's value is matched against. Default: the target column
+    /// of the relation declared on the relation column, else the target's <c>_id</c>.
+    /// </summary>
+    public string? MatchColumn { get; init; }
+
+    /// <summary>
+    /// When several target rows match, the one read is the first in this order — comma-separated
+    /// <c>column [asc|desc]</c> terms over the target. Default: <c>_id asc</c>.
+    /// </summary>
+    public string? OrderBy { get; init; }
+}
+
+/// <summary>
+/// A rollup column's declaration (mirrors the server's rollup object).
+/// </summary>
+public sealed class RollupConfig
+{
+    /// <summary>A name for the relationship the rollup follows.</summary>
+    public required string Relation { get; init; }
+
+    /// <summary>The table whose rows are summarised.</summary>
+    public required string TargetTable { get; init; }
+
+    /// <summary>The target's column holding this row's <c>_id</c>.</summary>
+    public required string ForeignKeyColumn { get; init; }
+
+    /// <summary>The target's column the aggregation reads; <c>*</c> for <c>count</c>.</summary>
+    public string SourceColumn { get; init; } = "*";
+
+    /// <summary>The aggregation, e.g. <c>count</c>, <c>sum</c>, <c>stringConcat</c>.</summary>
+    public required string Aggregation { get; init; }
+
+    /// <summary>Optional: only target rows where the filter holds.</summary>
+    public RollupFilter? Filter { get; init; }
+
+    /// <summary>For <c>stringConcat</c>: the separator.</summary>
+    public string? Delimiter { get; init; }
+
+    /// <summary>For <c>stringConcat</c>/<c>arrayValues</c>: <c>column [asc|desc]</c> terms.</summary>
+    public string? OrderBy { get; init; }
+}
+
+/// <summary>
+/// A rollup's filter: a stored column of the target compared to a value.
+/// </summary>
+public sealed class RollupFilter
+{
+    /// <summary>The target column compared.</summary>
+    public required string Field { get; init; }
+
+    /// <summary>The comparison, e.g. <c>eq</c>, <c>gt</c>, <c>contains</c>.</summary>
+    public required string Operator { get; init; }
+
+    /// <summary>A string, number, boolean or null.</summary>
+    public object? Value { get; init; }
+}
+
+/// <summary>
+/// A formula column's declaration (mirrors the server's formula object).
+/// </summary>
+public sealed class FormulaConfig
+{
+    /// <summary>The expression, naming this row's columns in braces (<c>{price} * {quantity}</c>).</summary>
+    public required string Formula { get; init; }
+
+    /// <summary>The type the expression evaluates to.</summary>
+    public string? ReturnType { get; init; }
+
+    /// <summary>Optional presentation hint stored with the column.</summary>
+    public string? OutputFormat { get; init; }
 }

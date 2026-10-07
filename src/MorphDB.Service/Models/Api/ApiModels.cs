@@ -321,43 +321,27 @@ public sealed record LookupConfigApiRequest
     public required string TargetColumn { get; init; }
 
     /// <summary>
-    /// Action when the referenced record is deleted: set-null, preserve, or clear.
-    /// Default: set-null.
+    /// The target column the relation column's value is matched against. Default: the target
+    /// column of the relation declared on the relation column, else the target's <c>_id</c>.
     /// </summary>
-    public string OnDelete { get; init; } = "set-null";
+    public string? MatchColumn { get; init; }
 
     /// <summary>
-    /// Whether to support multiple values (when relation is one-to-many).
+    /// When several target rows match, the one read is the first in this order —
+    /// comma-separated <c>column [asc|desc]</c> terms over the target. Default: <c>_id asc</c>.
     /// </summary>
-    public bool AllowMultiple { get; init; }
+    public string? OrderBy { get; init; }
 
-    /// <summary>
-    /// Converts to core LookupColumnConfig model.
-    /// </summary>
     public LookupColumnConfig ToModel() => new()
     {
         RelationColumn = RelationColumn,
         TargetTable = TargetTable,
         TargetColumn = TargetColumn,
-        OnDelete = ParseOnDeleteAction(OnDelete),
-        AllowMultiple = AllowMultiple
+        MatchColumn = MatchColumn,
+        OrderBy = OrderBy
     };
-
-    private static LookupDeleteAction ParseOnDeleteAction(string action)
-    {
-        return action.ToLowerInvariant().Replace("-", "").Replace("_", "") switch
-        {
-            "setnull" => LookupDeleteAction.SetNull,
-            "preserve" => LookupDeleteAction.Preserve,
-            "clear" => LookupDeleteAction.Clear,
-            _ => LookupDeleteAction.SetNull
-        };
-    }
 }
 
-/// <summary>
-/// Configuration for rollup fields in API requests.
-/// </summary>
 public sealed record RollupConfigApiRequest
 {
     /// <summary>
@@ -688,22 +672,22 @@ public sealed record LookupConfigApiResponse
     public required string TargetColumn { get; init; }
 
     /// <summary>
-    /// Action when the referenced record is deleted.
+    /// The target column matched against (as declared; null for the default).
     /// </summary>
-    public required string OnDelete { get; init; }
+    public string? MatchColumn { get; init; }
 
     /// <summary>
-    /// Whether multiple values are supported.
+    /// The order choosing among several matches (as declared; null for the default).
     /// </summary>
-    public bool AllowMultiple { get; init; }
+    public string? OrderBy { get; init; }
 
     public static LookupConfigApiResponse FromModel(LookupColumnConfig config) => new()
     {
         RelationColumn = config.RelationColumn,
         TargetTable = config.TargetTable,
         TargetColumn = config.TargetColumn,
-        OnDelete = config.OnDelete.ToString().ToLowerInvariant(),
-        AllowMultiple = config.AllowMultiple
+        MatchColumn = config.MatchColumn,
+        OrderBy = config.OrderBy
     };
 }
 

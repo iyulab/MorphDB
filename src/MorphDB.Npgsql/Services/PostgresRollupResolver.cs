@@ -126,7 +126,7 @@ public sealed class PostgresRollupResolver : IRollupResolver
         }
 
         errors.AddRange(FilterErrors(config.Filter, targetTable));
-        errors.AddRange(OrderErrors(config.OrderBy, targetTable));
+        errors.AddRange(DeclaredOrder.Errors(config.OrderBy, targetTable));
 
         if (errors.Count > 0)
         {
@@ -150,7 +150,7 @@ public sealed class PostgresRollupResolver : IRollupResolver
             ? $"sub.{DdlBuilder.QuoteIdentifier(sourceColumnPhysical)}"
             : null;
 
-        var orderBy = BuildOrderByClause(config.OrderBy, targetTable);
+        var orderBy = DeclaredOrder.Sql(config.OrderBy, targetTable, "sub");
         var aggregateExpr = BuildAggregateExpression(config.Aggregation, quotedSource, config, orderBy);
 
         var whereClause = $"sub.{quotedFk} = base_table.{quotedPk}";
@@ -188,53 +188,6 @@ public sealed class PostgresRollupResolver : IRollupResolver
             _ => "COUNT(*)"
         };
     }
-
-    /// <summary>
-    /// The order a <c>stringConcat</c> or <c>arrayValues</c> rollup collects its values in:
-    /// comma-separated <c>column [asc|desc]</c> terms over the target table's stored columns. It is
-    /// parsed, never pasted — it used to reach SQL as the caller wrote it, in logical names.
-    /// </summary>
-    private static string BuildOrderByClause(string? orderBy, TableMetadata targetTable)
-    {
-        if (string.IsNullOrWhiteSpace(orderBy))
-            return "";
-
-        var terms = ParseOrder(orderBy).Select(t =>
-        {
-            var column = StoredColumn(targetTable, t.Column)!;
-            return $"sub.{DdlBuilder.QuoteIdentifier(column.PhysicalName)}{(t.Descending ? " DESC" : " ASC")}";
-        });
-        return $" ORDER BY {string.Join(", ", terms)}";
-    }
-
-    private static IEnumerable<string> OrderErrors(string? orderBy, TableMetadata targetTable)
-    {
-        if (string.IsNullOrWhiteSpace(orderBy))
-            yield break;
-
-        foreach (var term in orderBy.Split(','))
-        {
-            var parts = term.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length is < 1 or > 2 ||
-                (parts.Length == 2 && !parts[1].Equals("asc", StringComparison.OrdinalIgnoreCase) && !parts[1].Equals("desc", StringComparison.OrdinalIgnoreCase)))
-            {
-                yield return $"Order '{orderBy}' is not a list of 'column [asc|desc]'.";
-                yield break;
-            }
-
-            if (StoredColumn(targetTable, parts[0]) is null)
-            {
-                yield return $"Order column '{parts[0]}' is not a stored column of '{targetTable.LogicalName}'.";
-            }
-        }
-    }
-
-    private static IEnumerable<(string Column, bool Descending)> ParseOrder(string orderBy) =>
-        orderBy.Split(',').Select(term =>
-        {
-            var parts = term.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            return (parts[0], parts.Length == 2 && parts[1].Equals("desc", StringComparison.OrdinalIgnoreCase));
-        });
 
     private static IEnumerable<string> FilterErrors(RollupFilter? filter, TableMetadata targetTable)
     {

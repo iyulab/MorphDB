@@ -2,6 +2,7 @@ using MorphDB.Core.Abstractions;
 using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
 using MorphDB.Npgsql.Ddl;
+using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Repositories;
 
 namespace MorphDB.Npgsql.Services;
@@ -30,20 +31,16 @@ public sealed class PostgresLookupResolver : ILookupResolver
             return new LookupQueryExpansion();
         }
 
-        var joinClauses = new List<string>();
-        var joins = new List<LookupJoinInfo>();
         var selectExpressions = new Dictionary<string, string>();
-        var tableAliases = new Dictionary<string, string>();
         var aliasCounter = 0;
 
         foreach (var lookup in lookupColumns)
         {
-            // Validate and get metadata
+            // A lookup that cannot be computed fails the read that needs it, naming why. It used to
+            // be skipped, so the column silently disappeared from every row.
             var validation = await ValidateLookupConfigAsync(
                 projectId, sourceTable, lookup.Config, cancellationToken);
 
-            // A lookup that cannot be computed fails the read that needs it, naming why. It used to
-            // be skipped, so the column silently disappeared from every row.
             if (!validation.IsValid)
             {
                 throw new SchemaException(
@@ -51,53 +48,22 @@ public sealed class PostgresLookupResolver : ILookupResolver
                     $"Lookup column '{lookup.ColumnName}' cannot be computed: {string.Join(" ", validation.Errors)}");
             }
 
-            var targetTable = validation.TargetTable!;
-            var targetColumn = validation.TargetColumn!;
-            var relationColumn = validation.RelationColumn!;
-
-            // Generate unique alias for this join
-            // Aliases are numbered per read: a counter on this shared resolver grew without end.
+            // A correlated subquery, not a join: several target rows may match a value that is not
+            // the target's key, and a join would repeat the row once per match. The declared order
+            // (by default the target's _id) chooses the one read. Aliases are numbered per read.
             var alias = $"lkp_{++aliasCounter}";
-            tableAliases[targetTable.LogicalName] = alias;
+            var target = validation.TargetTable!;
+            var order = string.IsNullOrWhiteSpace(lookup.Config.OrderBy) ? "_id asc" : lookup.Config.OrderBy;
 
-            // Find target PK column
-            var pkColumn = targetTable.Columns
-                .FirstOrDefault(c => c.IsPrimaryKey || c.LogicalName == "_id");
-
-            if (pkColumn == null)
-            {
-                throw new SchemaException(
-                    "INVALID_EXPRESSION",
-                    $"Lookup column '{lookup.ColumnName}' cannot be computed: table '{targetTable.LogicalName}' has no primary key.");
-            }
-
-            // Build LEFT JOIN clause (raw SQL format)
-            var joinClause = $"LEFT JOIN {DdlBuilder.QuoteIdentifier(targetTable.PhysicalName)} AS {alias} " +
-                           $"ON base_table.{DdlBuilder.QuoteIdentifier(relationColumn.PhysicalName)} = " +
-                           $"{alias}.{DdlBuilder.QuoteIdentifier(pkColumn.PhysicalName)}";
-            joinClauses.Add(joinClause);
-
-            // Add structured join info for query builder integration
-            joins.Add(new LookupJoinInfo
-            {
-                TargetTablePhysical = targetTable.PhysicalName,
-                TargetTableAlias = alias,
-                SourceColumnPhysical = relationColumn.PhysicalName,
-                TargetColumnPhysical = pkColumn.PhysicalName
-            });
-
-            // Build SELECT expression: alias."target_physical" AS "lookup_column"
-            var selectExpr = $"{alias}.{DdlBuilder.QuoteIdentifier(targetColumn.PhysicalName)}";
-            selectExpressions[lookup.ColumnName] = selectExpr;
+            selectExpressions[lookup.ColumnName] =
+                $"(SELECT {alias}.{DdlBuilder.QuoteIdentifier(validation.TargetColumn!.PhysicalName)} " +
+                $"FROM {DdlBuilder.QuoteIdentifier(target.PhysicalName)} AS {alias} " +
+                $"WHERE {alias}.{DdlBuilder.QuoteIdentifier(validation.MatchColumnPhysical!)} = " +
+                $"base_table.{DdlBuilder.QuoteIdentifier(validation.RelationColumn!.PhysicalName)}" +
+                $"{DeclaredOrder.Sql(order, target, alias)} LIMIT 1)";
         }
 
-        return new LookupQueryExpansion
-        {
-            JoinClauses = joinClauses,
-            Joins = joins,
-            SelectExpressions = selectExpressions,
-            TableAliases = tableAliases
-        };
+        return new LookupQueryExpansion { SelectExpressions = selectExpressions };
     }
 
     public async Task<LookupValidationResult> ValidateLookupConfigAsync(
@@ -130,31 +96,38 @@ public sealed class PostgresLookupResolver : ILookupResolver
             return LookupValidationResult.Invalid([.. errors]);
         }
 
-        // Find target column
+        // The column read must be stored: a derived column of the target is computed by its own read.
         var targetColumn = targetTable.Columns
-            .FirstOrDefault(c => c.LogicalName == config.TargetColumn);
+            .FirstOrDefault(c => c.LogicalName == config.TargetColumn && !c.IsDerived);
 
         if (targetColumn == null)
         {
-            errors.Add($"Target column '{config.TargetColumn}' not found in table '{config.TargetTable}'.");
+            errors.Add($"Target column '{config.TargetColumn}' is not a stored column of '{config.TargetTable}'.");
             return LookupValidationResult.Invalid([.. errors]);
         }
 
-        // Verify relation column type is compatible (should be UUID for FK)
-        if (relationColumn.DataType != MorphDataType.Uuid &&
-            relationColumn.DataType != MorphDataType.Relation &&
-            relationColumn.DataType != MorphDataType.BigInteger &&
-            relationColumn.DataType != MorphDataType.Integer)
+        // The value is matched against the named column, else the target column of the relation
+        // declared on the relation column, else the target's _id. Whether the two types compare is
+        // PostgreSQL's to say when the lookup is declared.
+        var matchName = config.MatchColumn
+            ?? (relationColumn.ForeignKey is { } fk && fk.TargetTable == targetTable.LogicalName ? fk.TargetColumn : null)
+            ?? "_id";
+        var matchColumn = targetTable.Columns.FirstOrDefault(c => c.LogicalName == matchName && !c.IsDerived);
+        var matchPhysical = matchColumn?.PhysicalName ?? (SystemColumns.IsSystemColumn(matchName) ? matchName : null);
+
+        if (matchPhysical == null)
         {
-            errors.Add($"Relation column '{config.RelationColumn}' should be a UUID, Relation, or integer type.");
+            errors.Add($"Match column '{matchName}' is not a stored column of '{config.TargetTable}'.");
         }
+
+        errors.AddRange(DeclaredOrder.Errors(config.OrderBy, targetTable));
 
         if (errors.Count > 0)
         {
             return LookupValidationResult.Invalid([.. errors]);
         }
 
-        return LookupValidationResult.Valid(targetTable, targetColumn, relationColumn);
+        return LookupValidationResult.Valid(targetTable, targetColumn, relationColumn, matchPhysical!);
     }
 
     public async Task<ColumnMetadata?> GetTargetColumnMetadataAsync(

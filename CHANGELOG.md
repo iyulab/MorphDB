@@ -4,6 +4,15 @@
 
 ### Changed
 
+- **A lookup matches any target column and reads one row.** The new `matchColumn` names the target
+  column the relation column's value is matched against (default: the target column of the relation
+  declared on the relation column, else `_id`), and `orderBy` chooses among several matches (default:
+  `_id asc`). A lookup is computed as a subquery, so several matches never repeat a row. The relation
+  column no longer has to be a `uuid` or integer — the two columns only have to be comparable.
+- **Lookup `onDelete` and `allowMultiple` are removed.** Both were stored and never read by anything.
+- **The .NET client declares and reads derived columns**: `CreateColumnRequest`/`AddColumnRequest` take
+  `Lookup`, `Rollup` and `Formula`, and `ColumnInfo` carries them.
+
 - **A lookup or rollup column is checked when declared**, by planning the read that computes it (as a
   formula already is): a target table or column that does not exist, a rollup filter or order naming
   something the target lacks, an order that is not a `column [asc|desc]` list, or a filter value with
@@ -27,6 +36,10 @@
   showed (the number is still read); responses now carry the name instead of the number.
 
 ### Fixed
+
+- **A relation's target names are read back.** Loading a table's relations never selected the target
+  table's and column's names, so every relation read as targeting `_id` of a table named by its id —
+  a lookup over a declared relation therefore matched the wrong column.
 
 - **A rollup's order and filter value no longer reach SQL as the declared text.** The `orderBy` of a
   `stringConcat`/`arrayValues` rollup was pasted into the statement verbatim, and a filter value was

@@ -40,7 +40,7 @@ public sealed class ComputedColumnConfig
 public sealed class LookupColumnConfig
 {
     /// <summary>
-    /// The relation column in this table (foreign key).
+    /// The column of this table whose value names the target row.
     /// </summary>
     public required string RelationColumn { get; init; }
 
@@ -55,14 +55,16 @@ public sealed class LookupColumnConfig
     public required string TargetColumn { get; init; }
 
     /// <summary>
-    /// Action when the referenced record is deleted.
+    /// The target column the relation column's value is matched against. When absent: the target
+    /// column of the relation declared on the relation column, else the target's <c>_id</c>.
     /// </summary>
-    public LookupDeleteAction OnDelete { get; init; } = LookupDeleteAction.SetNull;
+    public string? MatchColumn { get; init; }
 
     /// <summary>
-    /// Whether to support multiple values (when relation is one-to-many).
+    /// Which target row is read when several match: the first in this order, comma-separated
+    /// <c>column [asc|desc]</c> terms over the target's columns. When absent: <c>_id</c> ascending.
     /// </summary>
-    public bool AllowMultiple { get; init; }
+    public string? OrderBy { get; init; }
 }
 
 /// <summary>
@@ -212,21 +214,6 @@ public enum RollupAggregation
 
     /// <summary>Check if any value is truthy.</summary>
     AnyTrue
-}
-
-/// <summary>
-/// Action when a lookup target is deleted.
-/// </summary>
-public enum LookupDeleteAction
-{
-    /// <summary>Set the lookup value to null.</summary>
-    SetNull,
-
-    /// <summary>Keep the last known value (cached).</summary>
-    Preserve,
-
-    /// <summary>Clear the lookup (empty).</summary>
-    Clear
 }
 
 /// <summary>

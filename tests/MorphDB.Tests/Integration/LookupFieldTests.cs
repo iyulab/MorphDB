@@ -91,9 +91,7 @@ public class LookupFieldTests
                     {
                         RelationColumn = "customer_id",
                         TargetTable = "lookup_customers_" + uniqueSuffix,
-                        TargetColumn = "name",
-                        OnDelete = LookupDeleteAction.SetNull,
-                        AllowMultiple = false
+                        TargetColumn = "name"
                     }
                 }
             ]
@@ -113,8 +111,6 @@ public class LookupFieldTests
         lookupColumn.LookupConfig!.RelationColumn.Should().Be("customer_id");
         lookupColumn.LookupConfig.TargetTable.Should().Be("lookup_customers_" + uniqueSuffix);
         lookupColumn.LookupConfig.TargetColumn.Should().Be("name");
-        lookupColumn.LookupConfig.OnDelete.Should().Be(LookupDeleteAction.SetNull);
-        lookupColumn.LookupConfig.AllowMultiple.Should().BeFalse();
 
         // Virtual column should have special physical name and native type
         lookupColumn.PhysicalName.Should().StartWith("virtual_");
@@ -167,8 +163,8 @@ public class LookupFieldTests
                         RelationColumn = "parent_id",
                         TargetTable = "lookup_parent_" + uniqueSuffix,
                         TargetColumn = "title",
-                        OnDelete = LookupDeleteAction.Clear,
-                        AllowMultiple = false
+                        MatchColumn = "_id",
+                        OrderBy = "title desc"
                     }
                 }
             ]
@@ -184,7 +180,8 @@ public class LookupFieldTests
         lookupColumn.LookupConfig!.RelationColumn.Should().Be("parent_id");
         lookupColumn.LookupConfig.TargetTable.Should().Be("lookup_parent_" + uniqueSuffix);
         lookupColumn.LookupConfig.TargetColumn.Should().Be("title");
-        lookupColumn.LookupConfig.OnDelete.Should().Be(LookupDeleteAction.Clear);
+        lookupColumn.LookupConfig.MatchColumn.Should().Be("_id");
+        lookupColumn.LookupConfig.OrderBy.Should().Be("title desc");
     }
 
     [Fact]
@@ -237,9 +234,7 @@ public class LookupFieldTests
             {
                 RelationColumn = "parent_id",
                 TargetTable = "addcol_parent_" + uniqueSuffix,
-                TargetColumn = "status",
-                OnDelete = LookupDeleteAction.SetNull,
-                AllowMultiple = false
+                TargetColumn = "status"
             }
         };
 
@@ -337,8 +332,7 @@ public class LookupFieldTests
                     {
                         RelationColumn = "customer_id",
                         TargetTable = "multi_customers_" + uniqueSuffix,
-                        TargetColumn = "name",
-                        OnDelete = LookupDeleteAction.SetNull
+                        TargetColumn = "name"
                     }
                 },
                 new CreateColumnRequest
@@ -350,8 +344,7 @@ public class LookupFieldTests
                     {
                         RelationColumn = "customer_id",
                         TargetTable = "multi_customers_" + uniqueSuffix,
-                        TargetColumn = "email",
-                        OnDelete = LookupDeleteAction.SetNull
+                        TargetColumn = "email"
                     }
                 },
                 new CreateColumnRequest
@@ -363,8 +356,7 @@ public class LookupFieldTests
                     {
                         RelationColumn = "product_id",
                         TargetTable = "multi_products_" + uniqueSuffix,
-                        TargetColumn = "name",
-                        OnDelete = LookupDeleteAction.SetNull
+                        TargetColumn = "name"
                     }
                 },
                 new CreateColumnRequest
@@ -376,8 +368,7 @@ public class LookupFieldTests
                     {
                         RelationColumn = "product_id",
                         TargetTable = "multi_products_" + uniqueSuffix,
-                        TargetColumn = "price",
-                        OnDelete = LookupDeleteAction.SetNull
+                        TargetColumn = "price"
                     }
                 }
             ]
@@ -446,8 +437,7 @@ public class LookupFieldTests
                     {
                         RelationColumn = "parent_id",
                         TargetTable = "physical_parent_" + uniqueSuffix,
-                        TargetColumn = "value",
-                        OnDelete = LookupDeleteAction.SetNull
+                        TargetColumn = "value"
                     }
                 }
             ]

@@ -509,9 +509,12 @@ public sealed class MetadataRepository : IMetadataRepository
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-            SELECT relation_id, project_id, logical_name, source_table_id, source_column_id, target_table_id, target_column_id, relation_type, on_delete, on_update, descriptor, is_active, enforce_on_write, virtual_cascade, created_at
-            FROM morphdb._morph_relations
-            WHERE relation_id = @RelationId AND is_active = true
+            SELECT r.relation_id, r.project_id, r.logical_name, r.source_table_id, r.source_column_id, r.target_table_id, r.target_column_id, r.relation_type, r.on_delete, r.on_update, r.descriptor, r.is_active, r.enforce_on_write, r.virtual_cascade, r.created_at,
+                   tt.logical_name AS target_table_name, tc.logical_name AS target_column_name
+            FROM morphdb._morph_relations r
+            LEFT JOIN morphdb._morph_tables tt ON tt.table_id = r.target_table_id
+            LEFT JOIN morphdb._morph_columns tc ON tc.column_id = r.target_column_id
+            WHERE r.relation_id = @RelationId AND r.is_active = true
             """;
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
@@ -525,10 +528,13 @@ public sealed class MetadataRepository : IMetadataRepository
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-            SELECT relation_id, project_id, logical_name, source_table_id, source_column_id, target_table_id, target_column_id, relation_type, on_delete, on_update, descriptor, is_active, enforce_on_write, virtual_cascade, created_at
-            FROM morphdb._morph_relations
-            WHERE (source_table_id = @TableId OR target_table_id = @TableId) AND is_active = true
-            ORDER BY created_at
+            SELECT r.relation_id, r.project_id, r.logical_name, r.source_table_id, r.source_column_id, r.target_table_id, r.target_column_id, r.relation_type, r.on_delete, r.on_update, r.descriptor, r.is_active, r.enforce_on_write, r.virtual_cascade, r.created_at,
+                   tt.logical_name AS target_table_name, tc.logical_name AS target_column_name
+            FROM morphdb._morph_relations r
+            LEFT JOIN morphdb._morph_tables tt ON tt.table_id = r.target_table_id
+            LEFT JOIN morphdb._morph_columns tc ON tc.column_id = r.target_column_id
+            WHERE (r.source_table_id = @TableId OR r.target_table_id = @TableId) AND r.is_active = true
+            ORDER BY r.created_at
             """;
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
@@ -829,7 +835,9 @@ public sealed class MetadataRepository : IMetadataRepository
         Descriptor = row.descriptor is not null ? JsonDocument.Parse(row.descriptor) : null,
         IsActive = row.is_active,
         EnforceOnWrite = row.enforce_on_write,
-        VirtualCascade = row.virtual_cascade
+        VirtualCascade = row.virtual_cascade,
+        TargetTableName = row.target_table_name,
+        TargetColumnName = row.target_column_name
     };
 
     private static string MapOnDeleteAction(OnDeleteAction action) => action switch
@@ -972,6 +980,8 @@ public sealed class MetadataRepository : IMetadataRepository
         public bool enforce_on_write { get; set; }
         public bool virtual_cascade { get; set; }
         public DateTimeOffset created_at { get; set; }
+        public string? target_table_name { get; set; }
+        public string? target_column_name { get; set; }
     }
 
     #endregion

@@ -76,59 +76,16 @@ public sealed class LookupColumnInfo
 public sealed class LookupQueryExpansion
 {
     /// <summary>
-    /// SQL JOIN clauses to add to the query (raw SQL format).
-    /// </summary>
-    public IReadOnlyList<string> JoinClauses { get; init; } = [];
-
-    /// <summary>
-    /// Structured JOIN information for query builder integration.
-    /// </summary>
-    public IReadOnlyList<LookupJoinInfo> Joins { get; init; } = [];
-
-    /// <summary>
-    /// SELECT column expressions for lookup values.
-    /// Key: logical column name, Value: SQL expression.
+    /// The SQL expression of each lookup column, a correlated subquery over the table read as
+    /// <c>base_table</c>. Key: logical column name, Value: SQL expression.
     /// </summary>
     public IReadOnlyDictionary<string, string> SelectExpressions { get; init; } =
         new Dictionary<string, string>();
 
     /// <summary>
-    /// Table aliases used in the expansion.
-    /// Key: target table name, Value: alias.
-    /// </summary>
-    public IReadOnlyDictionary<string, string> TableAliases { get; init; } =
-        new Dictionary<string, string>();
-
-    /// <summary>
     /// Whether any lookup expansion was generated.
     /// </summary>
-    public bool HasExpansion => JoinClauses.Count > 0 || Joins.Count > 0;
-}
-
-/// <summary>
-/// Structured information for a lookup JOIN.
-/// </summary>
-public sealed class LookupJoinInfo
-{
-    /// <summary>
-    /// Physical name of the target table.
-    /// </summary>
-    public required string TargetTablePhysical { get; init; }
-
-    /// <summary>
-    /// Alias for the target table in the query.
-    /// </summary>
-    public required string TargetTableAlias { get; init; }
-
-    /// <summary>
-    /// Physical name of the source column (the relation/FK column in base table).
-    /// </summary>
-    public required string SourceColumnPhysical { get; init; }
-
-    /// <summary>
-    /// Physical name of the target column (usually the PK in target table).
-    /// </summary>
-    public required string TargetColumnPhysical { get; init; }
+    public bool HasExpansion => SelectExpressions.Count > 0;
 }
 
 /// <summary>
@@ -161,15 +118,22 @@ public sealed class LookupValidationResult
     /// </summary>
     public ColumnMetadata? RelationColumn { get; init; }
 
+    /// <summary>
+    /// Physical name of the target column the relation column's value is matched against.
+    /// </summary>
+    public string? MatchColumnPhysical { get; init; }
+
     public static LookupValidationResult Valid(
         TableMetadata targetTable,
         ColumnMetadata targetColumn,
-        ColumnMetadata relationColumn) => new()
+        ColumnMetadata relationColumn,
+        string matchColumnPhysical) => new()
         {
             IsValid = true,
             TargetTable = targetTable,
             TargetColumn = targetColumn,
-            RelationColumn = relationColumn
+            RelationColumn = relationColumn,
+            MatchColumnPhysical = matchColumnPhysical
         };
 
     public static LookupValidationResult Invalid(params string[] errors) => new()

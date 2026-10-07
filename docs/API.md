@@ -895,6 +895,35 @@ Cloud SQL and RDS, where `CREATE EXTENSION` is gated behind a server-parameter a
 
 ---
 
+## Lookup columns
+
+A lookup column reads a value from another table's row — the row this row names through one of its
+own columns. It is declared like any other column, with a `lookup` object:
+
+```json
+{
+  "name": "customer_grade",
+  "type": "text",
+  "lookup": {
+    "relationColumn": "customer_code",
+    "targetTable": "customers",
+    "targetColumn": "grade",
+    "matchColumn": "code"
+  }
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `relationColumn` | This table's column whose value names the target row. |
+| `targetTable` | The table the value is read from. It must exist when the lookup is declared (it may be this table). |
+| `targetColumn` | The target's stored column whose value is read. |
+| `matchColumn` | The target column the `relationColumn` value is matched against. Default: the target column of the relation declared on `relationColumn` (`POST /api/schema/relations`), else the target's `_id`. The two columns must be comparable — a `text` value against a `uuid` column is refused when declared. |
+| `orderBy` | When several target rows match, the one read is the first in this order: comma-separated `column [asc|desc]` terms over the target's columns (`version desc` reads the highest version). Default: `_id asc`, the earliest row. |
+
+A lookup reads exactly one target row per row — several matches never repeat the row — and reads
+`null` when nothing matches.
+
 ## Rollup columns
 
 A rollup column summarises the rows of another table that point at this row — the count of a

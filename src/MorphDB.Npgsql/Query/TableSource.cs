@@ -19,7 +19,7 @@ namespace MorphDB.Npgsql.Query;
 /// derived column exactly as it does a stored one — a declared column is one column whichever kind
 /// it is. Computing those columns only where a SELECT list happened to name them is how they came
 /// to read in a list and fail everywhere else. PostgreSQL flattens the derived table, so a read
-/// that does not use a derived column does not pay for it (an unused lookup join is removed).
+/// that does not use a derived column does not pay for it.
 /// </para>
 /// <para>
 /// The source is named what the statement calls the table — the caller's alias, else the table's
@@ -186,17 +186,9 @@ internal sealed class TableSource
             return new TableSource(table, name, derived: null, []);
         }
 
-        // Lookup joins, rollup subqueries and formula expressions all name the table base_table.
+        // Lookup and rollup subqueries and formula expressions all name the table base_table.
         var derived = new SqlKataQuery($"{table.PhysicalName} as {FormulaSql.TableAlias}")
             .Select($"{FormulaSql.TableAlias}.*");
-
-        foreach (var join in lookup?.Joins ?? [])
-        {
-            derived.LeftJoin(
-                $"{join.TargetTablePhysical} AS {join.TargetTableAlias}",
-                $"{FormulaSql.TableAlias}.{join.SourceColumnPhysical}",
-                $"{join.TargetTableAlias}.{join.TargetColumnPhysical}");
-        }
 
         foreach (var (column, sql) in expressions)
         {
