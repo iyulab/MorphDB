@@ -2,9 +2,9 @@
 
 > **This document describes `main`, which is ahead of what you can run.** Anything here the
 > published image does not serve yet carries a **Since x.y.z** marker naming the release that will
-> bring it. Everything else is in the published version, **0.17.0** — the one the README pins.
+> bring it. Everything else is in the published version, **0.18.0** — the one the README pins.
 > To read the reference for a release rather than for `main`, open this file at its tag:
-> `docs/API.md` at `v0.17.0`.
+> `docs/API.md` at `v0.18.0`.
 >
 > The marker is one-directional by nature: it can say that a documented behaviour is unreleased,
 > and no check can find a behaviour someone forgot to mark. What is held is that a marker names a
@@ -916,11 +916,11 @@ own columns. It is declared like any other column, with a `lookup` object:
 | Field | Description |
 |-------|-------------|
 | `relationColumn` | This table's column whose value names the target row. |
-| `targetTable` | The table the value is read from (it may be this table). It must exist when the lookup is declared, unless `whenTargetMissing` is `null`. |
+| `targetTable` | The table the value is read from (it may be this table). It must exist, with the columns the lookup names, when the lookup is declared — unless `whenTargetMissing` is `null`. |
 | `targetColumn` | The target's stored column whose value is read. |
 | `matchColumn` | The target column the `relationColumn` value is matched against. Default: the target column of the relation declared on `relationColumn` (`POST /api/schema/relations`), else the target's `_id`. The two columns must be comparable — a `text` value against a `uuid` column is refused when declared. |
 | `orderBy` | When several target rows match, the one read is the first in this order: comma-separated `column [asc|desc]` terms over the target's columns (`version desc` reads the highest version). Default: `_id asc`, the earliest row. |
-| `whenTargetMissing` | What a read does while the target table does not exist. `fail` (default): the lookup is refused when declared, and a read that needs it fails naming the target. `null`: the lookup is accepted and reads `null` — no target row matches — until the target table exists, then reads it as usual; a target dropped and created again reads `null` in between. For tables built in an order the writer does not control, or a target rebuilt by dropping and recreating it. Only the table's absence is covered: a target that exists without `targetColumn` or `matchColumn` is refused either way. |
+| `whenTargetMissing` | What a read does while the target cannot answer the declaration — the table does not exist, or exists without `targetColumn`, `matchColumn` or a column `orderBy` names. `fail` (default): the lookup is refused when declared, and a read that needs it fails naming what is missing. `null`: the lookup is accepted and reads `null` — no target row matches — until the target answers, then reads it as usual; a target dropped and created again reads `null` in between, as does one whose columns change before it is rebuilt. For tables built in an order the writer does not control, or a target rebuilt by dropping and recreating it. What is wrong on this side — a `relationColumn` this table lacks, an `orderBy` that is not a column list — is refused either way. A misspelt target column reads `null` too, so a writer that opts in checks its declarations against its targets. |
 
 A lookup reads exactly one target row per row — several matches never repeat the row — and reads
 `null` when nothing matches.

@@ -1,14 +1,22 @@
 # Changelog
 
-## Unreleased
+## 0.18.0
+
+A minor release for writers that build or rebuild a lookup's target table. A lookup may now name a target
+that cannot answer it yet (`"whenTargetMissing": "null"`) — a table not created, or without the columns
+the lookup names: it reads `null` until the target answers, and a target dropped and created again reads
+`null` in between instead of failing the read. The default
+is unchanged. Also: an unknown rollup aggregation is refused instead of counting, and the `0.17.0`
+client's `null` derived-column settings are no longer sent.
 
 ### Added
 
-- **A lookup may name a target table that does not exist yet.** With `"whenTargetMissing": "null"` the
-  lookup is accepted while its target table is absent and reads `null` until the table exists, then reads
-  it as usual; a target dropped and created again reads `null` in between instead of failing the read.
-  The default, `fail`, keeps the `0.17.0` behaviour. A target that exists without the read or matched
-  column is refused either way. The client's `LookupConfig` carries `WhenTargetMissing`, and a lookup
+- **A lookup may name a target that cannot answer it yet.** With `"whenTargetMissing": "null"` the
+  lookup is accepted while its target table is absent — or present without the read, matched or ordering
+  column — and reads `null` until the target answers, then reads it as usual; a target dropped and
+  created again reads `null` in between instead of failing the read. The default, `fail`, keeps the
+  `0.17.0` behaviour. A relation column the table lacks, or an order that is not a column list, is
+  refused either way. The client's `LookupConfig` carries `WhenTargetMissing`, and a lookup
   read back names it (`"fail"` when not set).
 
 ### Fixed
