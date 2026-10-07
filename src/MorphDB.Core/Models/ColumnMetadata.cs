@@ -17,7 +17,6 @@ public sealed class ColumnMetadata
     public bool IsUnique { get; init; }
     public bool IsPrimaryKey { get; init; }
     public bool IsIndexed { get; init; }
-    public bool IsEncrypted { get; init; }
 
     /// <summary>
     /// When true, this is a system-managed column (prefixed with _).

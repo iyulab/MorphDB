@@ -2,7 +2,6 @@ using System.Dynamic;
 using Dapper;
 using Microsoft.Extensions.Options;
 using MorphDB.Core.Abstractions;
-using MorphDB.Core.Encryption;
 using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
 using MorphDB.Core.Pipeline;
@@ -17,8 +16,7 @@ namespace MorphDB.Npgsql.Services;
 
 /// <summary>
 /// PostgreSQL implementation of IMorphDataService.
-/// Handles CRUD operations with logical-to-physical name translation
-/// and transparent data encryption.
+/// Handles CRUD operations with logical-to-physical name translation.
 /// </summary>
 public sealed class PostgresDataService : IMorphDataService
 {
@@ -30,8 +28,6 @@ public sealed class PostgresDataService : IMorphDataService
     private readonly ILookupResolver? _lookupResolver;
     private readonly IRollupResolver? _rollupResolver;
     private readonly IFormulaResolver? _formulaResolver;
-    private readonly IDataEncryptionService? _encryptionService;
-    private readonly DataEncryptionOptions _encryptionOptions;
     private readonly string _primaryKeyLogicalName;
 
     /// <summary>
@@ -46,8 +42,6 @@ public sealed class PostgresDataService : IMorphDataService
         ILookupResolver? lookupResolver = null,
         IRollupResolver? rollupResolver = null,
         IFormulaResolver? formulaResolver = null,
-        IDataEncryptionService? encryptionService = null,
-        IOptions<DataEncryptionOptions>? encryptionOptions = null,
         string primaryKeyLogicalName = "id")
     {
         _dataSource = dataSource ?? throw new ArgumentNullException(nameof(dataSource));
@@ -58,8 +52,6 @@ public sealed class PostgresDataService : IMorphDataService
         _lookupResolver = lookupResolver;
         _rollupResolver = rollupResolver;
         _formulaResolver = formulaResolver;
-        _encryptionService = encryptionService;
-        _encryptionOptions = encryptionOptions?.Value ?? new DataEncryptionOptions();
         _primaryKeyLogicalName = primaryKeyLogicalName;
     }
 
@@ -99,8 +91,7 @@ public sealed class PostgresDataService : IMorphDataService
         if (row is null)
             return null;
 
-        // Decrypt encrypted columns
-        return DecryptRowData(projectId, tableName, row, table.Columns);
+        return row;
     }
 
     /// <inheritdoc />
@@ -432,100 +423,6 @@ public sealed class PostgresDataService : IMorphDataService
         return (setColumns, values);
     }
 
-
-    /// <summary>
-    /// Encrypts row data for storage.
-    /// Only encrypts columns that are marked for encryption or configured for auto-encryption.
-    /// </summary>
-    private IDictionary<string, object?> EncryptRowData(
-        Guid projectId,
-        string tableName,
-        IDictionary<string, object?> data,
-        IReadOnlyList<ColumnMetadata> columns)
-    {
-        if (_encryptionService is null || !_encryptionService.IsEnabled)
-            return data;
-
-        // Determine which columns should be encrypted
-        var encryptedColumnNames = GetEncryptedColumnNames(columns);
-
-        if (encryptedColumnNames.Count == 0)
-            return data;
-
-        return _encryptionService.EncryptRow(projectId, tableName, data, encryptedColumnNames);
-    }
-
-    /// <summary>
-    /// Decrypts row data for retrieval.
-    /// </summary>
-    private IDictionary<string, object?> DecryptRowData(
-        Guid projectId,
-        string tableName,
-        IDictionary<string, object?> data,
-        IReadOnlyList<ColumnMetadata> columns)
-    {
-        if (_encryptionService is null || !_encryptionService.IsEnabled)
-            return data;
-
-        // Determine which columns should be decrypted
-        var encryptedColumnNames = GetEncryptedColumnNames(columns);
-
-        if (encryptedColumnNames.Count == 0)
-            return data;
-
-        return _encryptionService.DecryptRow(projectId, tableName, data, encryptedColumnNames);
-    }
-
-    /// <summary>
-    /// Gets the set of column names that should be encrypted.
-    /// </summary>
-    private HashSet<string> GetEncryptedColumnNames(IReadOnlyList<ColumnMetadata> columns)
-    {
-        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var column in columns)
-        {
-            // Skip excluded columns (id, project_id, timestamps, etc.)
-            if (_encryptionOptions.ExcludedColumns.Contains(column.LogicalName))
-                continue;
-
-            // Include if explicitly marked as encrypted
-            if (column.IsEncrypted)
-            {
-                result.Add(column.LogicalName);
-                continue;
-            }
-
-            // Include if encrypt all by default is enabled and column type is encryptable
-            if (_encryptionOptions.EncryptAllByDefault && IsEncryptableDataType(column.DataType))
-            {
-                result.Add(column.LogicalName);
-            }
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Determines if a data type is suitable for encryption.
-    /// </summary>
-    private static bool IsEncryptableDataType(MorphDataType dataType)
-    {
-        return dataType switch
-        {
-            MorphDataType.Text => true,
-            MorphDataType.LongText => true,
-            MorphDataType.Email => true,
-            MorphDataType.Phone => true,
-            MorphDataType.Url => true,
-            MorphDataType.Json => true,
-            MorphDataType.Integer => true,
-            MorphDataType.BigInteger => true,
-            MorphDataType.Decimal => true,
-            // Don't encrypt: Boolean, Date/Time, UUID (used for joins), relations, computed fields
-            _ => false
-        };
-    }
 
     #endregion
 }

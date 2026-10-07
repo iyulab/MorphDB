@@ -214,16 +214,16 @@ public sealed class MetadataRepository : IMetadataRepository
         const string sql = """
             INSERT INTO morphdb._morph_columns
                 (column_id, table_id, logical_name, physical_name, data_type, native_type,
-                 is_nullable, is_unique, is_primary_key, is_indexed, is_encrypted,
+                 is_nullable, is_unique, is_primary_key, is_indexed,
                  default_value, check_expr, ordinal_position, descriptor,
                  lookup_config, rollup_config, formula_config, computed_config)
             VALUES
                 (@ColumnId, @TableId, @LogicalName, @PhysicalName, @DataType, @NativeType,
-                 @IsNullable, @IsUnique, @IsPrimaryKey, @IsIndexed, @IsEncrypted,
+                 @IsNullable, @IsUnique, @IsPrimaryKey, @IsIndexed,
                  @DefaultValue, @CheckExpression, @OrdinalPosition, @Descriptor::jsonb,
                  @LookupConfig::jsonb, @RollupConfig::jsonb, @FormulaConfig::jsonb, @ComputedConfig::jsonb)
             RETURNING column_id, table_id, logical_name, physical_name, data_type, native_type,
-                      is_nullable, is_unique, is_primary_key, is_indexed, is_encrypted,
+                      is_nullable, is_unique, is_primary_key, is_indexed,
                       default_value, check_expr, ordinal_position, descriptor,
                       lookup_config, rollup_config, formula_config, computed_config, is_active
             """;
@@ -244,7 +244,6 @@ public sealed class MetadataRepository : IMetadataRepository
                 column.IsUnique,
                 column.IsPrimaryKey,
                 column.IsIndexed,
-                column.IsEncrypted,
                 column.DefaultValue,
                 column.CheckExpression,
                 column.OrdinalPosition,
@@ -264,7 +263,7 @@ public sealed class MetadataRepository : IMetadataRepository
     {
         const string sql = """
             SELECT column_id, table_id, logical_name, physical_name, data_type, native_type,
-                   is_nullable, is_unique, is_primary_key, is_indexed, is_encrypted,
+                   is_nullable, is_unique, is_primary_key, is_indexed,
                    default_value, check_expr, ordinal_position, descriptor,
                    lookup_config, rollup_config, formula_config, computed_config, is_active
             FROM morphdb._morph_columns
@@ -283,7 +282,7 @@ public sealed class MetadataRepository : IMetadataRepository
     {
         const string sql = """
             SELECT column_id, table_id, logical_name, physical_name, data_type, native_type,
-                   is_nullable, is_unique, is_primary_key, is_indexed, is_encrypted,
+                   is_nullable, is_unique, is_primary_key, is_indexed,
                    default_value, check_expr, ordinal_position, descriptor,
                    lookup_config, rollup_config, formula_config, computed_config, is_active
             FROM morphdb._morph_columns
@@ -688,7 +687,6 @@ public sealed class MetadataRepository : IMetadataRepository
                     IsUnique = col.IsUnique,
                     IsPrimaryKey = col.IsPrimaryKey,
                     IsIndexed = col.IsIndexed,
-                    IsEncrypted = col.IsEncrypted,
                     IsSystemColumn = col.IsSystemColumn,
                     DefaultValue = col.DefaultValue,
                     CheckExpression = col.CheckExpression,
@@ -770,7 +768,6 @@ public sealed class MetadataRepository : IMetadataRepository
         IsUnique = row.is_unique,
         IsPrimaryKey = row.is_primary_key,
         IsIndexed = row.is_indexed,
-        IsEncrypted = row.is_encrypted,
         DefaultValue = row.default_value,
         CheckExpression = row.check_expr,
         OrdinalPosition = row.ordinal_position,
@@ -928,7 +925,6 @@ public sealed class MetadataRepository : IMetadataRepository
         public bool is_unique { get; set; }
         public bool is_primary_key { get; set; }
         public bool is_indexed { get; set; }
-        public bool is_encrypted { get; set; }
         public string? default_value { get; set; }
         public string? check_expr { get; set; }
         public int ordinal_position { get; set; }

@@ -2,7 +2,6 @@ using System.Dynamic;
 using Dapper;
 using Microsoft.Extensions.Options;
 using MorphDB.Core.Diagnostics;
-using MorphDB.Core.Encryption;
 using MorphDB.Core.Models;
 using MorphDB.Core.Pipeline;
 using MorphDB.Npgsql.Diagnostics;
@@ -21,21 +20,15 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
 {
     private readonly NpgsqlDataSource _dataSource;
     private readonly IQueryDiagnostics _queryDiagnostics;
-    private readonly IDataEncryptionService? _encryptionService;
-    private readonly DataEncryptionOptions _encryptionOptions;
     private readonly string _primaryKeyLogicalName;
 
     public PostgresWriteExecutor(
         NpgsqlDataSource dataSource,
         IQueryDiagnostics queryDiagnostics,
-        IDataEncryptionService? encryptionService = null,
-        IOptions<DataEncryptionOptions>? encryptionOptions = null,
         string primaryKeyLogicalName = "id")
     {
         _dataSource = dataSource ?? throw new ArgumentNullException(nameof(dataSource));
         _queryDiagnostics = queryDiagnostics ?? throw new ArgumentNullException(nameof(queryDiagnostics));
-        _encryptionService = encryptionService;
-        _encryptionOptions = encryptionOptions?.Value ?? new DataEncryptionOptions();
         _primaryKeyLogicalName = primaryKeyLogicalName;
     }
 
@@ -132,11 +125,8 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             // Ensure project_id is set
             var dataWithProject = EnsureProjectId(context.Data, context.ProjectId);
 
-            // Encrypt data before storing
-            var encryptedData = EncryptRowData(context.ProjectId, table.LogicalName, dataWithProject, table.Columns);
-
             // Map logical names to physical and prepare parameters
-            var (columns, parameters, values) = PrepareInsertParameters(encryptedData, table.Columns);
+            var (columns, parameters, values) = PrepareInsertParameters(dataWithProject, table.Columns);
 
             var sql = DmlBuilder.BuildInsert(table.PhysicalName, columns, parameters);
 
@@ -146,10 +136,8 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
 
             var mapped = Infrastructure.RowMapper.MapToLogicalDictionary(result, table.Columns);
 
-            // Return decrypted data to the caller
-            var decrypted = DecryptRowData(context.ProjectId, table.LogicalName, mapped, table.Columns);
             scope.SetRowCount(1);
-            return WriteResult.Ok(decrypted);
+            return WriteResult.Ok(mapped);
         }
         catch (PostgresException pg) when (pg.SqlState is PostgresErrorCodes.NotNullViolation or PostgresErrorCodes.UniqueViolation or PostgresErrorCodes.ForeignKeyViolation)
         {
@@ -190,11 +178,8 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
 
         try
         {
-            // Encrypt data before storing
-            var encryptedData = EncryptRowData(context.ProjectId, table.LogicalName, context.Data, table.Columns);
-
             // Handle version increment specially
-            var (setColumns, values) = PrepareUpdateParameters(encryptedData, table.Columns);
+            var (setColumns, values) = PrepareUpdateParameters(context.Data, table.Columns);
             ((IDictionary<string, object?>)values)["id"] = context.RecordId.Value;
 
             var whereClause = DmlBuilder.BuildIdWhereClause(idColumn.PhysicalName);
@@ -215,9 +200,8 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             }
 
             var mapped = Infrastructure.RowMapper.MapToLogicalDictionary(result, table.Columns);
-            var decrypted = DecryptRowData(context.ProjectId, table.LogicalName, mapped, table.Columns);
             scope.SetRowCount(1);
-            return WriteResult.Ok(decrypted);
+            return WriteResult.Ok(mapped);
         }
         catch (PostgresException pg) when (pg.SqlState is PostgresErrorCodes.NotNullViolation or PostgresErrorCodes.UniqueViolation or PostgresErrorCodes.ForeignKeyViolation)
         {
@@ -277,11 +261,8 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             // Ensure project_id is set
             var dataWithProject = EnsureProjectId(context.Data, context.ProjectId);
 
-            // Encrypt data before storing
-            var encryptedData = EncryptRowData(context.ProjectId, table.LogicalName, dataWithProject, table.Columns);
-
             // Prepare insert parameters
-            var (columns, parameters, values) = PrepareInsertParameters(encryptedData, table.Columns);
+            var (columns, parameters, values) = PrepareInsertParameters(dataWithProject, table.Columns);
 
             var sql = DmlBuilder.BuildUpsert(table.PhysicalName, columns, parameters, conflictColumns);
 
@@ -290,9 +271,8 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
                 new CommandDefinition(sql, values, transaction: conn.Transaction, cancellationToken: context.CancellationToken));
 
             var mapped = Infrastructure.RowMapper.MapToLogicalDictionary(result, table.Columns);
-            var decrypted = DecryptRowData(context.ProjectId, table.LogicalName, mapped, table.Columns);
             scope.SetRowCount(1);
-            return WriteResult.Ok(decrypted);
+            return WriteResult.Ok(mapped);
         }
         catch (PostgresException pg) when (pg.SqlState is PostgresErrorCodes.NotNullViolation or PostgresErrorCodes.UniqueViolation or PostgresErrorCodes.ForeignKeyViolation)
         {
@@ -516,81 +496,6 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
         return (setColumns, values);
     }
 
-
-    private IDictionary<string, object?> EncryptRowData(
-        Guid projectId,
-        string tableName,
-        IDictionary<string, object?> data,
-        IReadOnlyList<ColumnMetadata> columns)
-    {
-        if (_encryptionService is null || !_encryptionService.IsEnabled)
-            return data;
-
-        var encryptedColumnNames = GetEncryptedColumnNames(columns);
-
-        if (encryptedColumnNames.Count == 0)
-            return data;
-
-        return _encryptionService.EncryptRow(projectId, tableName, data, encryptedColumnNames);
-    }
-
-    private IDictionary<string, object?> DecryptRowData(
-        Guid projectId,
-        string tableName,
-        IDictionary<string, object?> data,
-        IReadOnlyList<ColumnMetadata> columns)
-    {
-        if (_encryptionService is null || !_encryptionService.IsEnabled)
-            return data;
-
-        var encryptedColumnNames = GetEncryptedColumnNames(columns);
-
-        if (encryptedColumnNames.Count == 0)
-            return data;
-
-        return _encryptionService.DecryptRow(projectId, tableName, data, encryptedColumnNames);
-    }
-
-    private HashSet<string> GetEncryptedColumnNames(IReadOnlyList<ColumnMetadata> columns)
-    {
-        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var column in columns)
-        {
-            if (_encryptionOptions.ExcludedColumns.Contains(column.LogicalName))
-                continue;
-
-            if (column.IsEncrypted)
-            {
-                result.Add(column.LogicalName);
-                continue;
-            }
-
-            if (_encryptionOptions.EncryptAllByDefault && IsEncryptableDataType(column.DataType))
-            {
-                result.Add(column.LogicalName);
-            }
-        }
-
-        return result;
-    }
-
-    private static bool IsEncryptableDataType(MorphDataType dataType)
-    {
-        return dataType switch
-        {
-            MorphDataType.Text => true,
-            MorphDataType.LongText => true,
-            MorphDataType.Email => true,
-            MorphDataType.Phone => true,
-            MorphDataType.Url => true,
-            MorphDataType.Json => true,
-            MorphDataType.Integer => true,
-            MorphDataType.BigInteger => true,
-            MorphDataType.Decimal => true,
-            _ => false
-        };
-    }
 
     /// <summary>
     /// Turns a physical NOT NULL / UNIQUE violation into the same kind of error the app-layer

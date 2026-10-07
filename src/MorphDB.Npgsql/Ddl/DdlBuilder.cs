@@ -684,7 +684,6 @@ public static class DdlBuilder
                 is_unique BOOLEAN NOT NULL DEFAULT false,
                 is_primary_key BOOLEAN NOT NULL DEFAULT false,
                 is_indexed BOOLEAN NOT NULL DEFAULT false,
-                is_encrypted BOOLEAN NOT NULL DEFAULT false,
                 default_value TEXT,
                 check_expr TEXT,
                 ordinal_position INTEGER NOT NULL,

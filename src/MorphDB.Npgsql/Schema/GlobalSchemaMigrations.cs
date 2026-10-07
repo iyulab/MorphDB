@@ -36,6 +36,10 @@ public static class GlobalSchemaMigrations
         -- secrets live in _morph_secrets for exactly this reason.
         DROP TABLE IF EXISTS morphdb._morph_api_keys;
 
+        -- Column encryption was removed: it never round-tripped, and storage encryption belongs to
+        -- PostgreSQL and the disk under it. Its per-column flag was never set by any request.
+        ALTER TABLE IF EXISTS morphdb._morph_columns DROP COLUMN IF EXISTS is_encrypted;
+
         DROP TABLE IF EXISTS morphdb._morph_backups;
         DROP TABLE IF EXISTS morphdb._morph_sso_configurations;
         DROP TABLE IF EXISTS morphdb._morph_organization_invitations;

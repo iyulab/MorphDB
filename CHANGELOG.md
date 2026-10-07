@@ -4,6 +4,14 @@
 
 ### Changed
 
+- **Column encryption is removed.** It never round-tripped — a non-text column could not hold the
+  ciphertext, reads returned it undecrypted, and rotation saw no encrypted column — and since `0.16.0`
+  a configuration that would encrypt was refused at startup. Gone: the five
+  `/api/security/encryption/*` routes, the `Encryption` settings, the encryption and key-rotation
+  services, and the column metadata's `is_encrypted` flag (dropped from an existing control plane at
+  start). Encrypt storage at the PostgreSQL or disk level; a service still configured with
+  `Encryption:MasterKey` refuses to start and says why.
+
 - **A lookup matches any target column and reads one row.** The new `matchColumn` names the target
   column the relation column's value is matched against (default: the target column of the relation
   declared on the relation column, else `_id`), and `orderBy` chooses among several matches (default:

@@ -1155,38 +1155,12 @@ another and revoke the old one. Revocation keeps the row so audit records retain
 Only the master secret bypasses row-level security. An issued secret is subject to the same policies
 an anonymous caller is — with `{{role}}` now resolving to something.
 
-## Column encryption
+## Storage encryption
 
-**Not available in this release.** Encrypting column values does not yet round-trip: a column whose
-storage type is not text — the system `_version` column among them — cannot hold the ciphertext, so
-writes fail; record queries return the ciphertext instead of the value; a filter on an encrypted
-column matches nothing; and rotation and validation do not see the encrypted columns. A
-configuration that would encrypt is therefore refused when the service starts, with that reason.
-
-**Settings.** The `Encryption` section (`Encryption__MasterKey` and so on as environment variables):
-
-| Setting | Default | Meaning |
-|---------|---------|---------|
-| `MasterKey` | empty | A base64-encoded 32-byte key. Empty: encryption is off and the routes below answer `503` |
-| `Enabled` | `true` | With a key, whether encryption is on |
-| `EncryptAllByDefault` | `true` | With a key and `Enabled`, `true` is refused at startup. `false` encrypts nothing — no request field marks a column encrypted — and is accepted |
-| `KeyVersion` | `1` | The key version values would be encrypted under |
-| `Algorithm` | `AES-256-GCM` | Recorded with the data for forward compatibility |
-| `ExcludedColumns` | the system columns | Logical names never encrypted |
-
-So the configurations a service starts with encrypt nothing: no key (routes answer `503`), a key with
-`Enabled` off, or a key with `EncryptAllByDefault` off (routes answer, and report no encrypted value).
-
-**Routes.** All under `/api/security`, scoped by `X-Project-Id` like the rest of the API, and `503`
-while encryption is not enabled:
-
-| Route | Does |
-|-------|------|
-| `GET /api/security/encryption/info` | `{ enabled, currentKeyVersion, availableKeyVersions[] }` |
-| `GET /api/security/encryption/status/{table}` | Rotation state of one table: `state`, `currentKeyVersion`, `targetKeyVersion`, `progressPercent`, `rowsProcessed`, `totalRows`, `estimatedTimeRemainingMs`, `startedAt`, `lastRotatedAt` |
-| `GET /api/security/encryption/validate/{table}` | Whether every encrypted value of the table is under the current key: `isValid`, `expectedKeyVersion`, `totalEncryptedValues`, `currentVersionCount`, `oldVersionCount`, `unencryptedCount`, `versionBreakdown` |
-| `POST /api/security/encryption/rotate/{table}` | Re-encrypt one table under the current key version; answers `{ success, tableName, previousKeyVersion, newKeyVersion, rowsProcessed, columnsRotated, durationMs, startedAt, completedAt, errorMessage }` |
-| `POST /api/security/encryption/rotate` | The same for every table of the project |
+MorphDB does not encrypt column values. Encrypting data at rest is the job of PostgreSQL and the
+storage beneath it — an encrypted volume, or a managed PostgreSQL service's storage encryption.
+A service configured with `Encryption:MasterKey` (the setting of an earlier, removed column
+encryption) refuses to start and says so.
 
 ---
 

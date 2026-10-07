@@ -2,7 +2,6 @@ using System.Globalization;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.OpenApi;
 using MorphDB.Core.Abstractions;
-using MorphDB.Core.Encryption;
 using MorphDB.Core.Security;
 using MorphDB.Npgsql;
 using MorphDB.Npgsql.Security;
@@ -50,26 +49,11 @@ try
     var connectionString = builder.Configuration.GetConnectionString("MorphDB")
         ?? throw new InvalidOperationException("Connection string 'MorphDB' not found.");
 
-    // Configure encryption from settings
-    var encryptionSection = builder.Configuration.GetSection("Encryption");
-    var encryptionOptions = new DataEncryptionOptions();
-    encryptionSection.Bind(encryptionOptions);
+    RemovedSettings.EnsureAbsent(builder.Configuration);
 
     builder.Services.AddMorphDbNpgsql(connectionString, options =>
     {
         options.RedisConnectionString = builder.Configuration.GetConnectionString("Redis");
-
-        // Enable encryption if master key is configured
-        if (!string.IsNullOrEmpty(encryptionOptions.MasterKey))
-        {
-            options.EncryptionOptions = encryptionOptions;
-            Log.Information("Data encryption enabled (Algorithm: {Algorithm}, KeyVersion: {KeyVersion})",
-                encryptionOptions.Algorithm, encryptionOptions.KeyVersion);
-        }
-        else
-        {
-            Log.Information("Data encryption disabled (no master key configured)");
-        }
     });
 
     // Add CORS for development (allows Electron dev server and other local clients)
