@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.17.0
+
+A minor release about derived columns and the reads around them. A lookup, rollup or formula column now
+reads like a stored column through every route — filtered, ordered, grouped, aggregated, and carried by a
+single-record read — and a formula produces a value for the first time. A lookup matches any target column
+(`matchColumn`) and chooses among several matches (`orderBy`). A derived column is checked when declared by
+planning the read that computes it. Row-level security now binds single-record reads and policies that name
+columns. Breaking: lookup `onDelete`/`allowMultiple`, write-type policies and column encryption are removed,
+`policyType` answers as a name, and a rollup's target must exist when the rollup is declared (see Changed).
 
 ### Changed
 
