@@ -65,6 +65,31 @@ public sealed class LookupColumnConfig
     /// <c>column [asc|desc]</c> terms over the target's columns. When absent: <c>_id</c> ascending.
     /// </summary>
     public string? OrderBy { get; init; }
+
+    /// <summary>
+    /// What a read does while the target table does not exist. Default <see cref="LookupTargetMissing.Fail"/>.
+    /// </summary>
+    public LookupTargetMissing WhenTargetMissing { get; init; }
+}
+
+/// <summary>
+/// What a lookup does while its target table does not exist.
+/// </summary>
+public enum LookupTargetMissing
+{
+    /// <summary>
+    /// The lookup is refused when declared and fails every read that needs it, naming the target.
+    /// </summary>
+    Fail = 0,
+
+    /// <summary>
+    /// The lookup is accepted and reads null — no target row matches — until the target table
+    /// exists, from then on reading the target as usual. For a writer that builds tables in an order
+    /// it does not control, or rebuilds a target by dropping and recreating it. Only the table's
+    /// absence is covered: a target that exists without the read or matched column still fails,
+    /// because that is a declaration that no longer fits its target, not a target not yet there.
+    /// </summary>
+    Null = 1
 }
 
 /// <summary>

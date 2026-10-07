@@ -332,13 +332,29 @@ public sealed record LookupConfigApiRequest
     /// </summary>
     public string? OrderBy { get; init; }
 
+    /// <summary>
+    /// What a read does while the target table does not exist: <c>fail</c> (default — the lookup
+    /// is refused when declared and fails reads, naming the target) or <c>null</c> (the lookup reads
+    /// null until the target table exists). A target that exists without the read or matched column
+    /// fails either way.
+    /// </summary>
+    public string? WhenTargetMissing { get; init; }
+
     public LookupColumnConfig ToModel() => new()
     {
         RelationColumn = RelationColumn,
         TargetTable = TargetTable,
         TargetColumn = TargetColumn,
         MatchColumn = MatchColumn,
-        OrderBy = OrderBy
+        OrderBy = OrderBy,
+        WhenTargetMissing = ParseWhenTargetMissing(WhenTargetMissing)
+    };
+
+    private static LookupTargetMissing ParseWhenTargetMissing(string? value) => value?.ToLowerInvariant() switch
+    {
+        null or "fail" => LookupTargetMissing.Fail,
+        "null" => LookupTargetMissing.Null,
+        _ => throw new ArgumentException($"Unknown whenTargetMissing '{value}'. Supported: fail, null.")
     };
 }
 
@@ -422,7 +438,10 @@ public sealed record RollupConfigApiRequest
             "daterange" => RollupAggregation.DateRange,
             "alltrue" or "all" => RollupAggregation.AllTrue,
             "anytrue" or "any" => RollupAggregation.AnyTrue,
-            _ => RollupAggregation.Count
+            _ => throw new ArgumentException(
+                $"Unknown rollup aggregation '{aggregation}'. Supported: count, count-values, count-empty, sum, " +
+                "average, min, max, string-concat, array-values, percent-checked, percent-unchecked, " +
+                "earliest-date, latest-date, date-range, all-true, any-true.")
         };
     }
 }
@@ -681,13 +700,19 @@ public sealed record LookupConfigApiResponse
     /// </summary>
     public string? OrderBy { get; init; }
 
+    /// <summary>
+    /// What a read does while the target table does not exist: <c>fail</c> or <c>null</c>.
+    /// </summary>
+    public required string WhenTargetMissing { get; init; }
+
     public static LookupConfigApiResponse FromModel(LookupColumnConfig config) => new()
     {
         RelationColumn = config.RelationColumn,
         TargetTable = config.TargetTable,
         TargetColumn = config.TargetColumn,
         MatchColumn = config.MatchColumn,
-        OrderBy = config.OrderBy
+        OrderBy = config.OrderBy,
+        WhenTargetMissing = config.WhenTargetMissing == LookupTargetMissing.Null ? "null" : "fail"
     };
 }
 

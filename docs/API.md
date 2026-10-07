@@ -916,10 +916,11 @@ own columns. It is declared like any other column, with a `lookup` object:
 | Field | Description |
 |-------|-------------|
 | `relationColumn` | This table's column whose value names the target row. |
-| `targetTable` | The table the value is read from. It must exist when the lookup is declared (it may be this table). |
+| `targetTable` | The table the value is read from (it may be this table). It must exist when the lookup is declared, unless `whenTargetMissing` is `null`. |
 | `targetColumn` | The target's stored column whose value is read. |
 | `matchColumn` | The target column the `relationColumn` value is matched against. Default: the target column of the relation declared on `relationColumn` (`POST /api/schema/relations`), else the target's `_id`. The two columns must be comparable — a `text` value against a `uuid` column is refused when declared. |
 | `orderBy` | When several target rows match, the one read is the first in this order: comma-separated `column [asc|desc]` terms over the target's columns (`version desc` reads the highest version). Default: `_id asc`, the earliest row. |
+| `whenTargetMissing` | What a read does while the target table does not exist. `fail` (default): the lookup is refused when declared, and a read that needs it fails naming the target. `null`: the lookup is accepted and reads `null` — no target row matches — until the target table exists, then reads it as usual; a target dropped and created again reads `null` in between. For tables built in an order the writer does not control, or a target rebuilt by dropping and recreating it. Only the table's absence is covered: a target that exists without `targetColumn` or `matchColumn` is refused either way. |
 
 A lookup reads exactly one target row per row — several matches never repeat the row — and reads
 `null` when nothing matches.
@@ -949,7 +950,7 @@ customer's orders, their total. It is declared like any other column, with a `ro
 | `targetTable` | The table whose rows are summarised. It must exist when the rollup is declared. |
 | `foreignKeyColumn` | The target's column holding this row's `_id`. |
 | `sourceColumn` | The target's column the aggregation reads; `*` for `count`. |
-| `aggregation` | `count` `countValues` `countEmpty` `sum` `average` `min` `max` `stringConcat` `arrayValues` `percentChecked` `percentUnchecked` `earliestDate` `latestDate` `dateRange` `allTrue` `anyTrue`. |
+| `aggregation` | `count` `countValues` `countEmpty` `sum` `average` `min` `max` `stringConcat` `arrayValues` `percentChecked` `percentUnchecked` `earliestDate` `latestDate` `dateRange` `allTrue` `anyTrue`. Any other name is refused. |
 | `filter` | Optional: only target rows where `field` (a stored column of the target) compares to `value` — `eq` `neq` `gt` `gte` `lt` `lte` `contains` `startswith` `endswith` `isnull` `isnotnull`. The value is a string, number, boolean or null; it is stored as a literal, never as SQL text. |
 | `orderBy` | For `stringConcat` and `arrayValues`: the order values are collected in, as comma-separated `column [asc|desc]` terms over the target's stored columns. |
 | `delimiter` | For `stringConcat`: the separator (default `, `). |

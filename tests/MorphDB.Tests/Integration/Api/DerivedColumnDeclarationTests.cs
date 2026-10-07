@@ -159,6 +159,23 @@ public sealed class DerivedColumnDeclarationTests
     }
 
     [Fact]
+    public async Task A_rollup_aggregation_the_server_does_not_know_is_refused_instead_of_counting()
+    {
+        var (customers, orders, _) = await SetupAsync();
+
+        var body = await AddRollupAsync(customers, "median_amount", new RollupConfigApiRequest
+        {
+            Relation = orders,
+            TargetTable = orders,
+            ForeignKeyColumn = "customer_id",
+            SourceColumn = "amount",
+            Aggregation = "median",
+        }, HttpStatusCode.BadRequest);
+
+        body.Should().Contain("median", "the refusal names what it did not know");
+    }
+
+    [Fact]
     public async Task A_lookup_whose_target_does_not_resolve_is_refused_instead_of_vanishing()
     {
         var ct = TestContext.Current.CancellationToken;

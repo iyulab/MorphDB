@@ -2,7 +2,20 @@
 
 ## Unreleased
 
+### Added
+
+- **A lookup may name a target table that does not exist yet.** With `"whenTargetMissing": "null"` the
+  lookup is accepted while its target table is absent and reads `null` until the table exists, then reads
+  it as usual; a target dropped and created again reads `null` in between instead of failing the read.
+  The default, `fail`, keeps the `0.17.0` behaviour. A target that exists without the read or matched
+  column is refused either way. The client's `LookupConfig` carries `WhenTargetMissing`, and a lookup
+  read back names it (`"fail"` when not set).
+
 ### Fixed
+
+- **An unknown rollup aggregation is refused.** A name outside the documented list used to be stored
+  as `count`, so a typo declared a column that silently counted rows; it is now a `400` naming the
+  value.
 
 - **A column request without a derived column sends the same body as before.** The `0.17.0` client wrote
   `"lookup": null`, `"rollup": null` and `"formula": null` into every column it declared; unset ones are

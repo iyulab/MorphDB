@@ -48,6 +48,16 @@ public sealed class PostgresLookupResolver : ILookupResolver
                     $"Lookup column '{lookup.ColumnName}' cannot be computed: {string.Join(" ", validation.Errors)}");
             }
 
+            // A target that does not exist yet, under WhenTargetMissing = Null: no row matches, so
+            // the column reads null — typed as declared, so a filter or sort over it still plans.
+            if (validation.IsTargetAbsent)
+            {
+                selectExpressions[lookup.ColumnName] = lookup.DataType is { } type
+                    ? $"NULL::{TypeMapper.ToNativeType(type)}"
+                    : "NULL";
+                continue;
+            }
+
             // A correlated subquery, not a join: several target rows may match a value that is not
             // the target's key, and a join would repeat the row once per match. The declared order
             // (by default the target's _id) chooses the one read. Aliases are numbered per read.
@@ -92,6 +102,11 @@ public sealed class PostgresLookupResolver : ILookupResolver
 
         if (targetTable == null)
         {
+            if (config.WhenTargetMissing == LookupTargetMissing.Null)
+            {
+                return LookupValidationResult.TargetAbsent(relationColumn);
+            }
+
             errors.Add($"Target table '{config.TargetTable}' not found.");
             return LookupValidationResult.Invalid([.. errors]);
         }
