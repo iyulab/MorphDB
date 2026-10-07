@@ -1,5 +1,6 @@
 namespace MorphDB.Core.Abstractions;
 
+using MorphDB.Core.Formula;
 using MorphDB.Core.Models;
 
 /// <summary>
@@ -22,37 +23,6 @@ public interface IFormulaResolver
         TableMetadata sourceTable,
         IReadOnlyList<FormulaColumnInfo> formulaColumns,
         CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Parses a formula expression into an AST for validation and analysis.
-    /// </summary>
-    /// <param name="formula">The formula string to parse.</param>
-    /// <returns>Parse result with AST or errors.</returns>
-    FormulaParseResult ParseFormula(string formula);
-
-    /// <summary>
-    /// Validates a formula column configuration.
-    /// </summary>
-    /// <param name="projectId">The project ID.</param>
-    /// <param name="sourceTable">The source table containing the formula column.</param>
-    /// <param name="config">The formula configuration to validate.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Validation result with any errors.</returns>
-    Task<FormulaValidationResult> ValidateFormulaConfigAsync(
-        Guid projectId,
-        TableMetadata sourceTable,
-        FormulaColumnConfig config,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Infers the return type of a formula expression.
-    /// </summary>
-    /// <param name="formula">The formula expression.</param>
-    /// <param name="columnTypes">Map of column names to their data types.</param>
-    /// <returns>The inferred return type.</returns>
-    MorphDataType InferReturnType(
-        string formula,
-        IReadOnlyDictionary<string, MorphDataType> columnTypes);
 }
 
 /// <summary>
@@ -88,51 +58,11 @@ public sealed class FormulaQueryExpansion
     public IReadOnlyDictionary<string, string> Expressions { get; init; } =
         new Dictionary<string, string>();
 
-    /// <summary>
-    /// Structured expression information for query builder integration.
-    /// </summary>
-    public IReadOnlyList<FormulaExpressionInfo> FormulaExpressions { get; init; } = [];
 
     /// <summary>
     /// Whether any formula expansion was generated.
     /// </summary>
-    public bool HasExpansion => Expressions.Count > 0 || FormulaExpressions.Count > 0;
-}
-
-/// <summary>
-/// Structured information for a formula expression.
-/// </summary>
-public sealed class FormulaExpressionInfo
-{
-    /// <summary>
-    /// The logical column name.
-    /// </summary>
-    public required string ColumnName { get; init; }
-
-    /// <summary>
-    /// The original formula expression.
-    /// </summary>
-    public required string OriginalFormula { get; init; }
-
-    /// <summary>
-    /// The SQL expression (translated from formula syntax).
-    /// </summary>
-    public required string SqlExpression { get; init; }
-
-    /// <summary>
-    /// The expected return type.
-    /// </summary>
-    public required MorphDataType ReturnType { get; init; }
-
-    /// <summary>
-    /// Whether the formula contains volatile functions (NOW(), etc.).
-    /// </summary>
-    public bool IsVolatile { get; init; }
-
-    /// <summary>
-    /// Physical column names referenced by this formula.
-    /// </summary>
-    public IReadOnlyList<string> Dependencies { get; init; } = [];
+    public bool HasExpansion => Expressions.Count > 0;
 }
 
 /// <summary>
@@ -151,9 +81,9 @@ public sealed class FormulaParseResult
     public IReadOnlyList<string> Errors { get; init; } = [];
 
     /// <summary>
-    /// The parsed AST (as JSON for storage).
+    /// The parsed syntax tree; null when parsing failed.
     /// </summary>
-    public string? AstJson { get; init; }
+    public FormulaNode? Ast { get; init; }
 
     /// <summary>
     /// Column references found in the formula.
@@ -176,14 +106,14 @@ public sealed class FormulaParseResult
     public MorphDataType? InferredType { get; init; }
 
     public static FormulaParseResult Success(
-        string astJson,
+        FormulaNode ast,
         IReadOnlyList<string> columnReferences,
         IReadOnlyList<string> functionCalls,
         bool isVolatile,
         MorphDataType? inferredType = null) => new()
         {
             IsSuccess = true,
-            AstJson = astJson,
+            Ast = ast,
             ColumnReferences = columnReferences,
             FunctionCalls = functionCalls,
             IsVolatile = isVolatile,
@@ -193,48 +123,6 @@ public sealed class FormulaParseResult
     public static FormulaParseResult Failure(params string[] errors) => new()
     {
         IsSuccess = false,
-        Errors = errors
-    };
-}
-
-/// <summary>
-/// Result of formula configuration validation.
-/// </summary>
-public sealed class FormulaValidationResult
-{
-    /// <summary>
-    /// Whether the configuration is valid.
-    /// </summary>
-    public bool IsValid { get; init; }
-
-    /// <summary>
-    /// Validation errors, if any.
-    /// </summary>
-    public IReadOnlyList<string> Errors { get; init; } = [];
-
-    /// <summary>
-    /// Resolved column dependencies with their physical names.
-    /// </summary>
-    public IReadOnlyDictionary<string, string> ResolvedDependencies { get; init; } =
-        new Dictionary<string, string>();
-
-    /// <summary>
-    /// The inferred return type.
-    /// </summary>
-    public MorphDataType? InferredType { get; init; }
-
-    public static FormulaValidationResult Valid(
-        IReadOnlyDictionary<string, string> resolvedDependencies,
-        MorphDataType? inferredType = null) => new()
-        {
-            IsValid = true,
-            ResolvedDependencies = resolvedDependencies,
-            InferredType = inferredType
-        };
-
-    public static FormulaValidationResult Invalid(params string[] errors) => new()
-    {
-        IsValid = false,
         Errors = errors
     };
 }

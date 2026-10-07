@@ -1,5 +1,4 @@
 using System.Text;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using MorphDB.Core.Abstractions;
 
@@ -11,12 +10,6 @@ namespace MorphDB.Core.Formula;
 /// </summary>
 public sealed partial class FormulaParser
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = false,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-    };
-
     private static readonly HashSet<string> VolatileFunctions = new(StringComparer.OrdinalIgnoreCase)
     {
         "NOW", "TODAY", "CURRENT_TIMESTAMP", "CURRENT_DATE", "CURRENT_TIME", "RANDOM"
@@ -90,10 +83,8 @@ public sealed partial class FormulaParser
                 return FormulaParseResult.Failure(_errors.ToArray());
             }
 
-            var astJson = JsonSerializer.Serialize(ast, JsonOptions);
-
             return FormulaParseResult.Success(
-                astJson,
+                ast,
                 _columnReferences.Distinct().ToList(),
                 _functionCalls.Distinct().ToList(),
                 _isVolatile);

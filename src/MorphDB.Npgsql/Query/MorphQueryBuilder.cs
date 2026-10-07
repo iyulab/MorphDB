@@ -108,9 +108,7 @@ internal sealed class MorphQuery : IMorphQuery
 
     private TableMetadata? _tableMetadata;
     private readonly Dictionary<string, TableMetadata> _joinedTableMetadata = new();
-    private LookupQueryExpansion? _lookupExpansion;
-    private RollupQueryExpansion? _rollupExpansion;
-    private FormulaQueryExpansion? _formulaExpansion;
+    private TableSource? _source;
 
     // Store all query operations with logical names
     private bool _selectAllCalled;
@@ -383,8 +381,7 @@ internal sealed class MorphQuery : IMorphQuery
     /// <inheritdoc />
     public async Task<decimal?> SumAsync(string column, CancellationToken cancellationToken = default)
     {
-        var table = await GetTableMetadataAsync(cancellationToken);
-        var physicalColumn = GetPhysicalColumnName(column, table);
+        var physicalColumn = (await GetSourceAsync(cancellationToken)).Column(column);
 
         var query = await BuildPhysicalQueryAsync(cancellationToken);
         var sumQuery = query.AsSum(physicalColumn);
@@ -400,8 +397,7 @@ internal sealed class MorphQuery : IMorphQuery
     /// <inheritdoc />
     public async Task<decimal?> AvgAsync(string column, CancellationToken cancellationToken = default)
     {
-        var table = await GetTableMetadataAsync(cancellationToken);
-        var physicalColumn = GetPhysicalColumnName(column, table);
+        var physicalColumn = (await GetSourceAsync(cancellationToken)).Column(column);
 
         var query = await BuildPhysicalQueryAsync(cancellationToken);
         var avgQuery = query.AsAverage(physicalColumn);
@@ -417,8 +413,7 @@ internal sealed class MorphQuery : IMorphQuery
     /// <inheritdoc />
     public async Task<T?> MinAsync<T>(string column, CancellationToken cancellationToken = default)
     {
-        var table = await GetTableMetadataAsync(cancellationToken);
-        var physicalColumn = GetPhysicalColumnName(column, table);
+        var physicalColumn = (await GetSourceAsync(cancellationToken)).Column(column);
 
         var query = await BuildPhysicalQueryAsync(cancellationToken);
         var minQuery = query.AsMin(physicalColumn);
@@ -434,8 +429,7 @@ internal sealed class MorphQuery : IMorphQuery
     /// <inheritdoc />
     public async Task<T?> MaxAsync<T>(string column, CancellationToken cancellationToken = default)
     {
-        var table = await GetTableMetadataAsync(cancellationToken);
-        var physicalColumn = GetPhysicalColumnName(column, table);
+        var physicalColumn = (await GetSourceAsync(cancellationToken)).Column(column);
 
         var query = await BuildPhysicalQueryAsync(cancellationToken);
         var maxQuery = query.AsMax(physicalColumn);
@@ -507,20 +501,11 @@ internal sealed class MorphQuery : IMorphQuery
     }
 
     /// <summary>
-    /// The FROM source, aliased when an alias is given. SqlKata's <c>Query.As</c> names a query for use
-    /// as a subquery or CTE — it does not alias the table in FROM — so a statement that refers to the
-    /// table by an alias (lookup and rollup JOINs use <c>base_table</c>) needs the alias in the source
-    /// itself, or PostgreSQL refuses it as a missing FROM-clause entry.
-    /// </summary>
-    private static string Aliased(string table, string? alias) =>
-        string.IsNullOrEmpty(alias) ? table : $"{table} as {alias}";
-
-    /// <summary>
     /// Builds a SqlKata query using logical names (for debugging/ToSql).
     /// </summary>
     private SqlKataQuery BuildLogicalQuery()
     {
-        var query = new SqlKataQuery(Aliased(_tableName, _tableAlias));
+        var query = new SqlKataQuery(string.IsNullOrEmpty(_tableAlias) ? _tableName : $"{_tableName} as {_tableAlias}");
 
         // SELECT
         if (_selectAllCalled || (_selectedColumns.Count == 0 && _aggregates.Count == 0))
@@ -602,45 +587,42 @@ internal sealed class MorphQuery : IMorphQuery
     }
 
     /// <summary>
-    /// Builds a SqlKata query with physical names for actual execution.
-    /// Uses "base_table" as alias when lookup or rollup expansion is present.
+    /// The table as this read selects it: itself, or with its lookup, rollup and formula columns
+    /// computed by name (<see cref="TableSource"/>). Every clause below names columns through it.
+    /// </summary>
+    private async Task<TableSource> GetSourceAsync(CancellationToken cancellationToken) =>
+        _source ??= await TableSource.CreateAsync(
+            _projectId,
+            await GetTableMetadataAsync(cancellationToken),
+            _tableAlias,
+            _lookupResolver,
+            _rollupResolver,
+            _formulaResolver,
+            cancellationToken);
+
+    /// <summary>
+    /// Builds a SqlKata query with physical names for actual execution — FROM, WHERE, row-level
+    /// security, joins, ORDER BY, GROUP BY, HAVING and paging. The SELECT list is the caller's
+    /// (<see cref="CompileQueryAsync"/>, or an aggregate such as <see cref="CountAsync"/>).
     /// </summary>
     private async Task<SqlKataQuery> BuildPhysicalQueryAsync(CancellationToken cancellationToken)
     {
         var table = await GetTableMetadataAsync(cancellationToken);
-        // Use base_table alias when lookup or rollup expansion is present: their JOINs and select
-        // expressions name the queried table by it.
-        var useBaseTableAlias = _lookupExpansion?.HasExpansion == true || _rollupExpansion?.HasExpansion == true;
-        var query = new SqlKataQuery(Aliased(table.PhysicalName, useBaseTableAlias ? "base_table" : _tableAlias));
+        var source = await GetSourceAsync(cancellationToken);
+        var query = new SqlKataQuery();
+        source.ApplyFrom(query);
 
-        // SELECT - Note: We don't add SELECT here for aggregate queries
-        // The calling method (CountAsync, SumAsync, etc.) will handle the aggregate
-
-        // WHERE - Transform logical column names to physical
-        ApplyPhysicalWhereConditions(query, _whereConditions, table, useBaseTableAlias ? "base_table" : null);
+        // WHERE - a derived column filters like a stored one
+        foreach (var condition in _whereConditions)
+        {
+            ApplyWhereCondition(query, source.Column(condition.Column), condition);
+        }
 
         // Row-level security, in physical names qualified by whatever this statement calls the table.
-        var rlsExpression = await EvaluateRlsAsync(
-            table,
-            useBaseTableAlias ? "base_table" : DdlBuilder.QuoteIdentifier(_tableAlias ?? table.PhysicalName),
-            cancellationToken);
+        var rlsExpression = await EvaluateRlsAsync(table, DdlBuilder.QuoteIdentifier(source.Name), cancellationToken);
         if (!string.IsNullOrEmpty(rlsExpression))
         {
             query.WhereRaw(rlsExpression);
-        }
-
-        // Add lookup JOINs from expansion using structured join info
-        if (_lookupExpansion?.Joins.Count > 0)
-        {
-            foreach (var join in _lookupExpansion.Joins)
-            {
-                // SqlKata LeftJoin with aliased table
-                // Format: LEFT JOIN "target" AS alias ON base_table."source_col" = alias."target_col"
-                query.LeftJoin(
-                    $"{join.TargetTablePhysical} AS {join.TargetTableAlias}",
-                    $"base_table.{join.SourceColumnPhysical}",
-                    $"{join.TargetTableAlias}.{join.TargetColumnPhysical}");
-            }
         }
 
         // JOIN - resolve physical table and column names
@@ -648,56 +630,41 @@ internal sealed class MorphQuery : IMorphQuery
         {
             var joinTable = await GetJoinedTableMetadataAsync(joinTableName, cancellationToken);
             var physicalJoinTable = joinTable.PhysicalName;
-            var physicalSourceColumn = GetPhysicalColumnName(sourceColumn, table);
-            var physicalTargetColumn = GetPhysicalColumnName(targetColumn, joinTable);
-
-            // Add table prefix when using base_table alias
-            var sourceRef = useBaseTableAlias ? $"base_table.{physicalSourceColumn}" : physicalSourceColumn;
+            var targetRef = $"{physicalJoinTable}.{GetPhysicalColumnName(targetColumn, joinTable)}";
 
             if (isLeft)
             {
-                query.LeftJoin(physicalJoinTable, sourceRef, physicalTargetColumn);
+                query.LeftJoin(physicalJoinTable, source.Column(sourceColumn), targetRef);
             }
             else
             {
-                query.Join(physicalJoinTable, sourceRef, physicalTargetColumn);
+                query.Join(physicalJoinTable, source.Column(sourceColumn), targetRef);
             }
         }
 
         // ORDER BY
         foreach (var (column, descending) in _orderByClauses)
         {
-            var physicalColumn = GetPhysicalColumnName(column, table);
-            var columnRef = useBaseTableAlias ? $"base_table.{physicalColumn}" : physicalColumn;
             if (descending)
             {
-                query.OrderByDesc(columnRef);
+                query.OrderByDesc(source.Column(column));
             }
             else
             {
-                query.OrderBy(columnRef);
+                query.OrderBy(source.Column(column));
             }
         }
 
         // GROUP BY
         if (_groupByColumns.Count > 0)
         {
-            var physicalGroupBy = _groupByColumns
-                .Select(c =>
-                {
-                    var physCol = GetPhysicalColumnNameOrSelf(c, table);
-                    return useBaseTableAlias ? $"base_table.{physCol}" : physCol;
-                })
-                .ToArray();
-            query.GroupBy(physicalGroupBy);
+            query.GroupBy(_groupByColumns.Select(source.ColumnOrSelf).ToArray());
         }
 
         // HAVING
         foreach (var condition in _havingConditions)
         {
-            var physicalColumn = GetPhysicalColumnNameOrSelf(condition.Column, table);
-            var columnRef = useBaseTableAlias ? $"base_table.{physicalColumn}" : physicalColumn;
-            ApplyHaving(query, columnRef, condition.Operator, condition.Value);
+            ApplyHaving(query, _compiler.Wrap(source.ColumnOrSelf(condition.Column)), condition.Operator, condition.Value);
         }
 
         // LIMIT/OFFSET
@@ -717,106 +684,26 @@ internal sealed class MorphQuery : IMorphQuery
     private async Task<(string Sql, object Parameters)> CompileQueryAsync(
         CancellationToken cancellationToken)
     {
-        var table = await GetTableMetadataAsync(cancellationToken);
-
-        // Build lookup expansion for lookup columns
-        await BuildLookupExpansionAsync(table, cancellationToken);
-
-        // Build rollup expansion for rollup columns
-        await BuildRollupExpansionAsync(table, cancellationToken);
-
-        // Build formula expansion for formula columns
-        await BuildFormulaExpansionAsync(table, cancellationToken);
-
         var query = await BuildPhysicalQueryAsync(cancellationToken);
-
-        // Determine if we're using base_table alias (when lookups, rollups, or formulas are present)
-        var hasLookups = _lookupExpansion?.HasExpansion == true;
-        var hasRollups = _rollupExpansion?.HasExpansion == true;
-        var hasFormulas = _formulaExpansion?.HasExpansion == true;
-        var useBaseTableAlias = hasLookups || hasRollups || hasFormulas;
+        var source = await GetSourceAsync(cancellationToken);
 
         // Add SELECT clause
         if (_selectAllCalled || (_selectedColumns.Count == 0 && _aggregates.Count == 0))
         {
-            if (useBaseTableAlias)
-            {
-                // Select all base table columns with alias
-                query.Select("base_table.*");
-
-                // Add lookup column expressions
-                if (hasLookups)
-                {
-                    foreach (var (logicalName, selectExpr) in _lookupExpansion!.SelectExpressions)
-                    {
-                        query.SelectRaw($"{selectExpr} AS \"{logicalName}\"");
-                    }
-                }
-
-                // Add rollup column expressions (correlated subqueries)
-                if (hasRollups)
-                {
-                    foreach (var (logicalName, subqueryExpr) in _rollupExpansion!.SubqueryExpressions)
-                    {
-                        query.SelectRaw($"{subqueryExpr} AS \"{logicalName}\"");
-                    }
-                }
-
-                // Add formula column expressions
-                if (hasFormulas)
-                {
-                    foreach (var (logicalName, formulaExpr) in _formulaExpansion!.Expressions)
-                    {
-                        query.SelectRaw($"{formulaExpr} AS \"{logicalName}\"");
-                    }
-                }
-            }
-            else
-            {
-                // Standard SELECT * without alias
-                query.Select("*");
-            }
+            query.Select($"{source.Name}.*");
         }
-        else if (_selectedColumns.Count > 0)
+        else
         {
             foreach (var column in _selectedColumns)
             {
-                // Check if this is a lookup column with expansion
-                if (_lookupExpansion?.SelectExpressions.TryGetValue(column, out var lookupExpr) == true)
-                {
-                    query.SelectRaw($"{lookupExpr} AS \"{column}\"");
-                }
-                // Check if this is a rollup column with expansion
-                else if (_rollupExpansion?.SubqueryExpressions.TryGetValue(column, out var rollupExpr) == true)
-                {
-                    query.SelectRaw($"{rollupExpr} AS \"{column}\"");
-                }
-                // Check if this is a formula column with expansion
-                else if (_formulaExpansion?.Expressions.TryGetValue(column, out var formulaExpr) == true)
-                {
-                    query.SelectRaw($"{formulaExpr} AS \"{column}\"");
-                }
-                else
-                {
-                    var physicalColumn = GetPhysicalColumnName(column, table);
-                    if (useBaseTableAlias)
-                    {
-                        query.Select($"base_table.{physicalColumn}");
-                    }
-                    else
-                    {
-                        query.Select(physicalColumn);
-                    }
-                }
+                query.Select(source.Column(column));
             }
         }
 
         // Aggregates
         foreach (var (function, column, alias) in _aggregates)
         {
-            var physicalColumn = GetPhysicalColumnNameOrSelf(column, table);
-            var columnRef = useBaseTableAlias ? $"base_table.{physicalColumn}" : physicalColumn;
-            var aggExpr = BuildAggregateExpression(function, columnRef);
+            var aggExpr = BuildAggregateExpression(function, _compiler.Wrap(source.ColumnOrSelf(column)));
             if (!string.IsNullOrEmpty(alias))
             {
                 query.SelectRaw($"{aggExpr} AS {alias}");
@@ -831,121 +718,6 @@ internal sealed class MorphQuery : IMorphQuery
         return (compiled.Sql, compiled.NamedBindings);
     }
 
-    /// <summary>
-    /// Builds lookup expansion for columns that are lookup type.
-    /// </summary>
-    private async Task BuildLookupExpansionAsync(TableMetadata table, CancellationToken cancellationToken)
-    {
-        if (_lookupResolver is null)
-            return;
-
-        // Find lookup columns that need expansion
-        var lookupColumns = new List<LookupColumnInfo>();
-
-        foreach (var column in table.Columns)
-        {
-            if (column.LookupConfig is null)
-                continue;
-
-            // If SelectAll or this column is in the selected columns
-            if (_selectAllCalled || _selectedColumns.Count == 0 || _selectedColumns.Contains(column.LogicalName))
-            {
-                lookupColumns.Add(new LookupColumnInfo
-                {
-                    ColumnName = column.LogicalName,
-                    Config = column.LookupConfig,
-                    DataType = column.DataType
-                });
-            }
-        }
-
-        if (lookupColumns.Count == 0)
-            return;
-
-        _lookupExpansion = await _lookupResolver.BuildLookupExpansionAsync(
-            _projectId,
-            table,
-            lookupColumns,
-            cancellationToken);
-    }
-
-    /// <summary>
-    /// Builds rollup expansion for columns that are rollup type.
-    /// Rollups generate correlated subqueries for aggregate values.
-    /// </summary>
-    private async Task BuildRollupExpansionAsync(TableMetadata table, CancellationToken cancellationToken)
-    {
-        if (_rollupResolver is null)
-            return;
-
-        // Find rollup columns that need expansion
-        var rollupColumns = new List<RollupColumnInfo>();
-
-        foreach (var column in table.Columns)
-        {
-            if (column.RollupConfig is null)
-                continue;
-
-            // If SelectAll or this column is in the selected columns
-            if (_selectAllCalled || _selectedColumns.Count == 0 || _selectedColumns.Contains(column.LogicalName))
-            {
-                rollupColumns.Add(new RollupColumnInfo
-                {
-                    ColumnName = column.LogicalName,
-                    Config = column.RollupConfig,
-                    DataType = column.DataType
-                });
-            }
-        }
-
-        if (rollupColumns.Count == 0)
-            return;
-
-        _rollupExpansion = await _rollupResolver.BuildRollupExpansionAsync(
-            _projectId,
-            table,
-            rollupColumns,
-            cancellationToken);
-    }
-
-    /// <summary>
-    /// Builds formula expansion for columns that are formula type.
-    /// </summary>
-    private async Task BuildFormulaExpansionAsync(TableMetadata table, CancellationToken cancellationToken)
-    {
-        if (_formulaResolver is null)
-            return;
-
-        // Find formula columns that need expansion
-        var formulaColumns = new List<FormulaColumnInfo>();
-
-        foreach (var column in table.Columns)
-        {
-            if (column.FormulaConfig is null)
-                continue;
-
-            // If SelectAll or this column is in the selected columns
-            if (_selectAllCalled || _selectedColumns.Count == 0 || _selectedColumns.Contains(column.LogicalName))
-            {
-                formulaColumns.Add(new FormulaColumnInfo
-                {
-                    ColumnName = column.LogicalName,
-                    Config = column.FormulaConfig,
-                    DataType = column.DataType
-                });
-            }
-        }
-
-        if (formulaColumns.Count == 0)
-            return;
-
-        _formulaExpansion = await _formulaResolver.BuildFormulaExpansionAsync(
-            _projectId,
-            table,
-            formulaColumns,
-            cancellationToken);
-    }
-
     private static void ApplyWhereConditions(SqlKataQuery query, List<WhereCondition> conditions)
     {
         foreach (var condition in conditions)
@@ -954,19 +726,25 @@ internal sealed class MorphQuery : IMorphQuery
         }
     }
 
+    /// <summary>
+    /// The filter of an UPDATE or DELETE, which addresses the table itself: a derived column is
+    /// computed by reads only, so a write cannot be narrowed by one.
+    /// </summary>
     private static void ApplyPhysicalWhereConditions(
         SqlKataQuery query,
         List<WhereCondition> conditions,
-        TableMetadata table,
-        string? tableAlias = null)
+        TableMetadata table)
     {
         foreach (var condition in conditions)
         {
-            var physicalColumn = GetPhysicalColumnName(condition.Column, table);
-            var columnRef = string.IsNullOrEmpty(tableAlias)
-                ? physicalColumn
-                : $"{tableAlias}.{physicalColumn}";
-            ApplyWhereCondition(query, columnRef, condition);
+            if (table.Columns.FirstOrDefault(c => c.LogicalName == condition.Column) is { IsDerived: true })
+            {
+                throw new ValidationException(
+                    condition.Column,
+                    "a derived column (lookup, rollup or formula) is computed by reads and cannot narrow a write.");
+            }
+
+            ApplyWhereCondition(query, GetPhysicalColumnName(condition.Column, table), condition);
         }
     }
 
@@ -1176,16 +954,6 @@ internal sealed class MorphQuery : IMorphQuery
             return logicalName;
 
         throw new ColumnNotFoundException(table.LogicalName, logicalName);
-    }
-
-    /// <summary>
-    /// Lenient variant for the clauses where a name may legitimately be a SELECT alias rather than
-    /// a declared column (GROUP BY / HAVING / aggregate targets on the programmatic query surface).
-    /// </summary>
-    private static string GetPhysicalColumnNameOrSelf(string logicalName, TableMetadata table)
-    {
-        var column = table.Columns.FirstOrDefault(c => c.LogicalName == logicalName);
-        return column?.PhysicalName ?? logicalName;
     }
 
     private async Task<TableMetadata> GetTableMetadataAsync(CancellationToken cancellationToken)

@@ -6,6 +6,7 @@ using MorphDB.Core.Models;
 using MorphDB.Core.Security;
 using MorphDB.Npgsql.Ddl;
 using MorphDB.Npgsql.Infrastructure;
+using MorphDB.Npgsql.Query;
 using MorphDB.Npgsql.Repositories;
 using Npgsql;
 using SqlKata.Compilers;
@@ -23,17 +24,28 @@ public sealed class PostgresAggregationService : IAggregationService
     private readonly IMetadataRepository _metadataRepository;
     private readonly ISecurityPolicyService _securityPolicyService;
     private readonly ISecurityContextAccessor _securityContextAccessor;
+    private readonly ILookupResolver? _lookupResolver;
+    private readonly IRollupResolver? _rollupResolver;
+    private readonly IFormulaResolver? _formulaResolver;
     private readonly PostgresCompiler _compiler;
 
     /// <summary>
-    /// Creates a new PostgresAggregationService.
+    /// Creates a new PostgresAggregationService. The resolvers compute the table's lookup, rollup
+    /// and formula columns, so an aggregation can group, filter and aggregate by them as by any
+    /// other column (see <see cref="TableSource"/>).
     /// </summary>
     public PostgresAggregationService(
         NpgsqlDataSource dataSource,
         IMetadataRepository metadataRepository,
         ISecurityPolicyService securityPolicyService,
-        ISecurityContextAccessor securityContextAccessor)
+        ISecurityContextAccessor securityContextAccessor,
+        ILookupResolver? lookupResolver = null,
+        IRollupResolver? rollupResolver = null,
+        IFormulaResolver? formulaResolver = null)
     {
+        _lookupResolver = lookupResolver;
+        _rollupResolver = rollupResolver;
+        _formulaResolver = formulaResolver;
         _dataSource = dataSource ?? throw new ArgumentNullException(nameof(dataSource));
         _metadataRepository = metadataRepository ?? throw new ArgumentNullException(nameof(metadataRepository));
         _securityPolicyService = securityPolicyService ?? throw new ArgumentNullException(nameof(securityPolicyService));
@@ -54,11 +66,14 @@ public sealed class PostgresAggregationService : IAggregationService
         var table = await _metadataRepository.GetTableByNameAsync(projectId, tableName, includeColumns: true, cancellationToken)
             ?? throw new TableNotFoundException(tableName);
 
+        var source = await TableSource.CreateAsync(
+            projectId, table, alias: null, _lookupResolver, _rollupResolver, _formulaResolver, cancellationToken);
+
         // Build the aggregation query
-        var query = BuildAggregationQuery(table, request);
+        var query = BuildAggregationQuery(source, request);
 
         // Apply Row-Level Security
-        await ApplyRlsPolicyAsync(query, projectId, table, cancellationToken);
+        await ApplyRlsPolicyAsync(query, projectId, table, source, cancellationToken);
 
         // Compile and execute
         var compiled = _compiler.Compile(query);
@@ -78,7 +93,7 @@ public sealed class PostgresAggregationService : IAggregationService
         long? totalGroups = null;
         if (request.Limit.HasValue || request.Offset.HasValue)
         {
-            totalGroups = await CountGroupsAsync(projectId, table, tableName, request, cancellationToken);
+            totalGroups = await CountGroupsAsync(projectId, table, source, request, cancellationToken);
         }
 
         return new AggregationResult
@@ -93,49 +108,46 @@ public sealed class PostgresAggregationService : IAggregationService
         };
     }
 
-    private static SqlKataQuery BuildAggregationQuery(TableMetadata table, AggregationRequest request)
+    private SqlKataQuery BuildAggregationQuery(TableSource source, AggregationRequest request)
     {
-        var query = new SqlKataQuery(table.PhysicalName);
+        var query = new SqlKataQuery();
+        source.ApplyFrom(query);
 
         // Add GROUP BY columns to SELECT
         foreach (var groupColumn in request.GroupBy)
         {
-            var column = table.Columns.FirstOrDefault(c => c.LogicalName == groupColumn)
-                ?? throw new ColumnNotFoundException(table.LogicalName, groupColumn);
-
-            query.Select($"{table.PhysicalName}.{column.PhysicalName} AS {groupColumn}");
+            query.SelectRaw($"{source.Quoted(_compiler, groupColumn)} AS {_compiler.Wrap(groupColumn)}");
         }
 
         // Add aggregation columns to SELECT
         foreach (var agg in request.Aggregations)
         {
-            var aggSql = BuildAggregationSql(table, agg);
+            var aggSql = BuildAggregationSql(source, agg);
             query.SelectRaw($"{aggSql} AS {agg.Alias}");
         }
 
         // Add WHERE conditions
         if (request.Filter is { Count: > 0 })
         {
-            ApplyFilterConditions(query, table, request.Filter);
+            ApplyFilterConditions(query, source, request.Filter);
         }
 
         // Add GROUP BY
         foreach (var groupColumn in request.GroupBy)
         {
-            var column = table.Columns.First(c => c.LogicalName == groupColumn);
-            query.GroupBy($"{table.PhysicalName}.{column.PhysicalName}");
+            query.GroupBy(source.Column(groupColumn));
         }
 
         // Add HAVING conditions
         if (request.Having is { Count: > 0 })
         {
-            ApplyHavingConditions(query, table, request);
+            ApplyHavingConditions(query, source, request);
         }
 
         // Add ORDER BY
         if (request.OrderBy is { Count: > 0 })
         {
-            ApplyOrderBy(query, table, request);
+            ApplyOrderBy(query, source, request);
         }
 
         // Add LIMIT/OFFSET
@@ -152,7 +164,7 @@ public sealed class PostgresAggregationService : IAggregationService
         return query;
     }
 
-    private static string BuildAggregationSql(TableMetadata table, AggregationColumn agg)
+    private string BuildAggregationSql(TableSource source, AggregationColumn agg)
     {
         if (agg.Limit is not null && agg.Function != AggregateFunction.ArrayAgg)
         {
@@ -183,12 +195,8 @@ public sealed class PostgresAggregationService : IAggregationService
 
         if (agg.Column is not null)
         {
-            var column = table.Columns.FirstOrDefault(c => c.LogicalName == agg.Column)
-                ?? throw new ColumnNotFoundException(table.LogicalName, agg.Column);
-
-            columnExpr = agg.Distinct
-                ? $"DISTINCT {table.PhysicalName}.{column.PhysicalName}"
-                : $"{table.PhysicalName}.{column.PhysicalName}";
+            var column = source.Quoted(_compiler, agg.Column);
+            columnExpr = agg.Distinct ? $"DISTINCT {column}" : column;
         }
 
         return agg.Function switch
@@ -199,7 +207,7 @@ public sealed class PostgresAggregationService : IAggregationService
             AggregateFunction.Avg => $"AVG({columnExpr})",
             AggregateFunction.Min => $"MIN({columnExpr})",
             AggregateFunction.Max => $"MAX({columnExpr})",
-            AggregateFunction.ArrayAgg => BuildArrayAggSql(columnExpr, OrderColumn(table, agg), agg.Limit),
+            AggregateFunction.ArrayAgg => BuildArrayAggSql(columnExpr, OrderColumn(source, agg), agg.Limit),
             _ => throw new ArgumentException($"Unsupported aggregate function: {agg.Function}")
         };
     }
@@ -220,32 +228,18 @@ public sealed class PostgresAggregationService : IAggregationService
         return limit is { } n ? $@"({aggregate})\[1:{n.ToString(System.Globalization.CultureInfo.InvariantCulture)}\]" : aggregate;
     }
 
-    private static string? OrderColumn(TableMetadata table, AggregationColumn agg)
-    {
-        if (agg.OrderBy is null)
-        {
-            return null;
-        }
+    private string? OrderColumn(TableSource source, AggregationColumn agg) =>
+        agg.OrderBy is null ? null : source.Quoted(_compiler, agg.OrderBy);
 
-        var column = table.Columns.FirstOrDefault(c => c.LogicalName == agg.OrderBy)
-            ?? throw new ColumnNotFoundException(table.LogicalName, agg.OrderBy);
-        return $"{table.PhysicalName}.{column.PhysicalName}";
-    }
-
-    private static void ApplyFilterConditions(SqlKataQuery query, TableMetadata table, IReadOnlyList<FilterCondition> filters)
+    private void ApplyFilterConditions(SqlKataQuery query, TableSource source, IReadOnlyList<FilterCondition> filters)
     {
         foreach (var filter in filters)
         {
-            var column = table.Columns.FirstOrDefault(c => c.LogicalName == filter.Column)
-                ?? throw new ColumnNotFoundException(table.LogicalName, filter.Column);
-
-            var physicalColumn = $"{table.PhysicalName}.{column.PhysicalName}";
-
-            ApplyFilter(query, physicalColumn, filter.Operator, filter.Value);
+            ApplyFilter(query, source.Column(filter.Column), filter.Operator, filter.Value);
         }
     }
 
-    private static void ApplyFilter(SqlKataQuery query, string column, FilterOperator op, object? value)
+    private void ApplyFilter(SqlKataQuery query, string column, FilterOperator op, object? value)
     {
         switch (op)
         {
@@ -271,7 +265,7 @@ public sealed class PostgresAggregationService : IAggregationService
                 query.WhereLike(column, value?.ToString() ?? "");
                 break;
             case FilterOperator.ILike:
-                query.WhereRaw($"LOWER({column}) LIKE LOWER(?)", value?.ToString() ?? "");
+                query.WhereRaw($"LOWER({_compiler.Wrap(column)}) LIKE LOWER(?)", value?.ToString() ?? "");
                 break;
             case FilterOperator.Contains:
                 query.WhereLike(column, LikePattern.Contains(value));
@@ -305,7 +299,7 @@ public sealed class PostgresAggregationService : IAggregationService
         }
     }
 
-    private static void ApplyHavingConditions(SqlKataQuery query, TableMetadata table, AggregationRequest request)
+    private void ApplyHavingConditions(SqlKataQuery query, TableSource source, AggregationRequest request)
     {
         foreach (var having in request.Having!)
         {
@@ -328,12 +322,12 @@ public sealed class PostgresAggregationService : IAggregationService
             };
 
             // Use the full aggregate expression, not the alias (PostgreSQL doesn't allow aliases in HAVING)
-            var aggSql = BuildAggregationSql(table, agg);
+            var aggSql = BuildAggregationSql(source, agg);
             query.HavingRaw($"{aggSql} {op} ?", having.Value);
         }
     }
 
-    private static void ApplyOrderBy(SqlKataQuery query, TableMetadata table, AggregationRequest request)
+    private static void ApplyOrderBy(SqlKataQuery query, TableSource source, AggregationRequest request)
     {
         foreach (var orderBy in request.OrderBy!)
         {
@@ -351,10 +345,7 @@ public sealed class PostgresAggregationService : IAggregationService
             else
             {
                 // Order by GROUP BY column
-                var column = table.Columns.FirstOrDefault(c => c.LogicalName == orderBy.Column)
-                    ?? throw new ColumnNotFoundException(table.LogicalName, orderBy.Column);
-
-                var physicalColumn = $"{table.PhysicalName}.{column.PhysicalName}";
+                var physicalColumn = source.Column(orderBy.Column);
 
                 if (orderBy.Descending)
                     query.OrderByDesc(physicalColumn);
@@ -368,19 +359,19 @@ public sealed class PostgresAggregationService : IAggregationService
         SqlKataQuery query,
         Guid projectId,
         TableMetadata table,
+        TableSource source,
         CancellationToken cancellationToken)
     {
         var securityContext = _securityContextAccessor.ContextOrNull;
         if (securityContext is null || securityContext.BypassRls)
             return;
 
-        // The aggregation reads the table under its physical name, unaliased.
         var rlsExpression = await _securityPolicyService.EvaluatePoliciesAsync(
             projectId,
             table,
             PolicyType.Select,
             securityContext,
-            DdlBuilder.QuoteIdentifier(table.PhysicalName),
+            DdlBuilder.QuoteIdentifier(source.Name),
             cancellationToken);
 
         if (!string.IsNullOrEmpty(rlsExpression))
@@ -392,28 +383,28 @@ public sealed class PostgresAggregationService : IAggregationService
     private async Task<long> CountGroupsAsync(
         Guid projectId,
         TableMetadata table,
-        string tableName,
+        TableSource source,
         AggregationRequest request,
         CancellationToken cancellationToken)
     {
         // Build a count query for total groups
-        var subQuery = new SqlKataQuery(table.PhysicalName);
+        var subQuery = new SqlKataQuery();
+        source.ApplyFrom(subQuery);
 
         // Add WHERE conditions
         if (request.Filter is { Count: > 0 })
         {
-            ApplyFilterConditions(subQuery, table, request.Filter);
+            ApplyFilterConditions(subQuery, source, request.Filter);
         }
 
         // Apply RLS
-        await ApplyRlsPolicyAsync(subQuery, projectId, table, cancellationToken);
+        await ApplyRlsPolicyAsync(subQuery, projectId, table, source, cancellationToken);
 
         // Add GROUP BY
         foreach (var groupColumn in request.GroupBy)
         {
-            var column = table.Columns.First(c => c.LogicalName == groupColumn);
-            subQuery.GroupBy($"{table.PhysicalName}.{column.PhysicalName}");
-            subQuery.Select($"{table.PhysicalName}.{column.PhysicalName}");
+            subQuery.GroupBy(source.Column(groupColumn));
+            subQuery.Select(source.Column(groupColumn));
         }
 
         // If no GROUP BY, count is 1 (single result row)

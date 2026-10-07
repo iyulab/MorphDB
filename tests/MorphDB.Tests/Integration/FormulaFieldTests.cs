@@ -331,7 +331,7 @@ public class FormulaFieldTests
                     IsNullable = true,
                     FormulaConfig = new FormulaColumnConfig
                     {
-                        Formula = "SUBSTRING({email}, '@', 999)",
+                        Formula = "LOWER({email})",
                         ReturnType = MorphDataType.Text
                     }
                 }

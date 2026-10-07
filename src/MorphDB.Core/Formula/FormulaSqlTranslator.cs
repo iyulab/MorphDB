@@ -1,5 +1,4 @@
 using System.Text;
-using System.Text.Json;
 using MorphDB.Core.Abstractions;
 
 namespace MorphDB.Core.Formula;
@@ -22,31 +21,19 @@ public sealed class FormulaSqlTranslator
     }
 
     /// <summary>
-    /// Translates a formula AST (as JSON) to a PostgreSQL SQL expression.
+    /// Translates a parsed formula to a PostgreSQL SQL expression.
     /// </summary>
-    /// <param name="astJson">The AST in JSON format.</param>
+    /// <param name="ast">The formula's syntax tree, as <see cref="FormulaParser"/> produced it.</param>
     /// <param name="tableAlias">Optional table alias prefix for column references.</param>
-    /// <returns>The SQL expression and any translation errors.</returns>
-    public (string Sql, IReadOnlyList<string> Errors) Translate(string astJson, string? tableAlias = null)
+    /// <returns>The SQL expression and any translation errors; with errors the expression is unusable.</returns>
+    public (string Sql, IReadOnlyList<string> Errors) Translate(FormulaNode ast, string? tableAlias = null)
     {
         _errors.Clear();
-
-        try
-        {
-            var doc = JsonDocument.Parse(astJson);
-            var sql = TranslateNode(doc.RootElement, tableAlias);
-            return (sql, _errors);
-        }
-        catch (Exception ex)
-        {
-            return ("NULL", new[] { $"Translation error: {ex.Message}" });
-        }
+        var sql = TranslateNode(ast, tableAlias);
+        return (sql, _errors.ToList());
     }
 
-    /// <summary>
-    /// Translates a FormulaNode directly to SQL.
-    /// </summary>
-    public string TranslateNode(FormulaNode node, string? tableAlias = null)
+    private string TranslateNode(FormulaNode node, string? tableAlias)
     {
         return node switch
         {
@@ -56,21 +43,6 @@ public sealed class FormulaSqlTranslator
             UnaryOperatorNode unary => TranslateUnaryOperator(unary, tableAlias),
             FunctionCallNode function => TranslateFunction(function, tableAlias),
             _ => throw new ArgumentException($"Unknown node type: {node.GetType().Name}")
-        };
-    }
-
-    private string TranslateNode(JsonElement element, string? tableAlias)
-    {
-        var nodeType = element.GetProperty("nodeType").GetString();
-
-        return nodeType switch
-        {
-            "Literal" => TranslateLiteral(element),
-            "ColumnReference" => TranslateColumnReference(element, tableAlias),
-            "BinaryOperator" => TranslateBinaryOperator(element, tableAlias),
-            "UnaryOperator" => TranslateUnaryOperator(element, tableAlias),
-            "FunctionCall" => TranslateFunction(element, tableAlias),
-            _ => throw new ArgumentException($"Unknown node type: {nodeType}")
         };
     }
 
@@ -87,21 +59,6 @@ public sealed class FormulaSqlTranslator
         };
     }
 
-    private static string TranslateLiteral(JsonElement element)
-    {
-        var type = element.GetProperty("type").GetInt32();
-
-        return type switch
-        {
-            0 => "NULL", // LiteralType.Null
-            1 => element.GetProperty("value").GetBoolean() ? "TRUE" : "FALSE", // Boolean
-            2 => element.GetProperty("value").GetInt64().ToString(System.Globalization.CultureInfo.InvariantCulture), // IntegerLiteral
-            3 => element.GetProperty("value").GetDecimal().ToString(System.Globalization.CultureInfo.InvariantCulture), // DecimalLiteral
-            4 => $"'{EscapeString(element.GetProperty("value").GetString() ?? "")}'", // StringLiteral
-            _ => "NULL"
-        };
-    }
-
     private string TranslateColumnReference(string columnName, string? tableAlias)
     {
         if (!_columnMappings.TryGetValue(columnName, out var physicalName))
@@ -114,32 +71,11 @@ public sealed class FormulaSqlTranslator
         return string.IsNullOrEmpty(tableAlias) ? quotedName : $"{tableAlias}.{quotedName}";
     }
 
-    private string TranslateColumnReference(JsonElement element, string? tableAlias)
-    {
-        var columnName = element.GetProperty("columnName").GetString() ?? "";
-        return TranslateColumnReference(columnName, tableAlias);
-    }
-
     private string TranslateBinaryOperator(BinaryOperatorNode node, string? tableAlias)
     {
         var left = TranslateNode(node.Left, tableAlias);
         var right = TranslateNode(node.Right, tableAlias);
         var op = node.Operator;
-
-        // Handle string concatenation
-        if (op == "||")
-        {
-            return $"CONCAT({left}, {right})";
-        }
-
-        return $"({left} {op} {right})";
-    }
-
-    private string TranslateBinaryOperator(JsonElement element, string? tableAlias)
-    {
-        var op = element.GetProperty("operator").GetString();
-        var left = TranslateNode(element.GetProperty("left"), tableAlias);
-        var right = TranslateNode(element.GetProperty("right"), tableAlias);
 
         // Handle string concatenation
         if (op == "||")
@@ -161,33 +97,10 @@ public sealed class FormulaSqlTranslator
         };
     }
 
-    private string TranslateUnaryOperator(JsonElement element, string? tableAlias)
-    {
-        var op = element.GetProperty("operator").GetString()?.ToUpperInvariant();
-        var operand = TranslateNode(element.GetProperty("operand"), tableAlias);
-
-        return op switch
-        {
-            "NOT" => $"(NOT {operand})",
-            "-" => $"(-{operand})",
-            _ => operand
-        };
-    }
-
     private string TranslateFunction(FunctionCallNode node, string? tableAlias)
     {
         var args = node.Arguments.Select(a => TranslateNode(a, tableAlias)).ToList();
         return TranslateFunctionCall(node.FunctionName, args);
-    }
-
-    private string TranslateFunction(JsonElement element, string? tableAlias)
-    {
-        var funcName = element.GetProperty("functionName").GetString() ?? "";
-        var args = element.GetProperty("arguments").EnumerateArray()
-            .Select(a => TranslateNode(a, tableAlias))
-            .ToList();
-
-        return TranslateFunctionCall(funcName, args);
     }
 
     private static string TranslateFunctionCall(string funcName, List<string> args)

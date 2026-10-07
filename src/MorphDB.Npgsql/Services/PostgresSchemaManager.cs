@@ -292,6 +292,15 @@ public sealed class PostgresSchemaManager : ISchemaManager
                 await connection.ExecuteAsync(new CommandDefinition(indexSql, transaction: transaction, cancellationToken: cancellationToken));
             }
 
+            // A formula is checked against the table it computes over before the table exists for
+            // anyone: one that cannot run refuses the whole declaration.
+            foreach (var col in columns.Where(c => c.FormulaConfig is not null))
+            {
+                var formula = col.FormulaConfig!.Formula;
+                var sql = Infrastructure.FormulaSql.Translate(formula, col.LogicalName, columns);
+                await Infrastructure.FormulaSql.VerifyAsync(connection, transaction, physicalTableName, col.LogicalName, formula, sql, cancellationToken);
+            }
+
             await transaction.CommitAsync(cancellationToken);
         }
         catch (PostgresException ex)
@@ -587,6 +596,14 @@ public sealed class PostgresSchemaManager : ISchemaManager
                 await transaction.RollbackAsync(cancellationToken);
                 throw;
             }
+        }
+
+        if (column.FormulaConfig is not null)
+        {
+            var formula = column.FormulaConfig.Formula;
+            var sql = Infrastructure.FormulaSql.Translate(formula, column.LogicalName, table.Columns);
+            await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+            await Infrastructure.FormulaSql.VerifyAsync(connection, null, table.PhysicalName, column.LogicalName, formula, sql, cancellationToken);
         }
 
         // Insert metadata and increment version

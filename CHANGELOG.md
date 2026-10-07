@@ -4,6 +4,15 @@
 
 ### Changed
 
+- **A formula that cannot be computed is refused when declared.** Its expression is parsed, translated
+  and planned against the table at declaration; an unknown column or function, a reference to another
+  lookup, rollup or formula column, or an expression PostgreSQL cannot type is refused with
+  `400 INVALID_EXPRESSION` (a table declared with one is not created). A formula stored before this
+  check that cannot be computed fails the read that needs it, naming the column, instead of reading
+  as `NULL`.
+- **A lookup, rollup or formula column cannot narrow a bulk update or delete** — it is computed by
+  reads; such a filter is refused with `400 VALIDATION_ERROR` instead of failing in the database.
+
 - **Only `Select` row-level security policies can be created.** `Insert`, `Update`, `Delete` and `All`
   are refused with `400 VALIDATION_ERROR`: no insert, update or delete has ever consulted a policy, so
   such a policy was stored and silently never applied. Policies already stored keep their current
@@ -31,8 +40,16 @@
   lookup JOIN and the rollup expression name the queried table `base_table`, and the query never gave the
   table that alias in `FROM`, so PostgreSQL refused the statement — declaring a single lookup or rollup
   column made the whole table unreadable. Rows now carry the derived value (a lookup reads null when the
-  row references nothing). Filtering, ordering or grouping by a lookup column is not supported yet and
-  still fails.
+  row references nothing).
+- **A lookup, rollup or formula column filters, orders, groups and aggregates like a stored column.**
+  These columns were computed only where a SELECT list named them, so a filter, an order, a grouping or
+  an aggregate on one — on a list, `POST /query`, `POST /aggregate`, or an OData `$filter`/`$orderby` —
+  answered `500`. A table with derived columns is now read through a derived table that computes them
+  by name, and every clause reads them from it.
+- **A formula column has a value.** No formula ever produced one: its syntax tree lost every child on
+  the way to the SQL translator, which then emitted `NULL` without a word, and the expression named
+  the table by an alias the query did not use. A table whose only derived column was a formula could
+  not be listed at all (`500`).
 
 ## 0.16.0
 

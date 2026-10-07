@@ -902,12 +902,12 @@ A formula column is declared like any other column — in `POST /api/schema/tabl
 
 ```json
 {
-  "name": "email_domain",
-  "type": "text",
+  "name": "line_total",
+  "type": "decimal",
   "nullable": true,
   "formula": {
-    "formula": "SUBSTRING({email}, '@', 999)",
-    "returnType": "text"
+    "formula": "{price} * {quantity}",
+    "returnType": "decimal"
   }
 }
 ```
@@ -921,13 +921,26 @@ A formula column is declared like any other column — in `POST /api/schema/tabl
 A formula column is **virtual**: no column is created in storage, and the value is computed when a
 row is read, by translating the expression to SQL over the table's physical columns. The same is
 true of a `lookup` or `rollup` column — a declaration carrying any of the three configuration
-objects creates a virtual column. A formula column therefore cannot be written to, indexed, or
-given a default.
+objects creates a virtual column. A virtual column therefore cannot be written to, indexed, or
+given a default, and cannot narrow a bulk update or delete (`400 VALIDATION_ERROR`).
 
-**Expression syntax.** Reference the table's columns by logical name in braces (`{email}`);
+**A virtual column reads like a stored one.** Every read carries it — a list, a single record
+(`GET /api/data/{table}/{id}`, GraphQL `record`, OData by key), GraphQL `records`, OData queries —
+and every read can filter, order, group and aggregate by it: `filter=`/`orderBy=` on a list,
+`POST /api/data/{table}/query`, `POST /api/data/{table}/aggregate` (`groupBy`, an aggregation's
+`column`, `filter`), OData `$filter`/`$orderby`.
+
+**Expression syntax.** Reference the table's columns by logical name in braces (`{price}`);
 combine with the arithmetic operators `+ - * /`, the comparison operators `= != <> < <= > >=`, the
-keywords `AND` `OR` `NOT`, string and numeric literals, and the functions below. A function outside
-this list is refused when the column is declared (`400`), naming it.
+keywords `AND` `OR` `NOT`, string and numeric literals, and the functions below. A formula computes
+over the **stored and system columns of its own row** — like a PostgreSQL generated column, it
+cannot name another lookup, rollup or formula column.
+
+**Checked when declared.** The expression is parsed, translated and planned by PostgreSQL against
+the table when the column is declared. A function outside this list, a column the table does not
+have, a derived column, or an expression PostgreSQL cannot type (text minus a number, a text start
+position for `SUBSTRING`) is refused with `400 INVALID_EXPRESSION`, naming the column and the
+reason — and a table declared with such a formula is not created at all.
 
 | Group | Functions |
 |-------|-----------|
@@ -936,8 +949,10 @@ this list is refused when the column is declared (`400`), naming it.
 | Date | `NOW` `TODAY` `DATE` `YEAR` `MONTH` `DAY` `HOUR` `MINUTE` `SECOND` `DATEADD` `DATEDIFF` `DATE_TRUNC` `CURRENT_DATE` `CURRENT_TIME` `CURRENT_TIMESTAMP` |
 | Conditional | `IF` `IFS` `SWITCH` `COALESCE` `NULLIF` |
 | Boolean | `AND` `OR` `NOT` |
-| Aggregation (over a lookup) | `SUM` `AVG` `MIN` `MAX` `COUNT` |
 | Conversion | `CAST` `TO_TEXT` `TO_NUMBER` `TO_DATE` `TO_BOOLEAN` |
+
+A formula is evaluated per row, so it does not aggregate; to total or count related rows, declare a
+`rollup` column.
 
 ---
 
