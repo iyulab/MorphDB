@@ -30,7 +30,7 @@ public class SecurityPolicyServiceTests
     public SecurityPolicyServiceTests(PostgresFixture fixture)
     {
         _dataSource = fixture.DataSource;
-        _policies = new SecurityPolicyService(fixture.DataSource);
+        _policies = new SecurityPolicyService(fixture.DataSource, new MetadataRepository(fixture.DataSource));
         _schemaManager = new PostgresSchemaManager(
             fixture.DataSource,
             new MetadataRepository(fixture.DataSource),
@@ -53,7 +53,7 @@ public class SecurityPolicyServiceTests
             Name = "owner_reads_only",
             TableName = tableName,
             PolicyType = PolicyType.Select,
-            Expression = "owner_id = current_user_id()"
+            Expression = "owner_id = {{user_id}}"
         }, TestContext.Current.CancellationToken);
 
         created.TableId.Should().NotBeEmpty("the policy must resolve the table it applies to");
@@ -187,7 +187,7 @@ public class SecurityPolicyServiceTests
     {
         var projectId = Guid.NewGuid();
         var tableName = "policy_delete_" + Guid.NewGuid().ToString("N")[..8];
-        await CreateTableAsync(projectId, tableName);
+        var table = await CreateTableAsync(projectId, tableName);
 
         var created = await _policies.CreatePolicyAsync(projectId, new CreatePolicyRequest
         {
@@ -201,7 +201,7 @@ public class SecurityPolicyServiceTests
 
         (await _policies.GetPolicyAsync(projectId, created.Id, TestContext.Current.CancellationToken)).Should().BeNull();
         (await _policies.EvaluatePoliciesAsync(
-            projectId, tableName, PolicyType.Select, new SecurityContext { ProjectId = projectId }, TestContext.Current.CancellationToken))
+            projectId, table, PolicyType.Select, new SecurityContext { ProjectId = projectId }, cancellationToken: TestContext.Current.CancellationToken))
             .Should().BeNull("no policy remains to constrain the read");
     }
 
@@ -210,7 +210,7 @@ public class SecurityPolicyServiceTests
     {
         var projectId = Guid.NewGuid();
         var tableName = "policy_eval_" + Guid.NewGuid().ToString("N")[..8];
-        await CreateTableAsync(projectId, tableName);
+        var table = await CreateTableAsync(projectId, tableName);
 
         await _policies.CreatePolicyAsync(projectId, new CreatePolicyRequest
         {
@@ -226,23 +226,21 @@ public class SecurityPolicyServiceTests
             PolicyType = PolicyType.Select,
             Expression = "owner_id IS NOT NULL"
         }, TestContext.Current.CancellationToken);
-        await _policies.CreatePolicyAsync(projectId, new CreatePolicyRequest
-        {
-            Name = "writes_only",
-            TableName = tableName,
-            PolicyType = PolicyType.Insert,
-            Expression = "false"
-        }, TestContext.Current.CancellationToken);
-
         var where = await _policies.EvaluatePoliciesAsync(
             projectId,
-            tableName,
+            table,
             PolicyType.Select,
-            new SecurityContext { ProjectId = projectId, UserId = "u-1" }, TestContext.Current.CancellationToken);
+            new SecurityContext { ProjectId = projectId, UserId = "u-1" },
+            "base_table",
+            TestContext.Current.CancellationToken);
 
         where.Should().Contain("'u-1'", "the caller is substituted for the placeholder");
         where.Should().Contain(" AND ", "applicable policies are combined, not chosen between");
-        where.Should().NotContain("false", "a policy for another operation must not apply");
+        var physical = table.Columns.Single(c => c.LogicalName == "owner_id").PhysicalName;
+        where.Should().Contain($"base_table.\"{physical}\"",
+            "a policy is written in the table's own column names and read in the physical ones, " +
+            "qualified by what the query calls the table");
+        where.Should().NotContain("owner_id", "no logical name may reach the SQL");
     }
 
     /// <summary>
@@ -254,7 +252,7 @@ public class SecurityPolicyServiceTests
     {
         var projectId = Guid.NewGuid();
         var tableName = "policy_escape_" + Guid.NewGuid().ToString("N")[..8];
-        await CreateTableAsync(projectId, tableName);
+        var table = await CreateTableAsync(projectId, tableName);
 
         await _policies.CreatePolicyAsync(projectId, new CreatePolicyRequest
         {
@@ -266,9 +264,10 @@ public class SecurityPolicyServiceTests
 
         var where = await _policies.EvaluatePoliciesAsync(
             projectId,
-            tableName,
+            table,
             PolicyType.Select,
-            new SecurityContext { ProjectId = projectId, UserId = "x' OR '1'='1" }, TestContext.Current.CancellationToken);
+            new SecurityContext { ProjectId = projectId, UserId = "x' OR '1'='1" },
+            cancellationToken: TestContext.Current.CancellationToken);
 
         where.Should().Contain("''", "the quote is doubled, not closed");
     }
@@ -303,10 +302,74 @@ public class SecurityPolicyServiceTests
         }
 
         var act = () => _policies.EvaluatePoliciesAsync(
-            projectId, tableName, PolicyType.Select, new SecurityContext { ProjectId = projectId });
+            projectId, table, PolicyType.Select, new SecurityContext { ProjectId = projectId });
 
         await act.Should().ThrowAsync<SchemaException>(
             "a policy that cannot be emitted safely must fail the read, not be dropped from it");
+    }
+
+    /// <summary>
+    /// A write policy used to be stored and then consulted by nothing — inserts, updates and deletes
+    /// never read one. A security rule that silently does not apply is refused instead, until writes
+    /// enforce it.
+    /// </summary>
+    [Theory]
+    [InlineData(PolicyType.Insert)]
+    [InlineData(PolicyType.Update)]
+    [InlineData(PolicyType.Delete)]
+    [InlineData(PolicyType.All)]
+    public async Task A_policy_for_writes_is_refused_because_no_write_reads_one(PolicyType policyType)
+    {
+        var projectId = Guid.NewGuid();
+        var tableName = "policy_write_" + Guid.NewGuid().ToString("N")[..8];
+        await CreateTableAsync(projectId, tableName);
+
+        var act = () => _policies.CreatePolicyAsync(projectId, new CreatePolicyRequest
+        {
+            Name = "writes",
+            TableName = tableName,
+            PolicyType = policyType,
+            Expression = "owner_id IS NOT NULL"
+        });
+
+        (await act.Should().ThrowAsync<ValidationException>()).Which.ErrorCode.Should().Be("VALIDATION_ERROR");
+    }
+
+    /// <summary>
+    /// A policy that cannot hold as a predicate over its table used to be stored, and then failed
+    /// every read of the table with a 500. It is the caller's mistake, reported once, at registration.
+    /// </summary>
+    [Theory]
+    [InlineData("no_such_column = 'x'", "a name the table does not have")]
+    [InlineData("owner_id = current_user_id()", "a function that does not exist")]
+    [InlineData("owner_id > now()", "a comparison PostgreSQL cannot type")]
+    public async Task An_expression_that_is_not_a_predicate_over_the_table_is_refused_at_registration(string expression, string why)
+    {
+        var projectId = Guid.NewGuid();
+        var tableName = "policy_verify_" + Guid.NewGuid().ToString("N")[..8];
+        await CreateTableAsync(projectId, tableName);
+
+        var act = () => _policies.CreatePolicyAsync(projectId, new CreatePolicyRequest
+        {
+            Name = "broken",
+            TableName = tableName,
+            PolicyType = PolicyType.Select,
+            Expression = expression
+        });
+        (await act.Should().ThrowAsync<SchemaException>(why)).Which.ErrorCode.Should().Be("INVALID_EXPRESSION");
+
+        // A quoted column name reads like a bare one, and a literal is never mistaken for a column.
+        var ok = await _policies.CreatePolicyAsync(projectId, new CreatePolicyRequest
+        {
+            Name = "fine",
+            TableName = tableName,
+            PolicyType = PolicyType.Select,
+            Expression = "\"owner_id\" IS NOT NULL OR owner_id = 'no_such_column'"
+        }, TestContext.Current.CancellationToken);
+
+        var update = () => _policies.UpdatePolicyAsync(projectId, ok.Id, new UpdatePolicyRequest { Expression = expression });
+        (await update.Should().ThrowAsync<SchemaException>("an update is verified the same way"))
+            .Which.ErrorCode.Should().Be("INVALID_EXPRESSION");
     }
 
     private Task<TableMetadata> CreateTableAsync(Guid projectId, string tableName) =>

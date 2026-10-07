@@ -1,6 +1,9 @@
 using System.Text.RegularExpressions;
 using Dapper;
+using MorphDB.Core.Exceptions;
+using MorphDB.Core.Models;
 using MorphDB.Core.Security;
+using MorphDB.Npgsql.Ddl;
 using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Repositories;
 using Npgsql;
@@ -13,10 +16,12 @@ namespace MorphDB.Npgsql.Security;
 public sealed partial class SecurityPolicyService : ISecurityPolicyService
 {
     private readonly NpgsqlDataSource _dataSource;
+    private readonly IMetadataRepository _metadataRepository;
 
-    public SecurityPolicyService(NpgsqlDataSource dataSource)
+    public SecurityPolicyService(NpgsqlDataSource dataSource, IMetadataRepository metadataRepository)
     {
         _dataSource = dataSource;
+        _metadataRepository = metadataRepository;
     }
 
     public async Task<SecurityPolicy> CreatePolicyAsync(
@@ -29,20 +34,23 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
         // and subject to the same gate. Rejecting it here quotes the caller their own text.
         InlineExpressionValidator.Validate(request.Expression, "Policy");
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-
-        // Get table ID
-        var tableId = await connection.QueryFirstOrDefaultAsync<Guid?>(
-            """
-            SELECT table_id FROM morphdb._morph_tables
-            WHERE project_id = @ProjectId AND logical_name = @TableName AND is_active = true
-            """,
-            new { ProjectId = projectId, request.TableName });
-
-        if (!tableId.HasValue)
+        // Only reads apply a policy. A write policy would be stored and then never consulted by an
+        // insert, update or delete — a security rule that silently does not apply — so it is
+        // refused until writes enforce one.
+        if (request.PolicyType != PolicyType.Select)
         {
-            throw new MorphDB.Core.Exceptions.TableNotFoundException(request.TableName);
+            throw new ValidationException(
+                "policyType",
+                $"'{request.PolicyType}' policies are not enforced in this release; only 'Select' policies restrict rows.");
         }
+
+        var table = await _metadataRepository.GetTableByNameAsync(projectId, request.TableName, includeColumns: true, cancellationToken)
+            ?? throw new TableNotFoundException(request.TableName);
+
+        await VerifyAgainstTableAsync(request.Expression, table, cancellationToken);
+        var tableId = (Guid?)table.TableId;
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
 
         // Get next ordinal position
         var maxOrdinal = await connection.QueryFirstOrDefaultAsync<int?>(
@@ -158,7 +166,7 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
         var existing = await GetPolicyAsync(projectId, policyId, cancellationToken);
         if (existing == null)
         {
-            throw new MorphDB.Core.Exceptions.NotFoundException("Policy", policyId.ToString());
+            throw new NotFoundException("Policy", policyId.ToString());
         }
 
         var name = request.Name ?? existing.Name;
@@ -166,6 +174,10 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
         if (request.Expression is not null)
         {
             InlineExpressionValidator.Validate(request.Expression, "Policy");
+
+            var table = await _metadataRepository.GetTableByIdAsync(existing.TableId, includeColumns: true, cancellationToken)
+                ?? throw new NotFoundException("Table", existing.TableId.ToString());
+            await VerifyAgainstTableAsync(request.Expression, table, cancellationToken);
         }
 
         var isActive = request.IsActive ?? existing.IsActive;
@@ -222,9 +234,10 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
 
     public async Task<string?> EvaluatePoliciesAsync(
         Guid projectId,
-        string tableName,
+        TableMetadata table,
         PolicyType policyType,
         SecurityContext context,
+        string? tableQualifier = null,
         CancellationToken cancellationToken = default)
     {
         if (context.BypassRls)
@@ -232,7 +245,7 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
             return null; // Service key bypasses RLS
         }
 
-        var policies = await GetPoliciesByTableNameAsync(projectId, tableName, cancellationToken);
+        var policies = await GetPoliciesAsync(projectId, table.TableId, cancellationToken);
         var applicablePolicies = policies
             .Where(p => p.IsActive && (p.PolicyType == policyType || p.PolicyType == PolicyType.All))
             .ToList();
@@ -252,7 +265,7 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
             .Select(e =>
             {
                 InlineExpressionValidator.Validate(e, "Policy");
-                return e;
+                return ToPhysical(e, table, tableQualifier);
             })
             .ToList();
 
@@ -262,6 +275,60 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
         }
 
         return string.Join(" AND ", expressions.Select(e => $"({e})"));
+    }
+
+    /// <summary>
+    /// Rewrites the column names a policy is written in — the table's logical names, as the caller
+    /// declared them — to the physical names the query reads, qualified by the name the query gives
+    /// the table. The qualifier matters: a joined lookup target carries system columns of the same
+    /// name, so an unqualified <c>_id</c> would be ambiguous.
+    /// </summary>
+    private static string ToPhysical(string expression, TableMetadata table, string? qualifier)
+    {
+        var prefix = qualifier is null ? "" : qualifier + ".";
+
+        return SqlIdentifierRewriter.Rewrite(expression, token =>
+        {
+            var column = table.Columns.FirstOrDefault(c => c.LogicalName == token);
+            if (column is not null)
+            {
+                if (column.IsDerived)
+                {
+                    throw new SchemaException(
+                        "INVALID_EXPRESSION",
+                        $"Policy expression '{expression}' names '{token}', a derived column; a policy reads only stored columns.");
+                }
+
+                return prefix + DdlBuilder.QuoteIdentifier(column.PhysicalName);
+            }
+
+            return SystemColumns.IsSystemColumn(token) ? prefix + DdlBuilder.QuoteIdentifier(token) : null;
+        });
+    }
+
+    /// <summary>
+    /// Proves the expression is a predicate over this table by asking PostgreSQL to plan it, with
+    /// every placeholder standing in as an anonymous caller would see it. A name the table does not
+    /// have, a function that does not exist, or a comparison of the wrong type is refused here —
+    /// the caller's mistake, reported once at registration — instead of failing every read of the
+    /// table afterwards.
+    /// </summary>
+    private async Task VerifyAgainstTableAsync(string expression, TableMetadata table, CancellationToken cancellationToken)
+    {
+        var predicate = ToPhysical(SubstituteVariables(expression, new SecurityContext { ProjectId = table.ProjectId }), table, qualifier: null);
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        try
+        {
+            await connection.ExecuteAsync(
+                $"EXPLAIN SELECT 1 FROM {DdlBuilder.QuoteIdentifier(table.PhysicalName)} WHERE ({predicate})");
+        }
+        catch (PostgresException ex)
+        {
+            throw new SchemaException(
+                "INVALID_EXPRESSION",
+                $"Policy expression '{expression}' is not a predicate over table '{table.LogicalName}': {ex.MessageText}");
+        }
     }
 
     private static string SubstituteVariables(string expression, SecurityContext context)

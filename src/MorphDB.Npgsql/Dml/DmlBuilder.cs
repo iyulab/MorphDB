@@ -143,37 +143,6 @@ public static class DmlBuilder
     }
 
     /// <summary>
-    /// Builds a SELECT statement by ID.
-    /// </summary>
-    /// <param name="tableName">Physical table name.</param>
-    /// <param name="idColumnName">Physical ID column name.</param>
-    /// <param name="columnNames">Columns to select (null for *).</param>
-    /// <returns>SELECT SQL.</returns>
-    public static string BuildSelectById(string tableName, string idColumnName, IEnumerable<string>? columnNames = null)
-    {
-        var sb = new StringBuilder();
-        sb.Append("SELECT ");
-
-        var columns = columnNames?.ToList();
-        if (columns is null || columns.Count == 0)
-        {
-            sb.Append('*');
-        }
-        else
-        {
-            sb.Append(string.Join(", ", columns.Select(QuoteIdentifier)));
-        }
-
-        sb.Append(" FROM ");
-        sb.Append(QuoteIdentifier(tableName));
-        sb.Append(" WHERE ");
-        sb.Append(QuoteIdentifier(idColumnName));
-        sb.Append(" = @id");
-
-        return sb.ToString();
-    }
-
-    /// <summary>
     /// Builds an UPSERT (INSERT ... ON CONFLICT UPDATE) statement.
     /// </summary>
     /// <param name="tableName">Physical table name.</param>

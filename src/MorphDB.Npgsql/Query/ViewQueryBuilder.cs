@@ -363,20 +363,14 @@ public sealed class ViewQueryBuilder
         CancellationToken cancellationToken) =>
         TranslateIdentifiersAsync(expression, baseTable, tableQualifiers, cancellationToken);
 
-    // Matches either a single-quoted SQL string literal (copied verbatim, never treated as a
-    // column reference) or a bare/dotted identifier ("customer_id", "orders.customer_id").
-    private static readonly Regex IdentifierOrStringLiteral = new(
-        @"'(?:[^']|'')*'|\b[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?\b",
-        RegexOptions.Compiled);
-
     /// <summary>
     /// Translates logical column references embedded in a free-form condition or expression
     /// string (e.g. "orders.customer_id = customers._id", "price * quantity") to their physical
-    /// equivalents, leaving everything else (operators, literals, SQL keywords, function names)
-    /// untouched. Unlike <see cref="TranslateColumnNameAsync"/> -- which is only ever called with
-    /// text already known to be a column reference (Source/GroupBy/OrderBy) and so can safely
-    /// quote-and-assume on a miss -- a token here that fails to resolve is left as-is, since it
-    /// may well be a keyword or function name rather than an unknown column.
+    /// equivalents through <see cref="SqlIdentifierRewriter"/> — the rule row-level security
+    /// predicates follow too. Unlike <see cref="TranslateColumnNameAsync"/> -- which is only ever
+    /// called with text already known to be a column reference (Source/GroupBy/OrderBy) and so can
+    /// safely quote-and-assume on a miss -- a token here that fails to resolve is left as-is, since
+    /// it may well be a keyword or function name rather than an unknown column.
     /// </summary>
     private async Task<string> TranslateIdentifiersAsync(
         string text,
@@ -384,38 +378,33 @@ public sealed class ViewQueryBuilder
         IReadOnlyDictionary<string, string> tableQualifiers,
         CancellationToken cancellationToken)
     {
-        var result = new StringBuilder();
-        var lastIndex = 0;
-
-        foreach (Match match in IdentifierOrStringLiteral.Matches(text))
+        // Resolve every table a dotted reference names first, so the rewrite itself is synchronous.
+        var tables = new Dictionary<string, TableMetadata?>(StringComparer.Ordinal);
+        foreach (var identifier in SqlIdentifierRewriter.Identifiers(text))
         {
-            result.Append(text, lastIndex, match.Index - lastIndex);
-
-            result.Append(match.Value.StartsWith('\'')
-                ? match.Value
-                : await TryTranslateColumnReferenceAsync(match.Value, baseTable, tableQualifiers, cancellationToken));
-
-            lastIndex = match.Index + match.Length;
+            var dot = identifier.IndexOf('.', StringComparison.Ordinal);
+            if (dot > 0 && !tables.ContainsKey(identifier[..dot]))
+            {
+                tables[identifier[..dot]] = await GetTableMetadataAsync(identifier[..dot], cancellationToken);
+            }
         }
 
-        result.Append(text, lastIndex, text.Length - lastIndex);
-        return result.ToString();
+        return SqlIdentifierRewriter.Rewrite(text, token => TranslateColumnReference(token, baseTable, tables, tableQualifiers));
     }
 
-    private async Task<string> TryTranslateColumnReferenceAsync(
+    private static string? TranslateColumnReference(
         string token,
         TableMetadata baseTable,
-        IReadOnlyDictionary<string, string> tableQualifiers,
-        CancellationToken cancellationToken)
+        IReadOnlyDictionary<string, TableMetadata?> tables,
+        IReadOnlyDictionary<string, string> tableQualifiers)
     {
         var parts = token.Split('.', 2);
         if (parts.Length == 2)
         {
-            var table = await GetTableMetadataAsync(parts[0], cancellationToken);
-            var column = table?.Columns.FirstOrDefault(c => c.LogicalName == parts[1]);
+            var column = tables.GetValueOrDefault(parts[0])?.Columns.FirstOrDefault(c => c.LogicalName == parts[1]);
             if (column == null)
             {
-                return token;
+                return null;
             }
 
             var qualifier = tableQualifiers.TryGetValue(parts[0], out var mapped)
@@ -431,7 +420,7 @@ public sealed class ViewQueryBuilder
         }
 
         // System columns use logical = physical, same rule TranslateColumnNameAsync applies.
-        return token.StartsWith('_') ? $"base_table.{DdlBuilder.QuoteIdentifier(token)}" : token;
+        return token.StartsWith('_') ? $"base_table.{DdlBuilder.QuoteIdentifier(token)}" : null;
     }
 
     private async Task<TableMetadata?> GetTableMetadataAsync(string tableName, CancellationToken cancellationToken)

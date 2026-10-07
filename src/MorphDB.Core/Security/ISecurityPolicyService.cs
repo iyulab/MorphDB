@@ -1,3 +1,5 @@
+using MorphDB.Core.Models;
+
 namespace MorphDB.Core.Security;
 
 /// <summary>
@@ -79,18 +81,24 @@ public interface ISecurityPolicyService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Evaluates policies for a table and returns the combined WHERE clause.
+    /// Evaluates policies for a table and returns the combined WHERE clause, written in the
+    /// table's physical column names.
     /// </summary>
     /// <param name="projectId">The project ID.</param>
-    /// <param name="tableName">The table name.</param>
+    /// <param name="table">The table being read, with its columns.</param>
     /// <param name="policyType">The policy type to evaluate.</param>
     /// <param name="context">The security context for variable substitution.</param>
+    /// <param name="tableQualifier">
+    /// The name the reading query gives the table (an alias, or the quoted physical name), used to
+    /// qualify every column the clause names; <c>null</c> leaves them unqualified.
+    /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The combined WHERE clause or null if no policies apply.</returns>
     Task<string?> EvaluatePoliciesAsync(
         Guid projectId,
-        string tableName,
+        TableMetadata table,
         PolicyType policyType,
         SecurityContext context,
+        string? tableQualifier = null,
         CancellationToken cancellationToken = default);
 }

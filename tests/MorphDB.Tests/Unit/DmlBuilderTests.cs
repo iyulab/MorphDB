@@ -143,37 +143,6 @@ public class DmlBuilderTests
 
     #endregion
 
-    #region BuildSelectById Tests
-
-    [Fact]
-    public void BuildSelectById_ShouldGenerateSelectAll()
-    {
-        // Act
-        var sql = DmlBuilder.BuildSelectById("t_users", "id");
-
-        // Assert
-        sql.Should().Contain("SELECT *");
-        sql.Should().Contain("FROM \"t_users\"");
-        sql.Should().Contain("WHERE \"id\" = @id");
-    }
-
-    [Fact]
-    public void BuildSelectById_WithColumns_ShouldGenerateSelectSpecific()
-    {
-        // Arrange
-        var columns = new[] { "id", "email", "name" };
-
-        // Act
-        var sql = DmlBuilder.BuildSelectById("t_users", "id", columns);
-
-        // Assert
-        sql.Should().Contain("SELECT \"id\", \"email\", \"name\"");
-        sql.Should().Contain("FROM \"t_users\"");
-        sql.Should().Contain("WHERE \"id\" = @id");
-    }
-
-    #endregion
-
     #region BuildUpsert Tests
 
     [Fact]

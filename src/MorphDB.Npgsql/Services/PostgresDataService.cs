@@ -87,19 +87,20 @@ public sealed class PostgresDataService : IMorphDataService
         var table = await GetTableWithColumnsAsync(projectId, tableName, cancellationToken);
         var idColumn = GetPrimaryKeyColumn(table);
 
-        var sql = DmlBuilder.BuildSelectById(table.PhysicalName, idColumn.PhysicalName);
+        // One record is a query narrowed to its id, not a statement of its own: a separate path is
+        // how a single read came to skip row-level security and leave out every lookup, rollup and
+        // formula value the same row carries when it is listed.
+        var row = await Query(projectId)
+            .From(tableName)
+            .SelectAll()
+            .Where(idColumn.LogicalName, FilterOperator.Equals, id)
+            .FirstOrDefaultAsync(cancellationToken);
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
-        var result = await connection.QuerySingleOrDefaultAsync<dynamic>(
-            new CommandDefinition(sql, new { id }, cancellationToken: cancellationToken));
-
-        if (result is null)
+        if (row is null)
             return null;
 
-        var mapped = Infrastructure.RowMapper.MapToLogicalDictionary(result, table.Columns);
-
         // Decrypt encrypted columns
-        return DecryptRowData(projectId, tableName, mapped, table.Columns);
+        return DecryptRowData(projectId, tableName, row, table.Columns);
     }
 
     /// <inheritdoc />

@@ -4,6 +4,7 @@ using MorphDB.Core.Abstractions;
 using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
 using MorphDB.Core.Security;
+using MorphDB.Npgsql.Ddl;
 using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Repositories;
 using Npgsql;
@@ -57,7 +58,7 @@ public sealed class PostgresAggregationService : IAggregationService
         var query = BuildAggregationQuery(table, request);
 
         // Apply Row-Level Security
-        await ApplyRlsPolicyAsync(query, projectId, tableName, cancellationToken);
+        await ApplyRlsPolicyAsync(query, projectId, table, cancellationToken);
 
         // Compile and execute
         var compiled = _compiler.Compile(query);
@@ -366,18 +367,20 @@ public sealed class PostgresAggregationService : IAggregationService
     private async Task ApplyRlsPolicyAsync(
         SqlKataQuery query,
         Guid projectId,
-        string tableName,
+        TableMetadata table,
         CancellationToken cancellationToken)
     {
         var securityContext = _securityContextAccessor.ContextOrNull;
         if (securityContext is null || securityContext.BypassRls)
             return;
 
+        // The aggregation reads the table under its physical name, unaliased.
         var rlsExpression = await _securityPolicyService.EvaluatePoliciesAsync(
             projectId,
-            tableName,
+            table,
             PolicyType.Select,
             securityContext,
+            DdlBuilder.QuoteIdentifier(table.PhysicalName),
             cancellationToken);
 
         if (!string.IsNullOrEmpty(rlsExpression))
@@ -403,7 +406,7 @@ public sealed class PostgresAggregationService : IAggregationService
         }
 
         // Apply RLS
-        await ApplyRlsPolicyAsync(subQuery, projectId, tableName, cancellationToken);
+        await ApplyRlsPolicyAsync(subQuery, projectId, table, cancellationToken);
 
         // Add GROUP BY
         foreach (var groupColumn in request.GroupBy)

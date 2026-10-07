@@ -3,6 +3,7 @@ using MorphDB.Core.Abstractions;
 using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
 using MorphDB.Core.Security;
+using MorphDB.Npgsql.Ddl;
 using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Repositories;
 using Npgsql;
@@ -106,7 +107,6 @@ internal sealed class MorphQuery : IMorphQuery
     private readonly PostgresCompiler _compiler;
 
     private TableMetadata? _tableMetadata;
-    private string? _rlsExpression;
     private readonly Dictionary<string, TableMetadata> _joinedTableMetadata = new();
     private LookupQueryExpansion? _lookupExpansion;
     private RollupQueryExpansion? _rollupExpansion;
@@ -619,10 +619,14 @@ internal sealed class MorphQuery : IMorphQuery
         // WHERE - Transform logical column names to physical
         ApplyPhysicalWhereConditions(query, _whereConditions, table, useBaseTableAlias ? "base_table" : null);
 
-        // Apply RLS expression if available
-        if (!string.IsNullOrEmpty(_rlsExpression))
+        // Row-level security, in physical names qualified by whatever this statement calls the table.
+        var rlsExpression = await EvaluateRlsAsync(
+            table,
+            useBaseTableAlias ? "base_table" : DdlBuilder.QuoteIdentifier(_tableAlias ?? table.PhysicalName),
+            cancellationToken);
+        if (!string.IsNullOrEmpty(rlsExpression))
         {
-            query.WhereRaw(_rlsExpression);
+            query.WhereRaw(rlsExpression);
         }
 
         // Add lookup JOINs from expansion using structured join info
@@ -1198,9 +1202,6 @@ internal sealed class MorphQuery : IMorphQuery
         if (_tableMetadata is null)
             throw new TableNotFoundException(_tableName);
 
-        // Load RLS expression for SELECT operations
-        await LoadRlsExpressionAsync(PolicyType.Select, cancellationToken);
-
         return _tableMetadata;
     }
 
@@ -1221,23 +1222,21 @@ internal sealed class MorphQuery : IMorphQuery
         return metadata;
     }
 
-    private async Task LoadRlsExpressionAsync(PolicyType policyType, CancellationToken cancellationToken)
+    private async Task<string?> EvaluateRlsAsync(TableMetadata table, string tableQualifier, CancellationToken cancellationToken)
     {
-        if (_rlsExpression is not null)
-            return;
-
         var securityContext = _securityContextAccessor.ContextOrNull;
         if (securityContext is null)
         {
-            // No security context, allow all (anonymous access)
-            return;
+            // No security context: an internal read (no HTTP request behind it), not a caller.
+            return null;
         }
 
-        _rlsExpression = await _securityPolicyService.EvaluatePoliciesAsync(
+        return await _securityPolicyService.EvaluatePoliciesAsync(
             _projectId,
-            _tableName,
-            policyType,
+            table,
+            PolicyType.Select,
             securityContext,
+            tableQualifier,
             cancellationToken);
     }
 

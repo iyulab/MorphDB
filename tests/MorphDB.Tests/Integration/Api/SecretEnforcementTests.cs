@@ -272,7 +272,7 @@ public class SecretEnforcementTests
         // into the clause.
         var tableName = $"rls_role_probe_{Guid.NewGuid():N}"[..24];
         var schemaManager = services.GetRequiredService<MorphDB.Core.Abstractions.ISchemaManager>();
-        await schemaManager.CreateTableAsync(new CreateTableRequest
+        var table = await schemaManager.CreateTableAsync(new CreateTableRequest
         {
             ProjectId = _fixture.Api.ProjectId,
             LogicalName = tableName,
@@ -297,7 +297,7 @@ public class SecretEnforcementTests
         }, TestContext.Current.CancellationToken);
 
         var clause = await policies.EvaluatePoliciesAsync(
-            _fixture.Api.ProjectId, tableName, PolicyType.Select, authenticated, TestContext.Current.CancellationToken);
+            _fixture.Api.ProjectId, table, PolicyType.Select, authenticated, cancellationToken: TestContext.Current.CancellationToken);
 
         clause.Should().NotBeNull();
         clause.Should().Contain("'analyst'",

@@ -1130,11 +1130,31 @@ DELETE /api/security/policies/{policyId}       # Delete a policy
 }
 ```
 
-`policyType` is `Select`, `Insert`, `Update`, `Delete` or `All`. The expression is a SQL predicate
-over the table's own columns, with `{{user_id}}`, `{{email}}`, `{{role}}`, `{{project_id}}`,
-`{{is_authenticated}}` and `{{claims.<name>}}` substituted from the request's security context
-before the query runs. Substituted values are emitted as quoted literals — a caller's identity
-cannot become part of the predicate.
+`policyType` is `Select` — the only type a read enforces. `Insert`, `Update`, `Delete` and `All` are
+refused with `400 VALIDATION_ERROR`: no write consults a policy yet, and a rule that would be stored and
+never applied is worse than one that is refused. (The number `0` is still read for `Select`; responses
+carry the name.)
+
+The expression is a SQL predicate over the table's own columns, written in the names the table was
+declared with (`status`, or `"status"`), with `{{user_id}}`, `{{email}}`, `{{role}}`,
+`{{project_id}}`, `{{is_authenticated}}` and `{{claims.<name>}}` substituted from the request's
+security context before the query runs. Substituted values are emitted as quoted literals — a
+caller's identity cannot become part of the predicate. A policy may name stored columns and system
+columns; a lookup, rollup or formula column is refused.
+
+**Checked when registered.** Creating or updating a policy asks PostgreSQL to plan the predicate
+against the table, every placeholder standing in as an anonymous caller would see it. A column the
+table does not have, a function that does not exist, or a comparison PostgreSQL cannot type is
+refused with `400 INVALID_EXPRESSION` and the database's reason — the policy is not stored, so the
+table keeps reading.
+
+**Which reads a policy binds.** Listing (`GET /api/data/{table}`), `POST /api/data/{table}/query`,
+`POST /api/data/{table}/aggregate`, and a single record — `GET /api/data/{table}/{id}`, GraphQL
+`record`, OData `/{entitySet}({key})` — which answers `404` (GraphQL: `null`) for a row the policy
+hides, as it would for a row that does not exist. GraphQL `records`/`aggregate` and OData queries go
+through the same reads. **Not yet bound:** hierarchy routes, bulk exports, views, real-time change
+notifications (a subscriber receives changes to rows its policies would hide), and the target table a
+lookup or rollup reads through.
 
 Because the service is unauthenticated, an HTTP request's context is the project's anonymous one:
 `{{project_id}}` carries the header's value, `{{is_authenticated}}` is `false`, and the

@@ -2,7 +2,30 @@
 
 ## Unreleased
 
+### Changed
+
+- **Only `Select` row-level security policies can be created.** `Insert`, `Update`, `Delete` and `All`
+  are refused with `400 VALIDATION_ERROR`: no insert, update or delete has ever consulted a policy, so
+  such a policy was stored and silently never applied. Policies already stored keep their current
+  effect (an `All` policy restricts reads).
+- **`policyType` travels as its name.** Requests may send `"Select"`, as the documentation always
+  showed (the number is still read); responses now carry the name instead of the number.
+
 ### Fixed
+
+- **A single-record read honours row-level security.** `GET /api/data/{table}/{id}`, GraphQL `record`
+  and OData `/{entitySet}({key})` read a row by its own statement and never applied the table's
+  policies, so a row a policy hid from every list was returned by id. A single record is now the query
+  narrowed to its id: a hidden row answers `404` (GraphQL `null`), and the row also carries its lookup,
+  rollup and formula values, which the single read used to leave out.
+- **A policy that names a column works.** Policies are written in the table's own column names, and
+  those reached SQL unchanged while the table's columns have generated physical names — so any policy
+  naming a column made every list and aggregate of the table answer `500`. Policies are now rewritten
+  to the physical names, qualified by the name the query gives the table.
+- **A policy that cannot run is refused when registered.** A predicate naming a column the table lacks,
+  a missing function, or an untypeable comparison is checked against the table when the policy is
+  created or updated and refused with `400 INVALID_EXPRESSION`, instead of being stored and failing
+  every read.
 
 - **A table with a lookup or rollup column can be read.** Every read of such a table answered `500`: the
   lookup JOIN and the rollup expression name the queried table `base_table`, and the query never gave the

@@ -1,8 +1,12 @@
+using System.Text.Json.Serialization;
+
 namespace MorphDB.Core.Security;
 
 /// <summary>
-/// Represents the type of security policy.
+/// Represents the type of security policy. Travels as its name (<c>"Select"</c>) — the form the API
+/// documents; the number is still read.
 /// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<PolicyType>))]
 public enum PolicyType
 {
     /// <summary>
