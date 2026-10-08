@@ -31,6 +31,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The containers the suite starts are initialised by the same script the compose files mount,
+         so the service under test connects as the role a deployment uses, not as a superuser. -->
+    <None Include="..\..\scripts\init.sql" Link="init.sql" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Using Include="Xunit" />
     <Using Include="AwesomeAssertions" />
     <Using Include="Moq" />

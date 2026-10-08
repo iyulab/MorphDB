@@ -20,13 +20,15 @@ namespace MorphDB.Tests.Fixtures;
 /// </summary>
 public sealed class PostgresFixture : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder("postgres:15-alpine")
-        .WithDatabase("morphdb_test")
-        .WithUsername("test")
-        .WithPassword("test")
-        .Build();
+    private readonly PostgreSqlContainer _container = TestPostgres.Create("morphdb_test");
 
-    public string ConnectionString => _container.GetConnectionString();
+    /// <summary>The service role's connection — what everything under test connects as.</summary>
+    public string ConnectionString => TestPostgres.ServiceConnectionString(_container);
+
+    /// <summary>
+    /// The image's bootstrap superuser. Only for a test that needs a role MorphDB must refuse.
+    /// </summary>
+    public string SuperuserConnectionString => _container.GetConnectionString();
 
     public NpgsqlDataSource DataSource { get; private set; } = null!;
 

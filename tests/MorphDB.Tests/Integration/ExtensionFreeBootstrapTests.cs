@@ -6,7 +6,7 @@ using MorphDB.Npgsql.Ddl;
 using MorphDB.Npgsql.Repositories;
 using MorphDB.Npgsql.Schema;
 using Npgsql;
-using Testcontainers.PostgreSql;
+using MorphDB.Tests.Fixtures;
 
 namespace MorphDB.Tests.Integration;
 
@@ -23,16 +23,12 @@ public class ExtensionFreeBootstrapTests
     [Fact]
     public async Task Global_bootstrap_runs_without_creating_any_extension()
     {
-        var container = new PostgreSqlBuilder("postgres:15-alpine")
-            .WithDatabase("morphdb_bootstrap_test")
-            .WithUsername("test")
-            .WithPassword("test")
-            .Build();
+        var container = TestPostgres.Create("morphdb_bootstrap_test");
 
         await container.StartAsync(TestContext.Current.CancellationToken);
         try
         {
-            await using var connection = new NpgsqlConnection(container.GetConnectionString());
+            await using var connection = new NpgsqlConnection(TestPostgres.ServiceConnectionString(container));
             await connection.OpenAsync(TestContext.Current.CancellationToken);
 
             var before = await ReadExtensionsAsync(connection);
@@ -65,16 +61,12 @@ public class ExtensionFreeBootstrapTests
     [Fact]
     public async Task Provisioning_a_project_creates_no_extension_either()
     {
-        var container = new PostgreSqlBuilder("postgres:15-alpine")
-            .WithDatabase("morphdb_provision_test")
-            .WithUsername("test")
-            .WithPassword("test")
-            .Build();
+        var container = TestPostgres.Create("morphdb_provision_test");
 
         await container.StartAsync(TestContext.Current.CancellationToken);
         try
         {
-            await using var dataSource = NpgsqlDataSource.Create(container.GetConnectionString());
+            await using var dataSource = NpgsqlDataSource.Create(TestPostgres.ServiceConnectionString(container));
             var resolver = new PostgresSchemaNameResolver();
             var repository = new ProjectRepository(dataSource, resolver);
             var service = new PostgresSchemaLayerService(
@@ -122,16 +114,12 @@ public class ExtensionFreeBootstrapTests
             "clock_timestamp()"
         ];
 
-        var container = new PostgreSqlBuilder("postgres:15-alpine")
-            .WithDatabase("morphdb_defaults_test")
-            .WithUsername("test")
-            .WithPassword("test")
-            .Build();
+        var container = TestPostgres.Create("morphdb_defaults_test");
 
         await container.StartAsync(TestContext.Current.CancellationToken);
         try
         {
-            await using var connection = new NpgsqlConnection(container.GetConnectionString());
+            await using var connection = new NpgsqlConnection(TestPostgres.ServiceConnectionString(container));
             await connection.OpenAsync(TestContext.Current.CancellationToken);
 
             foreach (var declared in allowed)

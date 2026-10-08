@@ -265,3 +265,40 @@ public class ValidationException : MorphDbException
     }
 }
 
+
+/// <summary>
+/// Thrown at start-up when the database role MorphDB connects as is a superuser or carries
+/// <c>BYPASSRLS</c>. PostgreSQL applies no row-level security to such a role — not even with
+/// <c>FORCE ROW LEVEL SECURITY</c> — so every policy declared through MorphDB would be stored and
+/// never enforced. A superuser connection also hands the service the power to drop the database.
+/// Refusing to start is the only answer that does not fail silently.
+/// </summary>
+public class InsecureDatabaseRoleException : MorphDbException
+{
+    public string RoleName { get; }
+
+    public bool IsSuperuser { get; }
+
+    public bool BypassesRowLevelSecurity { get; }
+
+    public InsecureDatabaseRoleException(string roleName, bool isSuperuser, bool bypassesRowLevelSecurity)
+        : base(
+            "INSECURE_DATABASE_ROLE",
+            $"MorphDB connects as role '{roleName}', which is {Describe(isSuperuser, bypassesRowLevelSecurity)}. "
+            + "PostgreSQL does not apply row-level security to such a role, so security policies would never be enforced. "
+            + "Connect as a role created with NOSUPERUSER NOBYPASSRLS that owns the database "
+            + "(see the \"Database role\" section of the README for the SQL, including how to move an existing database to it).")
+    {
+        RoleName = roleName;
+        IsSuperuser = isSuperuser;
+        BypassesRowLevelSecurity = bypassesRowLevelSecurity;
+    }
+
+    private static string Describe(bool isSuperuser, bool bypassesRowLevelSecurity) =>
+        (isSuperuser, bypassesRowLevelSecurity) switch
+        {
+            (true, true) => "a superuser with BYPASSRLS",
+            (true, false) => "a superuser",
+            _ => "a role with BYPASSRLS"
+        };
+}

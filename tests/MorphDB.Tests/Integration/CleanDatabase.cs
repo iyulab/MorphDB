@@ -1,5 +1,6 @@
 using MorphDB.Npgsql.Ddl;
 using Npgsql;
+using MorphDB.Tests.Fixtures;
 using Testcontainers.PostgreSql;
 
 namespace MorphDB.Tests.Integration;
@@ -15,15 +16,11 @@ public sealed class CleanDatabase : IAsyncDisposable
 
     private CleanDatabase(PostgreSqlContainer container) => _container = container;
 
-    public string ConnectionString => _container.GetConnectionString();
+    public string ConnectionString => TestPostgres.ServiceConnectionString(_container);
 
     public static async Task<CleanDatabase> EmptyAsync(string database)
     {
-        var container = new PostgreSqlBuilder("postgres:15-alpine")
-            .WithDatabase(database)
-            .WithUsername("test")
-            .WithPassword("test")
-            .Build();
+        var container = TestPostgres.Create(database);
 
         await container.StartAsync();
         return new CleanDatabase(container);

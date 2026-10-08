@@ -61,16 +61,19 @@ public class GlobalSchemaContractTests
     {
         // scripts/init.sql seeds the compose Postgres before the service starts. It used to repeat
         // every CREATE TABLE, which is a copy that can only drift -- and did. The service bootstraps
-        // its own schema, so the script's only remaining job is granting privileges to the container
-        // role, which the service cannot grant itself.
+        // its own schema, so the script's only remaining job is creating the role the service
+        // connects as, which the service cannot create for itself.
         var statements = await ReadStatementsAsync(LocateRepoFile("scripts/init.sql"));
 
         statements.Should().NotContain(
             "CREATE TABLE",
             "the schema has one source: DdlBuilder.BuildGlobalSystemSchemaDdl()");
+        statements.Should().NotContain(
+            "CREATE SCHEMA",
+            "a schema created here would be owned by the bootstrap superuser, not by the service's role");
         statements.Should().Contain(
-            "GRANT",
-            "granting to the container role is the one thing only this script can do");
+            "NOSUPERUSER NOBYPASSRLS",
+            "creating a service role PostgreSQL applies row-level security to is the one thing only this script can do");
         statements.Should().NotContain(
             "CREATE EXTENSION",
             "morphdb must boot on a managed PostgreSQL that forbids extensions");

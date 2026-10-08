@@ -46,6 +46,11 @@ public sealed partial class PostgresSchemaLayerService : ISchemaLayerService
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
 
+        // Before touching anything: a role PostgreSQL exempts from row-level security would let every
+        // later policy be stored and silently ignored. Checked here rather than in the host so an
+        // in-process (embedded) caller meets the same refusal as the service.
+        await EnsureRoleIsSubjectToRowLevelSecurityAsync(connection);
+
         // Repair first: the canonical DDL is IF NOT EXISTS throughout, so it can neither remove nor
         // reshape anything an older version left behind.
         await connection.ExecuteAsync(GlobalSchemaMigrations.BuildPreBootstrapDdl());
@@ -54,6 +59,22 @@ public sealed partial class PostgresSchemaLayerService : ISchemaLayerService
         await connection.ExecuteAsync(ddl);
 
         LogGlobalSchemaEnsured(_logger);
+    }
+
+    /// <summary>
+    /// Refuses a connection whose role is a superuser or carries <c>BYPASSRLS</c>. Both attributes
+    /// belong to the role itself and are not inherited through membership, so reading them for
+    /// <c>current_user</c> is the whole test.
+    /// </summary>
+    private static async Task EnsureRoleIsSubjectToRowLevelSecurityAsync(NpgsqlConnection connection)
+    {
+        var role = await connection.QuerySingleAsync<(string Name, bool IsSuperuser, bool BypassesRls)>(
+            "SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user");
+
+        if (role.IsSuperuser || role.BypassesRls)
+        {
+            throw new InsecureDatabaseRoleException(role.Name, role.IsSuperuser, role.BypassesRls);
+        }
     }
 
     /// <inheritdoc/>
