@@ -18,6 +18,7 @@ services:
       - "127.0.0.1:${MORPHDB_PORT:-8080}:8080"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+      # The service role scripts/init.sql creates -- never the image's superuser, which MorphDB refuses.
       ConnectionStrings__MorphDB: Host=postgres;Port=5432;Database=morphdb;Username=morph;Password=morph
     depends_on:
       postgres:
@@ -32,8 +33,11 @@ services:
     ports:
       - "127.0.0.1:${MORPHDB_PG_PORT:-5432}:5432"
     environment:
-      POSTGRES_USER: morph
-      POSTGRES_PASSWORD: morph
+      # The bootstrap superuser (POSTGRES_USER defaults to postgres) is for administration only.
+      # scripts/init.sql creates the role the service logs in as: morph, NOSUPERUSER NOBYPASSRLS,
+      # owner of the database. A volume initialised before 0.19.0 has no such role -- see
+      # "Database role" in README.md, or recreate it with `docker compose down -v`.
+      POSTGRES_PASSWORD: postgres
       POSTGRES_DB: morphdb
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -42,7 +46,7 @@ services:
       # Over TCP on purpose. While the image runs its init scripts it serves only the Unix socket and
       # then restarts, and a socket probe answers ready during that window -- so a dependent service
       # started on this health check would reach a server that is about to go away.
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U morph -d morphdb"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d morphdb"]
       interval: 10s
       timeout: 5s
       retries: 5

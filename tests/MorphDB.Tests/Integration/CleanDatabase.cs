@@ -1,6 +1,6 @@
 using MorphDB.Npgsql.Ddl;
-using Npgsql;
 using MorphDB.Tests.Fixtures;
+using Npgsql;
 using Testcontainers.PostgreSql;
 
 namespace MorphDB.Tests.Integration;

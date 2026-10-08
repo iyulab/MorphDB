@@ -36,6 +36,11 @@ message naming the switch. Pass only the switches listed here.
 
 - **`PostgresFixture`**: Shared container for integration tests (use `[Collection("PostgreSQL")]`)
 - **`ApiTestFixture`**: WebApplicationFactory for API tests
+- **`TestPostgres`**: Builds every PostgreSQL container the suite starts. Each one is initialised
+  by `scripts/init.sql` — the script the compose files mount — and the code under test connects as
+  the service role it creates (`NOSUPERUSER NOBYPASSRLS`, owner of the database), never as the
+  image's superuser, which MorphDB refuses at start-up. A test that genuinely needs a superuser
+  uses `PostgresFixture.SuperuserConnectionString` and says why.
 
 ### Contract tests: when a write or exposure rule crosses more than one door
 

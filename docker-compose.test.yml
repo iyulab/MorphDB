@@ -32,13 +32,14 @@ services:
     ports:
       - "5433:5432"
     environment:
-      POSTGRES_USER: morph
-      POSTGRES_PASSWORD: morph
+      # scripts/init.sql creates the service role (morph) the api logs in as; the bootstrap
+      # superuser (postgres) is never the service's login -- MorphDB refuses one.
+      POSTGRES_PASSWORD: postgres
       POSTGRES_DB: morphdb_test
     volumes:
       - ./scripts/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U morph -d morphdb_test"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d morphdb_test"]
       interval: 5s
       timeout: 3s
       retries: 10

@@ -1,5 +1,37 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **MorphDB refuses to start on a database role exempt from row-level security.** If the role it
+  connects as is a superuser or has `BYPASSRLS`, start-up stops with `INSECURE_DATABASE_ROLE`
+  before anything is created. PostgreSQL applies no row-level security to such a role — not even
+  with `FORCE ROW LEVEL SECURITY` — so security policies would be stored and never enforced, and a
+  superuser connection could drop the database. An in-process (embedded) host meets the same check
+  in `EnsureGlobalSchemaAsync`. Connect as a role created `NOSUPERUSER NOBYPASSRLS` that owns the
+  database; nothing else is required.
+- **The compose files and `scripts/init.sql` create that role.** The image's bootstrap superuser
+  (`POSTGRES_USER`, now the default `postgres`) is for administration only; `init.sql` creates
+  `morph` as the service's login and makes it the database owner. The README quick-start carries
+  the same two statements inline, so it is still one file.
+
+### Migrating
+
+A database created from the compose files before this release was reached through the bootstrap
+superuser (`POSTGRES_USER: morph`), which PostgreSQL does not let you demote. Hand it to a service
+role once, with the new [`scripts/migrate-to-service-role.sql`](scripts/migrate-to-service-role.sql)
+— it changes ownership only, touches no data, and is safe to run again:
+
+```bash
+docker compose exec -T postgres psql -U morph -d morphdb   -v service_role=morphdb_service -v service_password='<password>'   < migrate-to-service-role.sql
+```
+
+Then set `ConnectionStrings__MorphDB` to `Username=morphdb_service;Password=<password>`, keep
+`POSTGRES_USER` as it was, and start the new image. A development volume can instead be recreated
+with `docker compose down -v`. See "Database role" in the README for a database you provision
+yourself.
+
 ## 0.18.0
 
 A minor release for writers that build or rebuild a lookup's target table. A lookup may now name a target

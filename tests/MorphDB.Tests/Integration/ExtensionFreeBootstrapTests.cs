@@ -5,8 +5,8 @@ using MorphDB.Core.Models;
 using MorphDB.Npgsql.Ddl;
 using MorphDB.Npgsql.Repositories;
 using MorphDB.Npgsql.Schema;
-using Npgsql;
 using MorphDB.Tests.Fixtures;
+using Npgsql;
 
 namespace MorphDB.Tests.Integration;
 

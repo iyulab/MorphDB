@@ -92,6 +92,7 @@ services:
       # docs/API.md#connection-secrets) or put a reverse proxy in front and bind that.
       - "127.0.0.1:8080:8080"
     environment:
+      # The service role created below -- not the image's superuser, which MorphDB refuses.
       ConnectionStrings__MorphDB: Host=postgres;Port=5432;Database=morphdb;Username=morph;Password=morph
     depends_on:
       postgres:
@@ -100,24 +101,35 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: morph
-      POSTGRES_PASSWORD: morph
+      # The bootstrap superuser (postgres) is for administration only.
+      POSTGRES_PASSWORD: postgres
       POSTGRES_DB: morphdb
+    configs:
+      # Runs once, on an empty volume: creates the role MorphDB logs in as.
+      - source: morphdb-service-role
+        target: /docker-entrypoint-initdb.d/morphdb-service-role.sql
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U morph -d morphdb"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d morphdb"]
       interval: 10s
       timeout: 5s
       retries: 5
+
+configs:
+  morphdb-service-role:
+    content: |
+      CREATE ROLE morph LOGIN PASSWORD 'morph' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
+      ALTER DATABASE morphdb OWNER TO morph;
 
 volumes:
   postgres_data:
 ```
 
-> This is the file to copy. The `docker-compose.yml` in the repository is the **development
-> bundle** — it builds the service from source and keeps it behind `--profile app` — so
-> `docker compose up -d` from a checkout starts the stores and not the server.
+> This is the file to copy — one file, nothing beside it (inline `configs` need Docker Compose
+> 2.23.1 or later). The `docker-compose.yml` in the repository is the **development bundle** — it
+> builds the service from source and keeps it behind `--profile app` — so `docker compose up -d`
+> from a checkout starts the stores and not the server.
 
 ```bash
 docker compose up -d
@@ -130,6 +142,43 @@ docker compose up -d
 
 Platforms: `linux/amd64`, `linux/arm64`.
 Tags: every release publishes `X.Y.Z` and `X.Y`, plus `latest`.
+
+### Database role
+
+MorphDB must connect as a role that is **neither a superuser nor `BYPASSRLS`**, and it refuses to
+start otherwise (`INSECURE_DATABASE_ROLE`). PostgreSQL applies no row-level security to either kind
+of role — not even with `FORCE ROW LEVEL SECURITY` — so every security policy declared through
+MorphDB would be stored and silently ignored; a superuser connection would also let the service drop
+the database. The role needs no other privilege than owning its database: MorphDB creates its schemas and
+tables there, and it never needs `CREATE EXTENSION`.
+
+The official `postgres` image always makes `POSTGRES_USER` a superuser, so that account is for
+administration only and the service logs in as a second role. The quick-start above creates it; on
+any other PostgreSQL, run this as a superuser, with your own password:
+
+```sql
+CREATE ROLE morph LOGIN PASSWORD '<password>' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
+ALTER DATABASE morphdb OWNER TO morph;
+```
+
+On a managed PostgreSQL (Azure, Cloud SQL, RDS), create the same role for MorphDB rather than
+pointing it at the administrator account the provider gives you: what that account may do is the
+provider's choice, and the start-up check reads `rolsuper` and `rolbypassrls` of whatever role it is
+given.
+
+**Upgrading a database created before 0.19.0.** The compose files before 0.19.0 made the image's
+bootstrap superuser — `POSTGRES_USER: morph` — the service's login, so that database has no service
+role yet, and PostgreSQL does not let the bootstrap superuser be demoted. Hand the database over to
+a new role with [`scripts/migrate-to-service-role.sql`](scripts/migrate-to-service-role.sql), which
+changes only ownership — no data is touched:
+
+```bash
+docker compose exec -T postgres psql -U morph -d morphdb   -v service_role=morphdb_service -v service_password='<password>'   < migrate-to-service-role.sql
+```
+
+then set `ConnectionStrings__MorphDB` to `Username=morphdb_service;Password=<password>` and start
+the new image. Keep the existing `POSTGRES_USER` value in the compose file: it no longer creates
+anything on a volume that is already initialised, and it is still the account you administer with.
 
 ### First request: create a project
 
