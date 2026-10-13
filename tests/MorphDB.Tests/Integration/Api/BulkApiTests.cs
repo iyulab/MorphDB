@@ -5,6 +5,7 @@ using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Models;
+using MorphDB.Core.Security;
 using MorphDB.Service.Models.Api;
 using MorphDB.Tests.Fixtures;
 
@@ -42,6 +43,16 @@ public class BulkApiTests
         });
         return tableName;
     }
+
+    /// <summary>
+    /// A job's status, read as a caller every job of the project is there for. The jobs these tests
+    /// start through the service are started by the test itself, where there is no caller — and a
+    /// job nobody requested is there only for a caller that bypasses row-level security.
+    /// </summary>
+    private Task<BulkImportJob?> ReadImportJobAsync(IBulkOperationService bulkService, Guid jobId) =>
+        RowLevelSecurityHarness.As(
+            SecurityContext.Service(_fixture.Api.ProjectId),
+            () => bulkService.GetImportJobAsync(_fixture.Api.ProjectId, jobId, TestContext.Current.CancellationToken));
 
     private async Task InsertTestDataAsync(string tableName, int count = 5)
     {
@@ -106,13 +117,14 @@ public class BulkApiTests
         //
         // The test host removes the BulkJobProcessor background service (it polls tables that
         // don't exist yet at fixture start-up — see ApiTestFixture), so job processing is driven
-        // directly through IBulkOperationService here instead of waiting on HTTP polling for a
+        // directly through IBulkJobExecutor here instead of waiting on HTTP polling for a
         // background pass that will never run.
         var tableName = await SetupTestTableAsync();
         await InsertTestDataAsync(tableName, 3);
 
         using var scope = _fixture.Api.Services.CreateScope();
         var bulkService = scope.ServiceProvider.GetRequiredService<IBulkOperationService>();
+        var executor = scope.ServiceProvider.GetRequiredService<IBulkJobExecutor>();
 
         // Export only the user-declared columns — re-importing the row's own primary key
         // alongside it would collide on uniqueness, which is a real conflict unrelated to the
@@ -127,7 +139,7 @@ public class BulkApiTests
             }, TestContext.Current.CancellationToken);
 
         using var exportStream = new MemoryStream();
-        await bulkService.StreamExportAsync(exportJob.JobId, exportStream, TestContext.Current.CancellationToken);
+        await executor.StreamExportAsync(exportJob.JobId, exportStream, TestContext.Current.CancellationToken);
         exportStream.Position = 0;
         var csvContent = await new StreamReader(exportStream, Encoding.UTF8).ReadToEndAsync(TestContext.Current.CancellationToken);
 
@@ -137,7 +149,7 @@ public class BulkApiTests
             _fixture.Api.ProjectId, tableName, importStream, new CsvImportOptions { Delimiter = ',', HasHeader = true }, TestContext.Current.CancellationToken);
 
         long successCount = 0, errorCount = 0;
-        await foreach (var result in bulkService.ProcessImportAsync(importJob.JobId, TestContext.Current.CancellationToken))
+        await foreach (var result in executor.ProcessImportAsync(importJob.JobId, TestContext.Current.CancellationToken))
         {
             if (result.Success)
                 successCount++;
@@ -149,7 +161,7 @@ public class BulkApiTests
         errorCount.Should().Be(0, "typed CSV values (integer, boolean) must round-trip like JSON/NDJSON does");
         successCount.Should().Be(3);
 
-        var finalJob = await bulkService.GetImportJobAsync(importJob.JobId, TestContext.Current.CancellationToken);
+        var finalJob = await ReadImportJobAsync(bulkService, importJob.JobId);
         finalJob!.ErrorCount.Should().Be(0);
         finalJob.SuccessCount.Should().Be(3);
     }
@@ -165,19 +177,20 @@ public class BulkApiTests
 
         using var scope = _fixture.Api.Services.CreateScope();
         var bulkService = scope.ServiceProvider.GetRequiredService<IBulkOperationService>();
+        var executor = scope.ServiceProvider.GetRequiredService<IBulkJobExecutor>();
 
         using var importStream = new MemoryStream(Encoding.UTF8.GetBytes(csvContent));
         var importJob = await bulkService.StartCsvImportAsync(
             _fixture.Api.ProjectId, tableName, importStream, new CsvImportOptions { Delimiter = ',', HasHeader = true }, TestContext.Current.CancellationToken);
 
         // Act
-        await foreach (var _ in bulkService.ProcessImportAsync(importJob.JobId, TestContext.Current.CancellationToken))
+        await foreach (var _ in executor.ProcessImportAsync(importJob.JobId, TestContext.Current.CancellationToken))
         {
             // Drain — the job record is what's under test, not the per-row stream.
         }
 
         // Assert
-        var finalJob = await bulkService.GetImportJobAsync(importJob.JobId, TestContext.Current.CancellationToken);
+        var finalJob = await ReadImportJobAsync(bulkService, importJob.JobId);
         finalJob!.ErrorCount.Should().Be(1);
         finalJob.ErrorDetails.Should().NotBeNullOrEmpty();
         finalJob.ErrorDetails![0].RowNumber.Should().Be(1);

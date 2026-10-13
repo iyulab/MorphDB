@@ -827,10 +827,12 @@ POST /api/bulk/{table}/export/json     # { "columns": [...], "pretty": false }
 POST /api/bulk/{table}/export/xlsx     # { "columns": [...] }
 
 # Following a job
+GET  /api/bulk/import/{jobId}             # An import job: status, counts, errorDetails
+GET  /api/bulk/export/{jobId}             # An export job: status, counts, fileSize
 GET  /api/bulk/jobs/{jobId}/progress      # Progress while it runs
 POST /api/bulk/jobs/{jobId}/cancel        # Stop it
-GET  /api/bulk/import                     # List import jobs
-GET  /api/bulk/export                     # List export jobs
+GET  /api/bulk/import                     # List your import jobs
+GET  /api/bulk/export                     # List your export jobs
 GET  /api/bulk/export/{jobId}/download    # Fetch a finished export
 ```
 
@@ -853,6 +855,24 @@ requester may read — the rows `totalRows` counted when it was requested — an
 rows its requester may write and lists each of the others in `errorDetails`. A job requested with
 the master secret is exempt from policies. The file an export stores is the table as its requester
 sees it; a download serves that file as it was stored.
+
+**A job belongs to its project and to the caller that requested it.** Each route above that takes a
+`jobId` answers a request only if it names the job's project (`X-Project-Id`) and comes from the
+caller that requested the job, or presents the master secret:
+
+- When [secrets are enforced](#connection-secrets), the caller is the secret a request presents. A
+  request with a different issued secret is a different caller, in the same project too.
+- When they are not, every caller of a project is the same anonymous caller, and a job is reachable
+  from anywhere inside its project — and from no other project.
+- The master secret reaches every job of the project its request names. It does not reach across
+  projects, and a job that was requested with the master secret is reachable with it alone.
+
+To any other request the job does not exist: `404 JOB_NOT_FOUND`, the answer an id that was never
+issued gets, whatever state the job is in. The two listings return the jobs the caller could fetch,
+not every job of the project.
+
+If a completed export has no stored file, the download reads the table at that moment — as the
+caller that requested the job, also when it is the master secret that downloads it.
 
 ---
 
@@ -1273,7 +1293,8 @@ at every start.
 that caller is stored with the job, and the job reads the table or writes each row as that caller,
 whenever it is carried out. A job stored by a version that did not record its requester runs as
 nobody — under a policy that compares with the caller its export is empty and every row of its
-import is refused and listed in `errorDetails`; cancel it and request it again. The read that fills
+import is refused and listed in `errorDetails` — and is [reachable](#bulk-operations) with the
+master secret only; cancel it with the master secret and request it again. The read that fills
 a change notification or a webhook delivery has no caller at all. Under a policy that compares with
 the caller, a change event therefore carries the table and the record id with an empty `data`, for
 every subscriber alike: notifications are not filtered per subscriber.
@@ -1423,7 +1444,7 @@ fixed string — internal exception text never reaches the wire) and retrying ma
 | 404 | `RECORD_NOT_FOUND` | The record id does not exist in the table |
 | 404 | `PROJECT_NOT_FOUND` | The project id does not exist, or the project was deleted |
 | 404 | `VIEW_NOT_FOUND` | The view does not exist |
-| 404 | `JOB_NOT_FOUND` | The bulk job does not exist |
+| 404 | `JOB_NOT_FOUND` | The bulk job does not exist, or is not this caller's: a job of another project or another caller is answered the same way |
 | 404 | `AUDIT_LOG_NOT_FOUND` | The audit log entry does not exist |
 | 401 | `UNAUTHENTICATED` | Authentication is enforced and the request presented no valid secret — send `Authorization: Bearer <secret>`. Only answered when a master secret is injected; see [Connection secrets](#connection-secrets) |
 | 403 | `FORBIDDEN` | The secret is recognized but may not do this — it is confined to another project, or the route requires the master secret. Also a write a row-level security policy refuses: a policy of the table does not admit the row the write would create or leave |

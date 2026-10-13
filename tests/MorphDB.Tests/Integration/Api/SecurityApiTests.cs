@@ -309,7 +309,7 @@ public class SecurityApiTests
         var job = (await requested.Content.ReadFromJsonAsync<ExportJobApiResponse>(ct))!;
         job.TotalRows.Should().Be(2);
 
-        var bulk = _fixture.Api.Services.GetRequiredService<IBulkOperationService>();
+        var bulk = _fixture.Api.Services.GetRequiredService<IBulkJobExecutor>();
         using var file = new MemoryStream();
         await bulk.StreamExportAsync(job.JobId, file, ct);
 

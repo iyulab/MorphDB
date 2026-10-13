@@ -3,8 +3,20 @@ using MorphDB.Core.Models;
 namespace MorphDB.Core.Abstractions;
 
 /// <summary>
-/// Service for bulk import/export operations.
+/// Bulk import and export, as a caller sees it: requesting a job, and following one it requested.
 /// </summary>
+/// <remarks>
+/// <para>Every member that reaches an existing job takes the project the caller is working in and
+/// answers for the ambient <see cref="Security.SecurityContext"/>. A job is there for a caller only
+/// when it belongs to that project and the caller is the one that requested it — the same user id,
+/// two callers without one being the same caller — or bypasses row-level security. A job requested
+/// by a caller that bypasses row-level security, and a job stored without a requester, is there for
+/// a bypassing caller only; and where there is no ambient context, no job is there at all. A job
+/// that is not there is answered exactly as an id that was never issued: <c>null</c>,
+/// <c>false</c>, or absent from a list.</para>
+/// <para>There is no member here that reaches a job by its id alone. Carrying jobs out, which is
+/// not done for a caller, is <see cref="IBulkJobExecutor"/>.</para>
+/// </remarks>
 public interface IBulkOperationService
 {
     #region Import Operations
@@ -39,13 +51,6 @@ public interface IBulkOperationService
         JsonImportOptions? options = null,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Processes import data asynchronously, yielding results as they complete.
-    /// </summary>
-    IAsyncEnumerable<ImportRowResult> ProcessImportAsync(
-        Guid jobId,
-        CancellationToken cancellationToken = default);
-
     #endregion
 
     #region Export Operations
@@ -77,30 +82,24 @@ public interface IBulkOperationService
         XlsxExportOptions? options = null,
         CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// Streams export data to the provided stream.
-    /// </summary>
-    Task StreamExportAsync(
-        Guid jobId,
-        Stream outputStream,
-        CancellationToken cancellationToken = default);
-
     #endregion
 
     #region Job Management
 
     /// <summary>
-    /// Gets the current status of an import job.
+    /// Gets the current status of an import job, or <c>null</c> when there is no such job for the
+    /// caller.
     /// </summary>
-    Task<BulkImportJob?> GetImportJobAsync(Guid jobId, CancellationToken cancellationToken = default);
+    Task<BulkImportJob?> GetImportJobAsync(Guid projectId, Guid jobId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Gets the current status of an export job.
+    /// Gets the current status of an export job, or <c>null</c> when there is no such job for the
+    /// caller.
     /// </summary>
-    Task<BulkExportJob?> GetExportJobAsync(Guid jobId, CancellationToken cancellationToken = default);
+    Task<BulkExportJob?> GetExportJobAsync(Guid projectId, Guid jobId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Lists import jobs for a project.
+    /// Lists the project's import jobs that are there for the caller, newest first.
     /// </summary>
     Task<IReadOnlyList<BulkImportJob>> ListImportJobsAsync(
         Guid projectId,
@@ -109,7 +108,7 @@ public interface IBulkOperationService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Lists export jobs for a project.
+    /// Lists the project's export jobs that are there for the caller, newest first.
     /// </summary>
     Task<IReadOnlyList<BulkExportJob>> ListExportJobsAsync(
         Guid projectId,
@@ -118,43 +117,27 @@ public interface IBulkOperationService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Cancels a running job.
+    /// Cancels a job that is pending or running. <c>false</c> when there is no such job for the
+    /// caller, or it has already ended.
     /// </summary>
-    Task<bool> CancelJobAsync(Guid jobId, CancellationToken cancellationToken = default);
+    Task<bool> CancelJobAsync(Guid projectId, Guid jobId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Gets progress updates for a job.
+    /// Gets the progress of an import or export job, or <c>null</c> when there is no such job for
+    /// the caller.
     /// </summary>
-    Task<BulkJobProgress?> GetJobProgressAsync(Guid jobId, CancellationToken cancellationToken = default);
+    Task<BulkJobProgress?> GetJobProgressAsync(Guid projectId, Guid jobId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Gets pending import jobs for background processing.
+    /// Opens the file of an export job, or answers <c>null</c> when there is no such job for the
+    /// caller. The file is the one stored when the job was carried out; when none is stored, the
+    /// table is read now, as the caller that requested the job — not as the caller opening it.
     /// </summary>
-    Task<IReadOnlyList<BulkImportJob>> GetPendingImportJobsAsync(
-        int limit = 10,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Gets pending export jobs for background processing.
-    /// </summary>
-    Task<IReadOnlyList<BulkExportJob>> GetPendingExportJobsAsync(
-        int limit = 10,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Stores export data to file system or storage.
-    /// </summary>
-    Task StoreExportDataAsync(
-        Guid jobId,
-        Stream dataStream,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Gets stored export data stream.
-    /// </summary>
-    Task<Stream?> GetStoredExportDataAsync(
-        Guid jobId,
-        CancellationToken cancellationToken = default);
+    /// <remarks>
+    /// Whether the job has reached a state in which it has a file to give is the caller's question
+    /// to ask first, of <see cref="GetExportJobAsync"/>.
+    /// </remarks>
+    Task<Stream?> OpenExportFileAsync(Guid projectId, Guid jobId, CancellationToken cancellationToken = default);
 
     #endregion
 }

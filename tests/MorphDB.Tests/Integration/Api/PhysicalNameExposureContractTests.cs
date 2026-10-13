@@ -97,16 +97,17 @@ public class PhysicalNameExposureContractTests
 
         // The test host removes the BulkJobProcessor background service (it polls tables that
         // don't exist yet at fixture start-up — see ApiTestFixture), so the export is driven
-        // directly through IBulkOperationService here instead of waiting on HTTP polling for a
+        // directly through the bulk service here instead of waiting on HTTP polling for a
         // background pass that will never run — the same workaround BulkApiTests already uses.
         using var scope = _fixture.Api.Services.CreateScope();
         var bulkService = scope.ServiceProvider.GetRequiredService<IBulkOperationService>();
+        var executor = scope.ServiceProvider.GetRequiredService<IBulkJobExecutor>();
 
         var exportJob = await bulkService.StartCsvExportAsync(
             _fixture.Api.ProjectId, tableName, new CsvExportOptions { Delimiter = ',', IncludeHeader = true }, TestContext.Current.CancellationToken);
 
         using var exportStream = new MemoryStream();
-        await bulkService.StreamExportAsync(exportJob.JobId, exportStream, TestContext.Current.CancellationToken);
+        await executor.StreamExportAsync(exportJob.JobId, exportStream, TestContext.Current.CancellationToken);
         exportStream.Position = 0;
         var csv = await new StreamReader(exportStream, Encoding.UTF8).ReadToEndAsync(TestContext.Current.CancellationToken);
 

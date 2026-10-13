@@ -167,21 +167,34 @@ internal sealed class RowLevelSecurityHarness
     {
         await JobProcessor.ProcessExportJobAsync(Bulk, job, CancellationToken.None);
 
-        await using var stored = await Bulk.GetStoredExportDataAsync(job.JobId)
+        var stored = await StoredExportFileAsync(job.JobId)
             ?? throw new InvalidOperationException($"Export job '{job.JobId}' stored no file; it failed.");
-        using var reader = new StreamReader(stored, Encoding.UTF8);
 
-        return (await reader.ReadToEndAsync())
+        return Encoding.UTF8.GetString(stored)
             .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Skip(1)
             .ToList();
+    }
+
+    /// <summary>
+    /// The file stored for an export job, read from its table as MorphDB itself — or <c>null</c>
+    /// when none is stored. Not through the service: that answers a caller, and only the job's
+    /// requester, where this is asked whoever is ambient.
+    /// </summary>
+    public async Task<byte[]?> StoredExportFileAsync(Guid jobId)
+    {
+        await using var connection = await _fixture.Connections.OpenSystemAsync();
+        return await connection.ExecuteScalarAsync<byte[]?>(
+            "SELECT data FROM morphdb._morph_export_data WHERE job_id = @JobId", new { JobId = jobId });
     }
 
     /// <summary>Has the job processor carry out one import job, and answers the job as it ended.</summary>
     public async Task<BulkImportJob> RunImportJobAsync(BulkImportJob job)
     {
         await JobProcessor.ProcessImportJobAsync(Bulk, job, CancellationToken.None);
-        return (await Bulk.GetImportJobAsync(job.JobId))!;
+
+        // Read as a caller every job of the project is there for, whoever requested this one.
+        return (await As(SecurityContext.Service(job.ProjectId), () => Bulk.GetImportJobAsync(job.ProjectId, job.JobId)))!;
     }
 
     /// <summary>The security context a job's row holds, as stored — <c>null</c> when it holds none.</summary>

@@ -129,7 +129,12 @@ public static partial class ServiceCollectionExtensions
         services.AddSingleton<IHierarchyQueryService, PostgresHierarchyQueryService>();
         services.AddSingleton<IWebhookManager, PostgresWebhookManager>();
         services.AddSingleton(options.BulkOperationOptions);
-        services.AddSingleton<IBulkOperationService, PostgresBulkOperationService>();
+
+        // One service, registered under the two things it is: what a request follows its jobs
+        // through, and what the job processor carries jobs out through.
+        services.AddSingleton<PostgresBulkOperationService>();
+        services.AddSingleton<IBulkOperationService>(sp => sp.GetRequiredService<PostgresBulkOperationService>());
+        services.AddSingleton<IBulkJobExecutor>(sp => sp.GetRequiredService<PostgresBulkOperationService>());
 
         // Register security services
         services.AddSingleton<ISecurityPolicyService, SecurityPolicyService>();

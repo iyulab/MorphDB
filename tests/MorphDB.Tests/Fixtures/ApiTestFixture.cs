@@ -134,8 +134,12 @@ public sealed class ApiTestFixture : IAsyncLifetime
 
                     services.RemoveAll<BulkOperationOptions>();
                     services.AddSingleton(new BulkOperationOptions());
+                    services.RemoveAll<PostgresBulkOperationService>();
                     services.RemoveAll<IBulkOperationService>();
-                    services.AddSingleton<IBulkOperationService, PostgresBulkOperationService>();
+                    services.RemoveAll<IBulkJobExecutor>();
+                    services.AddSingleton<PostgresBulkOperationService>();
+                    services.AddSingleton<IBulkOperationService>(sp => sp.GetRequiredService<PostgresBulkOperationService>());
+                    services.AddSingleton<IBulkJobExecutor>(sp => sp.GetRequiredService<PostgresBulkOperationService>());
 
                     // View services
                     services.RemoveAll<IViewMetadataRepository>();

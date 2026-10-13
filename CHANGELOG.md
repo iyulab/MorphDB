@@ -32,6 +32,21 @@
   VALIDATION_ERROR` before a statement is built. `parentColumn` and the columns an in-process
   request names are resolved the same way: a declared column name works where only a physical name
   did, and a name the table does not store is refused by name.
+- **A bulk job exists only for its project and the caller that requested it.** The routes that take
+  a job id — its status, its progress, cancelling it, downloading an export — found the job by that
+  id alone. Anyone who knew a job id could read the job, cancel it and download its file, whatever
+  project the request named and whoever had requested the job, and the two job listings returned
+  every job of the project to every caller of it. An export's file holds the rows its requester may
+  read (see Breaking), so the download handed those rows to callers a policy hides them from. A job
+  is now there only for a request that names the job's project and comes from the caller that
+  requested it, or presents the master secret. Where secrets are enforced the caller is the secret
+  it presents; where they are not, every caller of a project is the same anonymous caller, and a job
+  stays reachable from inside its project. To anyone else the job is answered exactly as an id that
+  was never issued — `404 JOB_NOT_FOUND` — and is absent from the listings. The master secret does
+  not reach across projects either: its request has to name the job's project. A job requested with
+  the master secret is there for the master secret alone. When a completed export has no stored
+  file, the download reads the table as the caller that requested the job, whoever downloads it.
+  (Verified-by: BulkJobAccessTests.A_stored_export_file_is_served_only_to_its_requester_or_the_master_secret_and_holds_the_requesters_rows)
 
 ### Breaking
 
@@ -67,8 +82,9 @@
   `ProcessImportAsync` work as the `SecurityContext` that was ambient when the job was started, not
   the one ambient where they are called. A job requested before the upgrade and not yet carried out
   has no caller stored and runs as nobody: on a table with a policy that compares with the caller
-  its export is empty and every row of its import is refused. Cancel such a job
-  (`POST /api/bulk/jobs/{jobId}/cancel`) and request it again.
+  its export is empty and every row of its import is refused. Such a job answers the master secret
+  only (see Security): cancel it with the master secret (`POST /api/bulk/jobs/{jobId}/cancel`) and
+  request it again.
   (Verified-by: NativeRowLevelSecurityTests.An_export_job_reads_the_table_as_the_caller_that_requested_it)
 - **A column a policy reads cannot be deleted or given another type.** PostgreSQL refuses to drop or
   retype a column a policy depends on; the request is answered `400 COLUMN_USED_BY_POLICY`, naming
@@ -96,6 +112,22 @@
   `ISecurityContextAccessor`: drop those two arguments. `PostgresBulkOperationService` gains one:
   it takes the `ISecurityContextAccessor` after the data service, to store a job's requester and
   to carry the job out as that caller.
+- **`IBulkOperationService` answers a caller; carrying jobs out moved to `IBulkJobExecutor`.** For a
+  host that calls the bulk service in process. The members that reach an existing job take the
+  project the caller works in — `GetImportJobAsync(projectId, jobId)`,
+  `GetExportJobAsync(projectId, jobId)`, `CancelJobAsync(projectId, jobId)`,
+  `GetJobProgressAsync(projectId, jobId)` — and answer for the ambient `SecurityContext` by the rule
+  described under Security: `null` or `false` for a job of another project or of another caller.
+  `ListImportJobsAsync` and `ListExportJobsAsync` return the jobs the caller could fetch, not every
+  job of the project. With no ambient context no job is found; set
+  `SecurityContext.Service(projectId)` for work that is meant to reach every job of a project.
+  `GetStoredExportDataAsync` is replaced by `OpenExportFileAsync(projectId, jobId)`, which answers
+  the stored file or, when none is stored, reads the table as the job's requester.
+  `GetPendingImportJobsAsync`, `GetPendingExportJobsAsync`, `ProcessImportAsync`,
+  `StreamExportAsync` and `StoreExportDataAsync` behave as before and are now members of
+  `IBulkJobExecutor`: they find a job by its id alone, for whatever carries jobs out, and are not
+  for answering a request. `PostgresBulkOperationService` implements both interfaces and
+  `AddMorphDbNpgsql` registers both.
 - **`ISecurityContextAccessor.SetContext` accepts `null`,** which clears the ambient context: what
   runs next in that flow has no caller. The accessor MorphDB registers already behaved this way. A
   host that implements the interface itself must accept `null` too — a bulk job that was started
@@ -240,8 +272,12 @@ upgrading, list each table's policies (`GET /api/security/policies/{tableName}`)
 deactivate any that was never meant to be enforced.
 
 **Bulk jobs.** Start-up adds a `requested_by` column to the two tables that hold bulk jobs; nothing
-has to be run. A job that is still pending when the service is upgraded has no caller stored in it
-and runs as nobody — see Breaking.
+has to be run. A job created before the upgrade has no requester recorded. If it is still pending
+it runs as nobody — see Breaking. Pending or finished, it can be reached only with the master
+secret: for every other caller its status, its cancellation and the download of its file answer
+`404 JOB_NOT_FOUND`, and it is absent from the listings. Request it again. A deployment that
+enforces no secrets has no caller that can reach such a job over the API; one that is still pending
+is carried out all the same.
 
 **A materialized view over a table that has a policy.** Earlier versions let one be created, and
 its copy was filled past the policy. Start-up drops nothing, but logs a warning for each such pair —
@@ -287,8 +323,8 @@ a superuser, or a role with `BYPASSRLS` — which is the kind of role MorphDB it
 - The two bulk job tables have a `requested_by` column: the security context of the request that
   created the job — project, user id, role, e-mail, whether it was authenticated, whether it
   bypasses row-level security, and claims — as JSON, or `NULL` for a job requested without a caller.
-  It is what the job's connections carry while the table is read or written, and nothing else reads
-  it; a job's status and listing do not return it.
+  It is what the job's connections carry while the table is read or written, and what a request for
+  the job is compared with; a job's status and listing do not return it.
 
 ## 0.18.0
 

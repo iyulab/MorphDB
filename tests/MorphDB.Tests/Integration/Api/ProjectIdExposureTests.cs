@@ -171,7 +171,8 @@ public class ProjectIdExposureTests
         var bulkService = scope.ServiceProvider.GetRequiredService<IBulkOperationService>();
         var job = await bulkService.StartCsvExportAsync(_fixture.Api.ProjectId, tableName, new CsvExportOptions { IncludeHeader = true }, TestContext.Current.CancellationToken);
         using var output = new MemoryStream();
-        await bulkService.StreamExportAsync(job.JobId, output, TestContext.Current.CancellationToken);
+        await scope.ServiceProvider.GetRequiredService<IBulkJobExecutor>()
+            .StreamExportAsync(job.JobId, output, TestContext.Current.CancellationToken);
         output.Position = 0;
         var header = (await new StreamReader(output).ReadLineAsync(TestContext.Current.CancellationToken))!;
 

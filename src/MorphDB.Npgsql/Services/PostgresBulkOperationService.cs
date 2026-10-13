@@ -30,8 +30,14 @@ namespace MorphDB.Npgsql.Services;
 /// <para>That is done here, in the two methods that carry a job out, and not in what calls them:
 /// anything that executes a job goes through one of the two, so nothing can execute one as the
 /// wrong caller by leaving a step out.</para>
+/// <para>The same row decides who may follow the job afterwards. What a job's file holds is what its
+/// requester may read, so a job is there only for a caller working in its project that is its
+/// requester, or that bypasses row-level security: <see cref="ReachableByCallerSql"/> is that rule,
+/// and every statement that finds a job for a caller — its status, a listing, a cancellation, its
+/// file — carries it. The members of <see cref="IBulkJobExecutor"/> find a job by its id alone;
+/// they are for the job processor, which is not a caller, and a request is not handed them.</para>
 /// </remarks>
-public sealed class PostgresBulkOperationService : IBulkOperationService
+public sealed class PostgresBulkOperationService : IBulkOperationService, IBulkJobExecutor
 {
     private readonly MorphConnectionFactory _connections;
     private readonly ISchemaManager _schemaManager;
@@ -170,7 +176,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         Guid jobId,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var job = await GetImportJobAsync(jobId, cancellationToken)
+        var job = await ReadImportJobForExecutionAsync(jobId, cancellationToken)
             ?? throw new NotFoundException("Import job", jobId.ToString());
 
         // Update status to processing
@@ -358,7 +364,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         Stream outputStream,
         CancellationToken cancellationToken = default)
     {
-        var job = await GetExportJobAsync(jobId, cancellationToken)
+        var job = await ReadExportJobForExecutionAsync(jobId, cancellationToken)
             ?? throw new NotFoundException("Export job", jobId.ToString());
 
         await UpdateExportJobStatusAsync(jobId, BulkJobStatus.Processing, cancellationToken);
@@ -404,34 +410,90 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
 
     #region Job Management
 
-    public async Task<BulkImportJob?> GetImportJobAsync(Guid jobId, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// What finds a job for a caller, as a condition on a job table: the job is of the caller's
+    /// project, and the caller bypasses row-level security or is the job's requester.
+    /// </summary>
+    /// <remarks>
+    /// <para>The requester is the caller with the same user id; two callers without one are the same
+    /// caller, which is every caller of a deployment that enforces no secrets. A job requested by a
+    /// caller that bypasses row-level security is not matched by a caller that does not, although
+    /// neither has a user id: its file holds rows read past every policy. A row with no requester —
+    /// requested without a caller, or stored by a version that did not record one — matches a
+    /// bypassing caller only.</para>
+    /// <para>Its parameters are those of <see cref="JobCaller"/>. An empty user id is no user id, on
+    /// both sides, as it is to a policy.</para>
+    /// </remarks>
+    private const string ReachableByCallerSql = """
+        project_id = @ProjectId
+        AND (@Bypass OR (jsonb_typeof(requested_by) = 'object'
+                         AND (requested_by -> 'bypassRls') IS DISTINCT FROM 'true'::jsonb
+                         AND nullif(requested_by ->> 'userId', '') IS NOT DISTINCT FROM @UserId::text))
+        """;
+
+    /// <summary>Who a job is looked up for: the parameters of <see cref="ReachableByCallerSql"/>.</summary>
+    private readonly record struct JobCaller(Guid ProjectId, bool Bypass, string? UserId);
+
+    /// <summary>
+    /// The ambient caller, working in <paramref name="projectId"/> — or <c>null</c> when there is no
+    /// ambient context: nobody is asking, and no job is there for nobody.
+    /// </summary>
+    private JobCaller? CallerIn(Guid projectId)
     {
-        const string sql = """
-            SELECT job_id, project_id, table_id, table_name, format, status,
-                   total_rows, processed_rows, success_count, error_count,
-                   error_message, error_details, options, created_at, started_at, completed_at
+        var context = _securityContext.ContextOrNull;
+        return context is null
+            ? null
+            : new JobCaller(projectId, context.BypassRls, string.IsNullOrEmpty(context.UserId) ? null : context.UserId);
+    }
+
+    private const string ImportJobColumns = """
+        job_id, project_id, table_id, table_name, format, status,
+        total_rows, processed_rows, success_count, error_count,
+        error_message, error_details, options, created_at, started_at, completed_at
+        """;
+
+    private const string ExportJobColumns = """
+        job_id, project_id, table_id, table_name, format, status,
+        total_rows, processed_rows, file_path, file_size,
+        error_message, options, created_at, started_at, completed_at, expires_at
+        """;
+
+    public async Task<BulkImportJob?> GetImportJobAsync(Guid projectId, Guid jobId, CancellationToken cancellationToken = default)
+    {
+        if (CallerIn(projectId) is not { } caller)
+        {
+            return null;
+        }
+
+        const string sql = $"""
+            SELECT {ImportJobColumns}
             FROM morphdb._morph_import_jobs
-            WHERE job_id = @JobId
+            WHERE job_id = @JobId AND {ReachableByCallerSql}
             """;
 
         await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-        var row = await connection.QuerySingleOrDefaultAsync<ImportJobRow>(sql, new { JobId = jobId });
+        var row = await connection.QuerySingleOrDefaultAsync<ImportJobRow>(
+            sql, new { JobId = jobId, caller.ProjectId, caller.Bypass, caller.UserId });
 
         return row is null ? null : MapToImportJob(row);
     }
 
-    public async Task<BulkExportJob?> GetExportJobAsync(Guid jobId, CancellationToken cancellationToken = default)
+    public async Task<BulkExportJob?> GetExportJobAsync(Guid projectId, Guid jobId, CancellationToken cancellationToken = default)
     {
-        const string sql = """
-            SELECT job_id, project_id, table_id, table_name, format, status,
-                   total_rows, processed_rows, file_path, file_size,
-                   error_message, options, created_at, started_at, completed_at, expires_at
+        if (CallerIn(projectId) is not { } caller)
+        {
+            return null;
+        }
+
+        const string sql = $"""
+            SELECT {ExportJobColumns}
             FROM morphdb._morph_export_jobs
-            WHERE job_id = @JobId
+            WHERE job_id = @JobId AND {ReachableByCallerSql}
             """;
 
         await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-        var row = await connection.QuerySingleOrDefaultAsync<ExportJobRow>(sql, new { JobId = jobId });
+        var row = await connection.QuerySingleOrDefaultAsync<ExportJobRow>(
+            sql, new { JobId = jobId, caller.ProjectId, caller.Bypass, caller.UserId });
 
         return row is null ? null : MapToExportJob(row);
     }
@@ -442,18 +504,22 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         int offset = 0,
         CancellationToken cancellationToken = default)
     {
-        const string sql = """
-            SELECT job_id, project_id, table_id, table_name, format, status,
-                   total_rows, processed_rows, success_count, error_count,
-                   error_message, error_details, options, created_at, started_at, completed_at
+        if (CallerIn(projectId) is not { } caller)
+        {
+            return [];
+        }
+
+        const string sql = $"""
+            SELECT {ImportJobColumns}
             FROM morphdb._morph_import_jobs
-            WHERE project_id = @ProjectId
+            WHERE {ReachableByCallerSql}
             ORDER BY created_at DESC
             LIMIT @Limit OFFSET @Offset
             """;
 
         await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-        var rows = await connection.QueryAsync<ImportJobRow>(sql, new { ProjectId = projectId, Limit = limit, Offset = offset });
+        var rows = await connection.QueryAsync<ImportJobRow>(
+            sql, new { caller.ProjectId, caller.Bypass, caller.UserId, Limit = limit, Offset = offset });
 
         return rows.Select(MapToImportJob).ToList();
     }
@@ -464,50 +530,63 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         int offset = 0,
         CancellationToken cancellationToken = default)
     {
-        const string sql = """
-            SELECT job_id, project_id, table_id, table_name, format, status,
-                   total_rows, processed_rows, file_path, file_size,
-                   error_message, options, created_at, started_at, completed_at, expires_at
+        if (CallerIn(projectId) is not { } caller)
+        {
+            return [];
+        }
+
+        const string sql = $"""
+            SELECT {ExportJobColumns}
             FROM morphdb._morph_export_jobs
-            WHERE project_id = @ProjectId
+            WHERE {ReachableByCallerSql}
             ORDER BY created_at DESC
             LIMIT @Limit OFFSET @Offset
             """;
 
         await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-        var rows = await connection.QueryAsync<ExportJobRow>(sql, new { ProjectId = projectId, Limit = limit, Offset = offset });
+        var rows = await connection.QueryAsync<ExportJobRow>(
+            sql, new { caller.ProjectId, caller.Bypass, caller.UserId, Limit = limit, Offset = offset });
 
         return rows.Select(MapToExportJob).ToList();
     }
 
-    public async Task<bool> CancelJobAsync(Guid jobId, CancellationToken cancellationToken = default)
+    public async Task<bool> CancelJobAsync(Guid projectId, Guid jobId, CancellationToken cancellationToken = default)
     {
-        const string importSql = """
+        if (CallerIn(projectId) is not { } caller)
+        {
+            return false;
+        }
+
+        // The rule is part of the statement that cancels, not a lookup made before it: a job that is
+        // not there for the caller is one the UPDATE does not find.
+        const string importSql = $"""
             UPDATE morphdb._morph_import_jobs
             SET status = 'cancelled', completed_at = @Now
-            WHERE job_id = @JobId AND status IN ('pending', 'processing')
+            WHERE job_id = @JobId AND status IN ('pending', 'processing') AND {ReachableByCallerSql}
             """;
 
-        const string exportSql = """
+        const string exportSql = $"""
             UPDATE morphdb._morph_export_jobs
             SET status = 'cancelled', completed_at = @Now
-            WHERE job_id = @JobId AND status IN ('pending', 'processing')
+            WHERE job_id = @JobId AND status IN ('pending', 'processing') AND {ReachableByCallerSql}
             """;
+
+        var parameters = new { JobId = jobId, Now = DateTimeOffset.UtcNow, caller.ProjectId, caller.Bypass, caller.UserId };
 
         await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
-        var importRows = await connection.ExecuteAsync(importSql, new { JobId = jobId, Now = DateTimeOffset.UtcNow });
+        var importRows = await connection.ExecuteAsync(importSql, parameters);
         if (importRows > 0)
             return true;
 
-        var exportRows = await connection.ExecuteAsync(exportSql, new { JobId = jobId, Now = DateTimeOffset.UtcNow });
+        var exportRows = await connection.ExecuteAsync(exportSql, parameters);
         return exportRows > 0;
     }
 
-    public async Task<BulkJobProgress?> GetJobProgressAsync(Guid jobId, CancellationToken cancellationToken = default)
+    public async Task<BulkJobProgress?> GetJobProgressAsync(Guid projectId, Guid jobId, CancellationToken cancellationToken = default)
     {
         // Try import job first
-        var importJob = await GetImportJobAsync(jobId, cancellationToken);
+        var importJob = await GetImportJobAsync(projectId, jobId, cancellationToken);
         if (importJob is not null)
         {
             return new BulkJobProgress
@@ -522,7 +601,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         }
 
         // Try export job
-        var exportJob = await GetExportJobAsync(jobId, cancellationToken);
+        var exportJob = await GetExportJobAsync(projectId, jobId, cancellationToken);
         if (exportJob is not null)
         {
             return new BulkJobProgress
@@ -537,14 +616,83 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         return null;
     }
 
+    public async Task<Stream?> OpenExportFileAsync(Guid projectId, Guid jobId, CancellationToken cancellationToken = default)
+    {
+        // The lookup is the gate: past it, the caller is the job's requester or bypasses row-level
+        // security, and either may have the file.
+        if (await GetExportJobAsync(projectId, jobId, cancellationToken) is null)
+        {
+            return null;
+        }
+
+        const string sql = "SELECT data FROM morphdb._morph_export_data WHERE job_id = @JobId";
+
+        byte[]? stored;
+        await using (var connection = await _connections.OpenSystemAsync(cancellationToken))
+        {
+            stored = await connection.ExecuteScalarAsync<byte[]>(sql, new { JobId = jobId });
+        }
+
+        if (stored is not null)
+        {
+            return new MemoryStream(stored);
+        }
+
+        // No file was stored: the table is read now. StreamExportAsync reads it as the requester the
+        // job's row holds, so a caller that bypasses row-level security opening another caller's job
+        // is handed that caller's rows, not every row.
+        var streamed = new MemoryStream();
+        await StreamExportAsync(jobId, streamed, cancellationToken);
+        streamed.Position = 0;
+        return streamed;
+    }
+
+    #endregion
+
+    #region Carrying Jobs Out
+
+    /// <summary>
+    /// The job as stored, found by its id alone — for the two methods that carry a job out. Not for
+    /// a caller: <see cref="GetImportJobAsync"/> is what answers one.
+    /// </summary>
+    private async Task<BulkImportJob?> ReadImportJobForExecutionAsync(Guid jobId, CancellationToken cancellationToken)
+    {
+        const string sql = $"""
+            SELECT {ImportJobColumns}
+            FROM morphdb._morph_import_jobs
+            WHERE job_id = @JobId
+            """;
+
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
+        var row = await connection.QuerySingleOrDefaultAsync<ImportJobRow>(sql, new { JobId = jobId });
+
+        return row is null ? null : MapToImportJob(row);
+    }
+
+    /// <summary>
+    /// The job as stored, found by its id alone — for the two methods that carry a job out. Not for
+    /// a caller: <see cref="GetExportJobAsync"/> is what answers one.
+    /// </summary>
+    private async Task<BulkExportJob?> ReadExportJobForExecutionAsync(Guid jobId, CancellationToken cancellationToken)
+    {
+        const string sql = $"""
+            SELECT {ExportJobColumns}
+            FROM morphdb._morph_export_jobs
+            WHERE job_id = @JobId
+            """;
+
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
+        var row = await connection.QuerySingleOrDefaultAsync<ExportJobRow>(sql, new { JobId = jobId });
+
+        return row is null ? null : MapToExportJob(row);
+    }
+
     public async Task<IReadOnlyList<BulkImportJob>> GetPendingImportJobsAsync(
         int limit = 10,
         CancellationToken cancellationToken = default)
     {
-        const string sql = """
-            SELECT job_id, project_id, table_id, table_name, format, status,
-                   total_rows, processed_rows, success_count, error_count,
-                   error_message, error_details, options, created_at, started_at, completed_at
+        const string sql = $"""
+            SELECT {ImportJobColumns}
             FROM morphdb._morph_import_jobs
             WHERE status = 'pending'
             ORDER BY created_at ASC
@@ -561,10 +709,8 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         int limit = 10,
         CancellationToken cancellationToken = default)
     {
-        const string sql = """
-            SELECT job_id, project_id, table_id, table_name, format, status,
-                   total_rows, processed_rows, file_path, file_size,
-                   error_message, options, created_at, started_at, completed_at, expires_at
+        const string sql = $"""
+            SELECT {ExportJobColumns}
             FROM morphdb._morph_export_jobs
             WHERE status = 'pending'
             ORDER BY created_at ASC
@@ -607,18 +753,6 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
             """;
 
         await connection.ExecuteAsync(updateSql, new { JobId = jobId, FileSize = ms.Length });
-    }
-
-    public async Task<Stream?> GetStoredExportDataAsync(
-        Guid jobId,
-        CancellationToken cancellationToken = default)
-    {
-        const string sql = "SELECT data FROM morphdb._morph_export_data WHERE job_id = @JobId";
-
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-        var data = await connection.ExecuteScalarAsync<byte[]>(sql, new { JobId = jobId });
-
-        return data is null ? null : new MemoryStream(data);
     }
 
     #endregion
@@ -1245,7 +1379,8 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
     /// <remarks>
     /// Read here, by the two methods that carry a job out, and kept off <see cref="BulkImportJob"/>
     /// and <see cref="BulkExportJob"/>: those are what a status request answers with, and who asked
-    /// for a job — claims included — is not part of that answer.
+    /// for a job — claims included — is not part of that answer. <see cref="ReachableByCallerSql"/>
+    /// compares with the stored requester inside PostgreSQL, and hands nothing of it back either.
     /// </remarks>
     private async Task<SecurityContext?> GetRequesterAsync(string sql, Guid jobId, CancellationToken cancellationToken)
     {

@@ -11,6 +11,12 @@ namespace MorphDB.Service.Controllers;
 /// <summary>
 /// Controller for bulk import/export operations.
 /// </summary>
+/// <remarks>
+/// A job is reached through <see cref="IBulkOperationService"/> alone, with the request's project.
+/// That service holds a job to its project and to the caller that requested it, and answers
+/// "no such job" for anything else — so every route here that takes a job id answers a job of
+/// another project, or of another caller, with the same <c>404</c> as an id that was never issued.
+/// </remarks>
 [ApiController]
 [Route("api/bulk")]
 [RequireProject]
@@ -148,7 +154,7 @@ public sealed class BulkController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetImportJob(Guid jobId, CancellationToken cancellationToken = default)
     {
-        var job = await _bulkService.GetImportJobAsync(jobId, cancellationToken);
+        var job = await _bulkService.GetImportJobAsync(GetProjectId(), jobId, cancellationToken);
 
         if (job == null)
         {
@@ -275,16 +281,11 @@ public sealed class BulkController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetExportJob(Guid jobId, CancellationToken cancellationToken = default)
     {
-        var job = await _bulkService.GetExportJobAsync(jobId, cancellationToken);
+        var job = await _bulkService.GetExportJobAsync(GetProjectId(), jobId, cancellationToken);
 
         if (job == null)
         {
-            return NotFound(new ErrorResponse
-            {
-                Error = "NotFound",
-                Message = $"Export job with ID '{jobId}' not found",
-                Code = "JOB_NOT_FOUND"
-            });
+            return ExportJobNotFound(jobId);
         }
 
         return Ok(ToExportJobResponse(job));
@@ -299,16 +300,15 @@ public sealed class BulkController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> DownloadExport(Guid jobId, CancellationToken cancellationToken = default)
     {
-        var job = await _bulkService.GetExportJobAsync(jobId, cancellationToken);
+        var projectId = GetProjectId();
+
+        // Before anything is said about the job's state: a caller the job is not there for learns
+        // nothing of it, not even that it has not finished.
+        var job = await _bulkService.GetExportJobAsync(projectId, jobId, cancellationToken);
 
         if (job == null)
         {
-            return NotFound(new ErrorResponse
-            {
-                Error = "NotFound",
-                Message = $"Export job with ID '{jobId}' not found",
-                Code = "JOB_NOT_FOUND"
-            });
+            return ExportJobNotFound(jobId);
         }
 
         if (job.Status != BulkJobStatus.Completed)
@@ -339,19 +339,16 @@ public sealed class BulkController : ControllerBase
 
         var fileName = $"{job.TableName}_{job.JobId:N}.{extension}";
 
-        // Try to get stored export data first (processed by background service)
-        var storedStream = await _bulkService.GetStoredExportDataAsync(jobId, cancellationToken);
-        if (storedStream != null)
+        // The file the background service stored, or — when none is stored — the table as read
+        // now, as the caller that requested the job. The service decides which, and looks the job
+        // up for this caller again before it hands anything over.
+        var file = await _bulkService.OpenExportFileAsync(projectId, jobId, cancellationToken);
+        if (file == null)
         {
-            return File(storedStream, contentType, fileName);
+            return ExportJobNotFound(jobId);
         }
 
-        // Fallback: stream export on-the-fly if not stored
-        var stream = new MemoryStream();
-        await _bulkService.StreamExportAsync(jobId, stream, cancellationToken);
-        stream.Position = 0;
-
-        return File(stream, contentType, fileName);
+        return File(file, contentType, fileName);
     }
 
     /// <summary>
@@ -381,7 +378,7 @@ public sealed class BulkController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetJobProgress(Guid jobId, CancellationToken cancellationToken = default)
     {
-        var progress = await _bulkService.GetJobProgressAsync(jobId, cancellationToken);
+        var progress = await _bulkService.GetJobProgressAsync(GetProjectId(), jobId, cancellationToken);
 
         if (progress == null)
         {
@@ -414,7 +411,7 @@ public sealed class BulkController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> CancelJob(Guid jobId, CancellationToken cancellationToken = default)
     {
-        var cancelled = await _bulkService.CancelJobAsync(jobId, cancellationToken);
+        var cancelled = await _bulkService.CancelJobAsync(GetProjectId(), jobId, cancellationToken);
 
         if (!cancelled)
         {
@@ -432,6 +429,13 @@ public sealed class BulkController : ControllerBase
     #endregion
 
     #region Helper Methods
+
+    private NotFoundObjectResult ExportJobNotFound(Guid jobId) => NotFound(new ErrorResponse
+    {
+        Error = "NotFound",
+        Message = $"Export job with ID '{jobId}' not found",
+        Code = "JOB_NOT_FOUND"
+    });
 
     private static ImportJobApiResponse ToImportJobResponse(BulkImportJob job) => new()
     {

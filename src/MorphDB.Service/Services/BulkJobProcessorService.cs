@@ -10,8 +10,10 @@ namespace MorphDB.Service.Services;
 /// </summary>
 /// <remarks>
 /// This service has no caller of its own, and a job is not run as nobody for that: the
-/// <see cref="IBulkOperationService"/> methods called here read and write the table as the caller
-/// each job was requested by. Nothing about a caller is set or cleared in this class.
+/// <see cref="IBulkJobExecutor"/> methods called here read and write the table as the caller
+/// each job was requested by. Nothing about a caller is set or cleared in this class. It finds
+/// jobs of every project and every requester; who may follow a job afterwards is decided where a
+/// request asks, in <see cref="IBulkOperationService"/>.
 /// </remarks>
 public sealed partial class BulkJobProcessorService : BackgroundService
 {
@@ -57,7 +59,7 @@ public sealed partial class BulkJobProcessorService : BackgroundService
     private async Task ProcessPendingJobsAsync(CancellationToken cancellationToken)
     {
         using var scope = _scopeFactory.CreateScope();
-        var bulkService = scope.ServiceProvider.GetRequiredService<IBulkOperationService>();
+        var bulkService = scope.ServiceProvider.GetRequiredService<IBulkJobExecutor>();
 
         // Process pending export jobs
         var pendingExports = await bulkService.GetPendingExportJobsAsync(_options.BatchSize, cancellationToken);
@@ -82,7 +84,7 @@ public sealed partial class BulkJobProcessorService : BackgroundService
 
     /// <summary>Carries out one export job and stores the file a download serves.</summary>
     internal async Task ProcessExportJobAsync(
-        IBulkOperationService bulkService,
+        IBulkJobExecutor bulkService,
         BulkExportJob job,
         CancellationToken cancellationToken)
     {
@@ -113,7 +115,7 @@ public sealed partial class BulkJobProcessorService : BackgroundService
 
     /// <summary>Carries out one import job, row by row.</summary>
     internal async Task ProcessImportJobAsync(
-        IBulkOperationService bulkService,
+        IBulkJobExecutor bulkService,
         BulkImportJob job,
         CancellationToken cancellationToken)
     {
