@@ -6,7 +6,6 @@ using MorphDB.Npgsql.Ddl;
 using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Query;
 using MorphDB.Npgsql.Repositories;
-using Npgsql;
 
 namespace MorphDB.Npgsql.Services;
 
@@ -16,7 +15,7 @@ namespace MorphDB.Npgsql.Services;
 /// </summary>
 public sealed class PostgresViewManager : IViewManager
 {
-    private readonly NpgsqlDataSource _dataSource;
+    private readonly MorphConnectionFactory _connections;
     private readonly IViewMetadataRepository _viewRepository;
     private readonly IMetadataRepository _metadataRepository;
     private readonly IAdvisoryLockManager _lockManager;
@@ -25,7 +24,7 @@ public sealed class PostgresViewManager : IViewManager
     private readonly SchemaManagerOptions _options;
 
     public PostgresViewManager(
-        NpgsqlDataSource dataSource,
+        MorphConnectionFactory connections,
         IViewMetadataRepository viewRepository,
         IMetadataRepository metadataRepository,
         IAdvisoryLockManager lockManager,
@@ -33,7 +32,7 @@ public sealed class PostgresViewManager : IViewManager
         IChangeLogger changeLogger,
         SchemaManagerOptions? options = null)
     {
-        _dataSource = dataSource;
+        _connections = connections;
         _viewRepository = viewRepository;
         _metadataRepository = metadataRepository;
         _lockManager = lockManager;
@@ -80,7 +79,7 @@ public sealed class PostgresViewManager : IViewManager
             ddl = DdlBuilder.BuildCreateView(physicalName, selectStatement);
         }
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(ddl);
 
         // For materialized views, create a unique index to enable CONCURRENTLY refresh
@@ -175,7 +174,7 @@ public sealed class PostgresViewManager : IViewManager
             var queryBuilder = new ViewQueryBuilder(_metadataRepository, view.ProjectId);
             var selectStatement = await queryBuilder.BuildSelectStatementAsync(request.Definition, cancellationToken);
 
-            await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+            await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
             if (view.IsMaterialized)
             {
@@ -222,7 +221,7 @@ public sealed class PostgresViewManager : IViewManager
             cancellationToken);
 
         // Drop the view from PostgreSQL
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         if (view.IsMaterialized)
         {
             await connection.ExecuteAsync(DdlBuilder.BuildDropMaterializedView(view.PhysicalName));
@@ -263,7 +262,7 @@ public sealed class PostgresViewManager : IViewManager
 
         // Refresh the materialized view
         var refreshSql = DdlBuilder.BuildRefreshMaterializedView(view.PhysicalName, concurrent: concurrent);
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(refreshSql);
 
         // Update refresh timestamp and clear stale status
@@ -345,7 +344,7 @@ public sealed class PostgresViewManager : IViewManager
         var sql = BuildViewQuerySql(view, request);
         var countSql = BuildViewCountSql(view, request);
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenAsync(cancellationToken);
 
         // Execute data query
         var data = await connection.QueryAsync<dynamic>(sql);

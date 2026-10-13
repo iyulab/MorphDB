@@ -99,8 +99,13 @@ public sealed class ApiTestFixture : IAsyncLifetime
                     services.RemoveAll<NpgsqlDataSource>();
                     services.AddSingleton(testDataSource);
 
-                    // Step 3: Remove and re-register all services that directly depend on NpgsqlDataSource
-                    // These services capture DataSource in their constructors, so they must be re-created
+                    // The factory every service opens through holds the data source it was built
+                    // with, so it is replaced along with it.
+                    services.RemoveAll<MorphConnectionFactory>();
+                    services.AddSingleton<MorphConnectionFactory>();
+
+                    // Step 3: Remove and re-register all services that open connections through that factory
+                    // These services capture it in their constructors, so they must be re-created
 
                     // Core repositories and services
                     services.RemoveAll<IMetadataRepository>();
@@ -294,11 +299,11 @@ public sealed class ApiTestFixture : IAsyncLifetime
         var shortId = ProjectId.ToString("N")[..8];
 
         var resolver = new PostgresSchemaNameResolver();
-        var repository = new ProjectRepository(_postgresFixture.DataSource, resolver);
+        var repository = new ProjectRepository(_postgresFixture.Connections, resolver);
         var projectService = new ProjectService(
             repository,
             new PostgresSchemaLayerService(
-                _postgresFixture.DataSource,
+                _postgresFixture.Connections,
                 resolver,
                 repository,
                 Microsoft.Extensions.Logging.Abstractions.NullLogger<PostgresSchemaLayerService>.Instance),

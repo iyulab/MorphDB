@@ -16,17 +16,17 @@ namespace MorphDB.Npgsql.Services;
 /// </summary>
 public sealed class PostgresTransactionService : ITransactionService
 {
-    private readonly NpgsqlDataSource _dataSource;
+    private readonly MorphConnectionFactory _connections;
     private readonly IMetadataRepository _metadataRepository;
     private readonly IWritePipeline _writePipeline;
     private readonly int _defaultTimeoutMs = 30000;
 
     public PostgresTransactionService(
-        NpgsqlDataSource dataSource,
+        MorphConnectionFactory connections,
         IMetadataRepository metadataRepository,
         IWritePipeline writePipeline)
     {
-        _dataSource = dataSource ?? throw new ArgumentNullException(nameof(dataSource));
+        _connections = connections ?? throw new ArgumentNullException(nameof(connections));
         _metadataRepository = metadataRepository ?? throw new ArgumentNullException(nameof(metadataRepository));
         _writePipeline = writePipeline ?? throw new ArgumentNullException(nameof(writePipeline));
     }
@@ -49,7 +49,7 @@ public sealed class PostgresTransactionService : ITransactionService
         var refResolver = new RefResolver();
         var results = new List<TransactionOperationResult>(request.Operations.Count);
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cts.Token);
+        await using var connection = await _connections.OpenAsync(cts.Token);
         await using var transaction = await connection.BeginTransactionAsync(cts.Token);
 
         try
@@ -484,7 +484,7 @@ public sealed class PostgresTransactionService : ITransactionService
 
         var sql = $"SELECT * FROM {table.PhysicalName} WHERE {idColumn.PhysicalName} = @id";
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenAsync(cancellationToken);
         var result = await connection.QuerySingleOrDefaultAsync<dynamic>(
             new CommandDefinition(sql, new { id = recordId }, cancellationToken: cancellationToken));
 
@@ -568,7 +568,7 @@ public sealed class PostgresTransactionService : ITransactionService
             RETURNING *
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenAsync(cancellationToken);
         var result = await connection.QuerySingleAsync<dynamic>(
             new CommandDefinition(sql, new { id = recordId, state = stateString, errors = errorsJson },
                 cancellationToken: cancellationToken));

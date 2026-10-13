@@ -1,6 +1,6 @@
 using System.Text.Json;
 using Dapper;
-using Npgsql;
+using MorphDB.Npgsql.Infrastructure;
 
 namespace MorphDB.Npgsql.Services;
 
@@ -15,11 +15,11 @@ public sealed class ChangeLogger : IChangeLogger
         WriteIndented = false
     };
 
-    private readonly NpgsqlDataSource _dataSource;
+    private readonly MorphConnectionFactory _connections;
 
-    public ChangeLogger(NpgsqlDataSource dataSource)
+    public ChangeLogger(MorphConnectionFactory connections)
     {
-        _dataSource = dataSource;
+        _connections = connections;
     }
 
     public async Task LogChangeAsync(
@@ -35,7 +35,7 @@ public sealed class ChangeLogger : IChangeLogger
 
         var changesJson = JsonSerializer.Serialize(entry.Changes, JsonOptions);
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new
         {
             entry.ChangeId,
@@ -61,7 +61,7 @@ public sealed class ChangeLogger : IChangeLogger
             LIMIT @Limit
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var rows = await connection.QueryAsync<ChangeLogRow>(sql, new { TableId = tableId, Limit = limit });
 
         return rows.Select(MapToEntry).ToList();
@@ -82,7 +82,7 @@ public sealed class ChangeLogger : IChangeLogger
             LIMIT @Limit OFFSET @Offset
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var rows = await connection.QueryAsync<ChangeLogRow>(sql, new { ProjectId = projectId, Limit = limit, Offset = offset });
 
         return rows.Select(MapToEntry).ToList();

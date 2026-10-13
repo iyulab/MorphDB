@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using Dapper;
 using MorphDB.Core.Exceptions;
 using MorphDB.Core.Security;
-using Npgsql;
+using MorphDB.Npgsql.Infrastructure;
 
 namespace MorphDB.Npgsql.Security;
 
@@ -19,12 +19,12 @@ public sealed class SecretService : ISecretService
 
     private const int EntropyBytes = 32;
 
-    private readonly NpgsqlDataSource _dataSource;
+    private readonly MorphConnectionFactory _connections;
     private readonly SecretOptions _options;
 
-    public SecretService(NpgsqlDataSource dataSource, SecretOptions options)
+    public SecretService(MorphConnectionFactory connections, SecretOptions options)
     {
-        _dataSource = dataSource;
+        _connections = connections;
         _options = options;
     }
 
@@ -65,7 +65,7 @@ public sealed class SecretService : ISecretService
             CreatedAt = DateTimeOffset.UtcNow
         };
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(
             """
             INSERT INTO morphdb._morph_secrets
@@ -81,7 +81,7 @@ public sealed class SecretService : ISecretService
     /// <inheritdoc/>
     public async Task<IReadOnlyList<Secret>> ListAsync(CancellationToken cancellationToken = default)
     {
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
         // secret_hash is not selected: listing is a management operation, and a hash is the only
         // thing here worth stealing.
@@ -99,7 +99,7 @@ public sealed class SecretService : ISecretService
     /// <inheritdoc/>
     public async Task<bool> RevokeAsync(Guid secretId, CancellationToken cancellationToken = default)
     {
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
         var affected = await connection.ExecuteAsync(
             """
@@ -137,7 +137,7 @@ public sealed class SecretService : ISecretService
             };
         }
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
         return await connection.QueryFirstOrDefaultAsync<Secret>(
             """

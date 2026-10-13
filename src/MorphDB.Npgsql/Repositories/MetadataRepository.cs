@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Dapper;
 using MorphDB.Core.Models;
-using Npgsql;
+using MorphDB.Npgsql.Infrastructure;
 
 namespace MorphDB.Npgsql.Repositories;
 
@@ -10,11 +10,11 @@ namespace MorphDB.Npgsql.Repositories;
 /// </summary>
 public sealed class MetadataRepository : IMetadataRepository
 {
-    private readonly NpgsqlDataSource _dataSource;
+    private readonly MorphConnectionFactory _connections;
 
-    public MetadataRepository(NpgsqlDataSource dataSource)
+    public MetadataRepository(MorphConnectionFactory connections)
     {
-        _dataSource = dataSource;
+        _connections = connections;
     }
 
     #region Table Operations
@@ -32,7 +32,7 @@ public sealed class MetadataRepository : IMetadataRepository
                       descriptor, is_active, created_at, updated_at
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var result = await MetadataConstraintTranslation.AsDuplicateNameAsync(
             "Table",
             table.LogicalName,
@@ -61,7 +61,7 @@ public sealed class MetadataRepository : IMetadataRepository
             WHERE table_id = @TableId AND is_active = true
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var row = await connection.QuerySingleOrDefaultAsync<TableRow>(sql, new { TableId = tableId });
 
         if (row is null)
@@ -93,7 +93,7 @@ public sealed class MetadataRepository : IMetadataRepository
             WHERE project_id = @ProjectId AND logical_name = @LogicalName AND is_active = true
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var row = await connection.QuerySingleOrDefaultAsync<TableRow>(
             sql, new { ProjectId = projectId, LogicalName = logicalName });
 
@@ -126,7 +126,7 @@ public sealed class MetadataRepository : IMetadataRepository
             ORDER BY created_at
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var rows = await connection.QueryAsync<TableRow>(sql, new { ProjectId = projectId });
 
         var tables = rows.Select(MapToTableMetadata).ToList();
@@ -159,7 +159,7 @@ public sealed class MetadataRepository : IMetadataRepository
             WHERE table_id = @TableId
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new { TableId = tableId, LogicalName = logicalName, NewVersion = newVersion });
     }
 
@@ -199,7 +199,7 @@ public sealed class MetadataRepository : IMetadataRepository
             WHERE (source_table_id = @TableId OR target_table_id = @TableId) AND is_active = true;
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new { TableId = tableId });
     }
 
@@ -228,7 +228,7 @@ public sealed class MetadataRepository : IMetadataRepository
                       lookup_config, rollup_config, formula_config, computed_config, is_active
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var result = await MetadataConstraintTranslation.AsDuplicateNameAsync(
             "Column",
             column.LogicalName,
@@ -270,7 +270,7 @@ public sealed class MetadataRepository : IMetadataRepository
             WHERE column_id = @ColumnId AND is_active = true
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var row = await connection.QuerySingleOrDefaultAsync<ColumnRow>(sql, new { ColumnId = columnId });
 
         return row is null ? null : MapToColumnMetadata(row);
@@ -290,7 +290,7 @@ public sealed class MetadataRepository : IMetadataRepository
             ORDER BY ordinal_position
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var rows = await connection.QueryAsync<ColumnRow>(sql, new { TableId = tableId });
 
         return rows.Select(MapToColumnMetadata).ToList();
@@ -306,7 +306,7 @@ public sealed class MetadataRepository : IMetadataRepository
             WHERE table_id = @TableId AND is_active = true
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         return await connection.ExecuteScalarAsync<int>(sql, new { TableId = tableId });
     }
 
@@ -323,7 +323,7 @@ public sealed class MetadataRepository : IMetadataRepository
             WHERE column_id = @ColumnId
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new { ColumnId = columnId, LogicalName = logicalName, DefaultValue = defaultValue });
     }
 
@@ -347,7 +347,7 @@ public sealed class MetadataRepository : IMetadataRepository
             WHERE column_id = @ColumnId
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new
         {
             ColumnId = columnId,
@@ -370,7 +370,7 @@ public sealed class MetadataRepository : IMetadataRepository
             WHERE column_id = @ColumnId
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new { ColumnId = columnId });
     }
 
@@ -399,7 +399,7 @@ public sealed class MetadataRepository : IMetadataRepository
             RETURNING index_id, table_id, logical_name, physical_name, columns, index_type, is_unique, where_clause, descriptor, is_active, created_at
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var result = await MetadataConstraintTranslation.AsDuplicateNameAsync(
             "Index",
             index.LogicalName,
@@ -429,7 +429,7 @@ public sealed class MetadataRepository : IMetadataRepository
             WHERE index_id = @IndexId AND is_active = true
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var row = await connection.QuerySingleOrDefaultAsync<IndexRow>(sql, new { IndexId = indexId });
 
         return row is null ? null : MapToIndexMetadata(row);
@@ -446,7 +446,7 @@ public sealed class MetadataRepository : IMetadataRepository
             ORDER BY created_at
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var rows = await connection.QueryAsync<IndexRow>(sql, new { TableId = tableId });
 
         return rows.Select(MapToIndexMetadata).ToList();
@@ -462,7 +462,7 @@ public sealed class MetadataRepository : IMetadataRepository
             WHERE index_id = @IndexId
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new { IndexId = indexId });
     }
 
@@ -482,7 +482,7 @@ public sealed class MetadataRepository : IMetadataRepository
             RETURNING relation_id, project_id, logical_name, source_table_id, source_column_id, target_table_id, target_column_id, relation_type, on_delete, on_update, descriptor, is_active, enforce_on_write, virtual_cascade, created_at
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var result = await connection.QuerySingleAsync<RelationRow>(sql, new
         {
             relation.RelationId,
@@ -516,7 +516,7 @@ public sealed class MetadataRepository : IMetadataRepository
             WHERE r.relation_id = @RelationId AND r.is_active = true
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var row = await connection.QuerySingleOrDefaultAsync<RelationRow>(sql, new { RelationId = relationId });
 
         return row is null ? null : MapToRelationMetadata(row);
@@ -536,7 +536,7 @@ public sealed class MetadataRepository : IMetadataRepository
             ORDER BY r.created_at
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var rows = await connection.QueryAsync<RelationRow>(sql, new { TableId = tableId });
 
         return rows.Select(MapToRelationMetadata).ToList();
@@ -552,7 +552,7 @@ public sealed class MetadataRepository : IMetadataRepository
             WHERE relation_id = @RelationId
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new { RelationId = relationId });
     }
 
@@ -570,7 +570,7 @@ public sealed class MetadataRepository : IMetadataRepository
             WHERE table_id = @TableId
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         return await connection.ExecuteScalarAsync<int>(sql, new { TableId = tableId });
     }
 
@@ -584,7 +584,7 @@ public sealed class MetadataRepository : IMetadataRepository
             WHERE table_id = @TableId
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new { TableId = tableId });
     }
 

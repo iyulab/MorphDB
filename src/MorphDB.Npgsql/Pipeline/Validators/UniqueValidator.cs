@@ -2,7 +2,6 @@ using Dapper;
 using MorphDB.Core.Models;
 using MorphDB.Core.Pipeline;
 using MorphDB.Npgsql.Infrastructure;
-using Npgsql;
 
 namespace MorphDB.Npgsql.Pipeline.Validators;
 
@@ -12,11 +11,11 @@ namespace MorphDB.Npgsql.Pipeline.Validators;
 /// </summary>
 public sealed class UniqueValidator : IValidator
 {
-    private readonly NpgsqlDataSource _dataSource;
+    private readonly MorphConnectionFactory _connections;
 
-    public UniqueValidator(NpgsqlDataSource dataSource)
+    public UniqueValidator(MorphConnectionFactory connections)
     {
-        _dataSource = dataSource;
+        _connections = connections;
     }
 
     public int Order => PipelineOrder.UniqueValidator;
@@ -42,7 +41,7 @@ public sealed class UniqueValidator : IValidator
 
         await using var conn = ConnectionScope.HasScope
             ? new ScopedConnection(ConnectionScope.CurrentConnection!, ConnectionScope.CurrentTransaction, false)
-            : new ScopedConnection(await _dataSource.OpenConnectionAsync(context.CancellationToken), null, true);
+            : new ScopedConnection(await _connections.OpenAsync(context.CancellationToken), null, true);
 
         foreach (var column in uniqueColumns)
         {

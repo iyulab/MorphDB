@@ -52,8 +52,7 @@ public static partial class ServiceCollectionExtensions
             ConnectionPruningInterval = (int)options.ConnectionPoolOptions.ConnectionPruningInterval.TotalSeconds,
             Timeout = (int)options.ConnectionPoolOptions.ConnectionTimeout.TotalSeconds,
             CommandTimeout = (int)options.ConnectionPoolOptions.CommandTimeout.TotalSeconds,
-            Pooling = options.ConnectionPoolOptions.Enabled,
-            Multiplexing = options.ConnectionPoolOptions.Multiplexing
+            Pooling = options.ConnectionPoolOptions.Enabled
         };
 
         // Register NpgsqlDataSource with optimized settings
@@ -62,6 +61,9 @@ public static partial class ServiceCollectionExtensions
         var dataSource = dataSourceBuilder.Build();
 
         services.AddSingleton(dataSource);
+
+        // The one place a connection is opened; everything below opens through it.
+        services.AddSingleton<MorphConnectionFactory>();
 
         // Register core infrastructure
         services.AddSingleton<INameHasher, Sha256NameHasher>();
@@ -348,9 +350,4 @@ public sealed class ConnectionPoolOptions
     /// Default command execution timeout.
     /// </summary>
     public TimeSpan CommandTimeout { get; set; } = TimeSpan.FromSeconds(30);
-
-    /// <summary>
-    /// Whether to use multiplexing for better connection utilization.
-    /// </summary>
-    public bool Multiplexing { get; set; }
 }

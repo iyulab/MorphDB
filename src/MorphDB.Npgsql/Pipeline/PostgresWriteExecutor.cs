@@ -18,16 +18,16 @@ namespace MorphDB.Npgsql.Pipeline;
 /// </summary>
 public sealed class PostgresWriteExecutor : IWriteExecutor
 {
-    private readonly NpgsqlDataSource _dataSource;
+    private readonly MorphConnectionFactory _connections;
     private readonly IQueryDiagnostics _queryDiagnostics;
     private readonly string _primaryKeyLogicalName;
 
     public PostgresWriteExecutor(
-        NpgsqlDataSource dataSource,
+        MorphConnectionFactory connections,
         IQueryDiagnostics queryDiagnostics,
         string primaryKeyLogicalName = "id")
     {
-        _dataSource = dataSource ?? throw new ArgumentNullException(nameof(dataSource));
+        _connections = connections ?? throw new ArgumentNullException(nameof(connections));
         _queryDiagnostics = queryDiagnostics ?? throw new ArgumentNullException(nameof(queryDiagnostics));
         _primaryKeyLogicalName = primaryKeyLogicalName;
     }
@@ -358,7 +358,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
     /// <summary>
     /// Returns a scoped connection wrapper. If a ConnectionScope is active
     /// (e.g. inside a transaction), uses the shared connection/transaction.
-    /// Otherwise opens a new connection from the data source.
+    /// Otherwise opens a new connection for the caller.
     /// </summary>
     private async ValueTask<ScopedConnection> GetScopedConnectionAsync(CancellationToken cancellationToken)
     {
@@ -367,7 +367,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             return new ScopedConnection(ConnectionScope.CurrentConnection!, ConnectionScope.CurrentTransaction, ownsConnection: false);
         }
 
-        var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        var connection = await _connections.OpenAsync(cancellationToken);
         return new ScopedConnection(connection, null, ownsConnection: true);
     }
 

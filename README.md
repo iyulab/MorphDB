@@ -173,7 +173,9 @@ a new role with [`scripts/migrate-to-service-role.sql`](scripts/migrate-to-servi
 changes only ownership — no data is touched:
 
 ```bash
-docker compose exec -T postgres psql -U morph -d morphdb   -v service_role=morphdb_service -v service_password='<password>'   < migrate-to-service-role.sql
+docker compose exec -T postgres psql -U morph -d morphdb \
+  -v service_role=morphdb_service -v service_password='<password>' \
+  < migrate-to-service-role.sql
 ```
 
 then set `ConnectionStrings__MorphDB` to `Username=morphdb_service;Password=<password>` and start

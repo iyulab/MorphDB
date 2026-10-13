@@ -24,21 +24,21 @@ public class SchemaManagerTests
     public SchemaManagerTests(PostgresFixture fixture)
     {
         _fixture = fixture;
-        _metadataRepository = new MetadataRepository(fixture.DataSource);
+        _metadataRepository = new MetadataRepository(fixture.Connections);
 
         var nameHasher = new Sha256NameHasher();
         var lockOptions = new AdvisoryLockOptions();
-        var lockManager = new PostgresAdvisoryLockManager(fixture.DataSource, lockOptions);
-        var changeLogger = new ChangeLogger(fixture.DataSource);
+        var lockManager = new PostgresAdvisoryLockManager(fixture.Connections, lockOptions);
+        var changeLogger = new ChangeLogger(fixture.Connections);
         var schemaOptions = new SchemaManagerOptions();
 
         _schemaManager = new PostgresSchemaManager(
-            fixture.DataSource,
+            fixture.Connections,
             _metadataRepository,
             lockManager,
             nameHasher,
             changeLogger,
-            new ProjectRepository(fixture.DataSource, new PostgresSchemaNameResolver()),
+            new ProjectRepository(fixture.Connections, new PostgresSchemaNameResolver()),
             schemaOptions);
     }
 

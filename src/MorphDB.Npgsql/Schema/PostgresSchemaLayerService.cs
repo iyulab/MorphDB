@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Exceptions;
 using MorphDB.Npgsql.Ddl;
+using MorphDB.Npgsql.Infrastructure;
 using Npgsql;
 
 namespace MorphDB.Npgsql.Schema;
@@ -13,18 +14,18 @@ namespace MorphDB.Npgsql.Schema;
 /// </summary>
 public sealed partial class PostgresSchemaLayerService : ISchemaLayerService
 {
-    private readonly NpgsqlDataSource _dataSource;
+    private readonly MorphConnectionFactory _connections;
     private readonly ISchemaNameResolver _schemaNameResolver;
     private readonly IProjectRepository _projectRepository;
     private readonly ILogger<PostgresSchemaLayerService> _logger;
 
     public PostgresSchemaLayerService(
-        NpgsqlDataSource dataSource,
+        MorphConnectionFactory connections,
         ISchemaNameResolver schemaNameResolver,
         IProjectRepository projectRepository,
         ILogger<PostgresSchemaLayerService> logger)
     {
-        _dataSource = dataSource;
+        _connections = connections;
         _schemaNameResolver = schemaNameResolver;
         _projectRepository = projectRepository;
         _logger = logger;
@@ -44,7 +45,7 @@ public sealed partial class PostgresSchemaLayerService : ISchemaLayerService
     {
         LogEnsuringGlobalSchema(_logger);
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
         // Before touching anything: a role PostgreSQL exempts from row-level security would let every
         // later policy be stored and silently ignored. Checked here rather than in the host so an
@@ -94,7 +95,7 @@ public sealed partial class PostgresSchemaLayerService : ISchemaLayerService
 
         LogProvisioningSchemas(_logger, projectId, schemaNames.SystemSchema, schemaNames.DataSchema);
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
         try
@@ -142,7 +143,7 @@ public sealed partial class PostgresSchemaLayerService : ISchemaLayerService
 
         LogDroppingSchemas(_logger, projectId, schemaNames.SystemSchema, schemaNames.DataSchema);
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
         try
@@ -174,7 +175,7 @@ public sealed partial class PostgresSchemaLayerService : ISchemaLayerService
         string schemaName,
         CancellationToken cancellationToken = default)
     {
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
         var exists = await connection.ExecuteScalarAsync<bool>(
             DdlBuilder.BuildSchemaExistsQuery(),
@@ -201,7 +202,7 @@ public sealed partial class PostgresSchemaLayerService : ISchemaLayerService
         string schemaName,
         CancellationToken cancellationToken = default)
     {
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
         var result = await connection.QuerySingleOrDefaultAsync<SchemaStatsDto>(
             DdlBuilder.BuildSchemaStatsQuery(),
@@ -255,7 +256,7 @@ public sealed partial class PostgresSchemaLayerService : ISchemaLayerService
         string newName,
         CancellationToken cancellationToken = default)
     {
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
         var renameSql = DdlBuilder.BuildRenameSchema(oldName, newName);
         await connection.ExecuteAsync(renameSql);
@@ -267,7 +268,7 @@ public sealed partial class PostgresSchemaLayerService : ISchemaLayerService
     public async Task<IReadOnlyList<ManagedSchemaInfo>> ListManagedSchemasAsync(
         CancellationToken cancellationToken = default)
     {
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
         const string sql = """
             SELECT
@@ -369,7 +370,7 @@ public sealed partial class PostgresSchemaLayerService : ISchemaLayerService
     {
         var requiredTables = new[] { "_tables", "_columns", "_indexes", "_relations", "_schema_changelog" };
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
         foreach (var tableName in requiredTables)
         {

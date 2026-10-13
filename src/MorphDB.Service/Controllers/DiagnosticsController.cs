@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using MorphDB.Core.Diagnostics;
+using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Service.Infrastructure;
 using Npgsql;
 
@@ -14,17 +15,22 @@ namespace MorphDB.Service.Controllers;
 public partial class DiagnosticsController : ControllerBase
 {
     private readonly IQueryDiagnostics _queryDiagnostics;
+    private readonly MorphConnectionFactory _connections;
+
+    // Held only to report the connection string the pool was built from; nothing is opened on it.
     private readonly NpgsqlDataSource _dataSource;
     private readonly GracefulShutdownService _shutdownService;
     private readonly ILogger<DiagnosticsController> _logger;
 
     public DiagnosticsController(
         IQueryDiagnostics queryDiagnostics,
+        MorphConnectionFactory connections,
         NpgsqlDataSource dataSource,
         GracefulShutdownService shutdownService,
         ILogger<DiagnosticsController> logger)
     {
         _queryDiagnostics = queryDiagnostics;
+        _connections = connections;
         _dataSource = dataSource;
         _shutdownService = shutdownService;
         _logger = logger;
@@ -111,7 +117,7 @@ public partial class DiagnosticsController : ControllerBase
         try
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            await using var conn = await _dataSource.OpenConnectionAsync();
+            await using var conn = await _connections.OpenSystemAsync();
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = "SELECT 1";
             await cmd.ExecuteScalarAsync();

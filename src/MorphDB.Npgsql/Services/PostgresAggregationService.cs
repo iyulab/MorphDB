@@ -8,7 +8,6 @@ using MorphDB.Npgsql.Ddl;
 using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Query;
 using MorphDB.Npgsql.Repositories;
-using Npgsql;
 using SqlKata.Compilers;
 using SqlKataQuery = SqlKata.Query;
 
@@ -20,7 +19,7 @@ namespace MorphDB.Npgsql.Services;
 /// </summary>
 public sealed class PostgresAggregationService : IAggregationService
 {
-    private readonly NpgsqlDataSource _dataSource;
+    private readonly MorphConnectionFactory _connections;
     private readonly IMetadataRepository _metadataRepository;
     private readonly ISecurityPolicyService _securityPolicyService;
     private readonly ISecurityContextAccessor _securityContextAccessor;
@@ -35,7 +34,7 @@ public sealed class PostgresAggregationService : IAggregationService
     /// other column (see <see cref="TableSource"/>).
     /// </summary>
     public PostgresAggregationService(
-        NpgsqlDataSource dataSource,
+        MorphConnectionFactory connections,
         IMetadataRepository metadataRepository,
         ISecurityPolicyService securityPolicyService,
         ISecurityContextAccessor securityContextAccessor,
@@ -46,7 +45,7 @@ public sealed class PostgresAggregationService : IAggregationService
         _lookupResolver = lookupResolver;
         _rollupResolver = rollupResolver;
         _formulaResolver = formulaResolver;
-        _dataSource = dataSource ?? throw new ArgumentNullException(nameof(dataSource));
+        _connections = connections ?? throw new ArgumentNullException(nameof(connections));
         _metadataRepository = metadataRepository ?? throw new ArgumentNullException(nameof(metadataRepository));
         _securityPolicyService = securityPolicyService ?? throw new ArgumentNullException(nameof(securityPolicyService));
         _securityContextAccessor = securityContextAccessor ?? throw new ArgumentNullException(nameof(securityContextAccessor));
@@ -78,7 +77,7 @@ public sealed class PostgresAggregationService : IAggregationService
         // Compile and execute
         var compiled = _compiler.Compile(query);
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenAsync(cancellationToken);
         var results = await connection.QueryAsync<dynamic>(
             new CommandDefinition(compiled.Sql, compiled.NamedBindings, cancellationToken: cancellationToken));
 
@@ -420,7 +419,7 @@ public sealed class PostgresAggregationService : IAggregationService
 
         var compiled = _compiler.Compile(countQuery);
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenAsync(cancellationToken);
         return await connection.ExecuteScalarAsync<long>(
             new CommandDefinition(compiled.Sql, compiled.NamedBindings, cancellationToken: cancellationToken));
     }

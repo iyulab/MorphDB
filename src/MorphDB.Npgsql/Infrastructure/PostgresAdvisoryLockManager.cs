@@ -11,12 +11,12 @@ namespace MorphDB.Npgsql.Infrastructure;
 /// </summary>
 public sealed class PostgresAdvisoryLockManager : IAdvisoryLockManager
 {
-    private readonly NpgsqlDataSource _dataSource;
+    private readonly MorphConnectionFactory _connections;
     private readonly AdvisoryLockOptions _options;
 
-    public PostgresAdvisoryLockManager(NpgsqlDataSource dataSource, AdvisoryLockOptions? options = null)
+    public PostgresAdvisoryLockManager(MorphConnectionFactory connections, AdvisoryLockOptions? options = null)
     {
-        _dataSource = dataSource;
+        _connections = connections;
         _options = options ?? new AdvisoryLockOptions();
     }
 
@@ -26,7 +26,7 @@ public sealed class PostgresAdvisoryLockManager : IAdvisoryLockManager
         CancellationToken cancellationToken = default)
     {
         var lockKey = ComputeLockKey(resourceIdentifier);
-        var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        var connection = await _connections.OpenSystemAsync(cancellationToken);
 
         try
         {
@@ -69,7 +69,7 @@ public sealed class PostgresAdvisoryLockManager : IAdvisoryLockManager
         CancellationToken cancellationToken = default)
     {
         var lockKey = ComputeLockKey(resourceIdentifier);
-        var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        var connection = await _connections.OpenSystemAsync(cancellationToken);
 
         try
         {
@@ -101,7 +101,7 @@ public sealed class PostgresAdvisoryLockManager : IAdvisoryLockManager
         CancellationToken cancellationToken = default)
     {
         var lockKey = ComputeLockKey(resourceIdentifier);
-        var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        var connection = await _connections.OpenSystemAsync(cancellationToken);
 
         try
         {

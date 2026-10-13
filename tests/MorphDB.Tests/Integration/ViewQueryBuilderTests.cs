@@ -31,24 +31,24 @@ public class ViewQueryBuilderTests
     public ViewQueryBuilderTests(PostgresFixture fixture)
     {
         _fixture = fixture;
-        var metadataRepository = new MetadataRepository(fixture.DataSource);
+        var metadataRepository = new MetadataRepository(fixture.Connections);
 
         var nameHasher = new Sha256NameHasher();
-        var lockManager = new PostgresAdvisoryLockManager(fixture.DataSource, new AdvisoryLockOptions());
-        var changeLogger = new ChangeLogger(fixture.DataSource);
+        var lockManager = new PostgresAdvisoryLockManager(fixture.Connections, new AdvisoryLockOptions());
+        var changeLogger = new ChangeLogger(fixture.Connections);
 
         _schemaManager = new PostgresSchemaManager(
-            fixture.DataSource,
+            fixture.Connections,
             metadataRepository,
             lockManager,
             nameHasher,
             changeLogger,
-            new ProjectRepository(fixture.DataSource, new PostgresSchemaNameResolver()),
+            new ProjectRepository(fixture.Connections, new PostgresSchemaNameResolver()),
             new SchemaManagerOptions());
 
         _dataService = fixture.CreateDataService(
             metadataRepository,
-            new SecurityPolicyService(fixture.DataSource, new MetadataRepository(fixture.DataSource)),
+            new SecurityPolicyService(fixture.Connections, new MetadataRepository(fixture.Connections)),
             new SecurityContextAccessor());
     }
 
@@ -56,7 +56,7 @@ public class ViewQueryBuilderTests
     public async Task BuildSelectStatementAsync_JoinConditionAndExpression_ProduceRunnableTranslatedSql()
     {
         var projectId = Guid.NewGuid();
-        var viewBuilder = new ViewQueryBuilder(new MetadataRepository(_fixture.DataSource), projectId);
+        var viewBuilder = new ViewQueryBuilder(new MetadataRepository(_fixture.Connections), projectId);
 
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var customersTable = await _schemaManager.CreateTableAsync(new CreateTableRequest

@@ -3,8 +3,10 @@ using Moq;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Models;
 using MorphDB.Npgsql.Ddl;
+using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Repositories;
 using MorphDB.Npgsql.Schema;
+using MorphDB.Npgsql.Security;
 using MorphDB.Tests.Fixtures;
 using Npgsql;
 
@@ -67,10 +69,11 @@ public class ExtensionFreeBootstrapTests
         try
         {
             await using var dataSource = NpgsqlDataSource.Create(TestPostgres.ServiceConnectionString(container));
+            var connections = new MorphConnectionFactory(dataSource, new SecurityContextAccessor());
             var resolver = new PostgresSchemaNameResolver();
-            var repository = new ProjectRepository(dataSource, resolver);
+            var repository = new ProjectRepository(connections, resolver);
             var service = new PostgresSchemaLayerService(
-                dataSource,
+                connections,
                 resolver,
                 repository,
                 new Mock<ILogger<PostgresSchemaLayerService>>().Object);

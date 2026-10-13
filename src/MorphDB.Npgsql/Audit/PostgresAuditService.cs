@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Audit;
 using MorphDB.Core.Exceptions;
-using Npgsql;
+using MorphDB.Npgsql.Infrastructure;
 
 namespace MorphDB.Npgsql.Audit;
 
@@ -17,7 +17,7 @@ namespace MorphDB.Npgsql.Audit;
 /// </summary>
 public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposable
 {
-    private readonly NpgsqlDataSource _dataSource;
+    private readonly MorphConnectionFactory _connections;
     private readonly IPiiMaskingService _piiMaskingService;
     private readonly IProjectRepository _projectRepository;
     private readonly ILogger<PostgresAuditService> _logger;
@@ -29,12 +29,12 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
     private const int MaxQueueSize = 10000;
 
     public PostgresAuditService(
-        NpgsqlDataSource dataSource,
+        MorphConnectionFactory connections,
         IPiiMaskingService piiMaskingService,
         IProjectRepository projectRepository,
         ILogger<PostgresAuditService> logger)
     {
-        _dataSource = dataSource;
+        _connections = connections;
         _piiMaskingService = piiMaskingService;
         _projectRepository = projectRepository;
         _logger = logger;
@@ -84,7 +84,7 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
     {
         var schemaNames = await RecordedSchemaNamesAsync(projectId, cancellationToken);
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
         var (whereClauses, parameters) = BuildWhereClause(query);
         var whereClause = whereClauses.Count > 0 ? $"WHERE {string.Join(" AND ", whereClauses)}" : "";
@@ -180,7 +180,7 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
     {
         var schemaNames = await RecordedSchemaNamesAsync(projectId, cancellationToken);
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
         var sql = $"""
             SELECT
@@ -246,7 +246,7 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
         var actualFrom = fromDate ?? DateTimeOffset.UtcNow.AddDays(-30);
         var actualTo = toDate ?? DateTimeOffset.UtcNow;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
         // Total and by category/severity
         var statsSql = $"""
@@ -340,7 +340,7 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
         var schemaNames = await RecordedSchemaNamesAsync(projectId, cancellationToken);
         var cutoff = DateTimeOffset.UtcNow.AddDays(-retentionDays.Value);
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var removed = await connection.ExecuteAsync(
             $"""
             DELETE FROM {QuoteIdentifier(schemaNames.SystemSchema)}."_audit_logs"
@@ -425,7 +425,7 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
             {
                 var schemaNames = await RecordedSchemaNamesAsync(projectId, cancellationToken);
 
-                await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+                await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
                 var sql = $"""
                     INSERT INTO {QuoteIdentifier(schemaNames.SystemSchema)}."_audit_logs"

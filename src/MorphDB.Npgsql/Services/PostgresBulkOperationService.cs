@@ -10,7 +10,7 @@ using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
 using MorphDB.Core.Pipeline;
 using MorphDB.Npgsql.Dml;
-using Npgsql;
+using MorphDB.Npgsql.Infrastructure;
 
 namespace MorphDB.Npgsql.Services;
 
@@ -20,20 +20,20 @@ namespace MorphDB.Npgsql.Services;
 /// </summary>
 public sealed class PostgresBulkOperationService : IBulkOperationService
 {
-    private readonly NpgsqlDataSource _dataSource;
+    private readonly MorphConnectionFactory _connections;
     private readonly ISchemaManager _schemaManager;
     private readonly IMorphDataService _dataService;
     private readonly IWritePipeline? _writePipeline;
     private readonly BulkOperationOptions _options;
 
     public PostgresBulkOperationService(
-        NpgsqlDataSource dataSource,
+        MorphConnectionFactory connections,
         ISchemaManager schemaManager,
         IMorphDataService dataService,
         BulkOperationOptions options,
         IWritePipeline? writePipeline = null)
     {
-        _dataSource = dataSource;
+        _connections = connections;
         _schemaManager = schemaManager;
         _dataService = dataService;
         _writePipeline = writePipeline;
@@ -390,7 +390,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
             WHERE job_id = @JobId
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var row = await connection.QuerySingleOrDefaultAsync<ImportJobRow>(sql, new { JobId = jobId });
 
         return row is null ? null : MapToImportJob(row);
@@ -406,7 +406,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
             WHERE job_id = @JobId
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var row = await connection.QuerySingleOrDefaultAsync<ExportJobRow>(sql, new { JobId = jobId });
 
         return row is null ? null : MapToExportJob(row);
@@ -428,7 +428,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
             LIMIT @Limit OFFSET @Offset
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var rows = await connection.QueryAsync<ImportJobRow>(sql, new { ProjectId = projectId, Limit = limit, Offset = offset });
 
         return rows.Select(MapToImportJob).ToList();
@@ -450,7 +450,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
             LIMIT @Limit OFFSET @Offset
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var rows = await connection.QueryAsync<ExportJobRow>(sql, new { ProjectId = projectId, Limit = limit, Offset = offset });
 
         return rows.Select(MapToExportJob).ToList();
@@ -470,7 +470,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
             WHERE job_id = @JobId AND status IN ('pending', 'processing')
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
         var importRows = await connection.ExecuteAsync(importSql, new { JobId = jobId, Now = DateTimeOffset.UtcNow });
         if (importRows > 0)
@@ -527,7 +527,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
             LIMIT @Limit
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var rows = await connection.QueryAsync<ImportJobRow>(sql, new { Limit = limit });
 
         return rows.Select(MapToImportJob).ToList();
@@ -547,7 +547,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
             LIMIT @Limit
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var rows = await connection.QueryAsync<ExportJobRow>(sql, new { Limit = limit });
 
         return rows.Select(MapToExportJob).ToList();
@@ -567,7 +567,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
             ON CONFLICT (job_id) DO UPDATE SET data = @Data
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new
         {
             JobId = jobId,
@@ -591,7 +591,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
     {
         const string sql = "SELECT data FROM morphdb._morph_export_data WHERE job_id = @JobId";
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var data = await connection.ExecuteScalarAsync<byte[]>(sql, new { JobId = jobId });
 
         return data is null ? null : new MemoryStream(data);
@@ -1122,7 +1122,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
 
         var sql = $"SELECT COUNT(*) FROM {table.PhysicalName}";
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenAsync(cancellationToken);
         return await connection.ExecuteScalarAsync<long>(sql);
     }
 
@@ -1143,7 +1143,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         // An export is the whole table in storage order; a subset is the query API's job.
         var sql = $"SELECT {selectList} FROM {table.PhysicalName}";
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenAsync(cancellationToken);
         using var reader = await connection.ExecuteReaderAsync(sql);
 
         while (await reader.ReadAsync(cancellationToken))
@@ -1168,7 +1168,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
             VALUES (@JobId, @Data, @CreatedAt)
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new
         {
             JobId = jobId,
@@ -1181,7 +1181,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
     {
         const string sql = "SELECT data FROM morphdb._morph_import_data WHERE job_id = @JobId";
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var data = await connection.ExecuteScalarAsync<byte[]>(sql, new { JobId = jobId });
 
         return data is null ? null : new MemoryStream(data);
@@ -1191,7 +1191,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
     {
         const string sql = "DELETE FROM morphdb._morph_import_data WHERE job_id = @JobId";
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new { JobId = jobId });
     }
 
@@ -1209,7 +1209,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
             )
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new
         {
             job.JobId,
@@ -1265,7 +1265,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
             )
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new
         {
             job.JobId,
@@ -1293,7 +1293,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
             WHERE job_id = @JobId
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new
         {
             JobId = jobId,
@@ -1310,7 +1310,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
             WHERE job_id = @JobId
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new
         {
             JobId = jobId,
@@ -1332,7 +1332,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
             WHERE job_id = @JobId
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new { JobId = jobId, ProcessedRows = processedRows, SuccessCount = successCount, ErrorCount = errorCount });
     }
 
@@ -1352,7 +1352,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
             WHERE job_id = @JobId
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new
         {
             JobId = jobId,
@@ -1376,7 +1376,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
             WHERE job_id = @JobId
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new { JobId = jobId, ProcessedRows = processedRows, Now = DateTimeOffset.UtcNow });
     }
 
@@ -1391,7 +1391,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
             WHERE job_id = @JobId
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new { JobId = jobId, ErrorMessage = errorMessage, Now = DateTimeOffset.UtcNow });
     }
 

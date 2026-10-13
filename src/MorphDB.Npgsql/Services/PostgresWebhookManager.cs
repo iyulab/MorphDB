@@ -3,7 +3,7 @@ using System.Text.Json;
 using Dapper;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Models;
-using Npgsql;
+using MorphDB.Npgsql.Infrastructure;
 
 namespace MorphDB.Npgsql.Services;
 
@@ -12,11 +12,11 @@ namespace MorphDB.Npgsql.Services;
 /// </summary>
 public sealed class PostgresWebhookManager : IWebhookManager
 {
-    private readonly NpgsqlDataSource _dataSource;
+    private readonly MorphConnectionFactory _connections;
 
-    public PostgresWebhookManager(NpgsqlDataSource dataSource)
+    public PostgresWebhookManager(MorphConnectionFactory connections)
     {
-        _dataSource = dataSource;
+        _connections = connections;
     }
 
     public async Task<WebhookMetadata> CreateWebhookAsync(
@@ -43,7 +43,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
             JOIN morphdb._morph_tables t ON i.table_id = t.table_id
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
         var result = await connection.QuerySingleAsync<WebhookRow>(sql, new
         {
@@ -75,7 +75,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
             WHERE w.webhook_id = @WebhookId
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var result = await connection.QuerySingleOrDefaultAsync<WebhookRow>(sql, new { WebhookId = webhookId });
 
         return result is null ? null : MapToMetadata(result);
@@ -101,7 +101,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
 
         sql += " ORDER BY w.created_at DESC";
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var results = await connection.QueryAsync<WebhookRow>(sql, new { ProjectId = projectId, TableName = tableName });
 
         return results.Select(MapToMetadata).ToList();
@@ -155,7 +155,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
             RETURNING webhook_id, project_id, table_id, logical_name, url, secret, events, filter, headers, is_active, created_at, updated_at
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var result = await connection.QuerySingleAsync<WebhookRow>(sql, parameters);
 
         return MapToMetadata(result);
@@ -167,7 +167,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
     {
         const string sql = "DELETE FROM morphdb._morph_webhooks WHERE webhook_id = @WebhookId";
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new { WebhookId = webhookId });
     }
 
@@ -190,7 +190,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
               AND @EventName = ANY(w.events)
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var results = await connection.QueryAsync<WebhookRow>(sql, new { ProjectId = projectId, TableId = tableId, EventName = eventName });
 
         return results.Select(MapToMetadata).ToList();
@@ -213,7 +213,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
                       http_status_code, response_body, error_message, next_retry_at, created_at, delivered_at
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var result = await connection.QuerySingleAsync<DeliveryRow>(sql, new
         {
             DeliveryId = deliveryId,
@@ -243,7 +243,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
             WHERE delivery_id = @DeliveryId
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new
         {
             request.DeliveryId,
@@ -270,7 +270,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
             LIMIT @Limit
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var results = await connection.QueryAsync<DeliveryRow>(sql, new { Now = DateTimeOffset.UtcNow, Limit = limit });
 
         return results.Select(MapToDelivery).ToList();
@@ -291,7 +291,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
             LIMIT @Limit OFFSET @Offset
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var results = await connection.QueryAsync<DeliveryRow>(sql, new { WebhookId = webhookId, Limit = limit, Offset = offset });
 
         return results.Select(MapToDelivery).ToList();
@@ -309,7 +309,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
             WHERE webhook_id = @WebhookId
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new
         {
             WebhookId = webhookId,
@@ -412,7 +412,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
                       resolution_notes, dlq_at, resolved_at, resolved_by
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var result = await connection.QuerySingleAsync<DlqRow>(sql, new
         {
             DlqId = dlqId,
@@ -436,7 +436,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
             WHERE dlq_id = @DlqId
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var result = await connection.QuerySingleOrDefaultAsync<DlqRow>(sql, new { DlqId = dlqId });
 
         return result is null ? null : MapToDlqMessage(result);
@@ -475,7 +475,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
         parameters.Add("Limit", limit);
         parameters.Add("Offset", offset);
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var results = await connection.QueryAsync<DlqRow>(sql, parameters);
 
         return results.Select(MapToDlqMessage).ToList();
@@ -510,7 +510,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
             GROUP BY webhook_id
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
         var stats = await connection.QuerySingleAsync<(int total_messages, int pending_review_count,
             int resolved_count, int archived_count, DateTimeOffset? oldest_pending_at)>(
@@ -544,7 +544,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
             WHERE dlq_id = @DlqId
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new
         {
             request.DlqId,
@@ -581,7 +581,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
             WHERE dlq_id = @DlqId
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new
         {
             DlqId = dlqId,
@@ -617,7 +617,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
             parameters.Add("OlderThan", olderThan.Value);
         }
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         return await connection.ExecuteAsync(sql, parameters);
     }
 

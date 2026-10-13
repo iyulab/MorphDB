@@ -111,6 +111,11 @@ public sealed partial class PostgresChangeListener : BackgroundService
             KeepAlive = KeepAliveSeconds,
         };
 
+        // The one connection not opened through MorphConnectionFactory. It is held for the life of
+        // the process and only ever waits on LISTEN, so it gets a data source of its own — with
+        // keepalive, and outside the pool the request path draws from. No row is read on it: the
+        // row a notification names is read back through the data service (ReadRowAsync), so there
+        // is no caller here for a security context to describe.
         await using var dataSource = NpgsqlDataSource.Create(connectionSettings);
         await using var connection = await dataSource.OpenConnectionAsync(stoppingToken);
 

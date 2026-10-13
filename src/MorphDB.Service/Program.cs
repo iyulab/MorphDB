@@ -202,9 +202,9 @@ try
     // It is also a cache: when it is configured but down, reads fall back to the database, so it is
     // not part of readiness.
     var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
-    // Both checks read the connection the service itself holds (the NpgsqlDataSource, the Redis
-    // multiplexer) rather than a connection string of their own, so a probe can never report on a
-    // database or cache other than the one the service is using.
+    // Both checks read the connection the service itself holds (the connection factory over its
+    // NpgsqlDataSource, the Redis multiplexer) rather than a connection string of their own, so a
+    // probe can never report on a database or cache other than the one the service is using.
     var healthChecks = builder.Services.AddHealthChecks()
         .AddCheck<PostgresHealthCheck>("postgresql", tags: ["db", "ready"]);
 

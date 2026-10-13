@@ -22,7 +22,7 @@ public class ProjectExistenceTests
     }
 
     private ProjectRepository Repository(TimeProvider? time = null) =>
-        new(_fixture.DataSource, new PostgresSchemaNameResolver(), time);
+        new(_fixture.Connections, new PostgresSchemaNameResolver(), time);
 
     private static async Task<Guid> CreateAsync(ProjectRepository repository)
     {

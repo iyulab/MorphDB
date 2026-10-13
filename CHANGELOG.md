@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### Breaking
+
+- **`ConnectionPoolOptions.Multiplexing` is removed, and a connection string that sets
+  `Multiplexing=true` or `No Reset On Close=true` is refused at start-up.** MorphDB writes the
+  caller's security context to the session of each connection it opens. A multiplexed command runs
+  on whichever physical connection is free, and a connection that is not reset when it goes back to
+  the pool keeps what its last caller wrote — either way one caller's context could reach another
+  caller's statement. Neither setting was on by default. With one of them set, the first MorphDB
+  service to be resolved throws an `ArgumentException` that names it; remove the setting from the
+  connection string.
+- **A host that constructs `MorphDB.Npgsql` services by hand passes a `MorphConnectionFactory`
+  where it passed an `NpgsqlDataSource`.** Every service constructor that took the data source —
+  the repositories, the schema manager, the data service, the write pipeline's executor and
+  validators, and the rest — takes the factory instead: build one with
+  `new MorphConnectionFactory(dataSource, securityContextAccessor)` and pass that. A host that
+  registers through `AddMorphDbNpgsql` changes nothing; the factory is registered there, next to
+  the `NpgsqlDataSource` it opens from.
+
 ### Changed
 
 - **MorphDB refuses to start on a database role exempt from row-level security.** If the role it
@@ -24,13 +42,25 @@ role once, with the new [`scripts/migrate-to-service-role.sql`](scripts/migrate-
 — it changes ownership only, touches no data, and is safe to run again:
 
 ```bash
-docker compose exec -T postgres psql -U morph -d morphdb   -v service_role=morphdb_service -v service_password='<password>'   < migrate-to-service-role.sql
+docker compose exec -T postgres psql -U morph -d morphdb \
+  -v service_role=morphdb_service -v service_password='<password>' \
+  < migrate-to-service-role.sql
 ```
 
 Then set `ConnectionStrings__MorphDB` to `Username=morphdb_service;Password=<password>`, keep
 `POSTGRES_USER` as it was, and start the new image. A development volume can instead be recreated
 with `docker compose down -v`. See "Database role" in the README for a database you provision
 yourself.
+
+### Internal
+
+- Every connection is opened through one factory, which writes a security context to the
+  connection's session before handing it out: `morphdb.project_id`, `morphdb.user_id`,
+  `morphdb.role`, `morphdb.email`, `morphdb.is_authenticated`, `morphdb.claims` and
+  `morphdb.bypass`. A statement run for a caller carries that caller's context; one run for
+  MorphDB's own bookkeeping — metadata, schema changes, jobs, audit — carries no caller and
+  `morphdb.bypass = on`. Nothing reads these settings yet. The triggers behind change notifications
+  are now installed over the service's connection pool rather than a data source built per call.
 
 ## 0.18.0
 

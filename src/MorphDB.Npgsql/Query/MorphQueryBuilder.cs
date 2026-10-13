@@ -6,7 +6,6 @@ using MorphDB.Core.Security;
 using MorphDB.Npgsql.Ddl;
 using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Repositories;
-using Npgsql;
 using SqlKata.Compilers;
 using SqlKataQuery = SqlKata.Query;
 
@@ -19,7 +18,7 @@ namespace MorphDB.Npgsql.Query;
 /// </summary>
 public sealed class MorphQueryBuilder : IMorphQueryBuilder
 {
-    private readonly NpgsqlDataSource _dataSource;
+    private readonly MorphConnectionFactory _connections;
     private readonly IMetadataRepository _metadataRepository;
     private readonly ISecurityPolicyService _securityPolicyService;
     private readonly ISecurityContextAccessor _securityContextAccessor;
@@ -32,7 +31,7 @@ public sealed class MorphQueryBuilder : IMorphQueryBuilder
     /// Creates a new MorphQueryBuilder with security support.
     /// </summary>
     public MorphQueryBuilder(
-        NpgsqlDataSource dataSource,
+        MorphConnectionFactory connections,
         IMetadataRepository metadataRepository,
         ISecurityPolicyService securityPolicyService,
         ISecurityContextAccessor securityContextAccessor,
@@ -41,7 +40,7 @@ public sealed class MorphQueryBuilder : IMorphQueryBuilder
         IRollupResolver? rollupResolver = null,
         IFormulaResolver? formulaResolver = null)
     {
-        _dataSource = dataSource ?? throw new ArgumentNullException(nameof(dataSource));
+        _connections = connections ?? throw new ArgumentNullException(nameof(connections));
         _metadataRepository = metadataRepository ?? throw new ArgumentNullException(nameof(metadataRepository));
         _securityPolicyService = securityPolicyService ?? throw new ArgumentNullException(nameof(securityPolicyService));
         _securityContextAccessor = securityContextAccessor ?? throw new ArgumentNullException(nameof(securityContextAccessor));
@@ -55,7 +54,7 @@ public sealed class MorphQueryBuilder : IMorphQueryBuilder
     public IMorphQuery From(string tableName)
     {
         return new MorphQuery(
-            _dataSource,
+            _connections,
             _metadataRepository,
             _securityPolicyService,
             _securityContextAccessor,
@@ -71,7 +70,7 @@ public sealed class MorphQueryBuilder : IMorphQueryBuilder
     public IMorphQuery From(string tableName, string tableAlias)
     {
         return new MorphQuery(
-            _dataSource,
+            _connections,
             _metadataRepository,
             _securityPolicyService,
             _securityContextAccessor,
@@ -94,7 +93,7 @@ public sealed class MorphQueryBuilder : IMorphQueryBuilder
 /// </summary>
 internal sealed class MorphQuery : IMorphQuery
 {
-    private readonly NpgsqlDataSource _dataSource;
+    private readonly MorphConnectionFactory _connections;
     private readonly IMetadataRepository _metadataRepository;
     private readonly ISecurityPolicyService _securityPolicyService;
     private readonly ISecurityContextAccessor _securityContextAccessor;
@@ -139,7 +138,7 @@ internal sealed class MorphQuery : IMorphQuery
     }
 
     internal MorphQuery(
-        NpgsqlDataSource dataSource,
+        MorphConnectionFactory connections,
         IMetadataRepository metadataRepository,
         ISecurityPolicyService securityPolicyService,
         ISecurityContextAccessor securityContextAccessor,
@@ -150,7 +149,7 @@ internal sealed class MorphQuery : IMorphQuery
         string tableName,
         string? tableAlias)
     {
-        _dataSource = dataSource;
+        _connections = connections;
         _metadataRepository = metadataRepository;
         _securityPolicyService = securityPolicyService;
         _securityContextAccessor = securityContextAccessor;
@@ -342,7 +341,7 @@ internal sealed class MorphQuery : IMorphQuery
     {
         var (sql, parameters) = await CompileQueryAsync(cancellationToken);
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenAsync(cancellationToken);
         var results = await connection.QueryAsync<dynamic>(
             new CommandDefinition(sql, parameters, cancellationToken: cancellationToken));
 
@@ -371,7 +370,7 @@ internal sealed class MorphQuery : IMorphQuery
         var countQuery = query.AsCount();
         var compiled = _compiler.Compile(countQuery);
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenAsync(cancellationToken);
         var result = await connection.ExecuteScalarAsync<long>(
             new CommandDefinition(compiled.Sql, compiled.NamedBindings, cancellationToken: cancellationToken));
 
@@ -387,7 +386,7 @@ internal sealed class MorphQuery : IMorphQuery
         var sumQuery = query.AsSum(physicalColumn);
         var compiled = _compiler.Compile(sumQuery);
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenAsync(cancellationToken);
         var result = await connection.ExecuteScalarAsync<decimal?>(
             new CommandDefinition(compiled.Sql, compiled.NamedBindings, cancellationToken: cancellationToken));
 
@@ -403,7 +402,7 @@ internal sealed class MorphQuery : IMorphQuery
         var avgQuery = query.AsAverage(physicalColumn);
         var compiled = _compiler.Compile(avgQuery);
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenAsync(cancellationToken);
         var result = await connection.ExecuteScalarAsync<decimal?>(
             new CommandDefinition(compiled.Sql, compiled.NamedBindings, cancellationToken: cancellationToken));
 
@@ -419,7 +418,7 @@ internal sealed class MorphQuery : IMorphQuery
         var minQuery = query.AsMin(physicalColumn);
         var compiled = _compiler.Compile(minQuery);
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenAsync(cancellationToken);
         var result = await connection.ExecuteScalarAsync<T?>(
             new CommandDefinition(compiled.Sql, compiled.NamedBindings, cancellationToken: cancellationToken));
 
@@ -435,7 +434,7 @@ internal sealed class MorphQuery : IMorphQuery
         var maxQuery = query.AsMax(physicalColumn);
         var compiled = _compiler.Compile(maxQuery);
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenAsync(cancellationToken);
         var result = await connection.ExecuteScalarAsync<T?>(
             new CommandDefinition(compiled.Sql, compiled.NamedBindings, cancellationToken: cancellationToken));
 

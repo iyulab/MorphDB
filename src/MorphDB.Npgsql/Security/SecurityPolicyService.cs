@@ -15,12 +15,12 @@ namespace MorphDB.Npgsql.Security;
 /// </summary>
 public sealed partial class SecurityPolicyService : ISecurityPolicyService
 {
-    private readonly NpgsqlDataSource _dataSource;
+    private readonly MorphConnectionFactory _connections;
     private readonly IMetadataRepository _metadataRepository;
 
-    public SecurityPolicyService(NpgsqlDataSource dataSource, IMetadataRepository metadataRepository)
+    public SecurityPolicyService(MorphConnectionFactory connections, IMetadataRepository metadataRepository)
     {
-        _dataSource = dataSource;
+        _connections = connections;
         _metadataRepository = metadataRepository;
     }
 
@@ -50,7 +50,7 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
         await VerifyAgainstTableAsync(request.Expression, table, cancellationToken);
         var tableId = (Guid?)table.TableId;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
         // Get next ordinal position
         var maxOrdinal = await connection.QueryFirstOrDefaultAsync<int?>(
@@ -108,7 +108,7 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
         Guid tableId,
         CancellationToken cancellationToken = default)
     {
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var records = await connection.QueryAsync<PolicyRecord>(
             """
             SELECT id, project_id, table_id, name, description, policy_type, expression, is_active, ordinal_position, created_at, updated_at
@@ -126,7 +126,7 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
         string tableName,
         CancellationToken cancellationToken = default)
     {
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var records = await connection.QueryAsync<PolicyRecord>(
             """
             SELECT p.id, p.project_id, p.table_id, p.name, p.description, p.policy_type, p.expression, p.is_active, p.ordinal_position, p.created_at, p.updated_at
@@ -145,7 +145,7 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
         Guid policyId,
         CancellationToken cancellationToken = default)
     {
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var record = await connection.QueryFirstOrDefaultAsync<PolicyRecord>(
             """
             SELECT id, project_id, table_id, name, description, policy_type, expression, is_active, ordinal_position, created_at, updated_at
@@ -184,7 +184,7 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
         var description = request.Description ?? existing.Description;
         var updatedAt = DateTimeOffset.UtcNow;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(
             """
             UPDATE morphdb._morph_security_policies
@@ -223,7 +223,7 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
         Guid policyId,
         CancellationToken cancellationToken = default)
     {
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(
             """
             DELETE FROM morphdb._morph_security_policies
@@ -317,7 +317,7 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
     {
         var predicate = ToPhysical(SubstituteVariables(expression, new SecurityContext { ProjectId = table.ProjectId }), table, qualifier: null);
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         try
         {
             await connection.ExecuteAsync(

@@ -4,8 +4,10 @@ using Microsoft.Extensions.Logging.Abstractions;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Exceptions;
 using MorphDB.Npgsql;
+using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Repositories;
 using MorphDB.Npgsql.Schema;
+using MorphDB.Npgsql.Security;
 using MorphDB.Tests.Fixtures;
 using Npgsql;
 using Testcontainers.PostgreSql;
@@ -93,11 +95,12 @@ public sealed class DatabaseRoleGuardTests : IAsyncLifetime
     private static async Task BootstrapAsync(string connectionString)
     {
         await using var dataSource = NpgsqlDataSource.Create(connectionString);
+        var connections = new MorphConnectionFactory(dataSource, new SecurityContextAccessor());
         var resolver = new PostgresSchemaNameResolver();
         ISchemaLayerService schemaLayer = new PostgresSchemaLayerService(
-            dataSource,
+            connections,
             resolver,
-            new ProjectRepository(dataSource, resolver),
+            new ProjectRepository(connections, resolver),
             NullLogger<PostgresSchemaLayerService>.Instance);
 
         await schemaLayer.EnsureGlobalSchemaAsync(TestContext.Current.CancellationToken);

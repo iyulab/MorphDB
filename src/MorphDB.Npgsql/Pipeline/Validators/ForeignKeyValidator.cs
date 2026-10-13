@@ -14,12 +14,12 @@ namespace MorphDB.Npgsql.Pipeline.Validators;
 /// </summary>
 public sealed class ForeignKeyValidator : IValidator
 {
-    private readonly NpgsqlDataSource _dataSource;
+    private readonly MorphConnectionFactory _connections;
     private readonly IMetadataRepository _metadataRepository;
 
-    public ForeignKeyValidator(NpgsqlDataSource dataSource, IMetadataRepository metadataRepository)
+    public ForeignKeyValidator(MorphConnectionFactory connections, IMetadataRepository metadataRepository)
     {
-        _dataSource = dataSource;
+        _connections = connections;
         _metadataRepository = metadataRepository;
     }
 
@@ -43,7 +43,7 @@ public sealed class ForeignKeyValidator : IValidator
 
         await using var conn = ConnectionScope.HasScope
             ? new ScopedConnection(ConnectionScope.CurrentConnection!, ConnectionScope.CurrentTransaction, false)
-            : new ScopedConnection(await _dataSource.OpenConnectionAsync(context.CancellationToken), null, true);
+            : new ScopedConnection(await _connections.OpenAsync(context.CancellationToken), null, true);
 
         foreach (var relation in relations)
         {

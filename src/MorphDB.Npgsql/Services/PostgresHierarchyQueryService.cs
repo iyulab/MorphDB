@@ -2,8 +2,8 @@ using System.Text;
 using Dapper;
 using MorphDB.Core.Abstractions;
 using MorphDB.Npgsql.Ddl;
+using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Repositories;
-using Npgsql;
 
 namespace MorphDB.Npgsql.Services;
 
@@ -13,15 +13,15 @@ namespace MorphDB.Npgsql.Services;
 /// </summary>
 public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
 {
-    private readonly NpgsqlDataSource _dataSource;
+    private readonly MorphConnectionFactory _connections;
     private readonly IMetadataRepository _metadataRepository;
     private const int DefaultMaxDepth = 100;
 
     public PostgresHierarchyQueryService(
-        NpgsqlDataSource dataSource,
+        MorphConnectionFactory connections,
         IMetadataRepository metadataRepository)
     {
-        _dataSource = dataSource;
+        _connections = connections;
         _metadataRepository = metadataRepository;
     }
 
@@ -35,7 +35,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         // Build recursive CTE for ancestors
         var sql = BuildAncestorsCte(table.PhysicalName, request.ParentColumn, request.Columns, maxDepth);
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenAsync(cancellationToken);
         var results = await connection.QueryAsync<dynamic>(sql, new { recordId = request.RecordId });
 
         var records = MapToHierarchyRecords(results, request.IncludeSelf, request.RecordId);
@@ -59,7 +59,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         // Build recursive CTE for descendants
         var sql = BuildDescendantsCte(table.PhysicalName, request.ParentColumn, request.Columns, maxDepth, request.OrderBy);
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenAsync(cancellationToken);
         var results = await connection.QueryAsync<dynamic>(sql, new { recordId = request.RecordId });
 
         var records = MapToHierarchyRecords(results, request.IncludeSelf, request.RecordId);
@@ -83,7 +83,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         // Path to root is ancestors in reverse order (from root to record)
         var sql = BuildPathToRootCte(table.PhysicalName, request.ParentColumn, request.Columns, maxDepth);
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenAsync(cancellationToken);
         var results = await connection.QueryAsync<dynamic>(sql, new { recordId = request.RecordId });
 
         var records = MapToHierarchyRecords(results, includeSelf: true, request.RecordId);
@@ -106,7 +106,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         // Get siblings (same parent, exclude self unless requested)
         var sql = BuildSiblingsSql(table.PhysicalName, request.ParentColumn, request.Columns, request.IncludeSelf);
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenAsync(cancellationToken);
         var results = await connection.QueryAsync<dynamic>(sql, new { recordId = request.RecordId });
 
         var records = results.Select(row => new HierarchyRecord
@@ -144,7 +144,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         // If so, setting it as parent would create a cycle
         var sql = BuildCycleCheckCte(table.PhysicalName, request.ParentColumn);
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenAsync(cancellationToken);
         var wouldCycle = await connection.ExecuteScalarAsync<bool>(sql, new
         {
             recordId = request.RecordId,
@@ -165,7 +165,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         // Use PostgreSQL 14+ CYCLE detection feature
         var sql = BuildCycleDetectionCte(table.PhysicalName, parentColumn);
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenAsync(cancellationToken);
         var cyclicIds = await connection.QueryAsync<Guid>(sql);
         var cyclicIdList = cyclicIds.ToList();
 

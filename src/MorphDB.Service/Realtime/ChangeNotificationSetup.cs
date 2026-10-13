@@ -1,4 +1,5 @@
 using MorphDB.Core.Abstractions;
+using MorphDB.Npgsql.Infrastructure;
 using Npgsql;
 
 namespace MorphDB.Service.Realtime;
@@ -13,15 +14,14 @@ public sealed partial class ChangeNotificationSetup : ITableNotificationTriggerM
     private const string TriggerPrefix = "_morph_notify_";
 
     private readonly ILogger<ChangeNotificationSetup> _logger;
-    private readonly string _connectionString;
+    private readonly MorphConnectionFactory _connections;
 
     public ChangeNotificationSetup(
         ILogger<ChangeNotificationSetup> logger,
-        IConfiguration configuration)
+        MorphConnectionFactory connections)
     {
         _logger = logger;
-        _connectionString = configuration.GetConnectionString("MorphDB")
-            ?? throw new InvalidOperationException("Connection string 'MorphDB' not found.");
+        _connections = connections;
     }
 
     /// <summary>
@@ -29,8 +29,7 @@ public sealed partial class ChangeNotificationSetup : ITableNotificationTriggerM
     /// </summary>
     public async Task EnsureNotificationFunctionAsync(CancellationToken cancellationToken = default)
     {
-        await using var dataSource = NpgsqlDataSource.Create(_connectionString);
-        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
         // Use the global morphdb._morph_tables to look up table metadata by physical name.
         // This works regardless of which schema the data table is created in.
@@ -96,8 +95,7 @@ public sealed partial class ChangeNotificationSetup : ITableNotificationTriggerM
     /// </summary>
     public async Task CreateTriggerForTableAsync(string physicalTableName, CancellationToken cancellationToken = default)
     {
-        await using var dataSource = NpgsqlDataSource.Create(_connectionString);
-        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
         var triggerName = $"{TriggerPrefix}{physicalTableName}";
 
@@ -127,8 +125,7 @@ public sealed partial class ChangeNotificationSetup : ITableNotificationTriggerM
     /// </summary>
     public async Task RemoveTriggerFromTableAsync(string physicalTableName, CancellationToken cancellationToken = default)
     {
-        await using var dataSource = NpgsqlDataSource.Create(_connectionString);
-        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
         var triggerName = $"{TriggerPrefix}{physicalTableName}";
         var sql = $"DROP TRIGGER IF EXISTS {triggerName} ON {physicalTableName}";
@@ -144,18 +141,22 @@ public sealed partial class ChangeNotificationSetup : ITableNotificationTriggerM
     /// </summary>
     public async Task CreateTriggersForAllTablesAsync(CancellationToken cancellationToken = default)
     {
-        await using var dataSource = NpgsqlDataSource.Create(_connectionString);
-        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-
-        // Get all physical table names from system table
-        var sql = "SELECT physical_name FROM morphdb._morph_tables WHERE is_active = true";
-        await using var cmd = new NpgsqlCommand(sql, connection);
-        await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
-
         var tableNames = new List<string>();
-        while (await reader.ReadAsync(cancellationToken))
+
+        // The list is read to the end and its connection returned before the loop below, where
+        // each table opens one of its own: holding this one across the loop would take two from
+        // the pool for the whole pass.
+        await using (var connection = await _connections.OpenSystemAsync(cancellationToken))
         {
-            tableNames.Add(reader.GetString(0));
+            // Get all physical table names from system table
+            var sql = "SELECT physical_name FROM morphdb._morph_tables WHERE is_active = true";
+            await using var cmd = new NpgsqlCommand(sql, connection);
+            await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
+
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                tableNames.Add(reader.GetString(0));
+            }
         }
 
         foreach (var tableName in tableNames)
@@ -186,8 +187,7 @@ public sealed partial class ChangeNotificationSetup : ITableNotificationTriggerM
     {
         // Note: projectId is kept for future schema-qualified table support
         // Currently tables are created in public schema, so we use unqualified names
-        await using var dataSource = NpgsqlDataSource.Create(_connectionString);
-        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
         var triggerName = $"{TriggerPrefix}{physicalTableName}";
 
@@ -219,8 +219,7 @@ public sealed partial class ChangeNotificationSetup : ITableNotificationTriggerM
     public async Task RemoveTriggerAsync(Guid projectId, string physicalTableName, CancellationToken cancellationToken = default)
     {
         // Note: projectId is kept for future schema-qualified table support
-        await using var dataSource = NpgsqlDataSource.Create(_connectionString);
-        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
         var triggerName = $"{TriggerPrefix}{physicalTableName}";
         var sql = $"DROP TRIGGER IF EXISTS \"{triggerName}\" ON \"{physicalTableName}\"";

@@ -15,7 +15,7 @@ namespace MorphDB.Npgsql.Services;
 /// </summary>
 public sealed class PostgresSchemaManager : ISchemaManager
 {
-    private readonly NpgsqlDataSource _dataSource;
+    private readonly MorphConnectionFactory _connections;
     private readonly IMetadataRepository _repository;
     private readonly IAdvisoryLockManager _lockManager;
     private readonly INameHasher _nameHasher;
@@ -28,7 +28,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
     private readonly IFormulaResolver _formulaResolver;
 
     public PostgresSchemaManager(
-        NpgsqlDataSource dataSource,
+        MorphConnectionFactory connections,
         IMetadataRepository repository,
         IAdvisoryLockManager lockManager,
         INameHasher nameHasher,
@@ -40,7 +40,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         _lookupResolver = new PostgresLookupResolver(repository);
         _rollupResolver = new PostgresRollupResolver(repository);
         _formulaResolver = new PostgresFormulaResolver();
-        _dataSource = dataSource;
+        _connections = connections;
         _repository = repository;
         _lockManager = lockManager;
         _nameHasher = nameHasher;
@@ -259,7 +259,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         };
 
         // Execute DDL and insert metadata in a transaction
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
         try
@@ -446,7 +446,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         var currentVersion = await _repository.GetCurrentVersionAsync(tableId, cancellationToken);
 
         // Execute DDL
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var dropTableSql = DdlBuilder.BuildDropTable(table.PhysicalName);
         try
         {
@@ -559,7 +559,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
                 Infrastructure.CheckGrammar.EnsureSupported(columnDef.CheckExpression);
             }
 
-            await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+            await using var connection = await _connections.OpenSystemAsync(cancellationToken);
             await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
             try
@@ -613,7 +613,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
                 PhysicalName = table.PhysicalName,
                 Columns = [.. table.Columns, column]
             };
-            await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+            await using var connection = await _connections.OpenSystemAsync(cancellationToken);
             await Query.TableSource.VerifyAsync(
                 connection, null, declared, _lookupResolver, _rollupResolver, _formulaResolver, cancellationToken);
         }
@@ -735,7 +735,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         UpdateColumnRequest request,
         CancellationToken cancellationToken)
     {
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
         try
@@ -834,7 +834,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         {
             var newPhysicalName = _nameHasher.GenerateColumnName(column.TableId, request.NewLogicalName);
 
-            await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+            await using var connection = await _connections.OpenSystemAsync(cancellationToken);
             var renameSql = DdlBuilder.BuildRenameColumn(table.PhysicalName, column.PhysicalName, newPhysicalName);
             await connection.ExecuteAsync(new CommandDefinition(renameSql, cancellationToken: cancellationToken));
 
@@ -879,7 +879,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
             WHERE column_id = @ColumnId
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(new CommandDefinition(sql, new { ColumnId = columnId, PhysicalName = newPhysicalName }, cancellationToken: cancellationToken));
     }
 
@@ -902,7 +902,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         var currentVersion = await _repository.GetCurrentVersionAsync(column.TableId, cancellationToken);
 
         // Execute DDL
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var dropColumnSql = DdlBuilder.BuildDropColumn(table.PhysicalName, column.PhysicalName);
         await connection.ExecuteAsync(new CommandDefinition(dropColumnSql, cancellationToken: cancellationToken));
 
@@ -975,7 +975,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         };
 
         // Execute DDL
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var createIndexSql = DdlBuilder.BuildCreateIndex(new IndexDefinition
         {
             PhysicalName = physicalIndexName,
@@ -1026,7 +1026,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         var currentVersion = await _repository.GetCurrentVersionAsync(index.TableId, cancellationToken);
 
         // Execute DDL
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var dropIndexSql = DdlBuilder.BuildDropIndex(index.PhysicalName);
         await connection.ExecuteAsync(new CommandDefinition(dropIndexSql, cancellationToken: cancellationToken));
 
@@ -1150,7 +1150,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
             && _options.CreatePhysicalForeignKeys
             && enforceOnWrite)
         {
-            await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+            await using var connection = await _connections.OpenSystemAsync(cancellationToken);
             var constraintName = $"fk_{sourceTable.PhysicalName}_{sourceColumn.PhysicalName}";
             var addFkSql = DdlBuilder.BuildAddForeignKey(new ForeignKeyDefinition
             {
@@ -1293,7 +1293,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
 
         // Execute DDL
         var constraintName = $"fk_{sourceTable.PhysicalName}_{sourceColumn.PhysicalName}";
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var dropFkSql = DdlBuilder.BuildDropForeignKey(sourceTable.PhysicalName, constraintName);
         await connection.ExecuteAsync(new CommandDefinition(dropFkSql, cancellationToken: cancellationToken));
 

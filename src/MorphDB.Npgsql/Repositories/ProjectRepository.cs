@@ -4,6 +4,7 @@ using Dapper;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
+using MorphDB.Npgsql.Infrastructure;
 using Npgsql;
 
 namespace MorphDB.Npgsql.Repositories;
@@ -13,7 +14,7 @@ namespace MorphDB.Npgsql.Repositories;
 /// </summary>
 public sealed partial class ProjectRepository : IProjectRepository
 {
-    private readonly NpgsqlDataSource _dataSource;
+    private readonly MorphConnectionFactory _connections;
     private readonly ISchemaNameResolver _schemaNameResolver;
     private const string ProjectsTable = "morphdb._morph_projects";
 
@@ -31,11 +32,11 @@ public sealed partial class ProjectRepository : IProjectRepository
     private readonly TimeProvider _timeProvider;
 
     public ProjectRepository(
-        NpgsqlDataSource dataSource,
+        MorphConnectionFactory connections,
         ISchemaNameResolver schemaNameResolver,
         TimeProvider? timeProvider = null)
     {
-        _dataSource = dataSource;
+        _connections = connections;
         _schemaNameResolver = schemaNameResolver;
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
@@ -76,7 +77,7 @@ public sealed partial class ProjectRepository : IProjectRepository
             RETURNING *
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
         try
         {
@@ -118,7 +119,7 @@ public sealed partial class ProjectRepository : IProjectRepository
             WHERE project_id = @ProjectId AND status != @DeletedStatus
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
         var entity = await connection.QuerySingleOrDefaultAsync<ProjectEntity>(sql, new
         {
@@ -146,7 +147,7 @@ public sealed partial class ProjectRepository : IProjectRepository
                 WHERE project_id = @ProjectId AND status != @DeletedStatus)
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var exists = await connection.ExecuteScalarAsync<bool>(new CommandDefinition(sql, new
         {
             ProjectId = projectId,
@@ -175,7 +176,7 @@ public sealed partial class ProjectRepository : IProjectRepository
             WHERE slug = @Slug AND status != @DeletedStatus
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
         var entity = await connection.QuerySingleOrDefaultAsync<ProjectEntity>(sql, new
         {
@@ -211,7 +212,7 @@ public sealed partial class ProjectRepository : IProjectRepository
 
         sql += " ORDER BY created_at DESC OFFSET @Offset LIMIT @Limit";
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
         var entities = await connection.QueryAsync<ProjectEntity>(sql, parameters);
 
@@ -249,7 +250,7 @@ public sealed partial class ProjectRepository : IProjectRepository
             RETURNING *
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
         var entity = await connection.QuerySingleAsync<ProjectEntity>(sql, parameters);
 
@@ -268,7 +269,7 @@ public sealed partial class ProjectRepository : IProjectRepository
             WHERE project_id = @ProjectId
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
         await connection.ExecuteAsync(sql, new
         {
@@ -313,7 +314,7 @@ public sealed partial class ProjectRepository : IProjectRepository
             WHERE project_id = @ProjectId
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var row = await connection.QuerySingleOrDefaultAsync<SchemaNamesRow>(sql, new { ProjectId = projectId });
         if (row is null)
         {
@@ -336,7 +337,7 @@ public sealed partial class ProjectRepository : IProjectRepository
             SELECT EXISTS(SELECT 1 FROM morphdb._morph_projects WHERE project_id = @ProjectId)
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
         return await connection.ExecuteScalarAsync<bool>(sql, new { ProjectId = projectId });
     }
@@ -353,7 +354,7 @@ public sealed partial class ProjectRepository : IProjectRepository
             )
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
         return await connection.ExecuteScalarAsync<bool>(sql, new
         {
@@ -378,7 +379,7 @@ public sealed partial class ProjectRepository : IProjectRepository
             parameters.Add("Status", (int)status.Value);
         }
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
         return await connection.ExecuteScalarAsync<int>(sql, parameters);
     }

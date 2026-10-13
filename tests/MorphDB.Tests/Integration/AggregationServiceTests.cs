@@ -25,24 +25,24 @@ public class AggregationServiceTests
     public AggregationServiceTests(PostgresFixture fixture)
     {
         _fixture = fixture;
-        _metadataRepository = new MetadataRepository(fixture.DataSource);
+        _metadataRepository = new MetadataRepository(fixture.Connections);
 
         var nameHasher = new Sha256NameHasher();
         var lockOptions = new AdvisoryLockOptions();
-        var lockManager = new PostgresAdvisoryLockManager(fixture.DataSource, lockOptions);
-        var changeLogger = new ChangeLogger(fixture.DataSource);
+        var lockManager = new PostgresAdvisoryLockManager(fixture.Connections, lockOptions);
+        var changeLogger = new ChangeLogger(fixture.Connections);
         var schemaOptions = new SchemaManagerOptions();
 
         _schemaManager = new PostgresSchemaManager(
-            fixture.DataSource,
+            fixture.Connections,
             _metadataRepository,
             lockManager,
             nameHasher,
             changeLogger,
-            new ProjectRepository(fixture.DataSource, new PostgresSchemaNameResolver()),
+            new ProjectRepository(fixture.Connections, new PostgresSchemaNameResolver()),
             schemaOptions);
 
-        var securityPolicyService = new SecurityPolicyService(fixture.DataSource, new MetadataRepository(fixture.DataSource));
+        var securityPolicyService = new SecurityPolicyService(fixture.Connections, new MetadataRepository(fixture.Connections));
         var securityContextAccessor = new SecurityContextAccessor();
 
         _dataService = fixture.CreateDataService(
@@ -51,7 +51,7 @@ public class AggregationServiceTests
             securityContextAccessor);
 
         _aggregationService = new PostgresAggregationService(
-            fixture.DataSource,
+            fixture.Connections,
             _metadataRepository,
             securityPolicyService,
             securityContextAccessor);

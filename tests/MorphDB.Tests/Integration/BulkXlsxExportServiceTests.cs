@@ -31,28 +31,28 @@ public class BulkXlsxExportServiceTests
     public BulkXlsxExportServiceTests(PostgresFixture fixture)
     {
         _fixture = fixture;
-        var metadataRepository = new MetadataRepository(fixture.DataSource);
+        var metadataRepository = new MetadataRepository(fixture.Connections);
 
         var nameHasher = new Sha256NameHasher();
-        var lockManager = new PostgresAdvisoryLockManager(fixture.DataSource, new AdvisoryLockOptions());
-        var changeLogger = new ChangeLogger(fixture.DataSource);
+        var lockManager = new PostgresAdvisoryLockManager(fixture.Connections, new AdvisoryLockOptions());
+        var changeLogger = new ChangeLogger(fixture.Connections);
 
         _schemaManager = new PostgresSchemaManager(
-            fixture.DataSource,
+            fixture.Connections,
             metadataRepository,
             lockManager,
             nameHasher,
             changeLogger,
-            new ProjectRepository(fixture.DataSource, new PostgresSchemaNameResolver()),
+            new ProjectRepository(fixture.Connections, new PostgresSchemaNameResolver()),
             new SchemaManagerOptions());
 
         _dataService = fixture.CreateDataService(
             metadataRepository,
-            new SecurityPolicyService(fixture.DataSource, new MetadataRepository(fixture.DataSource)),
+            new SecurityPolicyService(fixture.Connections, new MetadataRepository(fixture.Connections)),
             new SecurityContextAccessor());
 
         _bulkService = new PostgresBulkOperationService(
-            fixture.DataSource, _schemaManager, _dataService, new BulkOperationOptions());
+            fixture.Connections, _schemaManager, _dataService, new BulkOperationOptions());
     }
 
     [Fact]

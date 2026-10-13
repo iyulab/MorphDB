@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Dapper;
 using MorphDB.Core.Models;
-using Npgsql;
+using MorphDB.Npgsql.Infrastructure;
 
 namespace MorphDB.Npgsql.Repositories;
 
@@ -10,11 +10,11 @@ namespace MorphDB.Npgsql.Repositories;
 /// </summary>
 public sealed class ViewMetadataRepository : IViewMetadataRepository
 {
-    private readonly NpgsqlDataSource _dataSource;
+    private readonly MorphConnectionFactory _connections;
 
-    public ViewMetadataRepository(NpgsqlDataSource dataSource)
+    public ViewMetadataRepository(MorphConnectionFactory connections)
     {
-        _dataSource = dataSource;
+        _connections = connections;
     }
 
     public async Task<ViewMetadata> InsertViewAsync(
@@ -33,7 +33,7 @@ public sealed class ViewMetadataRepository : IViewMetadataRepository
                       is_stale, descriptor, is_active, created_at, updated_at
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var result = await MetadataConstraintTranslation.AsDuplicateNameAsync(
             "View",
             view.LogicalName,
@@ -65,7 +65,7 @@ public sealed class ViewMetadataRepository : IViewMetadataRepository
             WHERE view_id = @ViewId AND is_active = true
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var row = await connection.QuerySingleOrDefaultAsync<ViewRow>(sql, new { ViewId = viewId });
 
         if (row == null)
@@ -89,7 +89,7 @@ public sealed class ViewMetadataRepository : IViewMetadataRepository
             WHERE project_id = @ProjectId AND logical_name = @LogicalName AND is_active = true
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var row = await connection.QuerySingleOrDefaultAsync<ViewRow>(
             sql, new { ProjectId = projectId, LogicalName = logicalName });
 
@@ -114,7 +114,7 @@ public sealed class ViewMetadataRepository : IViewMetadataRepository
             ORDER BY created_at DESC
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var rows = await connection.QueryAsync<ViewRow>(sql, new { ProjectId = projectId });
 
         var views = new List<ViewMetadata>();
@@ -179,7 +179,7 @@ public sealed class ViewMetadataRepository : IViewMetadataRepository
             WHERE view_id = @ViewId AND is_active = true
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, parameters);
     }
 
@@ -196,7 +196,7 @@ public sealed class ViewMetadataRepository : IViewMetadataRepository
             WHERE view_id = @ViewId AND is_active = true
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new { ViewId = viewId, RefreshedAt = refreshedAt });
     }
 
@@ -212,7 +212,7 @@ public sealed class ViewMetadataRepository : IViewMetadataRepository
             WHERE view_id = @ViewId AND is_active = true
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new { ViewId = viewId, IsStale = isStale });
     }
 
@@ -227,7 +227,7 @@ public sealed class ViewMetadataRepository : IViewMetadataRepository
             WHERE view_id = @ViewId
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new { ViewId = viewId });
     }
 
@@ -243,7 +243,7 @@ public sealed class ViewMetadataRepository : IViewMetadataRepository
             RETURNING column_id, view_id, logical_name, data_type, is_computed, expression, ordinal_position
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var result = await connection.QuerySingleAsync<ViewColumnRow>(sql, new
         {
             column.ColumnId,
@@ -269,7 +269,7 @@ public sealed class ViewMetadataRepository : IViewMetadataRepository
             ORDER BY ordinal_position
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var rows = await connection.QueryAsync<ViewColumnRow>(sql, new { ViewId = viewId });
 
         return rows.Select(MapToViewColumnMetadata).ToList();

@@ -30,14 +30,14 @@ public class SecurityPolicyServiceTests
     public SecurityPolicyServiceTests(PostgresFixture fixture)
     {
         _dataSource = fixture.DataSource;
-        _policies = new SecurityPolicyService(fixture.DataSource, new MetadataRepository(fixture.DataSource));
+        _policies = new SecurityPolicyService(fixture.Connections, new MetadataRepository(fixture.Connections));
         _schemaManager = new PostgresSchemaManager(
-            fixture.DataSource,
-            new MetadataRepository(fixture.DataSource),
-            new PostgresAdvisoryLockManager(fixture.DataSource, new AdvisoryLockOptions()),
+            fixture.Connections,
+            new MetadataRepository(fixture.Connections),
+            new PostgresAdvisoryLockManager(fixture.Connections, new AdvisoryLockOptions()),
             new Sha256NameHasher(),
-            new ChangeLogger(fixture.DataSource),
-            new ProjectRepository(fixture.DataSource, new PostgresSchemaNameResolver()),
+            new ChangeLogger(fixture.Connections),
+            new ProjectRepository(fixture.Connections, new PostgresSchemaNameResolver()),
             new SchemaManagerOptions());
     }
 

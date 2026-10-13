@@ -10,7 +10,6 @@ using MorphDB.Npgsql.Dml;
 using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Query;
 using MorphDB.Npgsql.Repositories;
-using Npgsql;
 
 namespace MorphDB.Npgsql.Services;
 
@@ -20,7 +19,7 @@ namespace MorphDB.Npgsql.Services;
 /// </summary>
 public sealed class PostgresDataService : IMorphDataService
 {
-    private readonly NpgsqlDataSource _dataSource;
+    private readonly MorphConnectionFactory _connections;
     private readonly IMetadataRepository _metadataRepository;
     private readonly ISecurityPolicyService _securityPolicyService;
     private readonly ISecurityContextAccessor _securityContextAccessor;
@@ -34,7 +33,7 @@ public sealed class PostgresDataService : IMorphDataService
     /// Creates a new PostgresDataService.
     /// </summary>
     public PostgresDataService(
-        NpgsqlDataSource dataSource,
+        MorphConnectionFactory connections,
         IMetadataRepository metadataRepository,
         ISecurityPolicyService securityPolicyService,
         ISecurityContextAccessor securityContextAccessor,
@@ -44,7 +43,7 @@ public sealed class PostgresDataService : IMorphDataService
         IFormulaResolver? formulaResolver = null,
         string primaryKeyLogicalName = "id")
     {
-        _dataSource = dataSource ?? throw new ArgumentNullException(nameof(dataSource));
+        _connections = connections ?? throw new ArgumentNullException(nameof(connections));
         _metadataRepository = metadataRepository ?? throw new ArgumentNullException(nameof(metadataRepository));
         _securityPolicyService = securityPolicyService ?? throw new ArgumentNullException(nameof(securityPolicyService));
         _securityContextAccessor = securityContextAccessor ?? throw new ArgumentNullException(nameof(securityContextAccessor));
@@ -59,7 +58,7 @@ public sealed class PostgresDataService : IMorphDataService
     public IMorphQueryBuilder Query(Guid projectId)
     {
         return new MorphQueryBuilder(
-            _dataSource,
+            _connections,
             _metadataRepository,
             _securityPolicyService,
             _securityContextAccessor,
@@ -153,7 +152,7 @@ public sealed class PostgresDataService : IMorphDataService
         // ambient connection scope: the executor picks up this transaction instead of opening its own.
         var results = new List<IDictionary<string, object?>>(records.Count);
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         using var scope = ConnectionScope.Begin(connection, transaction);
 
@@ -208,7 +207,7 @@ public sealed class PostgresDataService : IMorphDataService
 
         var sql = DmlBuilder.BuildBatchUpdate(table.PhysicalName, setColumns, whereSql);
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenAsync(cancellationToken);
         var affectedRows = await connection.ExecuteAsync(
             new CommandDefinition(sql, values, cancellationToken: cancellationToken));
 
@@ -232,7 +231,7 @@ public sealed class PostgresDataService : IMorphDataService
             ? $"DELETE FROM {table.PhysicalName}"
             : $"DELETE FROM {table.PhysicalName} WHERE {whereSql}";
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        await using var connection = await _connections.OpenAsync(cancellationToken);
         var affectedRows = await connection.ExecuteAsync(
             new CommandDefinition(sql, whereParams, cancellationToken: cancellationToken));
 

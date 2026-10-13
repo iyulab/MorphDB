@@ -16,7 +16,7 @@ public class MetadataRepositoryTests
     public MetadataRepositoryTests(PostgresFixture fixture)
     {
         _fixture = fixture;
-        _repository = new MetadataRepository(fixture.DataSource);
+        _repository = new MetadataRepository(fixture.Connections);
     }
 
     #region Table CRUD Tests
