@@ -16,7 +16,7 @@
   `morph` as the service's login and makes it the database owner. The README quick-start carries
   the same two statements inline, so it is still one file.
 
-### Migrating
+### Migration
 
 A database created from the compose files before this release was reached through the bootstrap
 superuser (`POSTGRES_USER: morph`), which PostgreSQL does not let you demote. Hand it to a service
