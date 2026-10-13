@@ -1,4 +1,5 @@
 using MorphDB.Core.Abstractions;
+using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
 using MorphDB.Tests.Fixtures;
 
@@ -128,5 +129,48 @@ public class HierarchyQueryServiceTests
             record.Data.Keys.Should().NotContain(SystemColumns.ProjectId);
             record.Data.Keys.Should().Contain(["title", "owner", "department"]);
         }
+    }
+    [Fact]
+    public async Task Columns_and_order_are_named_as_the_table_declares_them()
+    {
+        var tree = await CreateTreeAsync();
+        var sibling = await _harness.SeedAsync(tree.Table, new Dictionary<string, object?> { ["title"] = "another child", [SystemColumns.ParentId] = tree.Root });
+        var ct = TestContext.Current.CancellationToken;
+
+        var result = await _harness.Hierarchy.GetDescendantsAsync(
+            tree.Request(tree.Root, "_id,title") with { OrderBy = "title desc", MaxDepth = 1 }, ct);
+
+        result.Records.Select(r => r.Data["title"]).Should().Equal("child", "another child");
+        result.Records.Select(r => (Guid)r.Data[SystemColumns.Id]!).Should().Equal(tree.Child, sibling);
+    }
+
+    [Theory]
+    [InlineData("title; DROP TABLE x")]
+    [InlineData("title, (SELECT 1)")]
+    [InlineData("1")]
+    [InlineData("no_such_column")]
+    [InlineData("title sideways")]
+    public async Task An_order_that_is_not_columns_of_the_table_is_refused_before_it_reaches_PostgreSQL(string orderBy)
+    {
+        var tree = await CreateTreeAsync();
+
+        var act = () => _harness.Hierarchy.GetDescendantsAsync(
+            tree.Request(tree.Root, columns: null) with { OrderBy = orderBy }, TestContext.Current.CancellationToken);
+
+        (await act.Should().ThrowAsync<ValidationException>()).Which.Message.Should().Contain("'orderBy'");
+    }
+
+    [Fact]
+    public async Task A_column_the_table_does_not_store_is_refused_by_name()
+    {
+        var tree = await CreateTreeAsync();
+        var ct = TestContext.Current.CancellationToken;
+
+        var columns = () => _harness.Hierarchy.GetAncestorsAsync(tree.Request(tree.Child, "title,no_such_column"), ct);
+        (await columns.Should().ThrowAsync<ValidationException>()).Which.Message.Should().Contain("no_such_column");
+
+        var parent = () => _harness.Hierarchy.GetDescendantsAsync(
+            tree.Request(tree.Root, columns: null) with { ParentColumn = "no_such_parent" }, ct);
+        (await parent.Should().ThrowAsync<ValidationException>()).Which.Message.Should().Contain("no_such_parent");
     }
 }

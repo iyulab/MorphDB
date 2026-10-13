@@ -33,7 +33,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         var maxDepth = request.MaxDepth ?? DefaultMaxDepth;
 
         // Build recursive CTE for ancestors
-        var sql = BuildAncestorsCte(table.PhysicalName, request.ParentColumn, request.Columns, maxDepth);
+        var sql = BuildAncestorsCte(table.PhysicalName, StoredColumn(table, request.ParentColumn, "parentColumn"), StoredColumns(table, request.Columns), maxDepth);
 
         await using var connection = await _connections.OpenAsync(cancellationToken);
         var results = await connection.QueryAsync<dynamic>(sql, new { recordId = request.RecordId });
@@ -57,7 +57,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         var maxDepth = request.MaxDepth ?? DefaultMaxDepth;
 
         // Build recursive CTE for descendants
-        var sql = BuildDescendantsCte(table.PhysicalName, request.ParentColumn, request.Columns, maxDepth, request.OrderBy);
+        var sql = BuildDescendantsCte(table.PhysicalName, StoredColumn(table, request.ParentColumn, "parentColumn"), StoredColumns(table, request.Columns), maxDepth, OrderTerms(table, request.OrderBy));
 
         await using var connection = await _connections.OpenAsync(cancellationToken);
         var results = await connection.QueryAsync<dynamic>(sql, new { recordId = request.RecordId });
@@ -81,7 +81,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         var maxDepth = request.MaxDepth ?? DefaultMaxDepth;
 
         // Path to root is ancestors in reverse order (from root to record)
-        var sql = BuildPathToRootCte(table.PhysicalName, request.ParentColumn, request.Columns, maxDepth);
+        var sql = BuildPathToRootCte(table.PhysicalName, StoredColumn(table, request.ParentColumn, "parentColumn"), StoredColumns(table, request.Columns), maxDepth);
 
         await using var connection = await _connections.OpenAsync(cancellationToken);
         var results = await connection.QueryAsync<dynamic>(sql, new { recordId = request.RecordId });
@@ -104,7 +104,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         var table = await GetTableMetadataAsync(request.ProjectId, request.TableName, cancellationToken);
 
         // Get siblings (same parent, exclude self unless requested)
-        var sql = BuildSiblingsSql(table.PhysicalName, request.ParentColumn, request.Columns, request.IncludeSelf);
+        var sql = BuildSiblingsSql(table.PhysicalName, StoredColumn(table, request.ParentColumn, "parentColumn"), StoredColumns(table, request.Columns), request.IncludeSelf);
 
         await using var connection = await _connections.OpenAsync(cancellationToken);
         var results = await connection.QueryAsync<dynamic>(sql, new { recordId = request.RecordId });
@@ -142,7 +142,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
 
         // Check if the new parent is a descendant of the record
         // If so, setting it as parent would create a cycle
-        var sql = BuildCycleCheckCte(table.PhysicalName, request.ParentColumn);
+        var sql = BuildCycleCheckCte(table.PhysicalName, StoredColumn(table, request.ParentColumn, "parentColumn"));
 
         await using var connection = await _connections.OpenAsync(cancellationToken);
         var wouldCycle = await connection.ExecuteScalarAsync<bool>(sql, new
@@ -163,7 +163,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         var table = await GetTableMetadataAsync(projectId, tableName, cancellationToken);
 
         // Use PostgreSQL 14+ CYCLE detection feature
-        var sql = BuildCycleDetectionCte(table.PhysicalName, parentColumn);
+        var sql = BuildCycleDetectionCte(table.PhysicalName, StoredColumn(table, parentColumn, "parentColumn"));
 
         await using var connection = await _connections.OpenAsync(cancellationToken);
         var cyclicIds = await connection.QueryAsync<Guid>(sql);
@@ -184,7 +184,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
     private static string BuildAncestorsCte(
         string physicalName,
         string parentColumn,
-        IReadOnlyList<string>? columns,
+        List<string>? columns,
         int maxDepth)
     {
         var tableName = DdlBuilder.QuoteIdentifier(physicalName);
@@ -213,7 +213,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
     private static string BuildDescendantsCte(
         string physicalName,
         string parentColumn,
-        IReadOnlyList<string>? columns,
+        List<string>? columns,
         int maxDepth,
         string? orderBy)
     {
@@ -247,7 +247,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
     private static string BuildPathToRootCte(
         string physicalName,
         string parentColumn,
-        IReadOnlyList<string>? columns,
+        List<string>? columns,
         int maxDepth)
     {
         var tableName = DdlBuilder.QuoteIdentifier(physicalName);
@@ -276,7 +276,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
     private static string BuildSiblingsSql(
         string physicalName,
         string parentColumn,
-        IReadOnlyList<string>? columns,
+        List<string>? columns,
         bool includeSelf)
     {
         var tableName = DdlBuilder.QuoteIdentifier(physicalName);
@@ -353,10 +353,53 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
     /// columns asked for, <c>*</c> is all of them: naming a computed column beside it would return
     /// it twice, and a row cannot hold two values under one name.
     /// </summary>
-    private static string SelectList(IReadOnlyList<string>? columns, params string[] computed) =>
+    private static string SelectList(List<string>? columns, params string[] computed) =>
         columns == null || columns.Count == 0
             ? "*"
             : string.Join(", ", columns.Select(DdlBuilder.QuoteIdentifier).Concat(computed));
+
+    /// <summary>
+    /// The physical name of the stored or system column a caller named by its declared name. A name
+    /// the table does not store is refused here, so nothing a caller wrote reaches SQL as written.
+    /// </summary>
+    private static string StoredColumn(Core.Models.TableMetadata table, string name, string parameter)
+    {
+        var column = table.Columns.FirstOrDefault(c => c.LogicalName == name);
+        if (column is { IsDerived: false })
+        {
+            return column.PhysicalName;
+        }
+
+        if (column is null && Core.Models.SystemColumns.IsSystemColumn(name))
+        {
+            return name;
+        }
+
+        throw new Core.Exceptions.ValidationException(parameter, $"'{name}' is not a stored column of '{table.LogicalName}'.");
+    }
+
+    private static List<string>? StoredColumns(Core.Models.TableMetadata table, IReadOnlyList<string>? names) =>
+        names is null || names.Count == 0 ? null : names.Select(name => StoredColumn(table, name, "columns")).ToList();
+
+    /// <summary>
+    /// The caller's order as <c>ORDER BY</c> terms the server wrote: parsed as
+    /// <c>column [asc|desc]</c> over the table's stored columns, never pasted.
+    /// </summary>
+    private static string? OrderTerms(Core.Models.TableMetadata table, string? orderBy)
+    {
+        if (string.IsNullOrWhiteSpace(orderBy))
+        {
+            return null;
+        }
+
+        var error = DeclaredOrder.Errors(orderBy, table).FirstOrDefault();
+        if (error is not null)
+        {
+            throw new Core.Exceptions.ValidationException("orderBy", error);
+        }
+
+        return DeclaredOrder.Terms(orderBy, table, alias: null);
+    }
 
     private async Task<Core.Models.TableMetadata> GetTableMetadataAsync(
         Guid projectId,

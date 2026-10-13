@@ -25,6 +25,13 @@
   table a materialized view reads; the message names the view. Use a plain (non-materialized) view,
   which is covered. A database that already holds such a pair keeps it, and the view cannot be read
   until one of the two is gone — see Migration.
+- **The `orderBy` of the hierarchy routes is parsed, not pasted.** `descendants` and `subtree` put
+  the `orderBy` query parameter into the statement's `ORDER BY` as written, so a caller could add
+  SQL of its own to the query. It is now read as a list of `column [asc|desc]` over the table's
+  stored columns, in the names the table declares, and anything else is refused with `400
+  VALIDATION_ERROR` before a statement is built. `parentColumn` and the columns an in-process
+  request names are resolved the same way: a declared column name works where only a physical name
+  did, and a name the table does not store is refused by name.
 
 ### Breaking
 

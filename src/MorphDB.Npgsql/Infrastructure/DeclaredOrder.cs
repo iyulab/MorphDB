@@ -63,15 +63,25 @@ internal static class DeclaredOrder
         if (string.IsNullOrWhiteSpace(order))
             return "";
 
+        return $" ORDER BY {Terms(order, target, alias)}";
+    }
+
+    /// <summary>
+    /// The comma-separated terms of a valid <paramref name="order"/> — what follows <c>ORDER BY</c> —
+    /// each column qualified by <paramref name="alias"/> when there is one.
+    /// </summary>
+    public static string Terms(string order, TableMetadata target, string? alias)
+    {
+        var qualifier = alias is null ? "" : alias + ".";
         var terms = order.Split(',').Select(term =>
         {
             var parts = term.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
             var column = Column(target, parts[0])
                 ?? throw new ArgumentException($"Order column '{parts[0]}' is not a stored column of '{target.LogicalName}'.", nameof(order));
             var descending = parts.Length == 2 && parts[1].Equals("desc", StringComparison.OrdinalIgnoreCase);
-            return $"{alias}.{DdlBuilder.QuoteIdentifier(column)}{(descending ? " DESC" : " ASC")}";
+            return $"{qualifier}{DdlBuilder.QuoteIdentifier(column)}{(descending ? " DESC" : " ASC")}";
         });
-        return $" ORDER BY {string.Join(", ", terms)}";
+        return string.Join(", ", terms);
     }
 
     private static bool IsDirection(string word) =>
