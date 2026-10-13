@@ -2,8 +2,59 @@
 
 ## Unreleased
 
+### Security
+
+- **A row-level security policy is enforced by PostgreSQL, on every statement.** A `Select` policy
+  used to be a condition MorphDB added to three reads: listing or querying a table, aggregating it,
+  and the single-record read built on them. Nothing else consulted it. Hierarchy routes, views, bulk
+  exports, the record read a `finalize` request makes, and the table a lookup or rollup reads
+  through all returned rows the policy was meant to hide, and an update or delete by id reached a
+  row its caller could not read. Every stored policy is now also a native PostgreSQL policy on its
+  table, reading the caller from the settings MorphDB writes to each connection, so a hidden row is
+  hidden from every statement whichever component built it: those reads return only the rows the
+  caller may read, a lookup of a hidden row reads `null`, and an update or delete of a hidden row
+  finds no row (`404`, or zero rows affected). The master secret, and an in-process caller whose
+  `SecurityContext.BypassRls` is set, are exempt as before.
+  (Verified-by: NativeRowLevelSecurityTests.A_walk_down_a_hierarchy_does_not_pass_through_a_hidden_row)
+- **One read is not covered: a materialized view.** It is a stored copy of its query's result, filled
+  when the view is created or refreshed, and it is read without the base table's policies — every
+  caller sees every row it holds. Do not materialize a view over a table that has a policy. A plain
+  (non-materialized) view is covered.
+
 ### Breaking
 
+- **A write is refused when its caller could not read the row it would leave.** A write returns the
+  row it wrote, and PostgreSQL does not hand a caller a row a policy hides from it. On a table with
+  an active policy, an insert, an update that changes a row so the policy no longer admits it, or
+  an upsert that lands on a hidden row is answered `403 FORBIDDEN` (`ForbiddenException` in
+  process), and nothing is written. Before, the insert succeeded and the caller simply could not
+  read the row back. A write whose result the caller may read is unchanged, and so is every write
+  to a table without a policy. For the same reason a relation cannot be pointed at a row its writer
+  may not read: the reference check reads the target as the writer and answers that the row does not
+  exist (`400 VALIDATION_ERROR`).
+- **Work done without a caller meets a policy as nobody.** A policy that compares with the caller
+  admits no row when there is no caller — to be read, or to be written. That is the case for:
+  - **Bulk export jobs.** The request counts the rows as its caller (`totalRows`); the job that
+    writes the file runs without one and exports no rows of such a table.
+  - **Bulk import jobs.** Every row is refused, and each failure is listed in the job's
+    `errorDetails`.
+  - **Change notifications and webhook deliveries.** The event still names the table and the record
+    id, but its `data` is empty: the row is read back without a caller. A webhook with a `filter`
+    has nothing to match against and is not delivered.
+  - **An in-process host that sets no `SecurityContext`.** It used to skip policies altogether and
+    read every row; it now reads none. Set `SecurityContext.Service(projectId)` for work that is
+    meant to bypass policies.
+
+  Carrying the requester's identity into a job, and filtering notifications per subscriber, are not
+  part of this release. Until then, export and import a table that has a policy through the query
+  and write APIs with the master secret, or deactivate the policy for the duration.
+- **A column a policy reads cannot be deleted or given another type.** PostgreSQL refuses to drop or
+  retype a column a policy depends on; the request is answered `400 COLUMN_USED_BY_POLICY`, naming
+  the policy. Change the policy's expression or delete the policy first.
+- **A policy expression with a placeholder inside quotes is refused.** `owner = '{{user_id}}'` was
+  accepted, and then failed every read of the table made by a caller with an id: the value arrived
+  wrapped in a second pair of quotes. It is now `400 INVALID_EXPRESSION` when the policy is created
+  or updated. Write a placeholder unquoted: `owner = {{user_id}}`.
 - **`ConnectionPoolOptions.Multiplexing` is removed, and a connection string that sets
   `Multiplexing=true` or `No Reset On Close=true` is refused at start-up.** MorphDB writes the
   caller's security context to the session of each connection it opens. A multiplexed command runs
@@ -33,6 +84,16 @@
   (`POSTGRES_USER`, now the default `postgres`) is for administration only; `init.sql` creates
   `morph` as the service's login and makes it the database owner. The README quick-start carries
   the same two statements inline, so it is still one file.
+- **A placeholder takes its type from where it stands, as before.** A placeholder used to be
+  substituted as a quoted literal, which PostgreSQL typed by its position; it is now read from the
+  connection and cast to the type PostgreSQL infers for that same position. `owner_id = {{user_id}}`
+  therefore works for a `uuid` column and a `text` column alike, and a placeholder nothing types
+  (`{{user_id}} IS NOT NULL`) is text. An absent value is still `NULL`, so a comparison with it
+  admits no row.
+- **Creating, changing or deleting a policy changes the table in the same transaction.** The stored
+  policy and PostgreSQL's policy are written together or not at all, and a policy PostgreSQL cannot
+  enforce is refused (`400 INVALID_EXPRESSION`) before anything is stored. Deactivating or deleting
+  a table's last policy turns row-level security on that table off again.
 
 ### Migration
 
@@ -52,6 +113,22 @@ Then set `ConnectionStrings__MorphDB` to `Username=morphdb_service;Password=<pas
 with `docker compose down -v`. See "Database role" in the README for a database you provision
 yourself.
 
+**Policies already stored are handed to PostgreSQL on the first start.** Nothing has to be run. For
+every table that has a stored policy, start-up creates the matching PostgreSQL policies; later
+starts find them in place and change nothing. A stored policy that cannot be translated — one that
+names a column the table no longer has, for instance — does not stop the service and is not left
+unenforced: its table is readable and writable only by the master secret until the policy is
+corrected or deleted, and a warning naming the table, the policy and PostgreSQL's reason is logged
+at every start. Check the log of the first start for such warnings. A stored `All` policy (they can
+no longer be created) is enforced for writes as well as reads.
+
+**Connecting to the database directly.** PostgreSQL now applies policies to the service role itself,
+so a `psql` session logged in as that role sees no row of a table that has a policy. For
+maintenance in such a session, run `SET morphdb.bypass = 'on';` first. `pg_dump` and a restore of
+its output do not work as the service role on a table that has a policy (`query would be affected
+by row-level security policy`), with or without that setting: run both as an administrative role —
+a superuser, or a role with `BYPASSRLS` — which is the kind of role MorphDB itself must not be.
+
 ### Internal
 
 - Every connection is opened through one factory, which writes a security context to the
@@ -59,8 +136,17 @@ yourself.
   `morphdb.role`, `morphdb.email`, `morphdb.is_authenticated`, `morphdb.claims` and
   `morphdb.bypass`. A statement run for a caller carries that caller's context; one run for
   MorphDB's own bookkeeping — metadata, schema changes, jobs, audit — carries no caller and
-  `morphdb.bypass = on`. Nothing reads these settings yet. The triggers behind change notifications
-  are now installed over the service's connection pool rather than a data source built per call.
+  `morphdb.bypass = on`. The PostgreSQL policies described under Security read these settings. The
+  triggers behind change notifications are now installed over the service's connection pool rather
+  than a data source built per call.
+- On a table with a policy MorphDB sets `ENABLE` and `FORCE ROW LEVEL SECURITY` and creates one
+  permissive policy, `morphdb_allow`, and one restrictive policy per stored policy, named
+  `morphdb_p_<policy id>_<hash>`; the hash follows the expression, so a changed policy is a new
+  native policy. These are derived from the stored policies and rebuilt from them at start-up — a
+  change made to them by hand does not last. A policy of your own on the same table, under any other
+  name, is left alone.
+- The reads that added a policy to their own WHERE clause still do, in addition to PostgreSQL's
+  enforcement.
 
 ## 0.18.0
 

@@ -1,5 +1,7 @@
 using System.Text.RegularExpressions;
 using Dapper;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
 using MorphDB.Core.Security;
@@ -13,15 +15,26 @@ namespace MorphDB.Npgsql.Security;
 /// <summary>
 /// PostgreSQL implementation of security policy service.
 /// </summary>
+/// <remarks>
+/// A policy is a row in <c>morphdb._morph_security_policies</c>, and PostgreSQL enforces it: every
+/// change to a stored policy is projected onto the table's native row-level security in the same
+/// transaction (<see cref="NativePolicyProjector"/>), so there is no moment at which the two disagree.
+/// </remarks>
 public sealed partial class SecurityPolicyService : ISecurityPolicyService
 {
     private readonly MorphConnectionFactory _connections;
     private readonly IMetadataRepository _metadataRepository;
+    private readonly NativePolicyProjector _projector;
 
-    public SecurityPolicyService(MorphConnectionFactory connections, IMetadataRepository metadataRepository)
+    public SecurityPolicyService(
+        MorphConnectionFactory connections,
+        IMetadataRepository metadataRepository,
+        ILogger<SecurityPolicyService>? logger = null)
     {
         _connections = connections;
         _metadataRepository = metadataRepository;
+        _projector = new NativePolicyProjector(
+            connections, metadataRepository, logger ?? NullLogger<SecurityPolicyService>.Instance);
     }
 
     public async Task<SecurityPolicy> CreatePolicyAsync(
@@ -29,14 +42,15 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
         CreatePolicyRequest request,
         CancellationToken cancellationToken = default)
     {
-        // A policy expression is spliced into the WHERE clause of ordinary queries, so it is a
-        // caller-authored string that reaches SQL verbatim — the same category as a CHECK predicate,
-        // and subject to the same gate. Rejecting it here quotes the caller their own text.
+        // A policy expression becomes part of a native policy and of the WHERE clause of ordinary
+        // queries, so it is a caller-authored string that reaches SQL verbatim — the same category
+        // as a CHECK predicate, and subject to the same gate. Rejecting it here quotes the caller
+        // their own text.
         InlineExpressionValidator.Validate(request.Expression, "Policy");
 
-        // Only reads apply a policy. A write policy would be stored and then never consulted by an
-        // insert, update or delete — a security rule that silently does not apply — so it is
-        // refused until writes enforce one.
+        // Only a policy on reads is offered. What a write may do under one follows from what its
+        // caller may read; a rule written for writes alone is refused until it means something of
+        // its own.
         if (request.PolicyType != PolicyType.Select)
         {
             throw new ValidationException(
@@ -47,10 +61,8 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
         var table = await _metadataRepository.GetTableByNameAsync(projectId, request.TableName, includeColumns: true, cancellationToken)
             ?? throw new TableNotFoundException(request.TableName);
 
-        await VerifyAgainstTableAsync(request.Expression, table, cancellationToken);
-        var tableId = (Guid?)table.TableId;
-
         await using var connection = await _connections.OpenSystemAsync(cancellationToken);
+        await using var tableLock = await NativePolicyProjector.LockAsync(connection, table, cancellationToken);
 
         // Get next ordinal position
         var maxOrdinal = await connection.QueryFirstOrDefaultAsync<int?>(
@@ -58,14 +70,14 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
             SELECT MAX(ordinal_position) FROM morphdb._morph_security_policies
             WHERE project_id = @ProjectId AND table_id = @TableId
             """,
-            new { ProjectId = projectId, TableId = tableId.Value });
+            new { ProjectId = projectId, TableId = table.TableId });
 
         var now = DateTimeOffset.UtcNow;
         var policy = new SecurityPolicy
         {
             Id = Guid.NewGuid(),
             ProjectId = projectId,
-            TableId = tableId.Value,
+            TableId = table.TableId,
             Name = request.Name,
             Description = request.Description,
             PolicyType = request.PolicyType,
@@ -75,6 +87,15 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
             CreatedAt = now,
             UpdatedAt = now
         };
+
+        // Translating the expression is also what proves it is a predicate over this table, so a
+        // policy that cannot be enforced is refused before anything is written.
+        var stored = await NativePolicyProjector.LoadStoredAsync(connection, table.TableId, cancellationToken);
+        var plan = await _projector.PlanAsync(
+            connection, table, [.. stored, Stored(policy)], strictPolicyId: policy.Id, cancellationToken);
+
+        // The row and the native policy it stands for, or neither.
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
         await MetadataConstraintTranslation.AsDuplicateNameAsync(
             "SecurityPolicy",
@@ -98,7 +119,11 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
                     policy.OrdinalPosition,
                     policy.CreatedAt,
                     policy.UpdatedAt
-                }));
+                },
+                transaction));
+
+        await _projector.ApplyAsync(connection, transaction, table, plan, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         return policy;
     }
@@ -174,10 +199,15 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
         if (request.Expression is not null)
         {
             InlineExpressionValidator.Validate(request.Expression, "Policy");
+        }
 
-            var table = await _metadataRepository.GetTableByIdAsync(existing.TableId, includeColumns: true, cancellationToken)
-                ?? throw new NotFoundException("Table", existing.TableId.ToString());
-            await VerifyAgainstTableAsync(request.Expression, table, cancellationToken);
+        // A deleted table keeps its policy rows but has nothing left to enforce them on. Its
+        // policies can still be renamed or described; a new expression has no table to be checked
+        // against.
+        var table = await _metadataRepository.GetTableByIdAsync(existing.TableId, includeColumns: true, cancellationToken);
+        if (table is null && request.Expression is not null)
+        {
+            throw new NotFoundException("Table", existing.TableId.ToString());
         }
 
         var isActive = request.IsActive ?? existing.IsActive;
@@ -185,6 +215,26 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
         var updatedAt = DateTimeOffset.UtcNow;
 
         await using var connection = await _connections.OpenSystemAsync(cancellationToken);
+        await using var tableLock = table is null
+            ? null
+            : await NativePolicyProjector.LockAsync(connection, table, cancellationToken);
+
+        // An expression the caller is writing now is theirs to get right, so it is verified even
+        // when the policy is inactive — and so is one the caller is switching on. Otherwise a
+        // policy stored earlier is projected as it stands.
+        IReadOnlyList<NativePolicyProjector.NativePolicy>? plan = null;
+        if (table is not null)
+        {
+            var stored = await NativePolicyProjector.LoadStoredAsync(connection, table.TableId, cancellationToken);
+            var updated = stored
+                .Select(p => p.Id == policyId ? p with { Name = name, Expression = expression, IsActive = isActive } : p)
+                .ToList();
+            var callersToGetRight = request.Expression is not null || (isActive && !existing.IsActive);
+            plan = await _projector.PlanAsync(
+                connection, table, updated, callersToGetRight ? policyId : null, cancellationToken);
+        }
+
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         await connection.ExecuteAsync(
             """
             UPDATE morphdb._morph_security_policies
@@ -200,7 +250,15 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
                 IsActive = isActive,
                 Description = description,
                 UpdatedAt = updatedAt
-            });
+            },
+            transaction);
+
+        if (table is not null && plan is not null)
+        {
+            await _projector.ApplyAsync(connection, transaction, table, plan, cancellationToken);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
 
         return new SecurityPolicy
         {
@@ -223,14 +281,46 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
         Guid policyId,
         CancellationToken cancellationToken = default)
     {
+        var existing = await GetPolicyAsync(projectId, policyId, cancellationToken);
+        if (existing is null)
+        {
+            return;
+        }
+
+        var table = await _metadataRepository.GetTableByIdAsync(existing.TableId, includeColumns: true, cancellationToken);
+
         await using var connection = await _connections.OpenSystemAsync(cancellationToken);
+        await using var tableLock = table is null
+            ? null
+            : await NativePolicyProjector.LockAsync(connection, table, cancellationToken);
+
+        IReadOnlyList<NativePolicyProjector.NativePolicy>? plan = null;
+        if (table is not null)
+        {
+            var stored = await NativePolicyProjector.LoadStoredAsync(connection, table.TableId, cancellationToken);
+            plan = await _projector.PlanAsync(
+                connection, table, stored.Where(p => p.Id != policyId).ToList(), strictPolicyId: null, cancellationToken);
+        }
+
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
         await connection.ExecuteAsync(
             """
             DELETE FROM morphdb._morph_security_policies
             WHERE project_id = @ProjectId AND id = @PolicyId
             """,
-            new { ProjectId = projectId, PolicyId = policyId });
+            new { ProjectId = projectId, PolicyId = policyId },
+            transaction);
+
+        if (table is not null && plan is not null)
+        {
+            await _projector.ApplyAsync(connection, transaction, table, plan, cancellationToken);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
     }
+
+    private static NativePolicyProjector.StoredPolicy Stored(SecurityPolicy policy) =>
+        new(policy.Id, policy.Name, policy.PolicyType, policy.Expression, policy.IsActive);
 
     public async Task<string?> EvaluatePoliciesAsync(
         Guid projectId,
@@ -281,9 +371,11 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
     /// Rewrites the column names a policy is written in — the table's logical names, as the caller
     /// declared them — to the physical names the query reads, qualified by the name the query gives
     /// the table. The qualifier matters: a joined lookup target carries system columns of the same
-    /// name, so an unqualified <c>_id</c> would be ambiguous.
+    /// name, so an unqualified <c>_id</c> would be ambiguous. <paramref name="reportedAs"/> is the
+    /// text to quote in a refusal when <paramref name="expression"/> is no longer what the caller
+    /// wrote — its placeholders already replaced, say.
     /// </summary>
-    private static string ToPhysical(string expression, TableMetadata table, string? qualifier)
+    internal static string ToPhysical(string expression, TableMetadata table, string? qualifier, string? reportedAs = null)
     {
         var prefix = qualifier is null ? "" : qualifier + ".";
 
@@ -296,7 +388,7 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
                 {
                     throw new SchemaException(
                         "INVALID_EXPRESSION",
-                        $"Policy expression '{expression}' names '{token}', a derived column; a policy reads only stored columns.");
+                        $"Policy expression '{reportedAs ?? expression}' names '{token}', a derived column; a policy reads only stored columns.");
                 }
 
                 return prefix + DdlBuilder.QuoteIdentifier(column.PhysicalName);
@@ -304,31 +396,6 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
 
             return SystemColumns.IsSystemColumn(token) ? prefix + DdlBuilder.QuoteIdentifier(token) : null;
         });
-    }
-
-    /// <summary>
-    /// Proves the expression is a predicate over this table by asking PostgreSQL to plan it, with
-    /// every placeholder standing in as an anonymous caller would see it. A name the table does not
-    /// have, a function that does not exist, or a comparison of the wrong type is refused here —
-    /// the caller's mistake, reported once at registration — instead of failing every read of the
-    /// table afterwards.
-    /// </summary>
-    private async Task VerifyAgainstTableAsync(string expression, TableMetadata table, CancellationToken cancellationToken)
-    {
-        var predicate = ToPhysical(SubstituteVariables(expression, new SecurityContext { ProjectId = table.ProjectId }), table, qualifier: null);
-
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-        try
-        {
-            await connection.ExecuteAsync(
-                $"EXPLAIN SELECT 1 FROM {DdlBuilder.QuoteIdentifier(table.PhysicalName)} WHERE ({predicate})");
-        }
-        catch (PostgresException ex)
-        {
-            throw new SchemaException(
-                "INVALID_EXPRESSION",
-                $"Policy expression '{expression}' is not a predicate over table '{table.LogicalName}': {ex.MessageText}");
-        }
     }
 
     private static string SubstituteVariables(string expression, SecurityContext context)

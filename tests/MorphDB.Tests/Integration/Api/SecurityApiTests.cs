@@ -12,10 +12,9 @@ namespace MorphDB.Tests.Integration.Api;
 /// (the service has no identity to demand), and row-level security still binds over HTTP because
 /// the pipeline supplies the ambient security context the query layer evaluates against.
 /// <para>
-/// The second half is the one that has to be measured. An absent context does not fail a query —
-/// it skips policy evaluation entirely ("allow all"), so losing the context middleware would not
-/// break a single existing test; it would silently stop enforcing every policy. The RLS test here
-/// goes red if <c>UseSecurityContext()</c> leaves the pipeline.
+/// The second half is the one that has to be measured, and it is measured over HTTP on purpose: a
+/// policy is enforced by PostgreSQL against whatever caller the pipeline wrote to the connection,
+/// so these tests go red if a route stops reaching the table as its caller.
 /// </para>
 /// </summary>
 [Collection("API")]
@@ -138,6 +137,50 @@ public class SecurityApiTests
 
         var entitySet = string.Concat(tableName.Split('_').Select(p => p.Length > 0 ? char.ToUpperInvariant(p[0]) + p[1..].ToLowerInvariant() : p));
         (await _client.GetAsync($"/odata/{entitySet}({hidden})", ct)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    /// <summary>
+    /// A policy on reads binds writes too: a hidden row is not there to be changed, and a write
+    /// whose result its caller could not read is refused rather than answered with a row the
+    /// policy hides.
+    /// </summary>
+    [Fact]
+    public async Task A_policy_binds_updates_deletes_and_inserts_over_http()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tableName = await SetupTestTableAsync();
+        var visible = await InsertAsync(tableName, "open");
+        var hidden = await InsertAsync(tableName, "closed");
+
+        var policy = await _client.PostAsJsonAsync("/api/security/policies", new
+        {
+            name = "open_only",
+            tableName,
+            policyType = "Select",
+            expression = "name = 'open'"
+        }, ct);
+        policy.StatusCode.Should().Be(HttpStatusCode.Created, await policy.Content.ReadAsStringAsync(ct));
+
+        var update = await _client.PatchAsJsonAsync($"/api/data/{tableName}/{hidden}",
+            new Dictionary<string, object?> { ["name"] = "open" }, ct);
+        update.StatusCode.Should().Be(HttpStatusCode.NotFound, "a hidden row is not there to be updated");
+
+        (await _client.DeleteAsync($"/api/data/{tableName}/{hidden}", ct)).StatusCode
+            .Should().Be(HttpStatusCode.NotFound, "nor to be deleted");
+
+        var insertHidden = await _client.PostAsJsonAsync($"/api/data/{tableName}",
+            new Dictionary<string, object?> { ["name"] = "closed" }, ct);
+        insertHidden.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await insertHidden.Content.ReadAsStringAsync(ct)).Should().Contain("FORBIDDEN");
+
+        var hide = await _client.PatchAsJsonAsync($"/api/data/{tableName}/{visible}",
+            new Dictionary<string, object?> { ["name"] = "closed" }, ct);
+        hide.StatusCode.Should().Be(HttpStatusCode.Forbidden, "the update would hide the row from its own caller");
+
+        // A write the caller can read back is unaffected.
+        await InsertAsync(tableName, "open");
+        var list = await _client.GetFromJsonAsync<PagedResponse<DataRecordResponse>>($"/api/data/{tableName}", ct);
+        list!.Data.Should().HaveCount(2);
     }
 
     [Theory]

@@ -10,6 +10,8 @@ using MorphDB.Npgsql.Dml;
 using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Query;
 using MorphDB.Npgsql.Repositories;
+using MorphDB.Npgsql.Security;
+using Npgsql;
 
 namespace MorphDB.Npgsql.Services;
 
@@ -208,10 +210,17 @@ public sealed class PostgresDataService : IMorphDataService
         var sql = DmlBuilder.BuildBatchUpdate(table.PhysicalName, setColumns, whereSql);
 
         await using var connection = await _connections.OpenAsync(cancellationToken);
-        var affectedRows = await connection.ExecuteAsync(
-            new CommandDefinition(sql, values, cancellationToken: cancellationToken));
-
-        return affectedRows;
+        try
+        {
+            return await connection.ExecuteAsync(
+                new CommandDefinition(sql, values, cancellationToken: cancellationToken));
+        }
+        catch (PostgresException pg) when (pg.SqlState == PostgresErrorCodes.InsufficientPrivilege)
+        {
+            // Rows the caller cannot read are simply not matched. This is the other case: the
+            // update would turn a row the caller can read into one it cannot.
+            throw RowLevelSecurityRefusal.ForWrite(table);
+        }
     }
 
     /// <inheritdoc />

@@ -6,6 +6,7 @@ using MorphDB.Core.Models;
 using MorphDB.Npgsql.Ddl;
 using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Repositories;
+using MorphDB.Npgsql.Security;
 using Npgsql;
 
 namespace MorphDB.Npgsql.Services;
@@ -782,6 +783,15 @@ public sealed class PostgresSchemaManager : ISchemaManager
         catch (PostgresException ex)
         {
             await transaction.RollbackAsync(cancellationToken);
+
+            // PostgreSQL will not change the type of a column a policy reads: the policy was
+            // checked against the type it had. Which policy that is, is the caller's to know.
+            if (ex.SqlState == PostgresErrorCodes.FeatureNotSupported
+                && await RowLevelSecurityRefusal.ForColumnAsync(connection, table, column, "given another type", cancellationToken) is { } refusal)
+            {
+                throw refusal;
+            }
+
             throw new SchemaException("DDL_EXECUTION_FAILED",
                 $"Column modification DDL failed: {ex.MessageText}", ex);
         }
@@ -904,7 +914,22 @@ public sealed class PostgresSchemaManager : ISchemaManager
         // Execute DDL
         await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var dropColumnSql = DdlBuilder.BuildDropColumn(table.PhysicalName, column.PhysicalName);
-        await connection.ExecuteAsync(new CommandDefinition(dropColumnSql, cancellationToken: cancellationToken));
+        try
+        {
+            await connection.ExecuteAsync(new CommandDefinition(dropColumnSql, cancellationToken: cancellationToken));
+        }
+        catch (PostgresException pg) when (pg.SqlState == PostgresErrorCodes.DependentObjectsStillExist)
+        {
+            // A policy that reads the column depends on it, and the DROP carries no CASCADE —
+            // deliberately: removing a column must not quietly remove the rule that guarded the
+            // table's rows. The caller changes or deletes the policy first, and is told which.
+            if (await RowLevelSecurityRefusal.ForColumnAsync(connection, table, column, "deleted", cancellationToken) is { } refusal)
+            {
+                throw refusal;
+            }
+
+            throw;
+        }
 
         // Soft delete metadata
         await _repository.SoftDeleteColumnAsync(columnId, cancellationToken);

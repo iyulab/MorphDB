@@ -654,7 +654,9 @@ serve it — the same logical column names, the same system columns, decrypted t
 back by key once the change has been notified. It is the row as it stands at that read, not the
 image the notifying statement wrote: a row changed twice in quick succession can arrive carrying
 the later state on both events, and a row deleted before the service read it arrives with an
-empty `data` (its `RecordDeleted` follows).
+empty `data` (its `RecordDeleted` follows). The read-back has no caller, so a row of a table under a
+[row-level security policy](#row-level-security-policies) that compares with the caller also
+arrives with an empty `data`: subscribers learn that the record changed, not what it holds.
 
 #### Delivery
 
@@ -710,6 +712,10 @@ data to compare against, so a webhook that needs to see deletions must subscribe
 on that event.
 
 `events` accepts `insert`, `update`, and `delete`; a webhook subscribes to one or more of them.
+
+A delivery's `data` is read the way a change notification's is, without a caller. For a table under
+a [row-level security policy](#row-level-security-policies) that compares with the caller it is
+empty, and a webhook with a `filter` on such a table is therefore not delivered.
 
 Webhook payload. A delivery's fields are camelCase, the same as every other surface in this
 document — the payload is signed and posted to a third-party endpoint rather than returned to a
@@ -840,6 +846,10 @@ per-row failures, each `{ "rowNumber": <1-based>, "error": "<message>" }` — so
 is diagnosable without re-sending the file. `errorDetailsTruncated` is `true` once `errorCount`
 exceeds 100. `errorMessage` (singular) is unrelated: it is set only when the whole job died from an
 unhandled exception, not on a per-row basis.
+
+A job runs in the background, without the caller that requested it. On a table with a
+[row-level security policy](#row-level-security-policies) that compares with the caller, an export
+therefore carries no rows and an import refuses every row — see "Work done without a caller" there.
 
 ---
 
@@ -1167,8 +1177,10 @@ encryption) refuses to start and says so.
 
 ## Row-Level Security Policies
 
-A policy narrows what a table's rows answer, per operation. Applicable policies are combined with
-`AND`, so adding one can only ever restrict a read further.
+A policy decides which of a table's rows a caller may read. PostgreSQL enforces it: each stored
+policy is a native row-level security policy on the table, so it holds for every statement that
+touches the table, whichever route it came in through. Policies on one table are combined with
+`AND`, so adding one can only ever restrict further.
 
 ```yaml
 GET    /api/security/policies/{tableName}      # Policies applying to a table
@@ -1186,43 +1198,64 @@ DELETE /api/security/policies/{policyId}       # Delete a policy
 }
 ```
 
-`policyType` is `Select` — the only type a read enforces. `Insert`, `Update`, `Delete` and `All` are
-refused with `400 VALIDATION_ERROR`: no write consults a policy yet, and a rule that would be stored and
-never applied is worse than one that is refused. (The number `0` is still read for `Select`; responses
-carry the name.)
+`policyType` is `Select` — the only type that can be created. `Insert`, `Update`, `Delete` and `All`
+are refused with `400 VALIDATION_ERROR`; what a write may do follows from what its caller may read
+(see below). (The number `0` is still read for `Select`; responses carry the name.)
 
 The expression is a SQL predicate over the table's own columns, written in the names the table was
-declared with (`status`, or `"status"`), with `{{user_id}}`, `{{email}}`, `{{role}}`,
-`{{project_id}}`, `{{is_authenticated}}` and `{{claims.<name>}}` substituted from the request's
-security context before the query runs. Substituted values are emitted as quoted literals — a
-caller's identity cannot become part of the predicate. A policy may name stored columns and system
-columns; a lookup, rollup or formula column is refused.
+declared with (`status`, or `"status"`), with the placeholders `{{user_id}}`, `{{email}}`,
+`{{role}}`, `{{project_id}}`, `{{is_authenticated}}` and `{{claims.<name>}}` standing for the
+caller. A placeholder is a value, never text spliced into the predicate — a caller's identity cannot
+become part of it — and it takes its type from where it stands: `owner_id = {{user_id}}` works
+whether `owner_id` is `uuid` or `text`. A value the caller does not have is `NULL`, so a comparison
+with it admits no row. Write a placeholder unquoted; one inside a string literal is refused. A
+policy may name stored columns and system columns; a lookup, rollup or formula column is refused.
 
-**Checked when registered.** Creating or updating a policy asks PostgreSQL to plan the predicate
-against the table, every placeholder standing in as an anonymous caller would see it. A column the
-table does not have, a function that does not exist, or a comparison PostgreSQL cannot type is
-refused with `400 INVALID_EXPRESSION` and the database's reason — the policy is not stored, so the
-table keeps reading.
+**Checked when registered.** Creating a policy, changing its expression or switching it back on
+asks PostgreSQL to accept the predicate against the table. A column the table does not have, a
+function that does not exist, or a comparison PostgreSQL cannot type is refused with
+`400 INVALID_EXPRESSION` and the database's reason — nothing is stored or changed, and the table
+keeps reading as it did. The stored policy and PostgreSQL's are written together: there is no
+moment at which one exists without the other.
+Deactivating a policy or deleting it removes it from PostgreSQL too.
 
-**Which reads a policy binds.** Listing (`GET /api/data/{table}`), `POST /api/data/{table}/query`,
-`POST /api/data/{table}/aggregate`, and a single record — `GET /api/data/{table}/{id}`, GraphQL
-`record`, OData `/{entitySet}({key})` — which answers `404` (GraphQL: `null`) for a row the policy
-hides, as it would for a row that does not exist. GraphQL `records`/`aggregate` and OData queries go
-through the same reads. **Not yet bound:** hierarchy routes, bulk exports, views, real-time change
-notifications (a subscriber receives changes to rows its policies would hide), and the target table a
-lookup or rollup reads through.
+**What a policy binds.** Every read of the table: listing and querying, aggregating, a single
+record (`404`, or `null` in GraphQL, for a hidden row — as for a row that does not exist), GraphQL
+and OData, hierarchy routes, views, bulk exports, and the rows a lookup or rollup on another table
+reads through (a lookup of a hidden row reads `null`; a rollup aggregates only what the caller may
+read). And every write: an update or delete of a hidden row finds no row (`404`, or zero rows
+affected), and a write is refused with `403 FORBIDDEN` when its caller could not read the row it
+would leave — inserting a row the policy hides from the caller, updating a row so that it becomes
+hidden, or an upsert that lands on a hidden row. Only the master secret is exempt.
+
+**What it does not bind: a materialized view.** A materialized view is a stored copy of its query's
+result, filled when it is created or refreshed, and it is read without the base table's policies.
+Do not materialize a view over a table that has a policy.
+
+**Work done without a caller.** Bulk import and export jobs, and the read that fills a change
+notification or a webhook delivery, run in the background with no caller. Under a policy that
+compares with the caller they read no row and can write none: an export of such a table is empty
+(the `totalRows` reported when it was requested was counted as the requester), every row of an
+import is refused and listed in `errorDetails`, and a change event carries the table and record id
+with an empty `data`. Carrying the requester's identity into a job and filtering notifications per
+subscriber are not available.
+
+**The table under a policy.** A column a policy reads cannot be deleted or given another type while
+the policy reads it; the request is refused with `400 COLUMN_USED_BY_POLICY`, naming the policy.
+Change or delete the policy first. Deleting the table deletes its policies with it.
 
 Because the service is unauthenticated, an HTTP request's context is the project's anonymous one:
 `{{project_id}}` carries the header's value, `{{is_authenticated}}` is `false`, and the
-user-bearing placeholders substitute `NULL` — a policy written against `{{user_id}}` therefore
-matches no rows over HTTP. That is fail-closed on purpose; there is currently no way for a caller
-to assert an end-user identity to this service.
+user-bearing placeholders are `NULL` — a policy written against `{{user_id}}` therefore
+matches no rows over HTTP, and refuses every insert. That is fail-closed on purpose; there is
+currently no way for a caller to assert an end-user identity to this service.
 
-**The expression is a predicate, not a statement.** It is checked before it is stored and again
-before it is used: a statement separator, a comment opener, an unbalanced parenthesis or an
-unterminated quote is refused with `INVALID_EXPRESSION`. A stored policy that fails that check
-fails the read rather than being quietly dropped from it — a security rule that silently stops
-applying is worse than an error.
+**The expression is a predicate, not a statement.** A statement separator, a comment opener, an
+unbalanced parenthesis or an unterminated quote is refused with `INVALID_EXPRESSION`. A policy
+stored by an earlier version that fails that check, or that PostgreSQL can no longer accept, is not
+quietly dropped: its table is closed to every caller but the master secret until the policy is
+corrected or deleted, and the service log names the table, the policy and the reason at each start
+— a security rule that silently stops applying is worse than a table that stops answering.
 
 ---
 
@@ -1320,6 +1353,7 @@ fixed string — internal exception text never reaches the wire) and retrying ma
 | 400 | `INVALID_PROJECT_ID` | `X-Project-Id` was sent but is not a GUID |
 | 400 | `INVALID_EXPRESSION` | A CHECK predicate, index predicate, policy expression, or a view's join condition or column expression that could escape the clause it is written into |
 | 400 | `TABLE_HAS_DEPENDENTS` | Deleting a table another table still references — delete those relations first |
+| 400 | `COLUMN_USED_BY_POLICY` | Deleting or retyping a column a row-level security policy reads — change or delete the policy first |
 | 400 | `EMPTY_BATCH` | A batch request with no operations |
 | 400 | `EMPTY_DATA` | A batch write with no rows |
 | 400 | `EMPTY_TRANSACTION` | A transaction with no operations |
@@ -1347,7 +1381,7 @@ fixed string — internal exception text never reaches the wire) and retrying ma
 | 404 | `JOB_NOT_FOUND` | The bulk job does not exist |
 | 404 | `AUDIT_LOG_NOT_FOUND` | The audit log entry does not exist |
 | 401 | `UNAUTHENTICATED` | Authentication is enforced and the request presented no valid secret — send `Authorization: Bearer <secret>`. Only answered when a master secret is injected; see [Connection secrets](#connection-secrets) |
-| 403 | `FORBIDDEN` | The secret is recognized but may not do this — it is confined to another project, or the route requires the master secret |
+| 403 | `FORBIDDEN` | The secret is recognized but may not do this — it is confined to another project, or the route requires the master secret. Also a write a row-level security policy refuses: its caller could not read the row it would leave |
 | 404 | `NOT_FOUND` | Another addressable resource (entity set, policy…) does not exist |
 | 409 | `DUPLICATE_NAME` | Creating a table/column under a name that is taken |
 | 409 | `DUPLICATE_SLUG` | Creating a project under a slug that is taken |

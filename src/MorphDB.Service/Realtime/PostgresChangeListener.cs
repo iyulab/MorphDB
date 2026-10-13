@@ -224,6 +224,12 @@ public sealed partial class PostgresChangeListener : BackgroundService
     /// later state on both, and a row already deleted arrives with no data at all. Both are the
     /// documented contract of the real-time surface (<c>docs/API.md</c>).
     /// </para>
+    /// <para>
+    /// The read has no caller. PostgreSQL therefore answers it with no row for a table under a
+    /// row-level security policy that compares with the caller, and the change is broadcast
+    /// without data — a subscriber is told that a record changed, never the contents of a row
+    /// nobody has shown it may read.
+    /// </para>
     /// </summary>
     private async Task<IDictionary<string, object?>> ReadRowAsync(DatabaseChangeEvent changeEvent, CancellationToken cancellationToken)
     {
@@ -350,7 +356,7 @@ public sealed partial class PostgresChangeListener : BackgroundService
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to queue webhook delivery for webhook {WebhookId}")]
     private static partial void LogWebhookQueueError(ILogger logger, Guid webhookId, Exception exception);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "{Operation} on {Table}, record {RecordId}: the row was gone before it could be read back; broadcasting the change without data")]
+    [LoggerMessage(Level = LogLevel.Debug, Message = "{Operation} on {Table}, record {RecordId}: the row could not be read back (deleted since, or hidden by a row-level security policy); broadcasting the change without data")]
     private static partial void LogRowGoneBeforeRead(ILogger logger, string operation, string table, Guid recordId);
 }
 

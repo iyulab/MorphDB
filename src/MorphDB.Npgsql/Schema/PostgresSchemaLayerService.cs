@@ -4,6 +4,8 @@ using MorphDB.Core.Abstractions;
 using MorphDB.Core.Exceptions;
 using MorphDB.Npgsql.Ddl;
 using MorphDB.Npgsql.Infrastructure;
+using MorphDB.Npgsql.Repositories;
+using MorphDB.Npgsql.Security;
 using Npgsql;
 
 namespace MorphDB.Npgsql.Schema;
@@ -60,6 +62,13 @@ public sealed partial class PostgresSchemaLayerService : ISchemaLayerService
         await connection.ExecuteAsync(ddl);
 
         LogGlobalSchemaEnsured(_logger);
+
+        // Last, because it reads the tables just ensured: every stored security policy is projected
+        // onto PostgreSQL's own row-level security. A database whose policies were stored by a
+        // version that only filtered some reads is enforced by the database from this start on; a
+        // database already in step is read and left alone.
+        var projector = new NativePolicyProjector(_connections, new MetadataRepository(_connections), _logger);
+        await projector.ReconcileAllAsync(cancellationToken);
     }
 
     /// <summary>

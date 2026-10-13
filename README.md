@@ -166,6 +166,12 @@ pointing it at the administrator account the provider gives you: what that accou
 provider's choice, and the start-up check reads `rolsuper` and `rolbypassrls` of whatever role it is
 given.
 
+**Reaching the database directly.** Security policies are enforced by PostgreSQL against the
+service role itself, so a `psql` session logged in as that role sees no row of a table that has a
+policy until it runs `SET morphdb.bypass = 'on';`. `pg_dump`, and a restore of its output, do not
+work as the service role on such a table at all — run backups and restores as an administrative
+role (a superuser, or one with `BYPASSRLS`).
+
 **Upgrading a database created before 0.19.0.** The compose files before 0.19.0 made the image's
 bootstrap superuser — `POSTGRES_USER: morph` — the service's login, so that database has no service
 role yet, and PostgreSQL does not let the bootstrap superuser be demoted. Hand the database over to

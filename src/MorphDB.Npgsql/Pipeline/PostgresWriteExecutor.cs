@@ -8,6 +8,7 @@ using MorphDB.Npgsql.Diagnostics;
 using MorphDB.Npgsql.Dml;
 using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Pipeline.Transformers;
+using MorphDB.Npgsql.Security;
 using Npgsql;
 
 namespace MorphDB.Npgsql.Pipeline;
@@ -95,10 +96,11 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             scope.SetRowCount(affectedRows);
             return WriteResult.Ok(new Dictionary<string, object?> { ["deleted"] = true, [SystemColumns.Id] = context.RecordId });
         }
-        catch (PostgresException pg) when (pg.SqlState is PostgresErrorCodes.NotNullViolation or PostgresErrorCodes.UniqueViolation or PostgresErrorCodes.ForeignKeyViolation)
+        catch (PostgresException pg) when (IsCallersMistake(pg))
         {
-            // A physical constraint the app-layer validators did not intercept is still the
-            // caller's mistake, not our defect — translate it before it can surface as a 500.
+            // A physical constraint the app-layer validators did not intercept — or a row-level
+            // security policy, which no validator reads — is still the caller's mistake, not our
+            // defect: translate it before it can surface as a 500.
             var translated = TranslateConstraintViolation(pg, context.Table);
             scope.SetError(translated.Message);
             throw translated;
@@ -139,10 +141,11 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             scope.SetRowCount(1);
             return WriteResult.Ok(mapped);
         }
-        catch (PostgresException pg) when (pg.SqlState is PostgresErrorCodes.NotNullViolation or PostgresErrorCodes.UniqueViolation or PostgresErrorCodes.ForeignKeyViolation)
+        catch (PostgresException pg) when (IsCallersMistake(pg))
         {
-            // A physical constraint the app-layer validators did not intercept is still the
-            // caller's mistake, not our defect — translate it before it can surface as a 500.
+            // A physical constraint the app-layer validators did not intercept — or a row-level
+            // security policy, which no validator reads — is still the caller's mistake, not our
+            // defect: translate it before it can surface as a 500.
             var translated = TranslateConstraintViolation(pg, context.Table);
             scope.SetError(translated.Message);
             throw translated;
@@ -203,10 +206,11 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             scope.SetRowCount(1);
             return WriteResult.Ok(mapped);
         }
-        catch (PostgresException pg) when (pg.SqlState is PostgresErrorCodes.NotNullViolation or PostgresErrorCodes.UniqueViolation or PostgresErrorCodes.ForeignKeyViolation)
+        catch (PostgresException pg) when (IsCallersMistake(pg))
         {
-            // A physical constraint the app-layer validators did not intercept is still the
-            // caller's mistake, not our defect — translate it before it can surface as a 500.
+            // A physical constraint the app-layer validators did not intercept — or a row-level
+            // security policy, which no validator reads — is still the caller's mistake, not our
+            // defect: translate it before it can surface as a 500.
             var translated = TranslateConstraintViolation(pg, context.Table);
             scope.SetError(translated.Message);
             throw translated;
@@ -274,10 +278,11 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             scope.SetRowCount(1);
             return WriteResult.Ok(mapped);
         }
-        catch (PostgresException pg) when (pg.SqlState is PostgresErrorCodes.NotNullViolation or PostgresErrorCodes.UniqueViolation or PostgresErrorCodes.ForeignKeyViolation)
+        catch (PostgresException pg) when (IsCallersMistake(pg))
         {
-            // A physical constraint the app-layer validators did not intercept is still the
-            // caller's mistake, not our defect — translate it before it can surface as a 500.
+            // A physical constraint the app-layer validators did not intercept — or a row-level
+            // security policy, which no validator reads — is still the caller's mistake, not our
+            // defect: translate it before it can surface as a 500.
             var translated = TranslateConstraintViolation(pg, context.Table);
             scope.SetError(translated.Message);
             throw translated;
@@ -338,10 +343,11 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             scope.SetRowCount(1);
             return WriteResult.Ok(mapped);
         }
-        catch (PostgresException pg) when (pg.SqlState is PostgresErrorCodes.NotNullViolation or PostgresErrorCodes.UniqueViolation or PostgresErrorCodes.ForeignKeyViolation)
+        catch (PostgresException pg) when (IsCallersMistake(pg))
         {
-            // A physical constraint the app-layer validators did not intercept is still the
-            // caller's mistake, not our defect — translate it before it can surface as a 500.
+            // A physical constraint the app-layer validators did not intercept — or a row-level
+            // security policy, which no validator reads — is still the caller's mistake, not our
+            // defect: translate it before it can surface as a 500.
             var translated = TranslateConstraintViolation(pg, context.Table);
             scope.SetError(translated.Message);
             throw translated;
@@ -498,13 +504,28 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
 
 
     /// <summary>
+    /// The refusals PostgreSQL answers a write with that say something about the request rather
+    /// than about this service: a physical constraint, or a row-level security policy.
+    /// </summary>
+    private static bool IsCallersMistake(PostgresException pg) =>
+        pg.SqlState is PostgresErrorCodes.NotNullViolation
+            or PostgresErrorCodes.UniqueViolation
+            or PostgresErrorCodes.ForeignKeyViolation
+            or PostgresErrorCodes.InsufficientPrivilege;
+
+    /// <summary>
     /// Turns a physical NOT NULL / UNIQUE violation into the same kind of error the app-layer
     /// validators produce, naming the logical column — never the physical one — because internal
     /// names are not contract (hidden-layer principle).
     /// </summary>
-    private static MorphDB.Core.Exceptions.ValidationException TranslateConstraintViolation(
+    private static MorphDB.Core.Exceptions.MorphDbException TranslateConstraintViolation(
         PostgresException pg, TableMetadata table)
     {
+        if (pg.SqlState == PostgresErrorCodes.InsufficientPrivilege)
+        {
+            return RowLevelSecurityRefusal.ForWrite(table);
+        }
+
         if (pg.SqlState == PostgresErrorCodes.NotNullViolation)
         {
             var logical = table.Columns.FirstOrDefault(c => c.PhysicalName == pg.ColumnName)?.LogicalName;

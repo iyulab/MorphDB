@@ -31,7 +31,7 @@ public class DocsErrorCodeParityTests
         // the management routes decline when no master secret is injected
         "SECRETS_NOT_CONFIGURED",
         // SchemaException codes with contract weight
-        "TABLE_HAS_DEPENDENTS", "INVALID_EXPRESSION",
+        "TABLE_HAS_DEPENDENTS", "INVALID_EXPRESSION", "COLUMN_USED_BY_POLICY",
         // SchemaException / ValidationException codes the schema routes pass through unchanged —
         // the controllers answer with ex.ErrorCode rather than flattening it, so these reach the
         // wire whether the handler or an action's catch answers

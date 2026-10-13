@@ -82,6 +82,19 @@ public sealed class PostgresFixture : IAsyncLifetime
         ISecurityPolicyService securityPolicyService,
         ISecurityContextAccessor securityContextAccessor)
     {
+        var pipeline = CreateWritePipeline(metadataRepository, securityContextAccessor);
+        return new PostgresDataService(
+            Connections, metadataRepository, securityPolicyService, securityContextAccessor, pipeline);
+    }
+
+    /// <summary>
+    /// The write pipeline <see cref="CreateDataService"/> writes through, for a test that hands it to
+    /// another service as well — the transaction service, or a data service that computes lookups.
+    /// </summary>
+    public WritePipeline CreateWritePipeline(
+        IMetadataRepository metadataRepository,
+        ISecurityContextAccessor securityContextAccessor)
+    {
         var diagnostics = new QueryDiagnosticsService(
             Options.Create(new QueryDiagnosticsOptions()),
             NullLogger<QueryDiagnosticsService>.Instance);
@@ -108,9 +121,7 @@ public sealed class PostgresFixture : IAsyncLifetime
             new RowStateApplier()
         ];
 
-        var pipeline = new WritePipeline(validators, transformers, securityContextAccessor, executor);
-        return new PostgresDataService(
-            Connections, metadataRepository, securityPolicyService, securityContextAccessor, pipeline);
+        return new WritePipeline(validators, transformers, securityContextAccessor, executor);
     }
 }
 
