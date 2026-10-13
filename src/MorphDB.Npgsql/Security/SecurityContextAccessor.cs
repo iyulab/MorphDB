@@ -24,7 +24,7 @@ public sealed class SecurityContextAccessor : ISecurityContextAccessor
 
     public SecurityContext? ContextOrNull => _contextHolder.Value?.Context;
 
-    public void SetContext(SecurityContext context)
+    public void SetContext(SecurityContext? context)
     {
         _contextHolder.Value = new SecurityContextHolder { Context = context };
     }

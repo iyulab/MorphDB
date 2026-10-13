@@ -6,6 +6,7 @@ using MorphDB.Core.Models;
 using MorphDB.Core.Pipeline;
 using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Repositories;
+using MorphDB.Npgsql.Security;
 using Npgsql;
 
 namespace MorphDB.Npgsql.Services;
@@ -168,8 +169,14 @@ public sealed class PostgresTransactionService : ITransactionService
             })
             .ToList();
 
-        // Update the record's row state
+        // Update the record's row state. A row the caller may read is not always one it may
+        // update: a row-level security policy for updates that does not admit the row leaves it
+        // out of the statement, and to this caller it is then not there to be finalized.
         var updatedData = await UpdateRowStateAsync(table, recordId, newState, errors, cancellationToken);
+        if (updatedData is null)
+        {
+            return FinalizeResult.NotFound(recordId);
+        }
 
         return validationResult.Success
             ? FinalizeResult.Valid(recordId, updatedData)
@@ -530,7 +537,7 @@ public sealed class PostgresTransactionService : ITransactionService
         }
     }
 
-    private async Task<IDictionary<string, object?>> UpdateRowStateAsync(
+    private async Task<IDictionary<string, object?>?> UpdateRowStateAsync(
         TableMetadata table,
         Guid recordId,
         RowStateValue newState,
@@ -569,11 +576,19 @@ public sealed class PostgresTransactionService : ITransactionService
             """;
 
         await using var connection = await _connections.OpenAsync(cancellationToken);
-        var result = await connection.QuerySingleAsync<dynamic>(
-            new CommandDefinition(sql, new { id = recordId, state = stateString, errors = errorsJson },
-                cancellationToken: cancellationToken));
+        try
+        {
+            var result = await connection.QuerySingleOrDefaultAsync<dynamic>(
+                new CommandDefinition(sql, new { id = recordId, state = stateString, errors = errorsJson },
+                    cancellationToken: cancellationToken));
 
-        return Infrastructure.RowMapper.MapToLogicalDictionary(result, table.Columns);
+            return result is null ? null : Infrastructure.RowMapper.MapToLogicalDictionary(result, table.Columns);
+        }
+        catch (PostgresException pg) when (pg.SqlState == PostgresErrorCodes.InsufficientPrivilege)
+        {
+            // A policy that reads the row's state does not admit the row in its new one.
+            throw RowLevelSecurityRefusal.ForWrite(table);
+        }
     }
 
 

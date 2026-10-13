@@ -133,6 +133,16 @@ public sealed class MorphDbMutation
             var writeResult = await writePipeline.UpdateAsync(
                 projectId, tableMetadata, id, normalizedData, existing, cancellationToken: cancellationToken);
 
+            if (ErrorHandling.WriteFailure.IsNotFound(writeResult))
+            {
+                return new MutationResult<RecordNode>
+                {
+                    Success = false,
+                    Error = $"Record with ID '{id}' not found in table '{table}'",
+                    ErrorCode = "NOT_FOUND"
+                };
+            }
+
             if (!writeResult.Success)
             {
                 return new MutationResult<RecordNode>

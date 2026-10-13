@@ -105,7 +105,8 @@ public interface ISecurityContextAccessor
     SecurityContext? ContextOrNull { get; }
 
     /// <summary>
-    /// Sets the security context for the current request.
+    /// Sets the security context for the current request. <c>null</c> clears it: what runs next in
+    /// this flow has no caller.
     /// </summary>
-    void SetContext(SecurityContext context);
+    void SetContext(SecurityContext? context);
 }

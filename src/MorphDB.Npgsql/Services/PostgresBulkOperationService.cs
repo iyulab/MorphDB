@@ -9,8 +9,10 @@ using MorphDB.Core.Abstractions;
 using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
 using MorphDB.Core.Pipeline;
+using MorphDB.Core.Security;
 using MorphDB.Npgsql.Dml;
 using MorphDB.Npgsql.Infrastructure;
+using MorphDB.Npgsql.Security;
 
 namespace MorphDB.Npgsql.Services;
 
@@ -18,11 +20,23 @@ namespace MorphDB.Npgsql.Services;
 /// PostgreSQL implementation of bulk import/export operations.
 /// Uses WritePipeline with BulkImport options for optimized validation.
 /// </summary>
+/// <remarks>
+/// <para>A job is requested by one call and carried out by another, usually much later and from a
+/// background service that has no caller of its own. The table's rows are read and written as the
+/// caller that requested the job: its security context is stored in the job's row when the job is
+/// created, and is the ambient context while <see cref="StreamExportAsync"/> reads the table and
+/// while <see cref="ProcessImportAsync"/> writes each row — whoever is ambient where those are
+/// called from, and nobody when the job's row holds no context.</para>
+/// <para>That is done here, in the two methods that carry a job out, and not in what calls them:
+/// anything that executes a job goes through one of the two, so nothing can execute one as the
+/// wrong caller by leaving a step out.</para>
+/// </remarks>
 public sealed class PostgresBulkOperationService : IBulkOperationService
 {
     private readonly MorphConnectionFactory _connections;
     private readonly ISchemaManager _schemaManager;
     private readonly IMorphDataService _dataService;
+    private readonly ISecurityContextAccessor _securityContext;
     private readonly IWritePipeline? _writePipeline;
     private readonly BulkOperationOptions _options;
 
@@ -30,12 +44,14 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         MorphConnectionFactory connections,
         ISchemaManager schemaManager,
         IMorphDataService dataService,
+        ISecurityContextAccessor securityContext,
         BulkOperationOptions options,
         IWritePipeline? writePipeline = null)
     {
         _connections = connections;
         _schemaManager = schemaManager;
         _dataService = dataService;
+        _securityContext = securityContext;
         _writePipeline = writePipeline;
         _options = options;
     }
@@ -160,6 +176,8 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         // Update status to processing
         await UpdateImportJobStatusAsync(jobId, BulkJobStatus.Processing, cancellationToken);
 
+        var requester = await GetRequesterAsync(ImportRequesterSql, jobId, cancellationToken);
+
         var dataStream = await GetStoredImportDataAsync(jobId, cancellationToken);
         if (dataStream is null)
         {
@@ -187,7 +205,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
             await foreach (var row in rows.WithCancellation(cancellationToken))
             {
                 rowNumber++;
-                var result = await ProcessImportRowAsync(job, table, row, rowNumber);
+                var result = await ProcessImportRowAsync(job, table, row, rowNumber, requester);
 
                 if (result.Success)
                 {
@@ -348,23 +366,29 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         try
         {
             var processedRows = 0L;
+            var requester = await GetRequesterAsync(ExportRequesterSql, jobId, cancellationToken);
 
-            switch (job.Format)
+            // The table is read as the caller the job was requested by — nobody, when the job's row
+            // holds no caller — and whoever is ambient here is ambient again once it has been read.
+            using (SecurityContextScope.Begin(_securityContext, requester))
             {
-                case ExportFormat.Csv:
-                    var csvOptions = job.Options?.Deserialize<CsvExportOptions>() ?? new CsvExportOptions();
-                    await StreamCsvExportAsync(job, csvOptions, outputStream, p => processedRows = p, cancellationToken);
-                    break;
+                switch (job.Format)
+                {
+                    case ExportFormat.Csv:
+                        var csvOptions = job.Options?.Deserialize<CsvExportOptions>() ?? new CsvExportOptions();
+                        await StreamCsvExportAsync(job, csvOptions, outputStream, p => processedRows = p, cancellationToken);
+                        break;
 
-                case ExportFormat.Json:
-                    var jsonOptions = job.Options?.Deserialize<JsonExportOptions>() ?? new JsonExportOptions();
-                    await StreamJsonExportAsync(job, jsonOptions, outputStream, p => processedRows = p, cancellationToken);
-                    break;
+                    case ExportFormat.Json:
+                        var jsonOptions = job.Options?.Deserialize<JsonExportOptions>() ?? new JsonExportOptions();
+                        await StreamJsonExportAsync(job, jsonOptions, outputStream, p => processedRows = p, cancellationToken);
+                        break;
 
-                case ExportFormat.Xlsx:
-                    var xlsxOptions = job.Options?.Deserialize<XlsxExportOptions>() ?? new XlsxExportOptions();
-                    await StreamXlsxExportAsync(job, xlsxOptions, outputStream, p => processedRows = p, cancellationToken);
-                    break;
+                    case ExportFormat.Xlsx:
+                        var xlsxOptions = job.Options?.Deserialize<XlsxExportOptions>() ?? new XlsxExportOptions();
+                        await StreamXlsxExportAsync(job, xlsxOptions, outputStream, p => processedRows = p, cancellationToken);
+                        break;
+                }
             }
 
             await UpdateExportJobCompletedAsync(jobId, processedRows, cancellationToken);
@@ -601,12 +625,24 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
 
     #region Private Helpers - Parsing
 
+    /// <summary>
+    /// Writes one row as <paramref name="requester"/>, the caller the job was requested by.
+    /// </summary>
+    /// <remarks>
+    /// The requester is made ambient here, for each row, and not once around the loop that calls
+    /// this. That loop is an iterator: after every row it hands back, it is resumed in whatever
+    /// context its consumer happens to be in, and a context set before the first row would be gone
+    /// by the second.
+    /// </remarks>
     private async Task<ImportRowResult> ProcessImportRowAsync(
         BulkImportJob job,
         TableMetadata? table,
         IDictionary<string, object?> row,
-        long rowNumber)
+        long rowNumber,
+        SecurityContext? requester)
     {
+        using var asRequester = SecurityContextScope.Begin(_securityContext, requester);
+
         try
         {
             IDictionary<string, object?> insertResult;
@@ -1195,17 +1231,46 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
         await connection.ExecuteAsync(sql, new { JobId = jobId });
     }
 
+    private const string ImportRequesterSql =
+        "SELECT requested_by::text FROM morphdb._morph_import_jobs WHERE job_id = @JobId";
+
+    private const string ExportRequesterSql =
+        "SELECT requested_by::text FROM morphdb._morph_export_jobs WHERE job_id = @JobId";
+
+    /// <summary>
+    /// The caller a job was requested by, as its row holds it — or <c>null</c>: a job requested
+    /// without a caller, or stored by a version that did not record one. Such a job runs as nobody;
+    /// a caller is not guessed for it.
+    /// </summary>
+    /// <remarks>
+    /// Read here, by the two methods that carry a job out, and kept off <see cref="BulkImportJob"/>
+    /// and <see cref="BulkExportJob"/>: those are what a status request answers with, and who asked
+    /// for a job — claims included — is not part of that answer.
+    /// </remarks>
+    private async Task<SecurityContext?> GetRequesterAsync(string sql, Guid jobId, CancellationToken cancellationToken)
+    {
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
+        var stored = await connection.ExecuteScalarAsync<string?>(
+            new CommandDefinition(sql, new { JobId = jobId }, cancellationToken: cancellationToken));
+
+        return SecurityContextSnapshot.Read(stored);
+    }
+
+    /// <summary>
+    /// Stores the job, and with it the ambient security context: the caller making this request is
+    /// the caller the job's rows are later written as.
+    /// </summary>
     private async Task SaveImportJobAsync(BulkImportJob job, CancellationToken cancellationToken)
     {
         const string sql = """
             INSERT INTO morphdb._morph_import_jobs (
                 job_id, project_id, table_id, table_name, format, status,
                 total_rows, processed_rows, success_count, error_count,
-                error_message, options, created_at
+                error_message, options, requested_by, created_at
             ) VALUES (
                 @JobId, @ProjectId, @TableId, @TableName, @Format, @Status,
                 @TotalRows, @ProcessedRows, @SuccessCount, @ErrorCount,
-                @ErrorMessage, @Options::jsonb, @CreatedAt
+                @ErrorMessage, @Options::jsonb, @RequestedBy::jsonb, @CreatedAt
             )
             """;
 
@@ -1224,6 +1289,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
             job.ErrorCount,
             job.ErrorMessage,
             Options = job.Options?.RootElement.GetRawText(),
+            RequestedBy = SecurityContextSnapshot.Write(_securityContext.ContextOrNull),
             job.CreatedAt
         });
     }
@@ -1251,17 +1317,21 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
             .ToList();
     }
 
+    /// <summary>
+    /// Stores the job, and with it the ambient security context: the caller making this request is
+    /// the caller the table is later read as.
+    /// </summary>
     private async Task SaveExportJobAsync(BulkExportJob job, CancellationToken cancellationToken)
     {
         const string sql = """
             INSERT INTO morphdb._morph_export_jobs (
                 job_id, project_id, table_id, table_name, format, status,
                 total_rows, processed_rows, file_path, file_size,
-                error_message, options, created_at, expires_at
+                error_message, options, requested_by, created_at, expires_at
             ) VALUES (
                 @JobId, @ProjectId, @TableId, @TableName, @Format, @Status,
                 @TotalRows, @ProcessedRows, @FilePath, @FileSize,
-                @ErrorMessage, @Options::jsonb, @CreatedAt, @ExpiresAt
+                @ErrorMessage, @Options::jsonb, @RequestedBy::jsonb, @CreatedAt, @ExpiresAt
             )
             """;
 
@@ -1280,6 +1350,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService
             job.FileSize,
             job.ErrorMessage,
             Options = job.Options?.RootElement.GetRawText(),
+            RequestedBy = SecurityContextSnapshot.Write(_securityContext.ContextOrNull),
             job.CreatedAt,
             job.ExpiresAt
         });

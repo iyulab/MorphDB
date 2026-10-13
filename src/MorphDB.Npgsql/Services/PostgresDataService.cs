@@ -208,8 +208,8 @@ public sealed class PostgresDataService : IMorphDataService
         }
         catch (PostgresException pg) when (pg.SqlState == PostgresErrorCodes.InsufficientPrivilege)
         {
-            // Rows the caller cannot read are simply not matched. This is the other case: the
-            // update would turn a row the caller can read into one it cannot.
+            // Rows a policy keeps from the caller are simply not matched. This is the other case:
+            // the update would turn a row the caller may update into one a policy does not admit.
             throw RowLevelSecurityRefusal.ForWrite(table);
         }
     }

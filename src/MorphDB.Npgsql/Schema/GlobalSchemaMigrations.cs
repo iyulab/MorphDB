@@ -115,6 +115,15 @@ public static class GlobalSchemaMigrations
         -- reasons to backfill, because the reasons were never kept anywhere.
         ALTER TABLE IF EXISTS morphdb._morph_import_jobs ADD COLUMN IF NOT EXISTS error_details JSONB;
 
+        -- A job is requested by a caller and carried out later, by a background service that has
+        -- none. Under a row-level security policy that compares with the caller, a job run as nobody
+        -- exports no row and has every row it imports refused -- so the requester's security context
+        -- is stored with the job and is the caller its rows are read and written as. NULL on every
+        -- existing row is correct, and deliberate: a job stored by an earlier version recorded
+        -- nobody, and one is not guessed for it. Such a job still runs as nobody.
+        ALTER TABLE IF EXISTS morphdb._morph_import_jobs ADD COLUMN IF NOT EXISTS requested_by JSONB;
+        ALTER TABLE IF EXISTS morphdb._morph_export_jobs ADD COLUMN IF NOT EXISTS requested_by JSONB;
+
         ALTER TABLE IF EXISTS morphdb._morph_tables ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
         ALTER TABLE IF EXISTS morphdb._morph_columns ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
         ALTER TABLE IF EXISTS morphdb._morph_indexes ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;

@@ -49,7 +49,7 @@ public class BulkXlsxExportServiceTests
         _dataService = fixture.CreateDataService(metadataRepository, new SecurityContextAccessor());
 
         _bulkService = new PostgresBulkOperationService(
-            fixture.Connections, _schemaManager, _dataService, new BulkOperationOptions());
+            fixture.Connections, _schemaManager, _dataService, new SecurityContextAccessor(), new BulkOperationOptions());
     }
 
     [Fact]

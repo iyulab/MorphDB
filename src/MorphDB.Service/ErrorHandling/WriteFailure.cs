@@ -12,6 +12,15 @@ namespace MorphDB.Service.ErrorHandling;
 /// </summary>
 internal static class WriteFailure
 {
+    /// <summary>
+    /// Whether the write found no row to write to. A route that updates a record reads it first and
+    /// answers "not found" itself when the read finds nothing — but the write can still find no
+    /// row: one deleted in between, or one its caller may read and a row-level security policy for
+    /// updates does not admit. That is the same answer, not a validation failure.
+    /// </summary>
+    public static bool IsNotFound(WriteResult result) =>
+        result.Errors.Any(e => e.Code == ValidationErrorCodes.NotFound);
+
     public static string CodeFor(WriteResult result) =>
         result.Errors.Count > 0 && result.Errors.All(e => e.Code == ValidationErrorCodes.UnknownColumn)
             ? ValidationErrorCodes.UnknownColumn

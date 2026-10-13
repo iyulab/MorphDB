@@ -46,20 +46,30 @@
   exist (`400 VALIDATION_ERROR`).
 - **Work done without a caller meets a policy as nobody.** A policy that compares with the caller
   admits no row when there is no caller — to be read, or to be written. That is the case for:
-  - **Bulk export jobs.** The request counts the rows as its caller (`totalRows`); the job that
-    writes the file runs without one and exports no rows of such a table.
-  - **Bulk import jobs.** Every row is refused, and each failure is listed in the job's
-    `errorDetails`.
-  - **Change notifications and webhook deliveries.** The event still names the table and the record
-    id, but its `data` is empty: the row is read back without a caller. A webhook with a `filter`
-    has nothing to match against and is not delivered.
+  - **Change notifications and webhook deliveries.** The row behind an event is read back by the
+    service itself, which has no caller. For a table with a policy that compares with the caller,
+    a subscriber still receives the event — the table, the record id and the operation — but its
+    `data` is empty: it learns that the record changed, not what it holds. Every subscriber gets
+    the same, whoever it is; notifications are not filtered per subscriber. A webhook with a
+    `filter` has nothing to match against and is not delivered.
   - **An in-process host that sets no `SecurityContext`.** It used to skip policies altogether and
     read every row; it now reads none. Set `SecurityContext.Service(projectId)` for work that is
     meant to bypass policies.
-
-  Carrying the requester's identity into a job, and filtering notifications per subscriber, are not
-  part of this release. Until then, export and import a table that has a policy through the query
-  and write APIs with the master secret, or deactivate the policy for the duration.
+  - **A bulk job that was requested before the upgrade** — see the next entry.
+- **A bulk export or import job runs as the caller that requested it.** A job is carried out in the
+  background, after the request that created it has been answered. The caller of that request is
+  stored with the job, and the job reads the table (an export) or writes each row (an import) as
+  that caller. An export therefore holds exactly the rows its requester may read — the rows its
+  `totalRows` counted — and an import writes the rows its requester may write and lists every other
+  row in `errorDetails` (`Row-level security on table … refuses this write`). A job requested with
+  the master secret is exempt from policies, as the request was. Before, a job read and wrote the
+  table past every policy, whoever asked for it. In process the same holds: `StreamExportAsync` and
+  `ProcessImportAsync` work as the `SecurityContext` that was ambient when the job was started, not
+  the one ambient where they are called. A job requested before the upgrade and not yet carried out
+  has no caller stored and runs as nobody: on a table with a policy that compares with the caller
+  its export is empty and every row of its import is refused. Cancel such a job
+  (`POST /api/bulk/jobs/{jobId}/cancel`) and request it again.
+  (Verified-by: NativeRowLevelSecurityTests.An_export_job_reads_the_table_as_the_caller_that_requested_it)
 - **A column a policy reads cannot be deleted or given another type.** PostgreSQL refuses to drop or
   retype a column a policy depends on; the request is answered `400 COLUMN_USED_BY_POLICY`, naming
   the policy. Change the policy's expression or delete the policy first.
@@ -83,7 +93,13 @@
   registers through `AddMorphDbNpgsql` changes nothing; the factory is registered there, next to
   the `NpgsqlDataSource` it opens from. `PostgresDataService`, `PostgresAggregationService` and
   `MorphQueryBuilder` also no longer take an `ISecurityPolicyService` and an
-  `ISecurityContextAccessor`: drop those two arguments.
+  `ISecurityContextAccessor`: drop those two arguments. `PostgresBulkOperationService` gains one:
+  it takes the `ISecurityContextAccessor` after the data service, to store a job's requester and
+  to carry the job out as that caller.
+- **`ISecurityContextAccessor.SetContext` accepts `null`,** which clears the ambient context: what
+  runs next in that flow has no caller. The accessor MorphDB registers already behaved this way. A
+  host that implements the interface itself must accept `null` too — a bulk job that was started
+  where there is no caller puts "no caller" back through it once the job's rows are written.
 - **`ISecurityPolicyService.EvaluatePoliciesAsync` is removed.** It returned a table's policies as a
   SQL condition for the caller to add to a statement, and three reads — listing or querying,
   aggregating, and the single-record read — added it to theirs. PostgreSQL applies the policies to
@@ -94,6 +110,38 @@
   three reads used to fail with an error for a caller that does not bypass row-level security; they
   now return no rows, as every other read of such a table does.
   (Verified-by: NativePolicyProjectionTests.Start_up_closes_a_table_whose_stored_policy_cannot_be_translated)
+
+### Added
+
+- **Policies for writes.** `policyType` takes `Insert`, `Update`, `Delete` and `All` beside
+  `Select`; the four were refused with `400 VALIDATION_ERROR`. Each is enforced by PostgreSQL, as
+  a `Select` policy is, and restricts the command it names — and no other:
+  - **`Insert`** — a row the policy does not admit cannot be created: `403 FORBIDDEN`.
+  - **`Update`** — a row the policy does not admit is not there to be updated, though it can still
+    be read: `404` for an update by id, zero rows affected for a filtered one. And a row cannot be
+    updated *into* one the policy does not admit: `403 FORBIDDEN`.
+  - **`Delete`** — a row the policy does not admit is not there to be deleted: `404`, or zero rows
+    affected.
+  - **`All`** — all three, and it hides the rows it does not admit from every read, as a `Select`
+    policy does.
+
+  Policies of different types on one table hold at once, each for its own command, so a table can
+  let a caller read every row and create or change only its own. A write still returns the row it
+  wrote, so a `Select` policy goes on deciding what any write may leave (see Breaking). In process
+  the answers are `ForbiddenException`, `NotFoundException` from `UpdateAsync`, `false` from
+  `DeleteAsync`, and the affected count of a batch. The master secret is exempt, as from every
+  policy. Three things follow from how PostgreSQL applies a policy and are worth knowing:
+  - An **upsert** answers to both. The row it proposes must pass the `Insert` policy even when the
+    upsert ends up updating an existing row; and if the row it lands on is one the `Update` policy
+    does not admit, the upsert is refused (`403`), where an update by id would have answered `404`.
+  - On a table created with **soft delete** (`systemColumns.softDelete`), deleting a record by id
+    marks the row instead of removing it. A `Delete` policy binds that too, but as a refusal: `403`,
+    where a table without soft delete answers `404`. (An `Update` policy binds it as it binds any
+    update.)
+  - A policy of one type leaves the other commands alone: under an `Insert` policy alone, a caller
+    that may not create a row for someone else may still update an existing row into one.
+
+  (Verified-by: NativeWritePolicyTests.Each_policy_type_restricts_its_own_command_on_every_write_path)
 
 ### Changed
 
@@ -147,6 +195,14 @@
   materialized view dropped and recreated it without the unique index it was created with, so a
   later concurrent refresh failed. The view is replaced in one transaction, index included; if the
   new definition is refused, the old view is still there.
+- **An update that finds no record answers "not found" on every route.** `PATCH
+  /api/data/{table}/{id}` and GraphQL `updateRecord` read the record first and answer not-found
+  when the read finds nothing — but when the update itself then found no row, they answered `400
+  VALIDATION_ERROR`. That took a record deleted between the two steps; with an `Update` policy it is
+  the ordinary answer for a row the caller may read and not change. Both now answer as for a record
+  that does not exist (`404 RECORD_NOT_FOUND`; `errorCode` `NOT_FOUND`). OData `PATCH` answered
+  `400` for any entity that was not there, and now answers `404`, as its `GET` and `DELETE` do. A
+  `finalize` of such a row answers `not_found` as well.
 
 ### Migration
 
@@ -170,10 +226,22 @@ yourself.
 every table that has a stored policy, start-up creates the matching PostgreSQL policies; later
 starts find them in place and change nothing. A stored policy that cannot be translated — one that
 names a column the table no longer has, for instance — does not stop the service and is not left
-unenforced: its table is readable and writable only by the master secret until the policy is
-corrected or deleted, and a warning naming the table, the policy and PostgreSQL's reason is logged
-at every start. Check the log of the first start for such warnings. A stored `All` policy (they can
-no longer be created) is enforced for writes as well as reads.
+unenforced: it admits no row, so what it applies to is refused to everyone but the master secret
+until the policy is corrected or deleted — the whole table, to be read or written, for a `Select`
+or `All` policy; the one command for an `Insert`, `Update` or `Delete` policy — and a warning naming
+the table, the policy and PostgreSQL's reason is logged at every start. Check the log of the first
+start for such warnings.
+
+**Policies for writes that are already stored start to hold.** Versions before 0.17 accepted
+`Insert`, `Update`, `Delete` and `All` policies and enforced none of them on a write; 0.17 and 0.18
+refused new ones and left the stored ones in place. All of them are handed to PostgreSQL on the
+first start with the rest, and from then on they restrict what their type names (see Added). Before
+upgrading, list each table's policies (`GET /api/security/policies/{tableName}`) and delete or
+deactivate any that was never meant to be enforced.
+
+**Bulk jobs.** Start-up adds a `requested_by` column to the two tables that hold bulk jobs; nothing
+has to be run. A job that is still pending when the service is upgraded has no caller stored in it
+and runs as nobody — see Breaking.
 
 **A materialized view over a table that has a policy.** Earlier versions let one be created, and
 its copy was filled past the policy. Start-up drops nothing, but logs a warning for each such pair —
@@ -203,15 +271,24 @@ a superuser, or a role with `BYPASSRLS` — which is the kind of role MorphDB it
   than a data source built per call.
 - On a table with a policy MorphDB sets `ENABLE` and `FORCE ROW LEVEL SECURITY` and creates one
   permissive policy, `morphdb_allow`, and one restrictive policy per stored policy, named
-  `morphdb_p_<policy id>_<hash>`; the hash follows the expression, so a changed policy is a new
-  native policy. These are derived from the stored policies and rebuilt from them at start-up — a
-  change made to them by hand does not last. A policy of your own on the same table, under any other
+  `morphdb_p_<policy id>_<hash>`; the hash follows the command and the expression, so a changed
+  policy is a new native policy. The stored policy's type is the command: `FOR SELECT USING (…)`,
+  `FOR INSERT WITH CHECK (…)`, `FOR UPDATE USING (…) WITH CHECK (…)`, `FOR DELETE USING (…)`, and
+  `FOR ALL USING (…) WITH CHECK (…)`, each with the same expression in every clause it has. A
+  `Delete` policy on a table with soft delete has a second native policy, `FOR UPDATE`, that checks
+  a row left marked as deleted. These are derived from the stored policies and rebuilt from them at
+  start-up — a change made to them by hand does not last. A policy of your own on the same table, under any other
   name, is left alone. The hash is taken over the physical column names: after `RenameColumnAsync`,
   which renames the physical column too, PostgreSQL's policy goes on enforcing unchanged, and the
   next reconcile of the table (its next policy change, or start-up) replaces it with the same policy
   under its new name.
 - The reads that used to add a policy to their own WHERE clause no longer do. PostgreSQL's
   enforcement is the only one, and it is the same for every statement.
+- The two bulk job tables have a `requested_by` column: the security context of the request that
+  created the job — project, user id, role, e-mail, whether it was authenticated, whether it
+  bypasses row-level security, and claims — as JSON, or `NULL` for a job requested without a caller.
+  It is what the job's connections carry while the table is read or written, and nothing else reads
+  it; a job's status and listing do not return it.
 
 ## 0.18.0
 

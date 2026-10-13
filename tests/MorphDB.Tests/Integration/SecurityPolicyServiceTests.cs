@@ -229,30 +229,55 @@ public class SecurityPolicyServiceTests
     }
 
     /// <summary>
-    /// A write policy used to be stored and then consulted by nothing — inserts, updates and deletes
-    /// never read one. A security rule that silently does not apply is refused instead, until writes
-    /// enforce it.
+    /// A policy for writes is stored with its type and enforced by PostgreSQL. Each type used to be
+    /// stored and then consulted by nothing, and after that was refused; what each one restricts is
+    /// measured in <see cref="NativeWritePolicyTests"/>.
     /// </summary>
     [Theory]
     [InlineData(PolicyType.Insert)]
     [InlineData(PolicyType.Update)]
     [InlineData(PolicyType.Delete)]
     [InlineData(PolicyType.All)]
-    public async Task A_policy_for_writes_is_refused_because_no_write_reads_one(PolicyType policyType)
+    public async Task A_policy_for_writes_is_stored_with_its_type(PolicyType policyType)
     {
         var projectId = Guid.NewGuid();
         var tableName = "policy_write_" + Guid.NewGuid().ToString("N")[..8];
         await CreateTableAsync(projectId, tableName);
 
-        var act = () => _policies.CreatePolicyAsync(projectId, new CreatePolicyRequest
+        var created = await _policies.CreatePolicyAsync(projectId, new CreatePolicyRequest
         {
             Name = "writes",
             TableName = tableName,
             PolicyType = policyType,
             Expression = "owner_id IS NOT NULL"
+        }, TestContext.Current.CancellationToken);
+
+        created.PolicyType.Should().Be(policyType);
+        (await _policies.GetPoliciesByTableNameAsync(projectId, tableName, TestContext.Current.CancellationToken))
+            .Should().ContainSingle().Which.PolicyType.Should().Be(policyType);
+    }
+
+    /// <summary>
+    /// The type travels as a name or as a number, and a number need not be a type. One that is not
+    /// is refused, not stored as a policy of a type nothing enforces.
+    /// </summary>
+    [Fact]
+    public async Task A_policy_of_a_type_that_does_not_exist_is_refused()
+    {
+        var projectId = Guid.NewGuid();
+        var tableName = "policy_type_" + Guid.NewGuid().ToString("N")[..8];
+        var table = await CreateTableAsync(projectId, tableName);
+
+        var act = () => _policies.CreatePolicyAsync(projectId, new CreatePolicyRequest
+        {
+            Name = "no_such_type",
+            TableName = tableName,
+            PolicyType = (PolicyType)9,
+            Expression = "owner_id IS NOT NULL"
         });
 
         (await act.Should().ThrowAsync<ValidationException>()).Which.ErrorCode.Should().Be("VALIDATION_ERROR");
+        (await _rls.StoredPolicyCountAsync(table)).Should().Be(0);
     }
 
     /// <summary>

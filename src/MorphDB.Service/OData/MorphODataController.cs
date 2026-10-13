@@ -242,6 +242,11 @@ public sealed partial class MorphODataController : ControllerBase
             var writeResult = await _writePipeline.UpdateAsync(
                 projectId, tableMetadata, key, data, existing, cancellationToken: cancellationToken);
 
+            if (ErrorHandling.WriteFailure.IsNotFound(writeResult))
+            {
+                return NotFound(new { error = $"Entity with key '{key}' not found in '{entitySet}'." });
+            }
+
             if (!writeResult.Success)
             {
                 return BadRequest(new { error = string.Join("; ", writeResult.Errors.Select(e => e.Message)) });
@@ -378,6 +383,10 @@ public sealed partial class MorphODataController : ControllerBase
                         ? JsonElementToDictionary(request.Body.Value)
                         : new Dictionary<string, object?>();
                     var updateWriteResult = await _writePipeline.UpdateAsync(projectId, tableMetadata, request.Key.Value, updateData, existing, cancellationToken: cancellationToken);
+                    if (ErrorHandling.WriteFailure.IsNotFound(updateWriteResult))
+                    {
+                        return new ODataBatchResponseItem { Id = request.Id, Status = 404, Error = "Entity not found." };
+                    }
                     if (!updateWriteResult.Success)
                     {
                         return new ODataBatchResponseItem { Id = request.Id, Status = 400, Error = string.Join("; ", updateWriteResult.Errors.Select(e => e.Message)) };

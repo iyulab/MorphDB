@@ -847,9 +847,12 @@ is diagnosable without re-sending the file. `errorDetailsTruncated` is `true` on
 exceeds 100. `errorMessage` (singular) is unrelated: it is set only when the whole job died from an
 unhandled exception, not on a per-row basis.
 
-A job runs in the background, without the caller that requested it. On a table with a
-[row-level security policy](#row-level-security-policies) that compares with the caller, an export
-therefore carries no rows and an import refuses every row — see "Work done without a caller" there.
+A job runs in the background, as the caller that requested it. On a table with a
+[row-level security policy](#row-level-security-policies), an export therefore carries the rows its
+requester may read — the rows `totalRows` counted when it was requested — and an import writes the
+rows its requester may write and lists each of the others in `errorDetails`. A job requested with
+the master secret is exempt from policies. The file an export stores is the table as its requester
+sees it; a download serves that file as it was stored.
 
 ---
 
@@ -1177,10 +1180,10 @@ encryption) refuses to start and says so.
 
 ## Row-Level Security Policies
 
-A policy decides which of a table's rows a caller may read. PostgreSQL enforces it: each stored
-policy is a native row-level security policy on the table, so it holds for every statement that
-touches the table, whichever route it came in through. Policies on one table are combined with
-`AND`, so adding one can only ever restrict further.
+A policy decides which of a table's rows a caller may read, create, change or delete. PostgreSQL
+enforces it: each stored policy is a native row-level security policy on the table, so it holds for
+every statement that touches the table, whichever route it came in through. Policies on one table
+are combined with `AND`, so adding one can only ever restrict further.
 
 ```yaml
 GET    /api/security/policies/{tableName}      # Policies applying to a table
@@ -1198,9 +1201,21 @@ DELETE /api/security/policies/{policyId}       # Delete a policy
 }
 ```
 
-`policyType` is `Select` — the only type that can be created. `Insert`, `Update`, `Delete` and `All`
-are refused with `400 VALIDATION_ERROR`; what a write may do follows from what its caller may read
-(see below). (The number `0` is still read for `Select`; responses carry the name.)
+`policyType` names the command the policy restricts. A row the policy "admits" is one its
+expression is true for:
+
+| `policyType` | Restricts | A row the policy does not admit |
+|---|---|---|
+| `Select` | reading | is hidden from every read; and no write may leave one (see below) |
+| `Insert` | creating a row | cannot be created: `403 FORBIDDEN` |
+| `Update` | changing a row | is not there to be updated — `404`, or zero rows affected — though it can be read; and no update may turn a row into one: `403 FORBIDDEN` |
+| `Delete` | deleting a row | is not there to be deleted: `404`, or zero rows affected |
+| `All` | all four | everything above |
+
+A policy restricts its own command and no other: with an `Insert` policy alone, every row can still
+be read, changed and deleted. Give a table one policy per command it should restrict — they hold at
+once. (The numbers `0`–`4` are still read for the five names, in that order; responses carry the
+name. Anything else is refused with `400 VALIDATION_ERROR`.)
 
 The expression is a SQL predicate over the table's own columns, written in the names the table was
 declared with (`status`, or `"status"`), with the placeholders `{{user_id}}`, `{{email}}`,
@@ -1219,14 +1234,29 @@ keeps reading as it did. The stored policy and PostgreSQL's are written together
 moment at which one exists without the other.
 Deactivating a policy or deleting it removes it from PostgreSQL too.
 
-**What a policy binds.** Every read of the table: listing and querying, aggregating, a single
-record (`404`, or `null` in GraphQL, for a hidden row — as for a row that does not exist), GraphQL
-and OData, hierarchy routes, views, bulk exports, and the rows a lookup or rollup on another table
-reads through (a lookup of a hidden row reads `null`; a rollup aggregates only what the caller may
-read). And every write: an update or delete of a hidden row finds no row (`404`, or zero rows
-affected), and a write is refused with `403 FORBIDDEN` when its caller could not read the row it
-would leave — inserting a row the policy hides from the caller, updating a row so that it becomes
-hidden, or an upsert that lands on a hidden row. Only the master secret is exempt.
+**What a `Select` policy binds.** Every read of the table: listing and querying, aggregating, a
+single record (`404`, or `null` in GraphQL, for a hidden row — as for a row that does not exist),
+GraphQL and OData, hierarchy routes, views, bulk exports, and the rows a lookup or rollup on another
+table reads through (a lookup of a hidden row reads `null`; a rollup aggregates only what the caller
+may read). And every write, because a write returns the row it wrote: an update or delete of a
+hidden row finds no row (`404`, or zero rows affected), and a write is refused with `403 FORBIDDEN`
+when its caller could not read the row it would leave — inserting a row the policy hides from the
+caller, updating a row so that it becomes hidden, or an upsert that lands on a hidden row. Only the
+master secret is exempt.
+
+**What a policy for writes binds.** Every route that writes: the data routes, batch, GraphQL, OData,
+a transaction, `finalize`, and each row of a bulk import. A record the caller can read and an
+`Update` policy does not admit is answered as a record that does not exist by every one of them.
+Three cases follow PostgreSQL's own rules rather than the table above:
+
+- An upsert is an insert that may become an update, and answers to both policies. The row it
+  proposes must be admitted by the `Insert` policy even if the upsert ends up updating; and if the
+  row it lands on is not admitted by the `Update` policy the upsert is refused with `403`, where an
+  update by id would have answered `404`.
+- On a table created with `systemColumns.softDelete`, `DELETE /api/data/{table}/{id}` marks the row
+  instead of removing it. A `Delete` policy binds that too, but answers `403` where a table without
+  soft delete answers `404`; an `Update` policy binds it as it binds any other update.
+- A `Select` policy still applies to the row a write returns, whatever other policies the table has.
 
 **A policy and a materialized view do not go together.** A materialized view is a stored copy of its
 query's result, filled when it is created or refreshed, and PostgreSQL reads the copy without the
@@ -1239,13 +1269,14 @@ that already holds such a pair keeps both, but reading the view is answered with
 until the view is deleted or the policy is deleted or deactivated; the service log names each pair
 at every start.
 
-**Work done without a caller.** Bulk import and export jobs, and the read that fills a change
-notification or a webhook delivery, run in the background with no caller. Under a policy that
-compares with the caller they read no row and can write none: an export of such a table is empty
-(the `totalRows` reported when it was requested was counted as the requester), every row of an
-import is refused and listed in `errorDetails`, and a change event carries the table and record id
-with an empty `data`. Carrying the requester's identity into a job and filtering notifications per
-subscriber are not available.
+**Work done in the background.** A bulk import or export job runs as the caller that requested it:
+that caller is stored with the job, and the job reads the table or writes each row as that caller,
+whenever it is carried out. A job stored by a version that did not record its requester runs as
+nobody — under a policy that compares with the caller its export is empty and every row of its
+import is refused and listed in `errorDetails`; cancel it and request it again. The read that fills
+a change notification or a webhook delivery has no caller at all. Under a policy that compares with
+the caller, a change event therefore carries the table and the record id with an empty `data`, for
+every subscriber alike: notifications are not filtered per subscriber.
 
 **The table under a policy.** A column a policy reads cannot be deleted or given another type while
 the policy reads it; the request is refused with `400 COLUMN_USED_BY_POLICY`, naming the policy.
@@ -1265,9 +1296,11 @@ currently no way for a caller to assert an end-user identity to this service.
 **The expression is a predicate, not a statement.** A statement separator, a comment opener, an
 unbalanced parenthesis or an unterminated quote is refused with `INVALID_EXPRESSION`. A policy
 stored by an earlier version that fails that check, or that PostgreSQL can no longer accept, is not
-quietly dropped: its table is closed to every caller but the master secret until the policy is
-corrected or deleted, and the service log names the table, the policy and the reason at each start
-— a security rule that silently stops applying is worse than a table that stops answering.
+quietly dropped: it admits no row, so what it restricts — the whole table for a `Select` or `All`
+policy, the one command for the others — is closed to every caller but the master secret until the
+policy is corrected or deleted, and the service log names the table, the policy and the reason at
+each start — a security rule that silently stops applying is worse than a table that stops
+answering.
 
 ---
 
@@ -1393,7 +1426,7 @@ fixed string — internal exception text never reaches the wire) and retrying ma
 | 404 | `JOB_NOT_FOUND` | The bulk job does not exist |
 | 404 | `AUDIT_LOG_NOT_FOUND` | The audit log entry does not exist |
 | 401 | `UNAUTHENTICATED` | Authentication is enforced and the request presented no valid secret — send `Authorization: Bearer <secret>`. Only answered when a master secret is injected; see [Connection secrets](#connection-secrets) |
-| 403 | `FORBIDDEN` | The secret is recognized but may not do this — it is confined to another project, or the route requires the master secret. Also a write a row-level security policy refuses: its caller could not read the row it would leave |
+| 403 | `FORBIDDEN` | The secret is recognized but may not do this — it is confined to another project, or the route requires the master secret. Also a write a row-level security policy refuses: a policy of the table does not admit the row the write would create or leave |
 | 404 | `NOT_FOUND` | Another addressable resource (entity set, policy…) does not exist |
 | 409 | `DUPLICATE_NAME` | Creating a table/column under a name that is taken |
 | 409 | `DUPLICATE_SLUG` | Creating a project under a slug that is taken |

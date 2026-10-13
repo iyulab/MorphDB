@@ -16,15 +16,19 @@ namespace MorphDB.Npgsql.Security;
 
 /// <summary>
 /// Projects the policies stored in <c>morphdb._morph_security_policies</c> onto PostgreSQL's own
-/// row-level security, so the database refuses a hidden row to every statement — whichever
-/// component built the SQL. The stored rows stay the source of truth; the native policies are
-/// derived from them and can always be rebuilt.
+/// row-level security, so the database refuses a hidden row to every statement — and a write a
+/// policy does not allow — whichever component built the SQL. The stored rows stay the source of
+/// truth; the native policies are derived from them and can always be rebuilt.
 /// </summary>
 /// <remarks>
-/// <para>A table with at least one active <c>Select</c> or <c>All</c> policy gets row-level security
-/// enabled and forced (the service role owns its tables, and an owner is exempt unless forced), one
-/// permissive policy that admits everything, and one restrictive policy per stored policy. Stored
-/// policies therefore combine with <c>AND</c>, as they always have.</para>
+/// <para>A table with at least one active policy gets row-level security enabled and forced (the
+/// service role owns its tables, and an owner is exempt unless forced), one permissive policy that
+/// admits everything, and one restrictive policy per stored policy. Stored policies therefore
+/// combine with <c>AND</c>, as they always have.</para>
+/// <para>A stored policy's type is the command its native policy is for, and decides which rows its
+/// expression is asked about: the rows a statement finds (<c>USING</c> — a row that fails is not
+/// there for the statement), the rows it would leave (<c>WITH CHECK</c> — a row that fails refuses
+/// the statement), or both. See <see cref="NativeFor"/>.</para>
 /// <para>A placeholder is read from the session settings <see cref="MorphConnectionFactory"/> writes
 /// on every connection. A setting is text, and a policy compares it with columns of any type, so each
 /// placeholder occurrence is cast to the type PostgreSQL itself infers for a parameter in that
@@ -59,8 +63,11 @@ internal sealed partial class NativePolicyProjector
     /// <summary>A stored policy, as much of it as the projection reads.</summary>
     internal sealed record StoredPolicy(Guid Id, string Name, PolicyType PolicyType, string Expression, bool IsActive);
 
-    /// <summary>A native policy a table is expected to carry.</summary>
-    internal sealed record NativePolicy(string Name, string Command, string Using);
+    /// <summary>
+    /// A native policy a table is expected to carry: the command it is for, and the clauses
+    /// PostgreSQL accepts for that command — <c>null</c> for one it does not take.
+    /// </summary>
+    internal sealed record NativePolicy(string Name, string Command, string? Using, string? Check);
 
     /// <summary>
     /// Brings the native policies of every table that has a stored policy row in line with those
@@ -258,8 +265,8 @@ internal sealed partial class NativePolicyProjector
     }
 
     /// <summary>
-    /// Works out the native policies <paramref name="policies"/> call for. Only active
-    /// <c>Select</c> and <c>All</c> policies are projected — the types a read has always applied.
+    /// Works out the native policies <paramref name="policies"/> call for: every active policy is
+    /// projected, whatever its type.
     /// </summary>
     /// <remarks>
     /// <para><paramref name="strictPolicyId"/> is the policy a caller is writing right now. Its
@@ -279,34 +286,74 @@ internal sealed partial class NativePolicyProjector
 
         foreach (var policy in policies)
         {
-            var projected = policy.IsActive && policy.PolicyType is PolicyType.Select or PolicyType.All;
+            var projected = policy.IsActive;
             var strict = policy.Id == strictPolicyId;
             if (!projected && !strict)
             {
                 continue;
             }
 
-            string usingExpression;
+            string expression;
             try
             {
                 var translated = await TranslateAsync(connection, policy.Expression, table, cancellationToken);
-                usingExpression = $"CASE WHEN {BypassIsOn} THEN true ELSE ({translated}) END";
+                expression = $"CASE WHEN {BypassIsOn} THEN true ELSE ({translated}) END";
             }
             catch (SchemaException ex) when (!strict)
             {
                 LogUntranslatablePolicy(_logger, table.LogicalName, policy.Name, ex.Message);
-                usingExpression = BypassIsOn;
+                expression = BypassIsOn;
             }
 
             if (projected)
             {
-                var command = policy.PolicyType == PolicyType.All ? "ALL" : "SELECT";
-                plan.Add(new NativePolicy(NameFor(policy.Id, command, usingExpression), command, usingExpression));
+                plan.AddRange(NativeFor(table, policy, expression));
             }
         }
 
         return plan;
     }
+
+    /// <summary>
+    /// The native policies one stored policy stands for. <paramref name="expression"/> is its
+    /// translated predicate, already exempting a connection that bypasses row-level security.
+    /// </summary>
+    /// <remarks>
+    /// <para>PostgreSQL takes <c>USING</c> for the rows a command finds and <c>WITH CHECK</c> for
+    /// the rows it leaves, and not every command has both: an <c>INSERT</c> finds no row, and a
+    /// <c>SELECT</c> or <c>DELETE</c> leaves none. An <c>Update</c> policy is asked both ways — a row
+    /// it does not admit cannot be updated, and a row cannot be updated into one it does not
+    /// admit.</para>
+    /// <para>A table with soft delete does not delete a record by id: it marks the row, with an
+    /// <c>UPDATE</c>, which a policy for <c>DELETE</c> never sees. So on such a table a
+    /// <c>Delete</c> policy also refuses an update that leaves a row marked deleted unless the
+    /// policy admits that row. PostgreSQL cannot be asked about the row as it was before an update
+    /// and as it is after in one expression, so this is a check on the row the update leaves — the
+    /// statement is refused, where a <c>DELETE</c> would have found no row.</para>
+    /// </remarks>
+    private static IEnumerable<NativePolicy> NativeFor(TableMetadata table, StoredPolicy policy, string expression)
+    {
+        yield return policy.PolicyType switch
+        {
+            PolicyType.Select => Native(policy.Id, "SELECT", expression, check: null),
+            PolicyType.Insert => Native(policy.Id, "INSERT", usingExpression: null, expression),
+            PolicyType.Update => Native(policy.Id, "UPDATE", expression, expression),
+            PolicyType.Delete => Native(policy.Id, "DELETE", expression, check: null),
+
+            // All — and a type this version does not know, which restricts every command rather
+            // than none.
+            _ => Native(policy.Id, "ALL", expression, expression),
+        };
+
+        if (policy.PolicyType == PolicyType.Delete && table.SoftDeleteEnabled)
+        {
+            var deletedAt = DdlBuilder.QuoteIdentifier(SystemColumns.DeletedAt);
+            yield return Native(policy.Id, "UPDATE", "true", $"{deletedAt} IS NULL OR ({expression})");
+        }
+    }
+
+    private static NativePolicy Native(Guid policyId, string command, string? usingExpression, string? check) =>
+        new(NameFor(policyId, command, usingExpression, check), command, usingExpression, check);
 
     /// <summary>
     /// Issues the DDL that takes the table from the native policies it has to the ones in
@@ -366,9 +413,12 @@ internal sealed partial class NativePolicyProjector
 
             foreach (var policy in plan.Where(p => !existing.Contains(p.Name)).DistinctBy(p => p.Name))
             {
+                var clauses =
+                    (policy.Using is null ? "" : $" USING ({policy.Using})") +
+                    (policy.Check is null ? "" : $" WITH CHECK ({policy.Check})");
                 statements.Add(
                     $"CREATE POLICY {DdlBuilder.QuoteIdentifier(policy.Name)} ON {tableName} " +
-                    $"AS RESTRICTIVE FOR {policy.Command} USING ({policy.Using})");
+                    $"AS RESTRICTIVE FOR {policy.Command}{clauses}");
             }
 
             var expected = plan.Select(p => p.Name).ToHashSet(StringComparer.Ordinal);
@@ -641,13 +691,14 @@ internal sealed partial class NativePolicyProjector
     }
 
     /// <summary>
-    /// Deterministic, and different whenever what PostgreSQL is asked to enforce differs — so a
-    /// changed expression is a policy to create and a policy to drop, and an unchanged one is
-    /// neither.
+    /// Deterministic, and different whenever what PostgreSQL is asked to enforce differs — the
+    /// command, either clause, or which clauses there are — so a changed policy is a policy to
+    /// create and a policy to drop, and an unchanged one is neither.
     /// </summary>
-    private static string NameFor(Guid policyId, string command, string usingExpression)
+    private static string NameFor(Guid policyId, string command, string? usingExpression, string? check)
     {
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(command + "\n" + usingExpression));
+        var enforced = command + "\nUSING " + usingExpression + "\nWITH CHECK " + check;
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(enforced));
         return $"{PolicyNamePrefix}{policyId:N}_{Convert.ToHexStringLower(hash, 0, 4)}";
     }
 
@@ -738,8 +789,9 @@ internal sealed partial class NativePolicyProjector
 
     [LoggerMessage(
         LogLevel.Warning,
-        "Row-level security policy '{Policy}' on table '{Table}' cannot be enforced as written, so the table is readable " +
-        "only by connections that bypass row-level security until the policy is corrected or removed: {Reason}")]
+        "Row-level security policy '{Policy}' on table '{Table}' cannot be enforced as written, so it admits no row: what " +
+        "the policy applies to is refused to every connection that does not bypass row-level security, until the policy " +
+        "is corrected or removed: {Reason}")]
     private static partial void LogUntranslatablePolicy(ILogger logger, string table, string policy, string reason);
 
     [LoggerMessage(

@@ -42,6 +42,9 @@ public class NativeRowLevelSecurityTests
         public SecurityContext B => User(ProjectId, UserB);
         public SecurityContext Bypass => SecurityContext.Service(ProjectId);
 
+        public string TitleOf(Guid id) =>
+            id == RootA ? "root-a" : id == ChildA ? "child-a" : id == RootB ? "root-b" : "child-b";
+
         /// <summary>Each caller, and the rows it is allowed to read.</summary>
         public IEnumerable<(string Who, SecurityContext? Caller, Guid[] Visible)> Callers =>
         [
@@ -441,40 +444,224 @@ public class NativeRowLevelSecurityTests
         await _rls.Policies.DeletePolicyAsync(table.ProjectId, policyId, ct);
     }
 
+    // ---- bulk jobs: requested by one caller, carried out later by a service that has none -------
+
+    private const string ExportJobs = "_morph_export_jobs";
+    private const string ImportJobs = "_morph_import_jobs";
+
+    /// <summary>Requests an export of the titles alone, so each line of the file is one row's title.</summary>
+    private Task<BulkExportJob> RequestExportAsync(Documents docs, SecurityContext? requester) =>
+        As(requester, () => _rls.Bulk.StartCsvExportAsync(
+            docs.ProjectId, docs.Name, new CsvExportOptions { Columns = ["title"] }));
+
+    private async Task<BulkImportJob> RequestImportAsync(
+        Documents docs, SecurityContext? requester, params (string Title, string Owner)[] rows)
+    {
+        var json = "[" + string.Join(",", rows.Select(r => $$"""{"title":"{{r.Title}}","owner":"{{r.Owner}}"}""")) + "]";
+        using var payload = new MemoryStream(Encoding.UTF8.GetBytes(json));
+        return await As(requester, () => _rls.Bulk.StartJsonImportAsync(docs.ProjectId, docs.Name, payload));
+    }
+
+    /// <summary>Every title the table holds, read past the policy.</summary>
+    private async Task<List<string>> StoredTitlesAsync(Documents docs)
+    {
+        var rows = await As(docs.Bypass, () => _rls.Data.Query(docs.ProjectId).From(docs.Name).SelectAll().ToListAsync());
+        return rows.Select(r => (string)r["title"]!).ToList();
+    }
+
     /// <summary>
-    /// Starting an export counts the rows as the caller asking; the export itself is written by a
-    /// background job, which has no caller. Both read the table with statements of their own.
+    /// The request counts the table's rows as its caller. The job is carried out later by the job
+    /// processor, which has no caller — and reads the table as the caller that requested it.
     /// </summary>
     [Fact]
-    public async Task A_bulk_export_counts_and_writes_only_the_rows_its_reader_may_read()
+    public async Task An_export_job_reads_the_table_as_the_caller_that_requested_it()
     {
         var docs = await CreateDocumentsWithOwnerPolicyAsync();
 
         foreach (var (who, caller, visible) in docs.Callers)
         {
-            var job = await As(caller, () => _rls.Bulk.StartCsvExportAsync(docs.ProjectId, docs.Name));
-            job.TotalRows.Should().Be(visible.Length, $"{who} starts the export");
+            var job = await RequestExportAsync(docs, caller);
+            job.TotalRows.Should().Be(visible.Length, $"{who} requests the export");
 
-            var exported = await As(caller, () => ExportedTitlesAsync(job.JobId));
-            exported.Should().HaveCount(visible.Length, $"{who} streams the export");
+            var exported = await As(null, () => _rls.RunExportJobAsync(job));
+            exported.Should().BeEquivalentTo(visible.Select(docs.TitleOf), $"{who} requested the export");
         }
-
-        // What the service does: the request counts as its caller, the job writes as nobody.
-        var requested = await As(docs.A, () => _rls.Bulk.StartCsvExportAsync(docs.ProjectId, docs.Name));
-        requested.TotalRows.Should().Be(2);
-        (await As(null, () => ExportedTitlesAsync(requested.JobId))).Should().BeEmpty(
-            "a job has no caller, and a policy that compares with the caller admits no row to it");
     }
 
-    private async Task<List<string>> ExportedTitlesAsync(Guid jobId)
+    /// <summary>
+    /// Who carries a job out is not who it runs as: not a caller with rows of its own, and not one
+    /// that bypasses every policy. A request that reaches the service's own streaming of a job is in
+    /// the same position as the processor.
+    /// </summary>
+    [Fact]
+    public async Task An_export_job_does_not_read_the_table_as_whoever_carries_it_out()
     {
-        using var output = new MemoryStream();
-        await _rls.Bulk.StreamExportAsync(jobId, output);
+        var docs = await CreateDocumentsWithOwnerPolicyAsync();
+        var executors = new (string Who, SecurityContext? Executor)[]
+        {
+            ("B", docs.B),
+            ("bypass", docs.Bypass),
+            ("no caller", null),
+        };
 
-        return Encoding.UTF8.GetString(output.ToArray())
-            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Skip(1) // header
-            .ToList();
+        foreach (var (who, executor) in executors)
+        {
+            var job = await RequestExportAsync(docs, docs.A);
+            (await As(executor, () => _rls.RunExportJobAsync(job)))
+                .Should().BeEquivalentTo(["root-a", "child-a"], $"A requested it and {who} carried it out");
+
+            var streamed = await RequestExportAsync(docs, docs.A);
+            using var output = new MemoryStream();
+            await As(executor, () => _rls.Bulk.StreamExportAsync(streamed.JobId, output));
+            Encoding.UTF8.GetString(output.ToArray()).Should().Contain("root-a").And.Contain("child-a")
+                .And.NotContain("root-b").And.NotContain("child-b", $"A requested it and {who} streamed it");
+        }
+    }
+
+    /// <summary>
+    /// A job whose row holds no security context — requested without a caller, or stored by a
+    /// version that did not record one — runs as nobody, whoever carries it out. A caller is not
+    /// guessed for it.
+    /// </summary>
+    [Fact]
+    public async Task An_export_job_whose_row_holds_no_caller_reads_the_table_as_nobody()
+    {
+        var docs = await CreateDocumentsWithOwnerPolicyAsync();
+
+        var requestedByNobody = await RequestExportAsync(docs, null);
+        (await _rls.StoredRequesterAsync(ExportJobs, requestedByNobody.JobId)).Should().BeNull();
+        (await As(docs.Bypass, () => _rls.RunExportJobAsync(requestedByNobody))).Should().BeEmpty();
+
+        var storedEarlier = await RequestExportAsync(docs, docs.A);
+        (await _rls.StoredRequesterAsync(ExportJobs, storedEarlier.JobId)).Should().Contain(UserA);
+        await _rls.ForgetRequesterAsync(ExportJobs, storedEarlier.JobId);
+        (await As(null, () => _rls.RunExportJobAsync(storedEarlier))).Should().BeEmpty();
+        (await As(docs.Bypass, () => _rls.RunExportJobAsync(storedEarlier))).Should().BeEmpty(
+            "the row holds no caller, and the one carrying it out is not borrowed");
+    }
+
+    /// <summary>
+    /// What is stored is the caller PostgreSQL saw: every setting a policy can compare with, and
+    /// whether the caller bypasses policies — nothing else of the context.
+    /// </summary>
+    [Fact]
+    public async Task A_job_stores_the_whole_caller_a_policy_can_compare_with()
+    {
+        var table = await _rls.CreateDocumentsAsync(Guid.NewGuid());
+        await _rls.SeedAsync(table, new Dictionary<string, object?> { ["title"] = "s", ["owner"] = UserA, ["department"] = "sales" });
+        await _rls.SeedAsync(table, new Dictionary<string, object?> { ["title"] = "e", ["owner"] = UserA, ["department"] = "engineering" });
+        await _rls.SeedAsync(table, new Dictionary<string, object?> { ["title"] = "x", ["owner"] = UserB, ["department"] = "sales" });
+        await _rls.CreatePolicyAsync(
+            table,
+            "owner = {{user_id}} AND department = {{claims.department}} AND {{role}} = 'analyst' " +
+            "AND {{email}} = 'a@example.test' AND {{is_authenticated}} AND {{project_id}} = project_id");
+
+        var requester = User(table.ProjectId, UserA);
+        requester.Role = "analyst";
+        requester.Email = "a@example.test";
+        requester.Claims["department"] = "sales";
+        requester.ConfinedToProjectId = table.ProjectId;
+
+        var job = await As(requester, () => _rls.Bulk.StartCsvExportAsync(
+            table.ProjectId, table.LogicalName, new CsvExportOptions { Columns = ["title"] }));
+
+        (await As(null, () => _rls.RunExportJobAsync(job))).Should().Equal("s");
+        (await _rls.StoredRequesterAsync(ExportJobs, job.JobId)).Should().NotContain("onfined");
+    }
+
+    /// <summary>
+    /// An import job writes each row as the caller that requested it. B's row stands between two of
+    /// A's: the caller is still A for the row after one that was refused, and after the processor
+    /// has been handed each row's result.
+    /// </summary>
+    [Fact]
+    public async Task An_import_job_writes_each_row_as_the_caller_that_requested_it()
+    {
+        var docs = await CreateDocumentsWithOwnerPolicyAsync();
+        var job = await RequestImportAsync(docs, docs.A, ("mine-1", UserA), ("theirs", UserB), ("mine-2", UserA));
+
+        var done = await As(null, () => _rls.RunImportJobAsync(job));
+
+        done.Should().BeEquivalentTo(new { SuccessCount = 2L, ErrorCount = 1L });
+        var refused = done.ErrorDetails.Should().ContainSingle().Which;
+        refused.RowNumber.Should().Be(2);
+        refused.Error.Should().Contain("Row-level security");
+        (await StoredTitlesAsync(docs)).Should().BeEquivalentTo(
+            ["root-a", "child-a", "root-b", "child-b", "mine-1", "mine-2"]);
+
+        // Requested by a caller that bypasses policies, every row is written.
+        var unrestricted = await RequestImportAsync(docs, docs.Bypass, ("any-1", UserA), ("any-2", UserB));
+        (await As(null, () => _rls.RunImportJobAsync(unrestricted)))
+            .Should().BeEquivalentTo(new { SuccessCount = 2L, ErrorCount = 0L });
+        (await StoredTitlesAsync(docs)).Should().Contain(["any-1", "any-2"]);
+    }
+
+    /// <summary>
+    /// An import job whose row holds no security context writes as nobody: under a policy that
+    /// compares with the caller every row is refused, and the job says why for each.
+    /// </summary>
+    [Fact]
+    public async Task An_import_job_whose_row_holds_no_caller_has_every_row_refused()
+    {
+        var docs = await CreateDocumentsWithOwnerPolicyAsync();
+
+        var requestedByNobody = await RequestImportAsync(docs, null, ("orphan-1", UserA), ("orphan-2", UserA));
+        (await _rls.StoredRequesterAsync(ImportJobs, requestedByNobody.JobId)).Should().BeNull();
+
+        var storedEarlier = await RequestImportAsync(docs, docs.A, ("late-1", UserA), ("late-2", UserA));
+        await _rls.ForgetRequesterAsync(ImportJobs, storedEarlier.JobId);
+
+        foreach (var job in new[] { requestedByNobody, storedEarlier })
+        {
+            // Carried out by a caller that could write the rows itself: it is not borrowed.
+            var done = await As(docs.Bypass, () => _rls.RunImportJobAsync(job));
+
+            done.Should().BeEquivalentTo(new { SuccessCount = 0L, ErrorCount = 2L });
+            done.ErrorDetails.Should().HaveCount(2).And.OnlyContain(e => e.Error.Contains("Row-level security"));
+        }
+
+        (await StoredTitlesAsync(docs)).Should().HaveCount(4, "nothing was imported");
+    }
+
+    /// <summary>
+    /// The processor carries out one job after another in one flow. Each runs as its own requester,
+    /// the next does not inherit the last one's, and the flow is left with the caller it had — which
+    /// the service puts back itself rather than leaving to how an asynchronous call happens to flow.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Jobs_carried_out_back_to_back_each_run_as_their_own_requester_and_leave_the_flow_as_it_was(
+        bool carriedOutByACaller)
+    {
+        var docs = await CreateDocumentsWithOwnerPolicyAsync();
+        var executor = carriedOutByACaller ? User(docs.ProjectId, "the-executor") : null;
+
+        var exportForA = await RequestExportAsync(docs, docs.A);
+        var exportForB = await RequestExportAsync(docs, docs.B);
+        var importForA = await RequestImportAsync(docs, docs.A, ("mine", UserA), ("theirs", UserB));
+        var exportForNobody = await RequestExportAsync(docs, null);
+
+        await As(executor, async () =>
+        {
+            (await _rls.RunExportJobAsync(exportForA)).Should().BeEquivalentTo(["root-a", "child-a"]);
+            ReferenceEquals(Ambient, executor).Should().BeTrue("the flow has the caller it had before the job");
+
+            (await _rls.RunExportJobAsync(exportForB)).Should().BeEquivalentTo(["root-b", "child-b"]);
+            ReferenceEquals(Ambient, executor).Should().BeTrue();
+
+            (await _rls.RunImportJobAsync(importForA)).Should().BeEquivalentTo(new { SuccessCount = 1L, ErrorCount = 1L });
+            ReferenceEquals(Ambient, executor).Should().BeTrue();
+
+            (await _rls.RunExportJobAsync(exportForNobody)).Should().BeEmpty("it inherits neither A nor the executor");
+            ReferenceEquals(Ambient, executor).Should().BeTrue();
+        });
+
+        // In order: each export once, and the import once for each of its two rows. Every context
+        // the service set is followed by its putting back the one that was there.
+        var changes = _rls.BulkCallers.Changes;
+        changes.Where((_, i) => i % 2 == 0).Select(c => c?.UserId).Should().Equal(UserA, UserB, UserA, UserA, null);
+        changes.Where((_, i) => i % 2 == 1).Should().HaveCount(5).And.OnlyContain(c => ReferenceEquals(c, executor));
     }
 
     /// <summary>
@@ -729,37 +916,6 @@ public class NativeRowLevelSecurityTests
         (await onHidden.Should().ThrowAsync<ValidationException>()).Which.Message.Should().Contain("does not exist");
 
         await RemarkOnAsync(docs.Bypass, docs.RootB);
-    }
-
-    /// <summary>
-    /// A bulk import is carried out by a background job, which has no caller: under a policy that
-    /// compares with the caller, every row is refused, and the job says why for each.
-    /// </summary>
-    [Fact]
-    public async Task A_bulk_import_job_cannot_write_rows_it_could_not_read()
-    {
-        var docs = await CreateDocumentsWithOwnerPolicyAsync();
-        using var payload = new MemoryStream(Encoding.UTF8.GetBytes(
-            $$"""[{"title":"imported-1","owner":"{{UserA}}"},{"title":"imported-2","owner":"{{UserA}}"}]"""));
-
-        var job = await As(docs.A, () => _rls.Bulk.StartJsonImportAsync(docs.ProjectId, docs.Name, payload));
-
-        var results = await As(null, async () =>
-        {
-            var rows = new List<ImportRowResult>();
-            await foreach (var row in _rls.Bulk.ProcessImportAsync(job.JobId))
-            {
-                rows.Add(row);
-            }
-
-            return rows;
-        });
-
-        results.Should().HaveCount(2);
-        results.Should().OnlyContain(r => !r.Success && r.Error!.Contains("Row-level security"));
-
-        var stored = await As(docs.Bypass, () => _rls.Data.Query(docs.ProjectId).From(docs.Name).CountAsync());
-        stored.Should().Be(4, "nothing was imported");
     }
 
     // ---- what a policy may compare with --------------------------------------------------------

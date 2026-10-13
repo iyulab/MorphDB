@@ -298,6 +298,29 @@ public class GlobalSchemaMigrationTests
         return names;
     }
 
+    /// <summary>
+    /// A bulk job's row holds the security context of the caller that requested it. The job tables
+    /// of a database an earlier version created have no column for it, and CREATE TABLE IF NOT
+    /// EXISTS adds none — every request for a job would fail on the missing column.
+    /// </summary>
+    [Fact]
+    public async Task Bootstrapping_adds_the_requester_column_to_job_tables_an_older_version_created()
+    {
+        await using var db = await CleanDatabase.EmptyAsync("morphdb_legacy_job_requester");
+        await EnsureGlobalSchemaAsync(db);
+        await db.ExecuteAsync(
+            """
+            ALTER TABLE morphdb._morph_import_jobs DROP COLUMN requested_by;
+            ALTER TABLE morphdb._morph_export_jobs DROP COLUMN requested_by;
+            """);
+
+        await EnsureGlobalSchemaAsync(db);
+        await EnsureGlobalSchemaAsync(db);
+
+        (await db.ReadColumnsAsync("_morph_import_jobs")).Should().Contain("requested_by");
+        (await db.ReadColumnsAsync("_morph_export_jobs")).Should().Contain("requested_by");
+    }
+
     [Fact]
     public async Task Bootstrapping_a_brand_new_database_is_unaffected_by_the_migration()
     {

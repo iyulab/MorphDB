@@ -805,6 +805,7 @@ public static class DdlBuilder
                 error_message TEXT,
                 error_details JSONB,
                 options JSONB,
+                requested_by JSONB,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 started_at TIMESTAMPTZ,
                 completed_at TIMESTAMPTZ
@@ -823,6 +824,7 @@ public static class DdlBuilder
                 file_size BIGINT,
                 error_message TEXT,
                 options JSONB,
+                requested_by JSONB,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 started_at TIMESTAMPTZ,
                 completed_at TIMESTAMPTZ,

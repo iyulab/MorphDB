@@ -8,6 +8,11 @@ namespace MorphDB.Service.Services;
 /// <summary>
 /// Background service that processes pending bulk import/export jobs.
 /// </summary>
+/// <remarks>
+/// This service has no caller of its own, and a job is not run as nobody for that: the
+/// <see cref="IBulkOperationService"/> methods called here read and write the table as the caller
+/// each job was requested by. Nothing about a caller is set or cleared in this class.
+/// </remarks>
 public sealed partial class BulkJobProcessorService : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
@@ -75,7 +80,8 @@ public sealed partial class BulkJobProcessorService : BackgroundService
         }
     }
 
-    private async Task ProcessExportJobAsync(
+    /// <summary>Carries out one export job and stores the file a download serves.</summary>
+    internal async Task ProcessExportJobAsync(
         IBulkOperationService bulkService,
         BulkExportJob job,
         CancellationToken cancellationToken)
@@ -105,7 +111,8 @@ public sealed partial class BulkJobProcessorService : BackgroundService
         }
     }
 
-    private async Task ProcessImportJobAsync(
+    /// <summary>Carries out one import job, row by row.</summary>
+    internal async Task ProcessImportJobAsync(
         IBulkOperationService bulkService,
         BulkImportJob job,
         CancellationToken cancellationToken)

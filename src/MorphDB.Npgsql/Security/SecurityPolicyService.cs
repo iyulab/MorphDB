@@ -43,14 +43,13 @@ public sealed class SecurityPolicyService : ISecurityPolicyService
         // same gate. Rejecting it here quotes the caller their own text.
         InlineExpressionValidator.Validate(request.Expression, "Policy");
 
-        // Only a policy on reads is offered. What a write may do under one follows from what its
-        // caller may read; a rule written for writes alone is refused until it means something of
-        // its own.
-        if (request.PolicyType != PolicyType.Select)
+        // The type arrives as a name or as a number, and a number need not be one of the types. A
+        // policy of a type nothing knows how to enforce is not stored.
+        if (!Enum.IsDefined(request.PolicyType))
         {
             throw new ValidationException(
                 "policyType",
-                $"'{request.PolicyType}' policies are not enforced in this release; only 'Select' policies restrict rows.");
+                $"'{request.PolicyType}' is not a policy type; use one of {string.Join(", ", Enum.GetNames<PolicyType>())}.");
         }
 
         var table = await _metadataRepository.GetTableByNameAsync(projectId, request.TableName, includeColumns: true, cancellationToken)

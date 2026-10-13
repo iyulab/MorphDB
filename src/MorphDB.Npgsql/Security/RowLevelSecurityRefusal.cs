@@ -14,13 +14,15 @@ namespace MorphDB.Npgsql.Security;
 internal static class RowLevelSecurityRefusal
 {
     /// <summary>
-    /// A write PostgreSQL refused with <c>42501</c>. A policy on reads also decides what a write may
-    /// leave behind: a row the caller could not read back is refused rather than written and then
-    /// hidden from the statement that wrote it.
+    /// A write PostgreSQL refused with <c>42501</c>: a policy of the table does not admit the row
+    /// the write would leave. That is a policy for the write itself — inserting the row, or updating
+    /// a row into it — or a policy on reads, which also decides what a write may leave behind: a
+    /// write hands back the row it wrote, and a row the caller could not read back is refused rather
+    /// than written and then hidden from the statement that wrote it.
     /// </summary>
     public static ForbiddenException ForWrite(TableMetadata table) =>
         new($"Row-level security on table '{table.LogicalName}' refuses this write: " +
-            "it would create or change a row the caller is not allowed to read.");
+            "a policy of the table does not allow the caller to create the row, or to leave it as this write would.");
 
     /// <summary>
     /// The refusal for a column that could not be <paramref name="change"/> because a native policy

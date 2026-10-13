@@ -390,6 +390,16 @@ public sealed class DataController : ControllerBase
         var writeResult = await _writePipeline.UpdateAsync(
             projectId, tableMetadata, id, data, existing, updateOptions, cancellationToken);
 
+        if (ErrorHandling.WriteFailure.IsNotFound(writeResult))
+        {
+            return NotFound(new ErrorResponse
+            {
+                Error = "NotFound",
+                Message = $"Record with ID '{id}' not found in table '{table}'",
+                Code = "RECORD_NOT_FOUND"
+            });
+        }
+
         if (!writeResult.Success)
         {
             return BadRequest(new ErrorResponse
