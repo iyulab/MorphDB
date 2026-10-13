@@ -14,6 +14,8 @@ namespace MorphDB.Npgsql.Infrastructure;
 /// copied verbatim — <c>'status'</c> is a value, never a column. A double-quoted identifier is a
 /// column reference whose text is the name, so <c>"status"</c> and <c>status</c> resolve alike. A
 /// bare or dotted identifier (<c>status</c>, <c>orders.status</c>) is offered to the caller's map.
+/// A <c>{{placeholder}}</c> is copied verbatim too: <c>{{email}}</c> stands for the caller's value,
+/// whatever the table's columns are called.
 /// </para>
 /// </summary>
 internal static partial class SqlIdentifierRewriter
@@ -41,13 +43,13 @@ internal static partial class SqlIdentifierRewriter
 
     /// <summary>
     /// The identifiers <paramref name="text"/> names, in order — bare and dotted as written, a
-    /// double-quoted one by its unquoted text. String literals are not identifiers.
+    /// double-quoted one by its unquoted text. String literals and placeholders are not identifiers.
     /// </summary>
     public static IEnumerable<string> Identifiers(string text)
     {
         foreach (Match match in Token().Matches(text))
         {
-            if (match.Value.StartsWith('\''))
+            if (IsVerbatim(match.Value))
             {
                 continue;
             }
@@ -58,7 +60,7 @@ internal static partial class SqlIdentifierRewriter
 
     private static string Translate(string token, Func<string, string?> map)
     {
-        if (token.StartsWith('\''))
+        if (IsVerbatim(token))
         {
             return token;
         }
@@ -67,10 +69,12 @@ internal static partial class SqlIdentifierRewriter
         return map(name) ?? token;
     }
 
+    private static bool IsVerbatim(string token) => token.StartsWith('\'') || token.StartsWith('{');
+
     private static string Unquote(string quoted) => quoted[1..^1].Replace("\"\"", "\"", StringComparison.Ordinal);
 
-    // A single-quoted literal, a double-quoted identifier (both with doubled-quote escapes), or a
-    // bare/dotted identifier.
-    [GeneratedRegex(@"'(?:[^']|'')*'|""(?:[^""]|"""")*""|\b[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?\b")]
+    // A single-quoted literal, a double-quoted identifier (both with doubled-quote escapes), a
+    // placeholder, or a bare/dotted identifier.
+    [GeneratedRegex(@"'(?:[^']|'')*'|""(?:[^""]|"""")*""|\{\{\w+(?:\.\w+)?\}\}|\b[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?\b")]
     private static partial Regex Token();
 }

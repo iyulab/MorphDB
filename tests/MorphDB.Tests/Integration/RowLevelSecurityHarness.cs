@@ -10,6 +10,7 @@ using MorphDB.Npgsql.Schema;
 using MorphDB.Npgsql.Security;
 using MorphDB.Npgsql.Services;
 using MorphDB.Tests.Fixtures;
+using Npgsql;
 
 namespace MorphDB.Tests.Integration;
 
@@ -50,14 +51,12 @@ internal sealed class RowLevelSecurityHarness
         Data = new PostgresDataService(
             fixture.Connections,
             Metadata,
-            Policies,
-            accessor,
             pipeline,
             new PostgresLookupResolver(Metadata),
             new PostgresRollupResolver(Metadata),
             new PostgresFormulaResolver());
 
-        Aggregation = new PostgresAggregationService(fixture.Connections, Metadata, Policies, accessor);
+        Aggregation = new PostgresAggregationService(fixture.Connections, Metadata);
         Hierarchy = new PostgresHierarchyQueryService(fixture.Connections, Metadata);
         Views = new PostgresViewManager(
             fixture.Connections, new ViewMetadataRepository(fixture.Connections), Metadata, locks, hasher, changes);
@@ -188,6 +187,51 @@ internal sealed class RowLevelSecurityHarness
             policies.Select(p => p.Version).ToList(),
             flags.Enabled,
             flags.Forced);
+    }
+
+    /// <summary>Whether PostgreSQL has a table or view of this physical name.</summary>
+    public async Task<bool> RelationExistsAsync(string physicalName)
+    {
+        await using var connection = await _fixture.Connections.OpenSystemAsync();
+        return await connection.ExecuteScalarAsync<bool>(
+            "SELECT to_regclass(@Relation) IS NOT NULL",
+            new { Relation = DdlBuilder.QuoteIdentifier(physicalName) });
+    }
+
+    /// <summary>
+    /// Runs a statement as MorphDB itself — for the state only an earlier version, or SQL written
+    /// by hand, could have left behind.
+    /// </summary>
+    public async Task ExecuteAsSystemAsync(string sql)
+    {
+        await using var connection = await _fixture.Connections.OpenSystemAsync();
+        await connection.ExecuteAsync(sql);
+    }
+
+    /// <summary>A connection of MorphDB's own, for a test that has to hold a transaction open.</summary>
+    public Task<NpgsqlConnection> OpenSystemConnectionAsync() => _fixture.Connections.OpenSystemAsync();
+
+    /// <summary>
+    /// Returns once some statement is waiting for a lock on the table — the moment at which the
+    /// transaction it waits for can be committed with the order of the two settled.
+    /// </summary>
+    public async Task WaitUntilALockOnIsAwaitedAsync(TableMetadata table)
+    {
+        await using var connection = await _fixture.Connections.OpenSystemAsync();
+        for (var attempt = 0; attempt < 300; attempt++)
+        {
+            var waiting = await connection.ExecuteScalarAsync<bool>(
+                "SELECT EXISTS (SELECT 1 FROM pg_locks WHERE relation = to_regclass(@Relation) AND NOT granted)",
+                new { Relation = DdlBuilder.QuoteIdentifier(table.PhysicalName) });
+            if (waiting)
+            {
+                return;
+            }
+
+            await Task.Delay(100);
+        }
+
+        throw new TimeoutException($"Nothing came to wait for a lock on table '{table.LogicalName}'.");
     }
 
     /// <summary>The number of stored policy rows the table has.</summary>

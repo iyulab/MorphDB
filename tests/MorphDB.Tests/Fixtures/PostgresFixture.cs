@@ -79,12 +79,10 @@ public sealed class PostgresFixture : IAsyncLifetime
     /// </summary>
     public PostgresDataService CreateDataService(
         IMetadataRepository metadataRepository,
-        ISecurityPolicyService securityPolicyService,
         ISecurityContextAccessor securityContextAccessor)
     {
         var pipeline = CreateWritePipeline(metadataRepository, securityContextAccessor);
-        return new PostgresDataService(
-            Connections, metadataRepository, securityPolicyService, securityContextAccessor, pipeline);
+        return new PostgresDataService(Connections, metadataRepository, pipeline);
     }
 
     /// <summary>

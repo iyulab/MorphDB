@@ -256,17 +256,32 @@ public class NativePolicyProjectionTests
 
         await _rls.StartUpAsync(log);
 
-        // Counted the way an export counts — a statement of its own, which nothing but PostgreSQL
-        // filters.
         (await ExportableRowsAsync(table, a)).Should().Be(0);
         (await ExportableRowsAsync(table, null)).Should().Be(0);
         (await ExportableRowsAsync(table, SecurityContext.Service(table.ProjectId))).Should().Be(2);
 
-        // The reads that also apply the policy to their own WHERE clause still refuse to run one
-        // they cannot write out, as they did before PostgreSQL enforced anything.
-        var list = () => CountAsync(table, a);
-        await list.Should().ThrowAsync<Exception>();
-        (await CountAsync(table, null)).Should().Be(0);
+        // Listing, aggregating and reading one record used to write the policy into their own WHERE
+        // clause, and threw on one they could not write out. They are filtered by PostgreSQL alone
+        // now, and answer what every other read answers: no row.
+        var storedId = (Guid)(await As(SecurityContext.Service(table.ProjectId), () =>
+            _rls.Data.Query(table.ProjectId).From(table.LogicalName).SelectAll().ToListAsync()))[0][SystemColumns.Id]!;
+        var counting = new AggregationRequest
+        {
+            Aggregations = [new AggregationColumn { Function = AggregateFunction.Count, Alias = "n" }]
+        };
+
+        foreach (var caller in new[] { a, null })
+        {
+            (await As(caller, () => _rls.Data.Query(table.ProjectId).From(table.LogicalName).SelectAll().ToListAsync()))
+                .Should().BeEmpty();
+            (await CountAsync(table, caller)).Should().Be(0);
+            var counted = await As(caller, () => _rls.Aggregation.AggregateAsync(table.ProjectId, table.LogicalName, counting));
+            Convert.ToInt64(counted.Data[0]["n"], System.Globalization.CultureInfo.InvariantCulture).Should().Be(0);
+            (await As(caller, () => _rls.Data.GetByIdAsync(table.ProjectId, table.LogicalName, storedId))).Should().BeNull();
+        }
+
+        (await CountAsync(table, SecurityContext.Service(table.ProjectId))).Should().Be(2);
+        (await _rls.StoredAsync(table, storedId)).Should().NotBeNull();
         log.Warnings.Should().ContainSingle(w => w.Contains(table.LogicalName) && w.Contains("cannot_translate"))
             .Which.Should().Contain(expression);
 
@@ -289,6 +304,90 @@ public class NativePolicyProjectionTests
         var forB = () => As(a, () => _rls.Data.InsertAsync(
             table.ProjectId, table.LogicalName, new Dictionary<string, object?> { ["title"] = "c", ["owner"] = UserB }));
         await forB.Should().ThrowAsync<ForbiddenException>();
+    }
+
+    /// <summary>
+    /// A materialized view over a table with a policy can no longer be created, but a database an
+    /// earlier version served may hold one — its copy filled past the policy. Start-up drops
+    /// nothing; it names the pair, and from then on the view is not read or refreshed until one of
+    /// the two is gone.
+    /// </summary>
+    [Fact]
+    public async Task Start_up_reports_a_materialized_view_over_a_policy_and_the_view_is_not_read_while_both_exist()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (table, a) = await CreateTwoOwnersAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        CreateViewRequest Titles(string name, bool materialized) => new()
+        {
+            ProjectId = table.ProjectId,
+            Name = name,
+            IsMaterialized = materialized,
+            Definition = new ViewDefinition
+            {
+                BaseTable = table.LogicalName,
+                Columns = [new ViewColumnSpec { Source = "title", Alias = "title" }]
+            }
+        };
+
+        // As an earlier version left it: the views first, built while nothing forbade them, then a
+        // policy stored without a look at what reads the table.
+        var direct = await _rls.Views.CreateViewAsync(Titles("mv_direct_" + suffix, materialized: true), ct);
+        var plain = await _rls.Views.CreateViewAsync(Titles("v_plain_" + suffix, materialized: false), ct);
+        var throughView = "mv_through_" + suffix;
+        await _rls.ExecuteAsSystemAsync(
+            $"""CREATE MATERIALIZED VIEW "{throughView}" AS SELECT * FROM "{plain.PhysicalName}" """);
+        var policyId = await _rls.StoreUnprojectedPolicyAsync(table, "owner = {{user_id}}", "owner_only");
+
+        Task<ViewQueryResult> ReadAsync(string view, SecurityContext? caller) => As(caller, () => _rls.Views.QueryViewAsync(
+            new ViewQueryRequest { ProjectId = table.ProjectId, ViewName = view }));
+
+        var log = new RecordingLogger();
+        await _rls.StartUpAsync(log);
+
+        // Each pair is named: the view, the table and the policy — a view reached through a plain
+        // view too, by the only name it has.
+        log.Warnings.Should().ContainSingle(w =>
+            w.Contains($"'{direct.LogicalName}'") && w.Contains($"'{table.LogicalName}'") && w.Contains("'owner_only'"));
+        log.Warnings.Should().ContainSingle(w =>
+            w.Contains($"'{throughView}'") && w.Contains($"'{table.LogicalName}'") && w.Contains("'owner_only'"));
+
+        // Nothing was dropped, and the policy is enforced where it can be.
+        (await _rls.RelationExistsAsync(direct.PhysicalName)).Should().BeTrue();
+        (await _rls.RelationExistsAsync(throughView)).Should().BeTrue();
+        (await _rls.StoredPolicyCountAsync(table)).Should().Be(1);
+        (await CountAsync(table, a)).Should().Be(1);
+        (await ReadAsync(plain.LogicalName, a)).TotalCount.Should().Be(1, "a plain view is read through the policy");
+
+        // The copy is not handed out — to anyone — and not filled again.
+        foreach (var caller in new[] { a, null, SecurityContext.Service(table.ProjectId) })
+        {
+            var read = () => ReadAsync(direct.LogicalName, caller);
+            var refusal = (await read.Should().ThrowAsync<SchemaException>()).Which;
+            refusal.ErrorCode.Should().Be("INVALID_OPERATION");
+            refusal.Message.Should().Contain($"'{direct.LogicalName}'").And.Contain($"'{table.LogicalName}'")
+                .And.Contain("'owner_only'").And.Contain("plain");
+        }
+
+        var refresh = () => _rls.Views.RefreshMaterializedViewAsync(direct.ViewId);
+        (await refresh.Should().ThrowAsync<SchemaException>()).Which.ErrorCode.Should().Be("INVALID_OPERATION");
+
+        // A second policy is refused like a first, and says which views stand in the way.
+        var second = () => _rls.CreatePolicyAsync(table, "title = 'a'", "a_only");
+        (await second.Should().ThrowAsync<SchemaException>()).Which.Message
+            .Should().Contain($"'{direct.LogicalName}'").And.Contain($"'{throughView}'");
+
+        // Deleting the policy ends it: the view reads again, and the next start has nothing to say.
+        await _rls.Policies.DeletePolicyAsync(table.ProjectId, policyId, ct);
+        (await ReadAsync(direct.LogicalName, a)).TotalCount.Should().Be(2);
+        await _rls.Views.RefreshMaterializedViewAsync(direct.ViewId, cancellationToken: ct);
+
+        var quiet = new RecordingLogger();
+        await _rls.StartUpAsync(quiet);
+        quiet.Warnings.Should().NotContain(w => w.Contains(direct.LogicalName) || w.Contains(throughView));
+
+        await _rls.ExecuteAsSystemAsync($"""DROP MATERIALIZED VIEW "{throughView}" """);
     }
 
     // ---- the table under a policy ---------------------------------------------------------------
@@ -350,6 +449,217 @@ public class NativePolicyProjectionTests
         refusal.ErrorCode.Should().Be("COLUMN_USED_BY_POLICY");
         refusal.Message.Should().Contain("'owner'").And.Contain("'owner_only'");
         (await CountAsync(table, a)).Should().Be(1);
+    }
+
+    // ---- renaming a column a policy reads -------------------------------------------------------
+
+    /// <summary>What each kind of caller reads from the table, by title.</summary>
+    private async Task<string[]> VisibleToEachCallerAsync(TableMetadata table)
+    {
+        var callers = new (string Who, SecurityContext? Caller)[]
+        {
+            ("A", User(table.ProjectId, UserA)),
+            ("B", User(table.ProjectId, UserB)),
+            ("no caller", null),
+            ("bypass", SecurityContext.Service(table.ProjectId)),
+        };
+
+        var seen = new List<string>();
+        foreach (var (who, caller) in callers)
+        {
+            var rows = await As(caller, () => _rls.Data.Query(table.ProjectId).From(table.LogicalName).SelectAll().ToListAsync());
+            seen.Add($"{who}: {string.Join(",", rows.Select(r => (string)r["title"]!).Order(StringComparer.Ordinal))}");
+        }
+
+        return [.. seen];
+    }
+
+    private async Task<TableMetadata> CurrentAsync(TableMetadata table) =>
+        (await _rls.Metadata.GetTableByIdAsync(table.TableId, includeColumns: true, TestContext.Current.CancellationToken))!;
+
+    private async Task<string> StoredExpressionAsync(TableMetadata table, Guid policyId) =>
+        (await _rls.Policies.GetPolicyAsync(table.ProjectId, policyId, TestContext.Current.CancellationToken))!.Expression;
+
+    /// <summary>
+    /// A policy is stored in the table's logical column names. Giving a column it reads another
+    /// name renames it in the stored expression too — where it is an identifier, and nowhere else —
+    /// and asks nothing of PostgreSQL, whose policy holds the column rather than its name.
+    /// </summary>
+    [Fact]
+    public async Task Renaming_a_column_a_policy_reads_renames_it_in_the_stored_policy_and_changes_nothing_in_PostgreSQL()
+    {
+        var (table, a) = await CreateTwoOwnersAsync();
+        var policy = await _rls.CreatePolicyAsync(
+            table, "owner = {{user_id}} AND \"owner\" IS NOT NULL AND title <> 'owner' AND owner_id IS NULL");
+        var before = await _rls.NativeStateAsync(table);
+        var visible = await VisibleToEachCallerAsync(table);
+        visible.Should().Equal("A: a", "B: b", "no caller: ", "bypass: a,b");
+
+        await _rls.Schema.UpdateColumnAsync(new UpdateColumnRequest
+        {
+            ColumnId = table.Columns.Single(c => c.LogicalName == "owner").ColumnId,
+            LogicalName = "holder",
+            ExpectedVersion = (await CurrentAsync(table)).SchemaVersion
+        }, TestContext.Current.CancellationToken);
+
+        // The identifier, bare or quoted — not the string literal, and not the longer name.
+        (await StoredExpressionAsync(table, policy.Id))
+            .Should().Be("holder = {{user_id}} AND holder IS NOT NULL AND title <> 'owner' AND owner_id IS NULL");
+
+        // Reconciling finds nothing to do: the same policies, and not one catalog row rewritten.
+        var renamed = await CurrentAsync(table);
+        var projector = new NativePolicyProjector(_fixture.Connections, _rls.Metadata, NullLogger.Instance);
+        (await projector.ReconcileAsync(renamed, TestContext.Current.CancellationToken)).Should().Be(0);
+        var after = await _rls.NativeStateAsync(renamed);
+        after.Names.Should().Equal(before.Names);
+        after.Versions.Should().Equal(before.Versions);
+        (await VisibleToEachCallerAsync(renamed)).Should().Equal(visible);
+
+        // The policy is still one the service can change, in the column's new name only.
+        await _rls.Policies.UpdatePolicyAsync(
+            table.ProjectId, policy.Id, new UpdatePolicyRequest { Description = "described" }, TestContext.Current.CancellationToken);
+        (await _rls.NativeStateAsync(renamed)).Names.Should().Equal(before.Names);
+
+        var oldName = () => _rls.Policies.UpdatePolicyAsync(
+            table.ProjectId, policy.Id, new UpdatePolicyRequest { Expression = "owner = {{user_id}}" });
+        (await oldName.Should().ThrowAsync<SchemaException>()).Which.ErrorCode.Should().Be("INVALID_EXPRESSION");
+
+        await _rls.Policies.UpdatePolicyAsync(
+            table.ProjectId, policy.Id, new UpdatePolicyRequest { Expression = "holder <> {{user_id}}" }, TestContext.Current.CancellationToken);
+        (await As(a, () => _rls.Data.Query(table.ProjectId).From(table.LogicalName).SelectAll().ToListAsync()))
+            .Should().ContainSingle().Which["title"].Should().Be("b");
+    }
+
+    /// <summary>
+    /// <c>RenameColumnAsync</c> renames the physical column as well. PostgreSQL's policy follows the
+    /// column through that, so no caller reads anything else at any point; the native policy's name
+    /// carries a hash of the physical expression, so the next reconcile replaces that one policy
+    /// with one of the same meaning under its new name, and the one after finds nothing to do.
+    /// </summary>
+    [Fact]
+    public async Task Renaming_the_physical_column_too_leaves_every_caller_reading_what_it_read()
+    {
+        var (table, a) = await CreateTwoOwnersAsync();
+        var policy = await _rls.CreatePolicyAsync(table, "owner = {{user_id}} AND title <> 'owner'");
+        var owner = table.Columns.Single(c => c.LogicalName == "owner");
+        var before = await _rls.NativeStateAsync(table);
+        var visible = await VisibleToEachCallerAsync(table);
+        visible.Should().Equal("A: a", "B: b", "no caller: ", "bypass: a,b");
+
+        await _rls.Schema.RenameColumnAsync(new RenameColumnRequest
+        {
+            ColumnId = owner.ColumnId,
+            NewLogicalName = "holder",
+            ExpectedVersion = (await CurrentAsync(table)).SchemaVersion
+        }, TestContext.Current.CancellationToken);
+
+        var renamed = await CurrentAsync(table);
+        renamed.Columns.Single(c => c.LogicalName == "holder").PhysicalName.Should().NotBe(owner.PhysicalName);
+        (await StoredExpressionAsync(table, policy.Id)).Should().Be("holder = {{user_id}} AND title <> 'owner'");
+
+        // Before anything is reconciled: the policy PostgreSQL holds went with the column.
+        (await _rls.NativeStateAsync(renamed)).Names.Should().Equal(before.Names);
+        (await VisibleToEachCallerAsync(renamed)).Should().Equal(visible);
+
+        // The reconcile that follows creates the policy under its new name and drops the old one.
+        var projector = new NativePolicyProjector(_fixture.Connections, _rls.Metadata, NullLogger.Instance);
+        (await projector.ReconcileAsync(renamed, TestContext.Current.CancellationToken)).Should().Be(2);
+        var after = await _rls.NativeStateAsync(renamed);
+        after.Names.Should().HaveCount(2).And.Contain(NativePolicyProjector.AllowPolicyName);
+        after.Names.Should().ContainSingle(n => n.StartsWith($"morphdb_p_{policy.Id:N}_", StringComparison.Ordinal))
+            .Which.Should().NotBe(before.Names.Single(n => n.StartsWith("morphdb_p_", StringComparison.Ordinal)));
+        (await VisibleToEachCallerAsync(renamed)).Should().Equal(visible);
+        (await projector.ReconcileAsync(renamed, TestContext.Current.CancellationToken)).Should().Be(0);
+
+        await _rls.Policies.UpdatePolicyAsync(
+            table.ProjectId, policy.Id, new UpdatePolicyRequest { Expression = "holder <> {{user_id}}" }, TestContext.Current.CancellationToken);
+        (await As(a, () => _rls.Data.Query(table.ProjectId).From(table.LogicalName).SelectAll().ToListAsync()))
+            .Should().ContainSingle().Which["title"].Should().Be("b");
+    }
+
+    /// <summary>
+    /// A column may be called what a placeholder is called. Renaming the column must leave the
+    /// placeholder alone: <c>{{role}}</c> is the caller's role, not the column.
+    /// </summary>
+    [Fact]
+    public async Task Renaming_a_column_named_like_a_placeholder_leaves_the_placeholder_alone()
+    {
+        var table = await _rls.CreateDocumentsAsync(Guid.NewGuid());
+        await _rls.SeedAsync(table, new Dictionary<string, object?> { ["title"] = "s", ["department"] = "sales" });
+        await _rls.SeedAsync(table, new Dictionary<string, object?> { ["title"] = "e", ["department"] = "engineering" });
+        var department = table.Columns.Single(c => c.LogicalName == "department");
+
+        async Task RenameAsync(string to) => await _rls.Schema.UpdateColumnAsync(new UpdateColumnRequest
+        {
+            ColumnId = department.ColumnId,
+            LogicalName = to,
+            ExpectedVersion = (await CurrentAsync(table)).SchemaVersion
+        });
+
+        async Task<string[]> SeenBySalesAsync()
+        {
+            var inSales = User(table.ProjectId, UserA);
+            inSales.Role = "sales";
+            var rows = await As(inSales, () => _rls.Data.Query(table.ProjectId).From(table.LogicalName).SelectAll().ToListAsync());
+            return [.. rows.Select(r => (string)r["title"]!)];
+        }
+
+        await RenameAsync("role");
+        var policy = await _rls.CreatePolicyAsync(table, "role = {{role}}");
+        (await SeenBySalesAsync()).Should().Equal("s");
+
+        await RenameAsync("team");
+
+        (await StoredExpressionAsync(table, policy.Id)).Should().Be("team = {{role}}");
+        (await SeenBySalesAsync()).Should().Equal("s");
+
+        // A name that is not a plain identifier is written the only way a policy can name it.
+        await RenameAsync("sales team");
+        (await StoredExpressionAsync(table, policy.Id)).Should().Be("\"sales team\" = {{role}}");
+        var projector = new NativePolicyProjector(_fixture.Connections, _rls.Metadata, NullLogger.Instance);
+        (await projector.ReconcileAsync(await CurrentAsync(table), TestContext.Current.CancellationToken)).Should().Be(0);
+        (await SeenBySalesAsync()).Should().Equal("s");
+    }
+
+    /// <summary>
+    /// A policy reads a name as a column whenever the table has a column of that name. A column
+    /// that took a name a policy already uses for a function would change what the policy means,
+    /// so that rename is refused and nothing changes.
+    /// </summary>
+    [Fact]
+    public async Task A_column_cannot_take_a_name_a_policy_uses_for_something_else()
+    {
+        var (table, a) = await CreateTwoOwnersAsync();
+        var policy = await _rls.CreatePolicyAsync(table, "lower(owner) = {{user_id}}", "owner_only");
+        var before = await _rls.NativeStateAsync(table);
+        var scratch = table.Columns.Single(c => c.LogicalName == "scratch");
+
+        var update = () => _rls.Schema.UpdateColumnAsync(new UpdateColumnRequest
+        {
+            ColumnId = scratch.ColumnId,
+            LogicalName = "lower",
+            ExpectedVersion = table.SchemaVersion
+        });
+        var refusal = (await update.Should().ThrowAsync<SchemaException>()).Which;
+        refusal.ErrorCode.Should().Be("COLUMN_USED_BY_POLICY");
+        refusal.Message.Should().Contain("'scratch'").And.Contain("'lower'").And.Contain("'owner_only'");
+
+        var rename = () => _rls.Schema.RenameColumnAsync(new RenameColumnRequest
+        {
+            ColumnId = scratch.ColumnId,
+            NewLogicalName = "lower",
+            ExpectedVersion = table.SchemaVersion
+        });
+        (await rename.Should().ThrowAsync<SchemaException>()).Which.ErrorCode.Should().Be("COLUMN_USED_BY_POLICY");
+
+        // Neither the column nor the policy moved — the physical column included.
+        var current = await CurrentAsync(table);
+        current.Columns.Single(c => c.ColumnId == scratch.ColumnId).Should().BeEquivalentTo(
+            new { LogicalName = "scratch", scratch.PhysicalName });
+        (await StoredExpressionAsync(table, policy.Id)).Should().Be("lower(owner) = {{user_id}}");
+        (await _rls.NativeStateAsync(table)).Should().BeEquivalentTo(before);
+        (await CountAsync(table, a)).Should().Be(1);
+        await _rls.SeedAsync(table, new Dictionary<string, object?> { ["title"] = "c", ["scratch"] = "still a column" });
     }
 
     private sealed class RecordingLogger : ILogger<PostgresSchemaLayerService>

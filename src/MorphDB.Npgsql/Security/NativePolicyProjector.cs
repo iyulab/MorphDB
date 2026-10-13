@@ -91,6 +91,26 @@ internal sealed partial class NativePolicyProjector
                 await ReconcileAsync(table, cancellationToken);
             }
         }
+
+        await ReportMaterializedViewsOverPoliciesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// A materialized view over a table with a policy can no longer be created, but an earlier
+    /// version allowed it, and the copy such a view holds was filled past the policy. Nothing is
+    /// dropped here — the view and the policy are both the operator's to keep or let go — but each
+    /// pair is named in the log, and the view cannot be read or refreshed while the pair exists.
+    /// </summary>
+    private async Task ReportMaterializedViewsOverPoliciesAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
+        var conflicts = await MaterializedViewPolicyGuard.FindAsync(
+            connection, transaction: null, viewPhysicalName: null, tableId: null, cancellationToken);
+
+        foreach (var conflict in conflicts)
+        {
+            LogMaterializedViewOverPolicy(_logger, conflict.ViewName, conflict.TableName, conflict.PolicyName);
+        }
     }
 
     /// <summary>
@@ -146,7 +166,8 @@ internal sealed partial class NativePolicyProjector
     public static async Task<IReadOnlyList<StoredPolicy>> LoadStoredAsync(
         NpgsqlConnection connection,
         Guid tableId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        NpgsqlTransaction? transaction = null)
     {
         var rows = await connection.QueryAsync<StoredPolicyRow>(new CommandDefinition(
             """
@@ -156,11 +177,84 @@ internal sealed partial class NativePolicyProjector
             ORDER BY ordinal_position, id
             """,
             new { TableId = tableId },
+            transaction,
             cancellationToken: cancellationToken));
 
         return rows
             .Select(r => new StoredPolicy(r.Id, r.Name, (PolicyType)r.PolicyType, r.Expression, r.IsActive))
             .ToList();
+    }
+
+    /// <summary>
+    /// Follows a column's change of logical name in every stored policy of its table, inside the
+    /// caller's transaction — so the rename and the expressions that name the column are written
+    /// together or not at all. A policy is written in logical names: one left naming the old name
+    /// could not be translated the next time the table's policies are reconciled, and the table
+    /// would be closed to every caller.
+    /// </summary>
+    /// <remarks>
+    /// <para>Only the stored text changes. The native policy needs nothing: PostgreSQL holds the
+    /// column itself, not its name, and follows it through a rename.</para>
+    /// <para>The name is replaced where it is an identifier — bare or double-quoted — and nowhere
+    /// else: not inside a string literal, not inside a longer name, and not inside a placeholder
+    /// (<c>{{email}}</c> is the caller's e-mail address whatever the column is called).</para>
+    /// <para>The caller holds <see cref="LockAsync"/>.</para>
+    /// </remarks>
+    /// <exception cref="SchemaException">
+    /// <c>COLUMN_USED_BY_POLICY</c>: a policy already uses the new name for something that is not a
+    /// column — a function or a keyword. Once a column carried that name the policy would read it
+    /// as the column, and mean something else or nothing at all.
+    /// </exception>
+    public static async Task RenameColumnInStoredAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        TableMetadata table,
+        string oldLogicalName,
+        string newLogicalName,
+        CancellationToken cancellationToken)
+    {
+        if (oldLogicalName == newLogicalName)
+        {
+            return;
+        }
+
+        var stored = await LoadStoredAsync(connection, table.TableId, cancellationToken, transaction);
+
+        var alreadyUsing = stored
+            .Where(p => SqlIdentifierRewriter.Identifiers(p.Expression).Contains(newLogicalName, StringComparer.Ordinal))
+            .Select(p => $"'{p.Name}'")
+            .ToList();
+        if (alreadyUsing.Count > 0)
+        {
+            throw new SchemaException(
+                "COLUMN_USED_BY_POLICY",
+                $"Column '{oldLogicalName}' of table '{table.LogicalName}' cannot be renamed to '{newLogicalName}': " +
+                $"row-level security {(alreadyUsing.Count == 1 ? "policy" : "policies")} {string.Join(", ", alreadyUsing)} " +
+                $"already {(alreadyUsing.Count == 1 ? "uses" : "use")} that name for something that is not a column. " +
+                "Change the policy first, or choose another name.");
+        }
+
+        var written = BareIdentifier().IsMatch(newLogicalName) ? newLogicalName : DdlBuilder.QuoteIdentifier(newLogicalName);
+
+        foreach (var policy in stored)
+        {
+            var expression = SqlIdentifierRewriter.Rewrite(
+                policy.Expression, token => token == oldLogicalName ? written : null);
+            if (expression == policy.Expression)
+            {
+                continue;
+            }
+
+            await connection.ExecuteAsync(new CommandDefinition(
+                """
+                UPDATE morphdb._morph_security_policies
+                SET expression = @Expression, updated_at = NOW()
+                WHERE id = @Id
+                """,
+                new { policy.Id, Expression = expression },
+                transaction,
+                cancellationToken: cancellationToken));
+        }
     }
 
     /// <summary>
@@ -343,11 +437,36 @@ internal sealed partial class NativePolicyProjector
         InlineExpressionValidator.Validate(expression, "Policy");
 
         var (parameterized, slots) = Parameterize(expression, table);
-        var template = SecurityPolicyService.ToPhysical(parameterized, table, qualifier: null, reportedAs: expression);
+        var template = ToPhysical(parameterized, table, reportedAs: expression);
 
         var types = await InferSlotTypesAsync(connection, expression, template, slots, table, cancellationToken);
         return RenderSlots(template, index => slots[index].ToNative(types[index]));
     }
+
+    /// <summary>
+    /// Rewrites the column names a policy is written in — the table's logical names, as the caller
+    /// declared them — to the physical names PostgreSQL knows the columns by.
+    /// <paramref name="reportedAs"/> is the text to quote in a refusal: <paramref name="expression"/>
+    /// is no longer what the caller wrote once its placeholders have been replaced.
+    /// </summary>
+    private static string ToPhysical(string expression, TableMetadata table, string reportedAs) =>
+        SqlIdentifierRewriter.Rewrite(expression, token =>
+        {
+            var column = table.Columns.FirstOrDefault(c => c.LogicalName == token);
+            if (column is not null)
+            {
+                if (column.IsDerived)
+                {
+                    throw new SchemaException(
+                        "INVALID_EXPRESSION",
+                        $"Policy expression '{reportedAs}' names '{token}', a derived column; a policy reads only stored columns.");
+                }
+
+                return DdlBuilder.QuoteIdentifier(column.PhysicalName);
+            }
+
+            return SystemColumns.IsSystemColumn(token) ? DdlBuilder.QuoteIdentifier(token) : null;
+        });
 
     /// <summary>
     /// Replaces every placeholder with a positional parameter of its own. A placeholder is only a
@@ -614,11 +733,21 @@ internal sealed partial class NativePolicyProjector
     [GeneratedRegex(@"\$(\d+)")]
     private static partial Regex ParameterReference();
 
+    [GeneratedRegex(@"^[A-Za-z_][A-Za-z0-9_]*$")]
+    private static partial Regex BareIdentifier();
+
     [LoggerMessage(
         LogLevel.Warning,
         "Row-level security policy '{Policy}' on table '{Table}' cannot be enforced as written, so the table is readable " +
         "only by connections that bypass row-level security until the policy is corrected or removed: {Reason}")]
     private static partial void LogUntranslatablePolicy(ILogger logger, string table, string policy, string reason);
+
+    [LoggerMessage(
+        LogLevel.Warning,
+        "Materialized view '{View}' reads table '{Table}', which has row-level security policy '{Policy}'. A materialized " +
+        "view is a stored copy that no policy filters, so reading or refreshing it is refused until the view is deleted " +
+        "(a plain view can take its place) or the policy is deleted or deactivated.")]
+    private static partial void LogMaterializedViewOverPolicy(ILogger logger, string view, string table, string policy);
 
     [LoggerMessage(
         LogLevel.Warning,

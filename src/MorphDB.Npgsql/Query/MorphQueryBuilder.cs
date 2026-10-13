@@ -2,8 +2,6 @@ using Dapper;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
-using MorphDB.Core.Security;
-using MorphDB.Npgsql.Ddl;
 using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Repositories;
 using SqlKata.Compilers;
@@ -13,28 +11,25 @@ namespace MorphDB.Npgsql.Query;
 
 /// <summary>
 /// PostgreSQL implementation of IMorphQueryBuilder using SqlKata.
-/// Provides fluent query building with logical-to-physical name translation
-/// and Row-Level Security (RLS) policy enforcement.
+/// Provides fluent query building with logical-to-physical name translation. Row-level security
+/// is not this builder's to apply: PostgreSQL enforces the table's policies on the statement it
+/// runs, for the caller its connection was opened for.
 /// </summary>
 public sealed class MorphQueryBuilder : IMorphQueryBuilder
 {
     private readonly MorphConnectionFactory _connections;
     private readonly IMetadataRepository _metadataRepository;
-    private readonly ISecurityPolicyService _securityPolicyService;
-    private readonly ISecurityContextAccessor _securityContextAccessor;
     private readonly ILookupResolver? _lookupResolver;
     private readonly IRollupResolver? _rollupResolver;
     private readonly IFormulaResolver? _formulaResolver;
     private readonly Guid _projectId;
 
     /// <summary>
-    /// Creates a new MorphQueryBuilder with security support.
+    /// Creates a new MorphQueryBuilder.
     /// </summary>
     public MorphQueryBuilder(
         MorphConnectionFactory connections,
         IMetadataRepository metadataRepository,
-        ISecurityPolicyService securityPolicyService,
-        ISecurityContextAccessor securityContextAccessor,
         Guid projectId,
         ILookupResolver? lookupResolver = null,
         IRollupResolver? rollupResolver = null,
@@ -42,8 +37,6 @@ public sealed class MorphQueryBuilder : IMorphQueryBuilder
     {
         _connections = connections ?? throw new ArgumentNullException(nameof(connections));
         _metadataRepository = metadataRepository ?? throw new ArgumentNullException(nameof(metadataRepository));
-        _securityPolicyService = securityPolicyService ?? throw new ArgumentNullException(nameof(securityPolicyService));
-        _securityContextAccessor = securityContextAccessor ?? throw new ArgumentNullException(nameof(securityContextAccessor));
         _lookupResolver = lookupResolver;
         _rollupResolver = rollupResolver;
         _formulaResolver = formulaResolver;
@@ -56,8 +49,6 @@ public sealed class MorphQueryBuilder : IMorphQueryBuilder
         return new MorphQuery(
             _connections,
             _metadataRepository,
-            _securityPolicyService,
-            _securityContextAccessor,
             _lookupResolver,
             _rollupResolver,
             _formulaResolver,
@@ -72,8 +63,6 @@ public sealed class MorphQueryBuilder : IMorphQueryBuilder
         return new MorphQuery(
             _connections,
             _metadataRepository,
-            _securityPolicyService,
-            _securityContextAccessor,
             _lookupResolver,
             _rollupResolver,
             _formulaResolver,
@@ -86,7 +75,6 @@ public sealed class MorphQueryBuilder : IMorphQueryBuilder
 /// <summary>
 /// PostgreSQL implementation of IMorphQuery using SqlKata.
 /// Stores query operations with logical names, then builds SQL with physical names at execution.
-/// Automatically applies Row-Level Security (RLS) policies during query execution.
 /// Supports automatic lookup column expansion via JOINs.
 /// Supports automatic rollup column expansion via correlated subqueries.
 /// Supports automatic formula column expansion via SQL expressions.
@@ -95,8 +83,6 @@ internal sealed class MorphQuery : IMorphQuery
 {
     private readonly MorphConnectionFactory _connections;
     private readonly IMetadataRepository _metadataRepository;
-    private readonly ISecurityPolicyService _securityPolicyService;
-    private readonly ISecurityContextAccessor _securityContextAccessor;
     private readonly ILookupResolver? _lookupResolver;
     private readonly IRollupResolver? _rollupResolver;
     private readonly IFormulaResolver? _formulaResolver;
@@ -140,8 +126,6 @@ internal sealed class MorphQuery : IMorphQuery
     internal MorphQuery(
         MorphConnectionFactory connections,
         IMetadataRepository metadataRepository,
-        ISecurityPolicyService securityPolicyService,
-        ISecurityContextAccessor securityContextAccessor,
         ILookupResolver? lookupResolver,
         IRollupResolver? rollupResolver,
         IFormulaResolver? formulaResolver,
@@ -151,8 +135,6 @@ internal sealed class MorphQuery : IMorphQuery
     {
         _connections = connections;
         _metadataRepository = metadataRepository;
-        _securityPolicyService = securityPolicyService;
-        _securityContextAccessor = securityContextAccessor;
         _lookupResolver = lookupResolver;
         _rollupResolver = rollupResolver;
         _formulaResolver = formulaResolver;
@@ -600,13 +582,12 @@ internal sealed class MorphQuery : IMorphQuery
             cancellationToken);
 
     /// <summary>
-    /// Builds a SqlKata query with physical names for actual execution — FROM, WHERE, row-level
-    /// security, joins, ORDER BY, GROUP BY, HAVING and paging. The SELECT list is the caller's
+    /// Builds a SqlKata query with physical names for actual execution — FROM, WHERE, joins,
+    /// ORDER BY, GROUP BY, HAVING and paging. The SELECT list is the caller's
     /// (<see cref="CompileQueryAsync"/>, or an aggregate such as <see cref="CountAsync"/>).
     /// </summary>
     private async Task<SqlKataQuery> BuildPhysicalQueryAsync(CancellationToken cancellationToken)
     {
-        var table = await GetTableMetadataAsync(cancellationToken);
         var source = await GetSourceAsync(cancellationToken);
         var query = new SqlKataQuery();
         source.ApplyFrom(query);
@@ -615,13 +596,6 @@ internal sealed class MorphQuery : IMorphQuery
         foreach (var condition in _whereConditions)
         {
             ApplyWhereCondition(query, source.Column(condition.Column), condition);
-        }
-
-        // Row-level security, in physical names qualified by whatever this statement calls the table.
-        var rlsExpression = await EvaluateRlsAsync(table, DdlBuilder.QuoteIdentifier(source.Name), cancellationToken);
-        if (!string.IsNullOrEmpty(rlsExpression))
-        {
-            query.WhereRaw(rlsExpression);
         }
 
         // JOIN - resolve physical table and column names
@@ -988,25 +962,6 @@ internal sealed class MorphQuery : IMorphQuery
         _joinedTableMetadata[tableName] = metadata;
         return metadata;
     }
-
-    private async Task<string?> EvaluateRlsAsync(TableMetadata table, string tableQualifier, CancellationToken cancellationToken)
-    {
-        var securityContext = _securityContextAccessor.ContextOrNull;
-        if (securityContext is null)
-        {
-            // No security context: an internal read (no HTTP request behind it), not a caller.
-            return null;
-        }
-
-        return await _securityPolicyService.EvaluatePoliciesAsync(
-            _projectId,
-            table,
-            PolicyType.Select,
-            securityContext,
-            tableQualifier,
-            cancellationToken);
-    }
-
 
     #endregion
 }

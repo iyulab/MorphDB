@@ -1228,9 +1228,16 @@ affected), and a write is refused with `403 FORBIDDEN` when its caller could not
 would leave — inserting a row the policy hides from the caller, updating a row so that it becomes
 hidden, or an upsert that lands on a hidden row. Only the master secret is exempt.
 
-**What it does not bind: a materialized view.** A materialized view is a stored copy of its query's
-result, filled when it is created or refreshed, and it is read without the base table's policies.
-Do not materialize a view over a table that has a policy.
+**A policy and a materialized view do not go together.** A materialized view is a stored copy of its
+query's result, filled when it is created or refreshed, and PostgreSQL reads the copy without the
+base table's policies. So the combination is refused, with `400 INVALID_OPERATION`, from both
+sides: a materialized view cannot be created or refreshed if its query reads a table that has an
+active policy (directly, through a join, or through another view), and a policy cannot be created
+or switched back on for a table a materialized view reads — the message names the view. Use a plain
+(non-materialized) view, which shows each caller only the rows that caller may read. A database
+that already holds such a pair keeps both, but reading the view is answered with the same `400`
+until the view is deleted or the policy is deleted or deactivated; the service log names each pair
+at every start.
 
 **Work done without a caller.** Bulk import and export jobs, and the read that fills a change
 notification or a webhook delivery, run in the background with no caller. Under a policy that
@@ -1242,7 +1249,12 @@ subscriber are not available.
 
 **The table under a policy.** A column a policy reads cannot be deleted or given another type while
 the policy reads it; the request is refused with `400 COLUMN_USED_BY_POLICY`, naming the policy.
-Change or delete the policy first. Deleting the table deletes its policies with it.
+Change or delete the policy first. Renaming such a column is allowed: the policy's expression is
+rewritten to the new name in the same step (the name as an identifier — a string literal or a
+placeholder that happens to read the same is left alone), and the rows each caller may read do not
+change. A column cannot be renamed *to* a name a policy on the table already uses for something
+else, such as a function (`400 COLUMN_USED_BY_POLICY`). Deleting the table deletes its policies
+with it.
 
 Because the service is unauthenticated, an HTTP request's context is the project's anonymous one:
 `{{project_id}}` carries the header's value, `{{is_authenticated}}` is `false`, and the
@@ -1353,7 +1365,7 @@ fixed string — internal exception text never reaches the wire) and retrying ma
 | 400 | `INVALID_PROJECT_ID` | `X-Project-Id` was sent but is not a GUID |
 | 400 | `INVALID_EXPRESSION` | A CHECK predicate, index predicate, policy expression, or a view's join condition or column expression that could escape the clause it is written into |
 | 400 | `TABLE_HAS_DEPENDENTS` | Deleting a table another table still references — delete those relations first |
-| 400 | `COLUMN_USED_BY_POLICY` | Deleting or retyping a column a row-level security policy reads — change or delete the policy first |
+| 400 | `COLUMN_USED_BY_POLICY` | Deleting or retyping a column a row-level security policy reads, or renaming a column to a name a policy already uses for something else — change or delete the policy first |
 | 400 | `EMPTY_BATCH` | A batch request with no operations |
 | 400 | `EMPTY_DATA` | A batch write with no rows |
 | 400 | `EMPTY_TRANSACTION` | A transaction with no operations |
@@ -1368,7 +1380,7 @@ fixed string — internal exception text never reaches the wire) and retrying ma
 | 400 | `RESERVED_NAME` | A name in the space the system reserves for itself (a leading underscore on a column, the system prefix on a table) |
 | 400 | `SYSTEM_COLUMN` | An attempt to alter or drop a column the table owns rather than the caller |
 | 400 | `UNSAFE_TYPE_CAST` | A column type change whose existing values cannot be converted — export, reload, and change the declaration instead |
-| 400 | `INVALID_OPERATION` | A schema operation that is well-formed but cannot apply to this target |
+| 400 | `INVALID_OPERATION` | A schema operation that is well-formed but cannot apply to this target — creating, refreshing or reading a materialized view over a table that has a row-level security policy, or giving a policy to a table a materialized view reads |
 | 400 | `DDL_EXECUTION_FAILED` | The database refused the schema statement — the message carries what it said |
 | 400 | `BATCH_DDL_FAILED` | One operation in a batch DDL request failed; the batch is not applied |
 | 404 | `TABLE_NOT_FOUND` | The table (or the project the request scoped it to) does not exist |

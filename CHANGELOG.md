@@ -16,10 +16,15 @@
   finds no row (`404`, or zero rows affected). The master secret, and an in-process caller whose
   `SecurityContext.BypassRls` is set, are exempt as before.
   (Verified-by: NativeRowLevelSecurityTests.A_walk_down_a_hierarchy_does_not_pass_through_a_hidden_row)
-- **One read is not covered: a materialized view.** It is a stored copy of its query's result, filled
-  when the view is created or refreshed, and it is read without the base table's policies — every
-  caller sees every row it holds. Do not materialize a view over a table that has a policy. A plain
-  (non-materialized) view is covered.
+- **A materialized view and a policy cannot be combined.** A materialized view is a stored copy of
+  its query's result, filled when the view is created or refreshed, and PostgreSQL reads the copy
+  without the base table's policies — every caller would see every row it holds. The combination is
+  refused from both sides with `400 INVALID_OPERATION`: a materialized view cannot be created,
+  redefined or refreshed if its query reads a table that has an active policy (directly, through a
+  join, or through another view), and a policy cannot be created — or switched back on — for a
+  table a materialized view reads; the message names the view. Use a plain (non-materialized) view,
+  which is covered. A database that already holds such a pair keeps it, and the view cannot be read
+  until one of the two is gone — see Migration.
 
 ### Breaking
 
@@ -69,7 +74,19 @@
   validators, and the rest — takes the factory instead: build one with
   `new MorphConnectionFactory(dataSource, securityContextAccessor)` and pass that. A host that
   registers through `AddMorphDbNpgsql` changes nothing; the factory is registered there, next to
-  the `NpgsqlDataSource` it opens from.
+  the `NpgsqlDataSource` it opens from. `PostgresDataService`, `PostgresAggregationService` and
+  `MorphQueryBuilder` also no longer take an `ISecurityPolicyService` and an
+  `ISecurityContextAccessor`: drop those two arguments.
+- **`ISecurityPolicyService.EvaluatePoliciesAsync` is removed.** It returned a table's policies as a
+  SQL condition for the caller to add to a statement, and three reads — listing or querying,
+  aggregating, and the single-record read — added it to theirs. PostgreSQL applies the policies to
+  every statement now, so nothing adds a condition any more. A host that called the method to filter
+  SQL of its own no longer needs to: open the connection through `MorphConnectionFactory`, for the
+  caller the statement is run for, and PostgreSQL applies the table's policies to it. One answer
+  changes with this: on a table whose stored policy cannot be translated (see Migration), those
+  three reads used to fail with an error for a caller that does not bypass row-level security; they
+  now return no rows, as every other read of such a table does.
+  (Verified-by: NativePolicyProjectionTests.Start_up_closes_a_table_whose_stored_policy_cannot_be_translated)
 
 ### Changed
 
@@ -94,6 +111,35 @@
   policy and PostgreSQL's policy are written together or not at all, and a policy PostgreSQL cannot
   enforce is refused (`400 INVALID_EXPRESSION`) before anything is stored. Deactivating or deleting
   a table's last policy turns row-level security on that table off again.
+
+- **Renaming a column a policy reads renames it in the policy.** A policy's expression is stored in
+  the table's column names. When a column is renamed — by updating its name, or through
+  `RenameColumnAsync` — every policy of the table that names it is rewritten to the new name in the
+  same transaction, as an identifier: a string literal or a `{{placeholder}}` that reads the same is
+  left alone. The rows each caller may read do not change, and the policy can be reconciled and
+  updated afterwards like any other. A column cannot be renamed *to* a name a policy of the table
+  already uses for something that is not a column — a function, say — because the policy would
+  then read that name as the column; the request is answered `400 COLUMN_USED_BY_POLICY`.
+  (Verified-by: NativePolicyProjectionTests.Renaming_a_column_a_policy_reads_renames_it_in_the_stored_policy_and_changes_nothing_in_PostgreSQL)
+
+### Fixed
+
+- **A hierarchy query that names no columns returns rows.** The `ancestors`, `descendants`,
+  `subtree` and `path` routes — which never name columns — and an in-process
+  `HierarchyQueryRequest` with `Columns` left unset failed with `An item with the same key has
+  already been added. Key: depth` (`400 INVALID_ARGUMENT` over HTTP): the query returned its
+  computed `depth` column twice, and `path` twice for the path to the root. Naming the columns was
+  the only way to get an answer. The computed columns are now returned once either way, and a
+  record's `data` — on these routes and on `siblings` — carries the table's logical column names
+  and no `project_id`, as a row read through any other route does.
+- **Renaming a column is one transaction.** `RenameColumnAsync` renamed the physical column and
+  then updated its metadata in separate steps, so a failure in between left the metadata naming a
+  column PostgreSQL no longer had. The physical rename, the metadata and the policies that name the
+  column now change together or not at all.
+- **Redefining a materialized view keeps its unique index.** Changing the definition of a
+  materialized view dropped and recreated it without the unique index it was created with, so a
+  later concurrent refresh failed. The view is replaced in one transaction, index included; if the
+  new definition is refused, the old view is still there.
 
 ### Migration
 
@@ -122,6 +168,15 @@ corrected or deleted, and a warning naming the table, the policy and PostgreSQL'
 at every start. Check the log of the first start for such warnings. A stored `All` policy (they can
 no longer be created) is enforced for writes as well as reads.
 
+**A materialized view over a table that has a policy.** Earlier versions let one be created, and
+its copy was filled past the policy. Start-up drops nothing, but logs a warning for each such pair —
+naming the view, the table and the policy — at every start for as long as the pair exists, and
+reading or refreshing that view is refused (`400 INVALID_OPERATION`). Check the log of the first
+start. To clear a pair, delete the materialized view and, if its rows are still wanted, create a
+plain view with the same definition, which shows each caller only the rows that caller may read; or
+delete or deactivate the policy, if the table was not meant to have one — the view can then be read
+and refreshed again.
+
 **Connecting to the database directly.** PostgreSQL now applies policies to the service role itself,
 so a `psql` session logged in as that role sees no row of a table that has a policy. For
 maintenance in such a session, run `SET morphdb.bypass = 'on';` first. `pg_dump` and a restore of
@@ -144,9 +199,12 @@ a superuser, or a role with `BYPASSRLS` — which is the kind of role MorphDB it
   `morphdb_p_<policy id>_<hash>`; the hash follows the expression, so a changed policy is a new
   native policy. These are derived from the stored policies and rebuilt from them at start-up — a
   change made to them by hand does not last. A policy of your own on the same table, under any other
-  name, is left alone.
-- The reads that added a policy to their own WHERE clause still do, in addition to PostgreSQL's
-  enforcement.
+  name, is left alone. The hash is taken over the physical column names: after `RenameColumnAsync`,
+  which renames the physical column too, PostgreSQL's policy goes on enforcing unchanged, and the
+  next reconcile of the table (its next policy change, or start-up) replaces it with the same policy
+  under its new name.
+- The reads that used to add a policy to their own WHERE clause no longer do. PostgreSQL's
+  enforcement is the only one, and it is the same for every statement.
 
 ## 0.18.0
 

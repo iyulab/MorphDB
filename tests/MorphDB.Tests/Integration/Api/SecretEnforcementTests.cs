@@ -227,8 +227,8 @@ public class SecretEnforcementTests
     }
 
     // (7) A placeholder existing is not the same as it being filled. The role has to survive the
-    // whole way from the issued secret to the WHERE clause row-level security builds -- which is a
-    // different proposition from 'SecurityContext has a Role property', and the one that matters.
+    // whole way from the issued secret to the policy PostgreSQL evaluates -- which is a different
+    // proposition from 'SecurityContext has a Role property', and the one that matters.
     [Fact]
     public async Task The_role_an_issued_secret_carries_reaches_row_level_security()
     {
@@ -268,8 +268,8 @@ public class SecretEnforcementTests
         authenticated.Role.Should().Be("analyst");
         authenticated.BypassRls.Should().BeFalse("only the master secret bypasses row-level security");
 
-        // Now the second half: that context, fed to the real policy evaluator, must put the role
-        // into the clause.
+        // Now the second half: a read made as that context, through the service's own data service
+        // and connection factory, must be let through by a policy that asks for the role.
         var tableName = $"rls_role_probe_{Guid.NewGuid():N}"[..24];
         var schemaManager = services.GetRequiredService<MorphDB.Core.Abstractions.ISchemaManager>();
         var table = await schemaManager.CreateTableAsync(new CreateTableRequest
@@ -296,13 +296,19 @@ public class SecretEnforcementTests
             Expression = "{{role}} = 'analyst'"
         }, TestContext.Current.CancellationToken);
 
-        var clause = await policies.EvaluatePoliciesAsync(
-            _fixture.Api.ProjectId, table, PolicyType.Select, authenticated, cancellationToken: TestContext.Current.CancellationToken);
+        var data = services.GetRequiredService<MorphDB.Core.Abstractions.IMorphDataService>();
+        await RowLevelSecurityHarness.As(SecurityContext.Service(_fixture.Api.ProjectId), () => data.InsertAsync(
+            _fixture.Api.ProjectId, table.LogicalName, new Dictionary<string, object?> { ["title"] = "for analysts" }));
 
-        clause.Should().NotBeNull();
-        clause.Should().Contain("'analyst'",
+        Task<long> RowsReadAsAsync(SecurityContext caller) => RowLevelSecurityHarness.As(
+            caller, () => data.Query(_fixture.Api.ProjectId).From(table.LogicalName).CountAsync());
+
+        (await RowsReadAsAsync(authenticated)).Should().Be(1,
             "the role the secret carries is what {{role}} resolves to — a placeholder that resolves " +
             "to NULL would silently match nothing and look like a working policy");
+
+        var anotherRole = new SecurityContext { ProjectId = _fixture.Api.ProjectId, IsAuthenticated = true, Role = "reader" };
+        (await RowsReadAsAsync(anotherRole)).Should().Be(0, "the policy asks for the role, and this is not it");
     }
 
     // (8) The project routes take their project from the path, not the header. The header check alone

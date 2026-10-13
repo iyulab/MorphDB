@@ -6,6 +6,8 @@ using MorphDB.Npgsql.Ddl;
 using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Query;
 using MorphDB.Npgsql.Repositories;
+using MorphDB.Npgsql.Security;
+using Npgsql;
 
 namespace MorphDB.Npgsql.Services;
 
@@ -69,30 +71,15 @@ public sealed class PostgresViewManager : IViewManager
         var selectStatement = await queryBuilder.BuildSelectStatementAsync(request.Definition, cancellationToken);
 
         // Create the view in PostgreSQL
-        string ddl;
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         if (request.IsMaterialized)
         {
-            ddl = DdlBuilder.BuildCreateMaterializedView(physicalName, selectStatement);
+            await BuildMaterializedViewAsync(
+                connection, request.Name, physicalName, selectStatement, request.Definition, replace: false, cancellationToken);
         }
         else
         {
-            ddl = DdlBuilder.BuildCreateView(physicalName, selectStatement);
-        }
-
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-        await connection.ExecuteAsync(ddl);
-
-        // For materialized views, create a unique index to enable CONCURRENTLY refresh
-        if (request.IsMaterialized)
-        {
-            var indexColumns = GetUniqueIndexColumns(request.Definition);
-            if (indexColumns.Count > 0)
-            {
-                var indexName = $"ux_{physicalName}";
-                var indexDdl = DdlBuilder.BuildMaterializedViewUniqueIndex(
-                    indexName, physicalName, indexColumns);
-                await connection.ExecuteAsync(indexDdl);
-            }
+            await connection.ExecuteAsync(DdlBuilder.BuildCreateView(physicalName, selectStatement));
         }
 
         // Build view columns metadata from definition
@@ -179,8 +166,8 @@ public sealed class PostgresViewManager : IViewManager
             if (view.IsMaterialized)
             {
                 // Drop and recreate materialized view (no CREATE OR REPLACE for mat views)
-                await connection.ExecuteAsync(DdlBuilder.BuildDropMaterializedView(view.PhysicalName));
-                await connection.ExecuteAsync(DdlBuilder.BuildCreateMaterializedView(view.PhysicalName, selectStatement));
+                await BuildMaterializedViewAsync(
+                    connection, view.LogicalName, view.PhysicalName, selectStatement, request.Definition, replace: true, cancellationToken);
             }
             else
             {
@@ -260,9 +247,15 @@ public sealed class PostgresViewManager : IViewManager
             _options.LockTimeout,
             cancellationToken);
 
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
+
+        // A refresh copies the tables' rows again, as MorphDB itself and so past every policy. A
+        // view an earlier version built over a table that has a policy is not filled a second time.
+        await MaterializedViewPolicyGuard.EnsureReadsNoTableWithPolicyAsync(
+            connection, transaction: null, view.LogicalName, view.PhysicalName, "refreshed", cancellationToken);
+
         // Refresh the materialized view
         var refreshSql = DdlBuilder.BuildRefreshMaterializedView(view.PhysicalName, concurrent: concurrent);
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(refreshSql);
 
         // Update refresh timestamp and clear stale status
@@ -346,6 +339,18 @@ public sealed class PostgresViewManager : IViewManager
 
         await using var connection = await _connections.OpenAsync(cancellationToken);
 
+        // A plain view is read through its tables' policies. A materialized view is a copy that no
+        // policy filters, and neither creating one over a table with a policy nor adding a policy
+        // under one is allowed — but a database an earlier version served may hold the pair, and
+        // nothing kept in memory would know when another instance made or unmade it. So each read
+        // of a materialized view asks the catalog, at the cost of one statement; a plain view asks
+        // nothing.
+        if (view.IsMaterialized)
+        {
+            await MaterializedViewPolicyGuard.EnsureReadsNoTableWithPolicyAsync(
+                connection, transaction: null, view.LogicalName, view.PhysicalName, "read", cancellationToken);
+        }
+
         // Execute data query
         var data = await connection.QueryAsync<dynamic>(sql);
         var results = data.Select(row => (IDictionary<string, object?>)row).ToList();
@@ -362,6 +367,53 @@ public sealed class PostgresViewManager : IViewManager
             HasMore = hasMore,
             Metadata = view
         };
+    }
+
+    /// <summary>
+    /// Creates a materialized view — in place of the one it has, when <paramref name="replace"/> —
+    /// and fills it, unless it reads a table that has a row-level security policy.
+    /// </summary>
+    /// <remarks>
+    /// One transaction: the view is created empty, PostgreSQL is asked what it reads, and only then
+    /// is it filled. A refused view copies no row and leaves nothing behind, and the view it would
+    /// have replaced is still there. Creating it also locks the tables it reads against the DDL
+    /// that gives a table a policy until this transaction ends, so of a view and a policy created
+    /// at the same moment the later one sees the earlier and is refused.
+    /// </remarks>
+    private static async Task BuildMaterializedViewAsync(
+        NpgsqlConnection connection,
+        string logicalName,
+        string physicalName,
+        string selectStatement,
+        ViewDefinition definition,
+        bool replace,
+        CancellationToken cancellationToken)
+    {
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+
+        async Task ExecuteAsync(string statement) => await connection.ExecuteAsync(
+            new CommandDefinition(statement, transaction: transaction, cancellationToken: cancellationToken));
+
+        if (replace)
+        {
+            await ExecuteAsync(DdlBuilder.BuildDropMaterializedView(physicalName));
+        }
+
+        await ExecuteAsync(DdlBuilder.BuildCreateMaterializedView(physicalName, selectStatement, withData: false));
+
+        await MaterializedViewPolicyGuard.EnsureReadsNoTableWithPolicyAsync(
+            connection, transaction, logicalName, physicalName, "created", cancellationToken);
+
+        await ExecuteAsync(DdlBuilder.BuildRefreshMaterializedView(physicalName));
+
+        // A unique index is what lets the view be refreshed CONCURRENTLY.
+        var indexColumns = GetUniqueIndexColumns(definition);
+        if (indexColumns.Count > 0)
+        {
+            await ExecuteAsync(DdlBuilder.BuildMaterializedViewUniqueIndex($"ux_{physicalName}", physicalName, indexColumns));
+        }
+
+        await transaction.CommitAsync(cancellationToken);
     }
 
     private static string BuildViewQuerySql(ViewMetadata view, ViewQueryRequest request)

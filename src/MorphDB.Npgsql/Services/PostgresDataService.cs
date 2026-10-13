@@ -5,7 +5,6 @@ using MorphDB.Core.Abstractions;
 using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
 using MorphDB.Core.Pipeline;
-using MorphDB.Core.Security;
 using MorphDB.Npgsql.Dml;
 using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Query;
@@ -23,8 +22,6 @@ public sealed class PostgresDataService : IMorphDataService
 {
     private readonly MorphConnectionFactory _connections;
     private readonly IMetadataRepository _metadataRepository;
-    private readonly ISecurityPolicyService _securityPolicyService;
-    private readonly ISecurityContextAccessor _securityContextAccessor;
     private readonly IWritePipeline _writePipeline;
     private readonly ILookupResolver? _lookupResolver;
     private readonly IRollupResolver? _rollupResolver;
@@ -37,8 +34,6 @@ public sealed class PostgresDataService : IMorphDataService
     public PostgresDataService(
         MorphConnectionFactory connections,
         IMetadataRepository metadataRepository,
-        ISecurityPolicyService securityPolicyService,
-        ISecurityContextAccessor securityContextAccessor,
         IWritePipeline writePipeline,
         ILookupResolver? lookupResolver = null,
         IRollupResolver? rollupResolver = null,
@@ -47,8 +42,6 @@ public sealed class PostgresDataService : IMorphDataService
     {
         _connections = connections ?? throw new ArgumentNullException(nameof(connections));
         _metadataRepository = metadataRepository ?? throw new ArgumentNullException(nameof(metadataRepository));
-        _securityPolicyService = securityPolicyService ?? throw new ArgumentNullException(nameof(securityPolicyService));
-        _securityContextAccessor = securityContextAccessor ?? throw new ArgumentNullException(nameof(securityContextAccessor));
         _writePipeline = writePipeline ?? throw new ArgumentNullException(nameof(writePipeline));
         _lookupResolver = lookupResolver;
         _rollupResolver = rollupResolver;
@@ -62,8 +55,6 @@ public sealed class PostgresDataService : IMorphDataService
         return new MorphQueryBuilder(
             _connections,
             _metadataRepository,
-            _securityPolicyService,
-            _securityContextAccessor,
             projectId,
             _lookupResolver,
             _rollupResolver,

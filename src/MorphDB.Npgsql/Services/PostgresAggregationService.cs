@@ -3,8 +3,6 @@ using Dapper;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
-using MorphDB.Core.Security;
-using MorphDB.Npgsql.Ddl;
 using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Query;
 using MorphDB.Npgsql.Repositories;
@@ -21,8 +19,6 @@ public sealed class PostgresAggregationService : IAggregationService
 {
     private readonly MorphConnectionFactory _connections;
     private readonly IMetadataRepository _metadataRepository;
-    private readonly ISecurityPolicyService _securityPolicyService;
-    private readonly ISecurityContextAccessor _securityContextAccessor;
     private readonly ILookupResolver? _lookupResolver;
     private readonly IRollupResolver? _rollupResolver;
     private readonly IFormulaResolver? _formulaResolver;
@@ -36,8 +32,6 @@ public sealed class PostgresAggregationService : IAggregationService
     public PostgresAggregationService(
         MorphConnectionFactory connections,
         IMetadataRepository metadataRepository,
-        ISecurityPolicyService securityPolicyService,
-        ISecurityContextAccessor securityContextAccessor,
         ILookupResolver? lookupResolver = null,
         IRollupResolver? rollupResolver = null,
         IFormulaResolver? formulaResolver = null)
@@ -47,8 +41,6 @@ public sealed class PostgresAggregationService : IAggregationService
         _formulaResolver = formulaResolver;
         _connections = connections ?? throw new ArgumentNullException(nameof(connections));
         _metadataRepository = metadataRepository ?? throw new ArgumentNullException(nameof(metadataRepository));
-        _securityPolicyService = securityPolicyService ?? throw new ArgumentNullException(nameof(securityPolicyService));
-        _securityContextAccessor = securityContextAccessor ?? throw new ArgumentNullException(nameof(securityContextAccessor));
         _compiler = new PostgresCompiler();
     }
 
@@ -71,9 +63,6 @@ public sealed class PostgresAggregationService : IAggregationService
         // Build the aggregation query
         var query = BuildAggregationQuery(source, request);
 
-        // Apply Row-Level Security
-        await ApplyRlsPolicyAsync(query, projectId, table, source, cancellationToken);
-
         // Compile and execute
         var compiled = _compiler.Compile(query);
 
@@ -92,7 +81,7 @@ public sealed class PostgresAggregationService : IAggregationService
         long? totalGroups = null;
         if (request.Limit.HasValue || request.Offset.HasValue)
         {
-            totalGroups = await CountGroupsAsync(projectId, table, source, request, cancellationToken);
+            totalGroups = await CountGroupsAsync(source, request, cancellationToken);
         }
 
         return new AggregationResult
@@ -354,34 +343,7 @@ public sealed class PostgresAggregationService : IAggregationService
         }
     }
 
-    private async Task ApplyRlsPolicyAsync(
-        SqlKataQuery query,
-        Guid projectId,
-        TableMetadata table,
-        TableSource source,
-        CancellationToken cancellationToken)
-    {
-        var securityContext = _securityContextAccessor.ContextOrNull;
-        if (securityContext is null || securityContext.BypassRls)
-            return;
-
-        var rlsExpression = await _securityPolicyService.EvaluatePoliciesAsync(
-            projectId,
-            table,
-            PolicyType.Select,
-            securityContext,
-            DdlBuilder.QuoteIdentifier(source.Name),
-            cancellationToken);
-
-        if (!string.IsNullOrEmpty(rlsExpression))
-        {
-            query.WhereRaw(rlsExpression);
-        }
-    }
-
     private async Task<long> CountGroupsAsync(
-        Guid projectId,
-        TableMetadata table,
         TableSource source,
         AggregationRequest request,
         CancellationToken cancellationToken)
@@ -395,9 +357,6 @@ public sealed class PostgresAggregationService : IAggregationService
         {
             ApplyFilterConditions(subQuery, source, request.Filter);
         }
-
-        // Apply RLS
-        await ApplyRlsPolicyAsync(subQuery, projectId, table, source, cancellationToken);
 
         // Add GROUP BY
         foreach (var groupColumn in request.GroupBy)

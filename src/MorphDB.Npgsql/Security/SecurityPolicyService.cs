@@ -1,14 +1,10 @@
-using System.Text.RegularExpressions;
 using Dapper;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using MorphDB.Core.Exceptions;
-using MorphDB.Core.Models;
 using MorphDB.Core.Security;
-using MorphDB.Npgsql.Ddl;
 using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Repositories;
-using Npgsql;
 
 namespace MorphDB.Npgsql.Security;
 
@@ -20,7 +16,7 @@ namespace MorphDB.Npgsql.Security;
 /// change to a stored policy is projected onto the table's native row-level security in the same
 /// transaction (<see cref="NativePolicyProjector"/>), so there is no moment at which the two disagree.
 /// </remarks>
-public sealed partial class SecurityPolicyService : ISecurityPolicyService
+public sealed class SecurityPolicyService : ISecurityPolicyService
 {
     private readonly MorphConnectionFactory _connections;
     private readonly IMetadataRepository _metadataRepository;
@@ -42,10 +38,9 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
         CreatePolicyRequest request,
         CancellationToken cancellationToken = default)
     {
-        // A policy expression becomes part of a native policy and of the WHERE clause of ordinary
-        // queries, so it is a caller-authored string that reaches SQL verbatim — the same category
-        // as a CHECK predicate, and subject to the same gate. Rejecting it here quotes the caller
-        // their own text.
+        // A policy expression becomes part of a native policy, so it is a caller-authored string
+        // that reaches SQL verbatim — the same category as a CHECK predicate, and subject to the
+        // same gate. Rejecting it here quotes the caller their own text.
         InlineExpressionValidator.Validate(request.Expression, "Policy");
 
         // Only a policy on reads is offered. What a write may do under one follows from what its
@@ -123,6 +118,13 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
                 transaction));
 
         await _projector.ApplyAsync(connection, transaction, table, plan, cancellationToken);
+
+        // Asked last, once the policy's own DDL holds the table: a materialized view being created
+        // over the table at this moment either committed before that lock was granted, and is found
+        // here, or waits for this transaction and then finds the policy.
+        await MaterializedViewPolicyGuard.EnsureNoMaterializedViewReadsAsync(
+            connection, transaction, table, "created on", cancellationToken);
+
         await transaction.CommitAsync(cancellationToken);
 
         return policy;
@@ -256,6 +258,13 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
         if (table is not null && plan is not null)
         {
             await _projector.ApplyAsync(connection, transaction, table, plan, cancellationToken);
+
+            // Switching a policy back on gives the table a policy, as creating one does.
+            if (isActive && !existing.IsActive)
+            {
+                await MaterializedViewPolicyGuard.EnsureNoMaterializedViewReadsAsync(
+                    connection, transaction, table, "switched on for", cancellationToken);
+            }
         }
 
         await transaction.CommitAsync(cancellationToken);
@@ -321,117 +330,6 @@ public sealed partial class SecurityPolicyService : ISecurityPolicyService
 
     private static NativePolicyProjector.StoredPolicy Stored(SecurityPolicy policy) =>
         new(policy.Id, policy.Name, policy.PolicyType, policy.Expression, policy.IsActive);
-
-    public async Task<string?> EvaluatePoliciesAsync(
-        Guid projectId,
-        TableMetadata table,
-        PolicyType policyType,
-        SecurityContext context,
-        string? tableQualifier = null,
-        CancellationToken cancellationToken = default)
-    {
-        if (context.BypassRls)
-        {
-            return null; // Service key bypasses RLS
-        }
-
-        var policies = await GetPoliciesAsync(projectId, table.TableId, cancellationToken);
-        var applicablePolicies = policies
-            .Where(p => p.IsActive && (p.PolicyType == policyType || p.PolicyType == PolicyType.All))
-            .ToList();
-
-        if (applicablePolicies.Count == 0)
-        {
-            return null;
-        }
-
-        // Combine policies with AND. Validation runs again on the substituted form, and on rows
-        // that predate the write-side gate: this is the text that actually reaches the query, and a
-        // policy that cannot be emitted safely must fail the read rather than be dropped from it —
-        // silently ignoring a row-level security rule is the one outcome worse than an error.
-        var expressions = applicablePolicies
-            .Select(p => SubstituteVariables(p.Expression, context))
-            .Where(e => !string.IsNullOrWhiteSpace(e))
-            .Select(e =>
-            {
-                InlineExpressionValidator.Validate(e, "Policy");
-                return ToPhysical(e, table, tableQualifier);
-            })
-            .ToList();
-
-        if (expressions.Count == 0)
-        {
-            return null;
-        }
-
-        return string.Join(" AND ", expressions.Select(e => $"({e})"));
-    }
-
-    /// <summary>
-    /// Rewrites the column names a policy is written in — the table's logical names, as the caller
-    /// declared them — to the physical names the query reads, qualified by the name the query gives
-    /// the table. The qualifier matters: a joined lookup target carries system columns of the same
-    /// name, so an unqualified <c>_id</c> would be ambiguous. <paramref name="reportedAs"/> is the
-    /// text to quote in a refusal when <paramref name="expression"/> is no longer what the caller
-    /// wrote — its placeholders already replaced, say.
-    /// </summary>
-    internal static string ToPhysical(string expression, TableMetadata table, string? qualifier, string? reportedAs = null)
-    {
-        var prefix = qualifier is null ? "" : qualifier + ".";
-
-        return SqlIdentifierRewriter.Rewrite(expression, token =>
-        {
-            var column = table.Columns.FirstOrDefault(c => c.LogicalName == token);
-            if (column is not null)
-            {
-                if (column.IsDerived)
-                {
-                    throw new SchemaException(
-                        "INVALID_EXPRESSION",
-                        $"Policy expression '{reportedAs ?? expression}' names '{token}', a derived column; a policy reads only stored columns.");
-                }
-
-                return prefix + DdlBuilder.QuoteIdentifier(column.PhysicalName);
-            }
-
-            return SystemColumns.IsSystemColumn(token) ? prefix + DdlBuilder.QuoteIdentifier(token) : null;
-        });
-    }
-
-    private static string SubstituteVariables(string expression, SecurityContext context)
-    {
-        // Replace {{user_id}} with the actual user ID
-        var result = PlaceholderRegex().Replace(expression, match =>
-        {
-            var placeholder = match.Groups[1].Value.ToLowerInvariant();
-            return placeholder switch
-            {
-                "user_id" => context.UserId != null ? $"'{EscapeSqlString(context.UserId)}'" : "NULL",
-                "email" => context.Email != null ? $"'{EscapeSqlString(context.Email)}'" : "NULL",
-                "role" => context.Role != null ? $"'{EscapeSqlString(context.Role)}'" : "NULL",
-                "project_id" => $"'{context.ProjectId}'",
-                "is_authenticated" => context.IsAuthenticated ? "true" : "false",
-                _ when placeholder.StartsWith("claims.", StringComparison.Ordinal) => GetClaimValue(placeholder[7..], context),
-                _ => match.Value // Keep original if not recognized
-            };
-        });
-
-        return result;
-    }
-
-    private static string GetClaimValue(string claimName, SecurityContext context)
-    {
-        var value = context.GetClaim(claimName);
-        return value != null ? $"'{EscapeSqlString(value)}'" : "NULL";
-    }
-
-    private static string EscapeSqlString(string value)
-    {
-        return value.Replace("'", "''");
-    }
-
-    [GeneratedRegex(@"\{\{(\w+(?:\.\w+)?)\}\}", RegexOptions.Compiled)]
-    private static partial Regex PlaceholderRegex();
 
     private static SecurityPolicy MapToPolicy(PolicyRecord record)
     {

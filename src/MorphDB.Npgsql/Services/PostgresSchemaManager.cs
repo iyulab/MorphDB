@@ -676,8 +676,21 @@ public sealed class PostgresSchemaManager : ISchemaManager
             throw new SchemaVersionConflictException(request.ExpectedVersion, currentVersion);
         }
 
-        // Update simple metadata (logical name, default value)
-        await _repository.UpdateColumnAsync(request.ColumnId, request.LogicalName, request.DefaultValue, cancellationToken);
+        // Update simple metadata (logical name, default value). The physical column keeps its name
+        // here, so a new logical name is a change to metadata alone — and to every policy that
+        // names the column.
+        if (request.LogicalName is not null && request.LogicalName != column.LogicalName)
+        {
+            var renamedTable = await _repository.GetTableByIdAsync(column.TableId, includeColumns: true, cancellationToken)
+                ?? throw new TableNotFoundException(column.TableId.ToString());
+
+            await RenameColumnWithPoliciesAsync(
+                renamedTable, column, request.LogicalName, newPhysicalName: null, request.DefaultValue, cancellationToken);
+        }
+        else
+        {
+            await _repository.UpdateColumnAsync(request.ColumnId, request.LogicalName, request.DefaultValue, cancellationToken);
+        }
 
         // Apply DDL changes for type/constraint modifications
         var hasDdlChanges = request.DataType.HasValue || request.IsNullable.HasValue ||
@@ -839,25 +852,14 @@ public sealed class PostgresSchemaManager : ISchemaManager
             _options.LockTimeout,
             cancellationToken);
 
-        // For non-system columns, generate new physical name and execute RENAME COLUMN DDL
-        if (!column.IsSystemColumn && !column.PhysicalName.StartsWith("virtual_", StringComparison.Ordinal))
-        {
-            var newPhysicalName = _nameHasher.GenerateColumnName(column.TableId, request.NewLogicalName);
+        // A stored column's physical name follows its logical one. A system or virtual column keeps
+        // the physical name it has: only its logical name changes, in metadata.
+        var newPhysicalName = !column.IsSystemColumn && !column.PhysicalName.StartsWith("virtual_", StringComparison.Ordinal)
+            ? _nameHasher.GenerateColumnName(column.TableId, request.NewLogicalName)
+            : null;
 
-            await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-            var renameSql = DdlBuilder.BuildRenameColumn(table.PhysicalName, column.PhysicalName, newPhysicalName);
-            await connection.ExecuteAsync(new CommandDefinition(renameSql, cancellationToken: cancellationToken));
-
-            // Update metadata with new logical name and physical name
-            await _repository.UpdateColumnAsync(request.ColumnId, request.NewLogicalName, null, cancellationToken);
-            // Update physical name separately — need to update the physical_name column in metadata
-            await UpdateColumnPhysicalNameAsync(request.ColumnId, newPhysicalName, cancellationToken);
-        }
-        else
-        {
-            // System columns or virtual columns: only update logical name in metadata
-            await _repository.UpdateColumnAsync(request.ColumnId, request.NewLogicalName, null, cancellationToken);
-        }
+        await RenameColumnWithPoliciesAsync(
+            table, column, request.NewLogicalName, newPhysicalName, defaultValue: null, cancellationToken);
 
         await _repository.IncrementVersionAsync(column.TableId, cancellationToken);
 
@@ -878,19 +880,49 @@ public sealed class PostgresSchemaManager : ISchemaManager
         return (await _repository.GetColumnByIdAsync(request.ColumnId, cancellationToken))!;
     }
 
-    private async Task UpdateColumnPhysicalNameAsync(
-        Guid columnId,
-        string newPhysicalName,
+    /// <summary>
+    /// Gives a column its new logical name — and, when <paramref name="newPhysicalName"/> is given,
+    /// renames the physical column to it — and follows the change in every row-level security
+    /// policy of the table, in one transaction. A policy is written in logical column names, so a
+    /// rename that left it behind would leave a policy nothing can translate any more.
+    /// </summary>
+    private async Task RenameColumnWithPoliciesAsync(
+        TableMetadata table,
+        ColumnMetadata column,
+        string newLogicalName,
+        string? newPhysicalName,
+        string? defaultValue,
         CancellationToken cancellationToken)
     {
-        const string sql = """
-            UPDATE morphdb._morph_columns
-            SET physical_name = @PhysicalName
-            WHERE column_id = @ColumnId
-            """;
-
         await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-        await connection.ExecuteAsync(new CommandDefinition(sql, new { ColumnId = columnId, PhysicalName = newPhysicalName }, cancellationToken: cancellationToken));
+
+        // Whoever writes a policy reads the table's stored policies under this lock and writes them
+        // back; without it, a policy written while the column is renamed could keep the old name.
+        await using var policyLock = await NativePolicyProjector.LockAsync(connection, table, cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+
+        if (newPhysicalName is not null)
+        {
+            var renameSql = DdlBuilder.BuildRenameColumn(table.PhysicalName, column.PhysicalName, newPhysicalName);
+            await connection.ExecuteAsync(new CommandDefinition(renameSql, transaction: transaction, cancellationToken: cancellationToken));
+        }
+
+        await connection.ExecuteAsync(new CommandDefinition(
+            """
+            UPDATE morphdb._morph_columns
+            SET logical_name = @LogicalName,
+                physical_name = COALESCE(@PhysicalName, physical_name),
+                default_value = COALESCE(@DefaultValue, default_value)
+            WHERE column_id = @ColumnId
+            """,
+            new { column.ColumnId, LogicalName = newLogicalName, PhysicalName = newPhysicalName, DefaultValue = defaultValue },
+            transaction,
+            cancellationToken: cancellationToken));
+
+        await NativePolicyProjector.RenameColumnInStoredAsync(
+            connection, transaction, table, column.LogicalName, newLogicalName, cancellationToken);
+
+        await transaction.CommitAsync(cancellationToken);
     }
 
     public async Task DeleteColumnAsync(

@@ -1,9 +1,11 @@
 using System.Globalization;
 using System.Text;
+using Dapper;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
 using MorphDB.Core.Security;
+using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Tests.Fixtures;
 using static MorphDB.Tests.Integration.RowLevelSecurityHarness;
 
@@ -151,8 +153,7 @@ public class NativeRowLevelSecurityTests
             ProjectId = docs.ProjectId,
             TableName = docs.Name,
             ParentColumn = SystemColumns.ParentId,
-            RecordId = docs.RootA,
-            Columns = [SystemColumns.Id]
+            RecordId = docs.RootA
         };
 
         // Both children hang under A's root; each caller is given the one it may read.
@@ -202,32 +203,242 @@ public class NativeRowLevelSecurityTests
         }
     }
 
+    private static CreateViewRequest TitlesView(Guid projectId, string viewName, string tableName, bool materialized) => new()
+    {
+        ProjectId = projectId,
+        Name = viewName,
+        IsMaterialized = materialized,
+        Definition = new ViewDefinition
+        {
+            BaseTable = tableName,
+            Columns = [new ViewColumnSpec { Source = "title", Alias = "title" }]
+        }
+    };
+
     /// <summary>
     /// A materialized view is a table of its own, filled when it is created or refreshed. PostgreSQL
     /// applies the base table's policies to the statement that fills it — which MorphDB runs as
-    /// itself — and none to the copy.
+    /// itself — and none to the copy, so every caller would read every row. It is not built.
     /// </summary>
     [Fact]
-    public async Task A_materialized_view_is_a_stored_copy_that_no_policy_filters()
+    public async Task A_materialized_view_cannot_be_built_over_a_table_that_has_a_policy()
     {
         var docs = await CreateDocumentsWithOwnerPolicyAsync();
         var viewName = "rls_mview_" + Guid.NewGuid().ToString("N")[..8];
-        await _rls.Views.CreateViewAsync(new CreateViewRequest
+
+        var act = () => _rls.Views.CreateViewAsync(TitlesView(docs.ProjectId, viewName, docs.Name, materialized: true));
+
+        var refusal = (await act.Should().ThrowAsync<SchemaException>()).Which;
+        refusal.ErrorCode.Should().Be("INVALID_OPERATION");
+        refusal.Message.Should().Contain($"'{viewName}'").And.Contain($"'{docs.Name}'").And.Contain("'policy'")
+            .And.Contain("row-level security policy").And.Contain("plain");
+        (await _rls.Views.GetViewAsync(docs.ProjectId, viewName, TestContext.Current.CancellationToken)).Should().BeNull();
+        (await _rls.RelationExistsAsync(new Sha256NameHasher().GenerateViewName(docs.ProjectId, viewName)))
+            .Should().BeFalse("a refused view leaves nothing behind");
+
+        // Nor one that only joins the table: it is what the view reads that counts, not its base.
+        var notes = await _rls.Schema.CreateTableAsync(new CreateTableRequest
+        {
+            ProjectId = docs.ProjectId,
+            LogicalName = "rls_notes_" + Guid.NewGuid().ToString("N")[..8],
+            Columns =
+            [
+                new CreateColumnRequest { LogicalName = "label", DataType = MorphDataType.Text, IsNullable = false },
+                new CreateColumnRequest { LogicalName = "document_id", DataType = MorphDataType.Uuid, IsNullable = true },
+            ]
+        }, TestContext.Current.CancellationToken);
+        var joinedName = "rls_mjoin_" + Guid.NewGuid().ToString("N")[..8];
+        var joined = () => _rls.Views.CreateViewAsync(new CreateViewRequest
+        {
+            ProjectId = docs.ProjectId,
+            Name = joinedName,
+            IsMaterialized = true,
+            Definition = new ViewDefinition
+            {
+                BaseTable = notes.LogicalName,
+                Joins =
+                [
+                    new ViewJoinSpec
+                    {
+                        Table = docs.Name,
+                        JoinType = ViewJoinType.Left,
+                        Condition = $"{notes.LogicalName}.document_id = {docs.Name}._id"
+                    }
+                ],
+                Columns = [new ViewColumnSpec { Source = "label", Alias = "label" }]
+            }
+        });
+        (await joined.Should().ThrowAsync<SchemaException>()).Which.Message.Should().Contain($"'{docs.Name}'");
+
+        // The same view, not materialized, is built — and read through the policy.
+        await _rls.Views.CreateViewAsync(
+            TitlesView(docs.ProjectId, viewName, docs.Name, materialized: false), TestContext.Current.CancellationToken);
+        foreach (var (who, caller, visible) in docs.Callers)
+        {
+            var result = await As(caller, () => _rls.Views.QueryViewAsync(
+                new ViewQueryRequest { ProjectId = docs.ProjectId, ViewName = viewName }));
+            result.TotalCount.Should().Be(visible.Length, who);
+        }
+    }
+
+    /// <summary>
+    /// Redefining a materialized view builds it again, so the same rule holds — and a definition
+    /// that is refused leaves the view that was there, with the index a concurrent refresh needs.
+    /// </summary>
+    [Fact]
+    public async Task A_materialized_view_cannot_be_redefined_to_read_a_table_that_has_a_policy()
+    {
+        var docs = await CreateDocumentsWithOwnerPolicyAsync();
+        var open = await _rls.CreateDocumentsAsync(docs.ProjectId, "rls_open");
+        await _rls.SeedAsync(open, Row("open-1", UserA));
+        await _rls.SeedAsync(open, Row("open-2", UserB));
+
+        static ViewDefinition Over(string tableName, int? limit = null) => new()
+        {
+            BaseTable = tableName,
+            Columns =
+            [
+                new ViewColumnSpec { Source = SystemColumns.Id, Alias = SystemColumns.Id },
+                new ViewColumnSpec { Source = "title", Alias = "title" }
+            ],
+            Limit = limit
+        };
+
+        var viewName = "rls_mview_" + Guid.NewGuid().ToString("N")[..8];
+        var view = await _rls.Views.CreateViewAsync(new CreateViewRequest
         {
             ProjectId = docs.ProjectId,
             Name = viewName,
             IsMaterialized = true,
-            Definition = new ViewDefinition
-            {
-                BaseTable = docs.Name,
-                Columns = [new ViewColumnSpec { Source = "title", Alias = "title" }]
-            }
+            Definition = Over(open.LogicalName)
         }, TestContext.Current.CancellationToken);
 
-        var result = await As(docs.A, () => _rls.Views.QueryViewAsync(
+        Task<ViewQueryResult> ReadAsync() => As(docs.A, () => _rls.Views.QueryViewAsync(
             new ViewQueryRequest { ProjectId = docs.ProjectId, ViewName = viewName }));
 
-        result.Data.Should().HaveCount(4, "the copy holds every row, and is read without the table's policies");
+        var redefine = () => _rls.Views.UpdateViewAsync(
+            new UpdateViewRequest { ViewId = view.ViewId, Definition = Over(docs.Name) });
+
+        (await redefine.Should().ThrowAsync<SchemaException>()).Which.ErrorCode.Should().Be("INVALID_OPERATION");
+        (await ReadAsync()).Data.Select(r => (string)r["title"]!).Should().BeEquivalentTo(["open-1", "open-2"]);
+        await _rls.Views.RefreshMaterializedViewAsync(view.ViewId, concurrent: true, TestContext.Current.CancellationToken);
+
+        // A definition that reads no such table replaces the view, index included.
+        await _rls.Views.UpdateViewAsync(
+            new UpdateViewRequest { ViewId = view.ViewId, Definition = Over(open.LogicalName, limit: 1) },
+            TestContext.Current.CancellationToken);
+        (await ReadAsync()).Data.Should().HaveCount(1);
+        await _rls.Views.RefreshMaterializedViewAsync(view.ViewId, concurrent: true, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// The other way round: a policy added under a materialized view would leave the copy it already
+    /// holds readable by everyone. The policy is refused until the view is gone.
+    /// </summary>
+    [Fact]
+    public async Task A_table_a_materialized_view_reads_cannot_be_given_a_policy()
+    {
+        var table = await _rls.CreateDocumentsAsync(Guid.NewGuid());
+        await _rls.SeedAsync(table, Row("a", UserA));
+        await _rls.SeedAsync(table, Row("b", UserB));
+        var a = User(table.ProjectId, UserA);
+        var viewName = "rls_mview_" + Guid.NewGuid().ToString("N")[..8];
+        var view = await _rls.Views.CreateViewAsync(
+            TitlesView(table.ProjectId, viewName, table.LogicalName, materialized: true), TestContext.Current.CancellationToken);
+
+        Task<ViewQueryResult> ReadViewAsync() => As(a, () => _rls.Views.QueryViewAsync(
+            new ViewQueryRequest { ProjectId = table.ProjectId, ViewName = viewName }));
+        (await ReadViewAsync()).Data.Should().HaveCount(2, "no policy: the copy holds every row, for every caller");
+
+        var create = () => _rls.CreatePolicyAsync(table, "owner = {{user_id}}");
+
+        var refusal = (await create.Should().ThrowAsync<SchemaException>()).Which;
+        refusal.ErrorCode.Should().Be("INVALID_OPERATION");
+        refusal.Message.Should().Contain($"'{viewName}'").And.Contain($"'{table.LogicalName}'").And.Contain("plain");
+        (await _rls.StoredPolicyCountAsync(table)).Should().Be(0);
+        (await _rls.NativeStateAsync(table)).Should().BeEquivalentTo(new { Enabled = false, Forced = false });
+        (await _rls.NativeStateAsync(table)).Names.Should().BeEmpty();
+
+        // Nor by switching on a policy that is stored but inactive.
+        var policyId = await _rls.StoreUnprojectedPolicyAsync(table, "owner = {{user_id}}");
+        await _rls.Policies.UpdatePolicyAsync(
+            table.ProjectId, policyId, new UpdatePolicyRequest { IsActive = false }, TestContext.Current.CancellationToken);
+        var activate = () => _rls.Policies.UpdatePolicyAsync(
+            table.ProjectId, policyId, new UpdatePolicyRequest { IsActive = true });
+        (await activate.Should().ThrowAsync<SchemaException>()).Which.ErrorCode.Should().Be("INVALID_OPERATION");
+        (await _rls.Policies.GetPolicyAsync(table.ProjectId, policyId, TestContext.Current.CancellationToken))!
+            .IsActive.Should().BeFalse();
+        (await _rls.NativeStateAsync(table)).Names.Should().BeEmpty();
+        (await ReadViewAsync()).Data.Should().HaveCount(2, "the view is as it was");
+
+        // Once the view is deleted the table can have its policy.
+        await _rls.Views.DeleteViewAsync(view.ViewId, TestContext.Current.CancellationToken);
+        await _rls.Policies.UpdatePolicyAsync(
+            table.ProjectId, policyId, new UpdatePolicyRequest { IsActive = true }, TestContext.Current.CancellationToken);
+        (await VisibleAsync(table, a)).Should().HaveCount(1);
+    }
+
+    /// <summary>
+    /// A view and a policy created at the same moment. Each side asks about the other only after
+    /// the statement that takes its lock on the table, so whichever PostgreSQL makes wait finds the
+    /// other already committed, and is refused.
+    /// </summary>
+    [Fact]
+    public async Task A_materialized_view_and_a_policy_created_at_the_same_moment_do_not_both_succeed()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var table = await _rls.CreateDocumentsAsync(Guid.NewGuid());
+        await _rls.SeedAsync(table, Row("a", UserA));
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        // The view is still being built, in a transaction of its own, when the policy is created.
+        var unfinishedView = "mv_unfinished_" + suffix;
+        await using (var building = await _rls.OpenSystemConnectionAsync())
+        {
+            await using var transaction = await building.BeginTransactionAsync(ct);
+            await building.ExecuteAsync(
+                $"""CREATE MATERIALIZED VIEW "{unfinishedView}" AS SELECT * FROM "{table.PhysicalName}" WITH NO DATA""",
+                transaction: transaction);
+
+            var policy = _rls.CreatePolicyAsync(table, "owner = {{user_id}}");
+            await _rls.WaitUntilALockOnIsAwaitedAsync(table);
+            await transaction.CommitAsync(ct);
+
+            var created = () => policy;
+            (await created.Should().ThrowAsync<SchemaException>()).Which.Message.Should().Contain($"'{unfinishedView}'");
+        }
+
+        (await _rls.StoredPolicyCountAsync(table)).Should().Be(0);
+        (await _rls.NativeStateAsync(table)).Should().BeEquivalentTo(new { Enabled = false, Forced = false });
+        await _rls.ExecuteAsSystemAsync($"""DROP MATERIALIZED VIEW "{unfinishedView}" """);
+
+        // The other way round: the policy is still being written when the view is created.
+        var policyId = Guid.NewGuid();
+        var viewName = "rls_mview_" + suffix;
+        await using (var writing = await _rls.OpenSystemConnectionAsync())
+        {
+            await using var transaction = await writing.BeginTransactionAsync(ct);
+            await writing.ExecuteAsync(
+                """
+                INSERT INTO morphdb._morph_security_policies
+                (id, project_id, table_id, name, description, policy_type, expression, is_active, ordinal_position, created_at, updated_at)
+                VALUES (@Id, @ProjectId, @TableId, 'unfinished', NULL, 0, @Expression, true, 1, NOW(), NOW())
+                """,
+                new { Id = policyId, table.ProjectId, table.TableId, Expression = "owner = {{user_id}}" },
+                transaction);
+            await writing.ExecuteAsync(
+                $"""ALTER TABLE "{table.PhysicalName}" ENABLE ROW LEVEL SECURITY""", transaction: transaction);
+
+            var view = _rls.Views.CreateViewAsync(TitlesView(table.ProjectId, viewName, table.LogicalName, materialized: true), ct);
+            await _rls.WaitUntilALockOnIsAwaitedAsync(table);
+            await transaction.CommitAsync(ct);
+
+            var created = () => view;
+            (await created.Should().ThrowAsync<SchemaException>()).Which.Message.Should().Contain("'unfinished'");
+        }
+
+        (await _rls.Views.GetViewAsync(table.ProjectId, viewName, ct)).Should().BeNull();
+        await _rls.Policies.DeletePolicyAsync(table.ProjectId, policyId, ct);
     }
 
     /// <summary>

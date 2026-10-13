@@ -1,15 +1,11 @@
-using Dapper;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
 using MorphDB.Core.Security;
-using MorphDB.Npgsql.Infrastructure;
-using MorphDB.Npgsql.Repositories;
-using MorphDB.Npgsql.Schema;
 using MorphDB.Npgsql.Security;
 using MorphDB.Npgsql.Services;
 using MorphDB.Tests.Fixtures;
-using Npgsql;
+using static MorphDB.Tests.Integration.RowLevelSecurityHarness;
 
 namespace MorphDB.Tests.Integration;
 
@@ -23,22 +19,22 @@ namespace MorphDB.Tests.Integration;
 [Collection("PostgreSQL")]
 public class SecurityPolicyServiceTests
 {
+    private readonly RowLevelSecurityHarness _rls;
     private readonly SecurityPolicyService _policies;
     private readonly PostgresSchemaManager _schemaManager;
-    private readonly NpgsqlDataSource _dataSource;
 
     public SecurityPolicyServiceTests(PostgresFixture fixture)
     {
-        _dataSource = fixture.DataSource;
-        _policies = new SecurityPolicyService(fixture.Connections, new MetadataRepository(fixture.Connections));
-        _schemaManager = new PostgresSchemaManager(
-            fixture.Connections,
-            new MetadataRepository(fixture.Connections),
-            new PostgresAdvisoryLockManager(fixture.Connections, new AdvisoryLockOptions()),
-            new Sha256NameHasher(),
-            new ChangeLogger(fixture.Connections),
-            new ProjectRepository(fixture.Connections, new PostgresSchemaNameResolver()),
-            new SchemaManagerOptions());
+        _rls = new RowLevelSecurityHarness(fixture);
+        _policies = _rls.Policies;
+        _schemaManager = _rls.Schema;
+    }
+
+    /// <summary>The owners of the rows a caller reads from the table, in order.</summary>
+    private async Task<List<string?>> OwnersReadByAsync(TableMetadata table, SecurityContext? caller)
+    {
+        var rows = await As(caller, () => _rls.Data.Query(table.ProjectId).From(table.LogicalName).SelectAll().ToListAsync());
+        return [.. rows.Select(r => (string?)r["owner_id"]).Order(StringComparer.Ordinal)];
     }
 
     [Fact]
@@ -106,7 +102,7 @@ public class SecurityPolicyServiceTests
     }
 
     /// <summary>
-    /// A policy expression is spliced into the WHERE clause of ordinary queries, which makes it a
+    /// A policy expression becomes part of a policy PostgreSQL evaluates, which makes it a
     /// caller-authored string reaching SQL verbatim — the category the constitution says must never
     /// pass unchecked. CHECK predicates and index predicates were gated; this path shipped open.
     /// </summary>
@@ -188,6 +184,8 @@ public class SecurityPolicyServiceTests
         var projectId = Guid.NewGuid();
         var tableName = "policy_delete_" + Guid.NewGuid().ToString("N")[..8];
         var table = await CreateTableAsync(projectId, tableName);
+        await _rls.SeedAsync(table, new Dictionary<string, object?> { ["owner_id"] = null });
+        var caller = User(projectId, UserA);
 
         var created = await _policies.CreatePolicyAsync(projectId, new CreatePolicyRequest
         {
@@ -196,63 +194,27 @@ public class SecurityPolicyServiceTests
             PolicyType = PolicyType.Select,
             Expression = "owner_id IS NOT NULL"
         }, TestContext.Current.CancellationToken);
+        (await OwnersReadByAsync(table, caller)).Should().BeEmpty("the policy hides the row");
 
         await _policies.DeletePolicyAsync(projectId, created.Id, TestContext.Current.CancellationToken);
 
         (await _policies.GetPolicyAsync(projectId, created.Id, TestContext.Current.CancellationToken)).Should().BeNull();
-        (await _policies.EvaluatePoliciesAsync(
-            projectId, table, PolicyType.Select, new SecurityContext { ProjectId = projectId }, cancellationToken: TestContext.Current.CancellationToken))
-            .Should().BeNull("no policy remains to constrain the read");
-    }
-
-    [Fact]
-    public async Task Evaluation_combines_the_applicable_policies_and_substitutes_the_caller()
-    {
-        var projectId = Guid.NewGuid();
-        var tableName = "policy_eval_" + Guid.NewGuid().ToString("N")[..8];
-        var table = await CreateTableAsync(projectId, tableName);
-
-        await _policies.CreatePolicyAsync(projectId, new CreatePolicyRequest
-        {
-            Name = "owner_only",
-            TableName = tableName,
-            PolicyType = PolicyType.Select,
-            Expression = "owner_id = {{user_id}}"
-        }, TestContext.Current.CancellationToken);
-        await _policies.CreatePolicyAsync(projectId, new CreatePolicyRequest
-        {
-            Name = "not_null",
-            TableName = tableName,
-            PolicyType = PolicyType.Select,
-            Expression = "owner_id IS NOT NULL"
-        }, TestContext.Current.CancellationToken);
-        var where = await _policies.EvaluatePoliciesAsync(
-            projectId,
-            table,
-            PolicyType.Select,
-            new SecurityContext { ProjectId = projectId, UserId = "u-1" },
-            "base_table",
-            TestContext.Current.CancellationToken);
-
-        where.Should().Contain("'u-1'", "the caller is substituted for the placeholder");
-        where.Should().Contain(" AND ", "applicable policies are combined, not chosen between");
-        var physical = table.Columns.Single(c => c.LogicalName == "owner_id").PhysicalName;
-        where.Should().Contain($"base_table.\"{physical}\"",
-            "a policy is written in the table's own column names and read in the physical ones, " +
-            "qualified by what the query calls the table");
-        where.Should().NotContain("owner_id", "no logical name may reach the SQL");
+        (await OwnersReadByAsync(table, caller)).Should().HaveCount(1, "no policy remains to constrain the read");
     }
 
     /// <summary>
-    /// A caller's identity is substituted into the expression as a literal. A quote inside it must
-    /// stay inside it, or the caller writes the predicate rather than being filtered by it.
+    /// A caller's identity reaches the policy as a value. A quote inside it stays inside it: the
+    /// caller is compared with the column, and never writes the predicate.
     /// </summary>
     [Fact]
-    public async Task A_caller_identity_carrying_a_quote_cannot_break_out_of_its_literal()
+    public async Task A_caller_identity_carrying_a_quote_is_compared_as_a_value()
     {
+        const string hostile = "x' OR '1'='1";
         var projectId = Guid.NewGuid();
         var tableName = "policy_escape_" + Guid.NewGuid().ToString("N")[..8];
         var table = await CreateTableAsync(projectId, tableName);
+        await _rls.SeedAsync(table, new Dictionary<string, object?> { ["owner_id"] = "someone-else" });
+        await _rls.SeedAsync(table, new Dictionary<string, object?> { ["owner_id"] = hostile });
 
         await _policies.CreatePolicyAsync(projectId, new CreatePolicyRequest
         {
@@ -262,50 +224,8 @@ public class SecurityPolicyServiceTests
             Expression = "owner_id = {{user_id}}"
         }, TestContext.Current.CancellationToken);
 
-        var where = await _policies.EvaluatePoliciesAsync(
-            projectId,
-            table,
-            PolicyType.Select,
-            new SecurityContext { ProjectId = projectId, UserId = "x' OR '1'='1" },
-            cancellationToken: TestContext.Current.CancellationToken);
-
-        where.Should().Contain("''", "the quote is doubled, not closed");
-    }
-
-    /// <summary>
-    /// The write-side gate cannot reach rows that were stored before it existed — and those are the
-    /// rows a deployed database actually holds. Written straight to the table here, as the released
-    /// service would have accepted it.
-    /// </summary>
-    [Fact]
-    public async Task A_hostile_expression_stored_before_the_gate_existed_fails_the_read()
-    {
-        var projectId = Guid.NewGuid();
-        var tableName = "policy_legacy_" + Guid.NewGuid().ToString("N")[..8];
-        var table = await CreateTableAsync(projectId, tableName);
-
-        await using (var connection = await _dataSource.OpenConnectionAsync(TestContext.Current.CancellationToken))
-        {
-            await connection.ExecuteAsync(
-                """
-                INSERT INTO morphdb._morph_security_policies
-                (id, project_id, table_id, name, description, policy_type, expression, is_active, ordinal_position, created_at, updated_at)
-                VALUES (@Id, @ProjectId, @TableId, 'legacy_hostile', NULL, 0, @Expression, true, 1, NOW(), NOW())
-                """,
-                new
-                {
-                    Id = Guid.NewGuid(),
-                    ProjectId = projectId,
-                    TableId = table.TableId,
-                    Expression = "true) OR (1=1"
-                });
-        }
-
-        var act = () => _policies.EvaluatePoliciesAsync(
-            projectId, table, PolicyType.Select, new SecurityContext { ProjectId = projectId });
-
-        await act.Should().ThrowAsync<SchemaException>(
-            "a policy that cannot be emitted safely must fail the read, not be dropped from it");
+        (await OwnersReadByAsync(table, User(projectId, hostile)))
+            .Should().Equal([hostile], "the only row it reads is the one that carries exactly that text as its owner");
     }
 
     /// <summary>

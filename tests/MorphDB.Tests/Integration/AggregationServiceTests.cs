@@ -42,19 +42,9 @@ public class AggregationServiceTests
             new ProjectRepository(fixture.Connections, new PostgresSchemaNameResolver()),
             schemaOptions);
 
-        var securityPolicyService = new SecurityPolicyService(fixture.Connections, new MetadataRepository(fixture.Connections));
-        var securityContextAccessor = new SecurityContextAccessor();
+        _dataService = fixture.CreateDataService(_metadataRepository, new SecurityContextAccessor());
 
-        _dataService = fixture.CreateDataService(
-            _metadataRepository,
-            securityPolicyService,
-            securityContextAccessor);
-
-        _aggregationService = new PostgresAggregationService(
-            fixture.Connections,
-            _metadataRepository,
-            securityPolicyService,
-            securityContextAccessor);
+        _aggregationService = new PostgresAggregationService(fixture.Connections, _metadataRepository);
     }
 
     private async Task<TableMetadata> CreateTestTableAsync(Guid projectId, string logicalName)

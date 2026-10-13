@@ -38,7 +38,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         await using var connection = await _connections.OpenAsync(cancellationToken);
         var results = await connection.QueryAsync<dynamic>(sql, new { recordId = request.RecordId });
 
-        var records = MapToHierarchyRecords(results, request.IncludeSelf, request.RecordId);
+        var records = MapToHierarchyRecords(results, table.Columns, request.IncludeSelf, request.RecordId);
 
         return new HierarchyQueryResult
         {
@@ -62,7 +62,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         await using var connection = await _connections.OpenAsync(cancellationToken);
         var results = await connection.QueryAsync<dynamic>(sql, new { recordId = request.RecordId });
 
-        var records = MapToHierarchyRecords(results, request.IncludeSelf, request.RecordId);
+        var records = MapToHierarchyRecords(results, table.Columns, request.IncludeSelf, request.RecordId);
 
         return new HierarchyQueryResult
         {
@@ -86,7 +86,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         await using var connection = await _connections.OpenAsync(cancellationToken);
         var results = await connection.QueryAsync<dynamic>(sql, new { recordId = request.RecordId });
 
-        var records = MapToHierarchyRecords(results, includeSelf: true, request.RecordId);
+        var records = MapToHierarchyRecords(results, table.Columns, includeSelf: true, request.RecordId);
 
         return new HierarchyQueryResult
         {
@@ -111,7 +111,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
 
         var records = results.Select(row => new HierarchyRecord
         {
-            Data = (IDictionary<string, object?>)row,
+            Data = RowMapper.MapToLogicalDictionary(row, table.Columns),
             Depth = 0,
             Path = null
         }).ToList();
@@ -189,9 +189,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
     {
         var tableName = DdlBuilder.QuoteIdentifier(physicalName);
         var parentCol = DdlBuilder.QuoteIdentifier(parentColumn);
-        var selectCols = columns == null || columns.Count == 0
-            ? "*"
-            : string.Join(", ", columns.Select(DdlBuilder.QuoteIdentifier));
+        var selectCols = SelectList(columns, "depth");
 
         return $"""
             WITH RECURSIVE ancestors AS (
@@ -208,7 +206,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
                 INNER JOIN ancestors a ON t."_id" = a.{parentCol}
                 WHERE a.depth < {maxDepth}
             )
-            SELECT {selectCols}, depth FROM ancestors ORDER BY depth ASC
+            SELECT {selectCols} FROM ancestors ORDER BY depth ASC
             """;
     }
 
@@ -221,9 +219,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
     {
         var tableName = DdlBuilder.QuoteIdentifier(physicalName);
         var parentCol = DdlBuilder.QuoteIdentifier(parentColumn);
-        var selectCols = columns == null || columns.Count == 0
-            ? "*"
-            : string.Join(", ", columns.Select(DdlBuilder.QuoteIdentifier));
+        var selectCols = SelectList(columns, "depth");
 
         var orderClause = string.IsNullOrEmpty(orderBy)
             ? "depth ASC"
@@ -244,7 +240,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
                 INNER JOIN descendants d ON t.{parentCol} = d."_id"
                 WHERE d.depth < {maxDepth}
             )
-            SELECT {selectCols}, depth FROM descendants ORDER BY {orderClause}
+            SELECT {selectCols} FROM descendants ORDER BY {orderClause}
             """;
     }
 
@@ -256,9 +252,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
     {
         var tableName = DdlBuilder.QuoteIdentifier(physicalName);
         var parentCol = DdlBuilder.QuoteIdentifier(parentColumn);
-        var selectCols = columns == null || columns.Count == 0
-            ? "*"
-            : string.Join(", ", columns.Select(DdlBuilder.QuoteIdentifier));
+        var selectCols = SelectList(columns, "depth", "path");
 
         return $"""
             WITH RECURSIVE path_to_root AS (
@@ -275,7 +269,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
                 INNER JOIN path_to_root p ON t."_id" = p.{parentCol}
                 WHERE p.depth < {maxDepth} AND NOT t."_id" = ANY(p.path)
             )
-            SELECT {selectCols}, depth, path FROM path_to_root ORDER BY depth DESC
+            SELECT {selectCols} FROM path_to_root ORDER BY depth DESC
             """;
     }
 
@@ -353,12 +347,24 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
 
     #region Helpers
 
+    /// <summary>
+    /// The select list of a query over a recursive CTE that carries the table's columns and the
+    /// columns the walk computes (<paramref name="computed"/> — <c>depth</c>, <c>path</c>). With no
+    /// columns asked for, <c>*</c> is all of them: naming a computed column beside it would return
+    /// it twice, and a row cannot hold two values under one name.
+    /// </summary>
+    private static string SelectList(IReadOnlyList<string>? columns, params string[] computed) =>
+        columns == null || columns.Count == 0
+            ? "*"
+            : string.Join(", ", columns.Select(DdlBuilder.QuoteIdentifier).Concat(computed));
+
     private async Task<Core.Models.TableMetadata> GetTableMetadataAsync(
         Guid projectId,
         string tableName,
         CancellationToken cancellationToken)
     {
-        var table = await _metadataRepository.GetTableByNameAsync(projectId, tableName, cancellationToken: cancellationToken);
+        // With its columns: a row is handed back in the names the table was declared with.
+        var table = await _metadataRepository.GetTableByNameAsync(projectId, tableName, includeColumns: true, cancellationToken);
         if (table == null)
         {
             throw new KeyNotFoundException($"Table '{tableName}' not found");
@@ -368,6 +374,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
 
     private static List<HierarchyRecord> MapToHierarchyRecords(
         IEnumerable<dynamic> results,
+        IReadOnlyList<Core.Models.ColumnMetadata> columns,
         bool includeSelf,
         Guid selfId)
     {
@@ -375,7 +382,10 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
 
         foreach (var row in results)
         {
-            var data = (IDictionary<string, object?>)row;
+            // Logical column names, and no internal column — as every other read hands a row back.
+            // The columns the walk computed are not the table's, and pass through under their own
+            // names.
+            Dictionary<string, object?> data = RowMapper.MapToLogicalDictionary(row, columns);
 
             // Extract depth from the row
             var depth = data.TryGetValue("depth", out var d) && d is int depthValue ? depthValue : 0;
@@ -393,14 +403,13 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
                 continue;
             }
 
-            // Remove internal columns from data
-            var cleanData = new Dictionary<string, object?>(data);
-            cleanData.Remove("depth");
-            cleanData.Remove("path");
+            // The computed columns are the record's own properties, not part of its row
+            data.Remove("depth");
+            data.Remove("path");
 
             records.Add(new HierarchyRecord
             {
-                Data = cleanData,
+                Data = data,
                 Depth = depth,
                 Path = path
             });

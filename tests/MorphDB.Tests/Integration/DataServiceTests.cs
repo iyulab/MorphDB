@@ -41,13 +41,7 @@ public class DataServiceTests
             new ProjectRepository(fixture.Connections, new PostgresSchemaNameResolver()),
             schemaOptions);
 
-        var securityPolicyService = new SecurityPolicyService(fixture.Connections, new MetadataRepository(fixture.Connections));
-        var securityContextAccessor = new SecurityContextAccessor();
-
-        _dataService = fixture.CreateDataService(
-            _metadataRepository,
-            securityPolicyService,
-            securityContextAccessor);
+        _dataService = fixture.CreateDataService(_metadataRepository, new SecurityContextAccessor());
     }
 
     /// <summary>
