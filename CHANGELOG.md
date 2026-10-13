@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+Row-level security moves into PostgreSQL. A policy used to be a condition MorphDB added to three
+of its reads; it is now a PostgreSQL policy on the table, applied to every statement — reads,
+writes, bulk jobs — whichever part of MorphDB issued it. Three things follow that an operator
+meets first: MorphDB must connect as a role PostgreSQL applies policies to, so it no longer
+starts as a superuser; policies restrict more than they did, including writes; and work done
+without a caller reads nothing a policy protects. Read Breaking, then Migration, before upgrading
+a deployment that has policies.
+
 ### Security
 
 - **A row-level security policy is enforced by PostgreSQL, on every statement.** A `Select` policy
@@ -50,6 +58,21 @@
 
 ### Breaking
 
+- **MorphDB refuses to start on a database role exempt from row-level security.** If the role it
+  connects as is a superuser or has `BYPASSRLS`, start-up stops with `INSECURE_DATABASE_ROLE`
+  before anything is created. PostgreSQL applies no row-level security to such a role — not even
+  with `FORCE ROW LEVEL SECURITY` — so security policies would be stored and never enforced, and a
+  superuser connection could drop the database. An in-process (embedded) host meets the same check
+  in `EnsureGlobalSchemaAsync`. Connect as a role created `NOSUPERUSER NOBYPASSRLS` that owns the
+  database; nothing else is required.
+- **`ConnectionPoolOptions.Multiplexing` is removed, and a connection string that sets
+  `Multiplexing=true` or `No Reset On Close=true` is refused at start-up.** MorphDB writes the
+  caller's security context to the session of each connection it opens. A multiplexed command runs
+  on whichever physical connection is free, and a connection that is not reset when it goes back to
+  the pool keeps what its last caller wrote — either way one caller's context could reach another
+  caller's statement. Neither setting was on by default. With one of them set, the first MorphDB
+  service to be resolved throws an `ArgumentException` that names it; remove the setting from the
+  connection string.
 - **A write is refused when its caller could not read the row it would leave.** A write returns the
   row it wrote, and PostgreSQL does not hand a caller a row a policy hides from it. On a table with
   an active policy, an insert, an update that changes a row so the policy no longer admits it, or
@@ -93,14 +116,6 @@
   accepted, and then failed every read of the table made by a caller with an id: the value arrived
   wrapped in a second pair of quotes. It is now `400 INVALID_EXPRESSION` when the policy is created
   or updated. Write a placeholder unquoted: `owner = {{user_id}}`.
-- **`ConnectionPoolOptions.Multiplexing` is removed, and a connection string that sets
-  `Multiplexing=true` or `No Reset On Close=true` is refused at start-up.** MorphDB writes the
-  caller's security context to the session of each connection it opens. A multiplexed command runs
-  on whichever physical connection is free, and a connection that is not reset when it goes back to
-  the pool keeps what its last caller wrote — either way one caller's context could reach another
-  caller's statement. Neither setting was on by default. With one of them set, the first MorphDB
-  service to be resolved throws an `ArgumentException` that names it; remove the setting from the
-  connection string.
 - **A host that constructs `MorphDB.Npgsql` services by hand passes a `MorphConnectionFactory`
   where it passed an `NpgsqlDataSource`.** Every service constructor that took the data source —
   the repositories, the schema manager, the data service, the write pipeline's executor and
@@ -177,17 +192,19 @@
 
 ### Changed
 
-- **MorphDB refuses to start on a database role exempt from row-level security.** If the role it
-  connects as is a superuser or has `BYPASSRLS`, start-up stops with `INSECURE_DATABASE_ROLE`
-  before anything is created. PostgreSQL applies no row-level security to such a role — not even
-  with `FORCE ROW LEVEL SECURITY` — so security policies would be stored and never enforced, and a
-  superuser connection could drop the database. An in-process (embedded) host meets the same check
-  in `EnsureGlobalSchemaAsync`. Connect as a role created `NOSUPERUSER NOBYPASSRLS` that owns the
-  database; nothing else is required.
-- **The compose files and `scripts/init.sql` create that role.** The image's bootstrap superuser
+- **The compose files and `scripts/init.sql` create the role MorphDB now has to connect as** (see
+  Breaking). The image's bootstrap superuser
   (`POSTGRES_USER`, now the default `postgres`) is for administration only; `init.sql` creates
   `morph` as the service's login and makes it the database owner. The README quick-start carries
   the same two statements inline, so it is still one file.
+- **A policy's condition is not served by an index.** PostgreSQL checks a policy on each row a
+  statement reads, and the form MorphDB gives a policy — the caller's exemption and the
+  condition in one expression — keeps the planner from using an index on the column the
+  condition compares. A read of a table with a policy by a caller the policy applies to scans
+  the table: on 200,000 rows with an indexed owner column, counting one owner's 200 rows took
+  about 60 ms where the bare comparison takes under 1 ms. A table without a policy, and a
+  caller exempt from policies, are unaffected. The condition MorphDB used to add to its own
+  queries could use the index.
 - **A placeholder takes its type from where it stands, as before.** A placeholder used to be
   substituted as a quoted literal, which PostgreSQL typed by its position; it is now read from the
   connection and cast to the type PostgreSQL infers for that same position. `owner_id = {{user_id}}`
@@ -237,6 +254,19 @@
   `finalize` of such a row answers `not_found` as well.
 
 ### Migration
+
+In order, for a deployment coming from 0.18:
+
+1. **Before upgrading**, list each table's policies and delete or deactivate any `Insert`,
+   `Update`, `Delete` or `All` policy that was never meant to hold — they start to (below). If
+   backups run `pg_dump` as the role MorphDB connects as, move them to an administrative role.
+2. **Give MorphDB a role of its own** if it connects as a superuser — it will not start as one
+   (below) — and remove `Multiplexing=true` and `No Reset On Close=true` from the connection
+   string if either is set.
+3. **Start the new version and read the log of the first start.** It names any stored policy
+   that could not be handed to PostgreSQL, and any materialized view that reads a table with a
+   policy; both leave something closed until dealt with (below).
+4. **Afterwards**, request again any bulk job that was pending or unfinished across the upgrade.
 
 A database created from the compose files before this release was reached through the bootstrap
 superuser (`POSTGRES_USER: morph`), which PostgreSQL does not let you demote. Hand it to a service
