@@ -1,14 +1,16 @@
 # Changelog
 
-## Unreleased
+## 0.19.0
 
 Row-level security moves into PostgreSQL. A policy used to be a condition MorphDB added to three
 of its reads; it is now a PostgreSQL policy on the table, applied to every statement — reads,
 writes, bulk jobs — whichever part of MorphDB issued it. Three things follow that an operator
-meets first: MorphDB must connect as a role PostgreSQL applies policies to, so it no longer
-starts as a superuser; policies restrict more than they did, including writes; and work done
-without a caller reads nothing a policy protects. Read Breaking, then Migration, before upgrading
-a deployment that has policies.
+meets first: MorphDB must connect as a role PostgreSQL applies policies to — not a superuser, and a
+member of a second role, `morphdb_bypass`, that the master secret's requests switch to — on
+PostgreSQL 15 or later; policies restrict more than they did, including writes; and work done
+without a caller reads nothing a policy protects. Read Breaking, then Migration, before upgrading:
+`scripts/migrate-to-service-role.sql` creates both roles for a database the earlier compose files
+made.
 
 ### Security
 
@@ -44,8 +46,9 @@ a deployment that has policies.
   only.)
 - **A bulk job exists only for its project and the caller that requested it.** The routes that take
   a job id — its status, its progress, cancelling it, downloading an export — found the job by that
-  id alone (`0.18.1` already confines a job to its project; the requester is new here). Anyone who knew a job id could read the job, cancel it and download its file, whatever
-  project the request named and whoever had requested the job, and the two job listings returned
+  id alone (`0.18.1` already confines a job to its project; the requester is new here). Anyone who
+  knew a job id could read the job, cancel it and download its file, whatever project the request
+  named and whoever had requested the job, and the two job listings returned
   every job of the project to every caller of it. An export's file holds the rows its requester may
   read (see Breaking), so the download handed those rows to callers a policy hides them from. A job
   is now there only for a request that names the job's project and comes from the caller that
