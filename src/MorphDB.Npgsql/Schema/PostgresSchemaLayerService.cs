@@ -114,21 +114,35 @@ public sealed partial class PostgresSchemaLayerService : ISchemaLayerService
     }
 
     /// <summary>
-    /// Lets <paramref name="bypassRole"/> read and write what the login role creates: every schema,
-    /// table and sequence that exists, and — through the login role's default privileges — every one
+    /// Lets <paramref name="bypassRole"/> read and write what the login role owns: every schema, table,
+    /// view and sequence that exists — wherever it lives, <c>public</c> included, where an earlier
+    /// version created its data tables — and, through the login role's default privileges, every one
     /// it creates later. The role passes row-level security because no policy names it; these grants
     /// are what it needs to reach the tables at all. It is given no right to create anything, so a
     /// connection switched to it cannot change the schema, and everything stays owned by the login
-    /// role. Idempotent: run on every start.
+    /// role. Run on every start; an object already granted is left alone.
     /// </summary>
     private static async Task GrantToBypassRoleAsync(NpgsqlConnection connection, string bypassRole)
     {
         var role = DdlBuilder.QuoteIdentifier(bypassRole);
-        var schemas = await connection.QueryAsync<string>(
+        var missing = await connection.QueryAsync<(string Kind, string Name)>(
             """
-            SELECT nspname::text FROM pg_namespace
-            WHERE nspowner = (SELECT oid FROM pg_roles WHERE rolname = session_user)
-            """);
+            WITH me AS (SELECT oid FROM pg_roles WHERE rolname = session_user)
+            SELECT 'schema', quote_ident(n.nspname)
+            FROM pg_namespace n, me
+            WHERE n.nspowner = me.oid AND NOT has_schema_privilege(@Role, n.oid, 'USAGE')
+            UNION ALL
+            SELECT CASE c.relkind WHEN 'S' THEN 'sequence' WHEN 'm' THEN 'readonly' ELSE 'table' END,
+                   format('%I.%I', n.nspname, c.relname)
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace, me
+            WHERE c.relowner = me.oid
+              AND c.relkind IN ('r', 'p', 'v', 'f', 'm', 'S')
+              AND NOT CASE c.relkind
+                  WHEN 'S' THEN has_sequence_privilege(@Role, c.oid, 'USAGE')
+                  ELSE has_table_privilege(@Role, c.oid, 'SELECT') END
+            """,
+            new { Role = bypassRole });
 
         var statements = new List<string>
         {
@@ -136,12 +150,15 @@ public sealed partial class PostgresSchemaLayerService : ISchemaLayerService
             $"ALTER DEFAULT PRIVILEGES GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {role}",
             $"ALTER DEFAULT PRIVILEGES GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO {role}"
         };
-        foreach (var schema in schemas)
+        foreach (var (kind, name) in missing)
         {
-            var name = DdlBuilder.QuoteIdentifier(schema);
-            statements.Add($"GRANT USAGE ON SCHEMA {name} TO {role}");
-            statements.Add($"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {name} TO {role}");
-            statements.Add($"GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA {name} TO {role}");
+            statements.Add(kind switch
+            {
+                "schema" => $"GRANT USAGE ON SCHEMA {name} TO {role}",
+                "sequence" => $"GRANT USAGE, SELECT, UPDATE ON SEQUENCE {name} TO {role}",
+                "readonly" => $"GRANT SELECT ON TABLE {name} TO {role}",
+                _ => $"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {name} TO {role}",
+            });
         }
 
         await connection.ExecuteAsync(string.Join(";\n", statements));

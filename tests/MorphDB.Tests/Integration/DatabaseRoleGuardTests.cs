@@ -100,6 +100,38 @@ public sealed class DatabaseRoleGuardTests : IAsyncLifetime
         (await noSuchRole.Should().ThrowAsync<MissingBypassRoleException>()).Which.BypassRoleExists.Should().BeFalse();
     }
 
+    /// <summary>
+    /// A database an earlier version wrote has data tables in <c>public</c>, made before the login
+    /// role's default privileges existed. Start-up grants them to the bypass role too — or a request
+    /// with the master secret is refused on the first table it reads.
+    /// </summary>
+    [Fact]
+    public async Task Tables_the_login_role_owned_before_start_up_are_granted_to_the_bypass_role()
+    {
+        await using (var service = new NpgsqlConnection(TestPostgres.ServiceConnectionString(_container)))
+        {
+            await service.OpenAsync(TestContext.Current.CancellationToken);
+            await using var create = new NpgsqlCommand(
+                "CREATE TABLE public.older_data (id bigserial PRIMARY KEY, title text); CREATE VIEW public.older_titles AS SELECT title FROM public.older_data",
+                service);
+            await create.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        await BootstrapAsync(TestPostgres.ServiceConnectionString(_container));
+
+        await using var connection = new NpgsqlConnection(_container.GetConnectionString());
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        await using var command = new NpgsqlCommand(
+            """
+            SELECT has_table_privilege('morphdb_bypass', 'public.older_data', 'SELECT,INSERT,UPDATE,DELETE')
+               AND has_table_privilege('morphdb_bypass', 'public.older_data', 'DELETE')
+               AND has_table_privilege('morphdb_bypass', 'public.older_titles', 'SELECT')
+               AND has_sequence_privilege('morphdb_bypass', 'public.older_data_id_seq', 'USAGE')
+               AND NOT has_schema_privilege('morphdb_bypass', 'morphdb', 'CREATE')
+            """, connection);
+        ((bool)(await command.ExecuteScalarAsync(TestContext.Current.CancellationToken))!).Should().BeTrue();
+    }
+
     [Fact]
     public async Task A_view_an_earlier_version_created_reads_as_its_caller_after_start_up()
     {
