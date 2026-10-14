@@ -177,20 +177,18 @@ jobs:
           docker network create morphdb-verify
           # Initialised by the same scripts/init.sql the compose files mount: the service logs in as
           # the non-superuser role it creates, because the image refuses a superuser at start-up.
-          # This workflow runs from the default branch for every release, a hotfix branch included,
-          # and a hotfix tree from before that script (0.18.x and earlier) has neither the script
-          # nor the refusal: its image is verified the way it was built to run, as the bootstrap
-          # superuser.
-          if [ -f "${GITHUB_WORKSPACE}/scripts/init.sql" ]; then
-            db_setup=(-e POSTGRES_PASSWORD=postgres
-              -v "${GITHUB_WORKSPACE}/scripts/init.sql:/docker-entrypoint-initdb.d/init.sql:ro")
+          # This workflow runs from the default branch for every release, a hotfix branch included.
+          # A tree from before the service role (0.18.x and earlier) has an init.sql that grants to
+          # `morph` as the bootstrap superuser, and an image that accepts a superuser: it is verified
+          # the way its own compose file runs it.
+          if grep -q 'CREATE ROLE morph' "${GITHUB_WORKSPACE}/scripts/init.sql"; then
             bootstrap_user=postgres
           else
-            db_setup=(-e POSTGRES_USER=morph -e POSTGRES_PASSWORD=morph)
             bootstrap_user=morph
           fi
           docker run -d --name verify-db --network morphdb-verify \
-            -e POSTGRES_DB=morphdb "${db_setup[@]}" \
+            -e POSTGRES_USER="${bootstrap_user}" -e POSTGRES_PASSWORD="${bootstrap_user}" -e POSTGRES_DB=morphdb \
+            -v "${GITHUB_WORKSPACE}/scripts/init.sql:/docker-entrypoint-initdb.d/init.sql:ro" \
             --health-cmd "pg_isready -h 127.0.0.1 -U ${bootstrap_user} -d morphdb" --health-interval 2s --health-retries 15 \
             postgres:16-alpine
           for _ in $(seq 30); do
