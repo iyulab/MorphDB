@@ -243,6 +243,12 @@ a deployment that has policies.
 
 ### Fixed
 
+- **Two schema changes to one table run one after the other.** Creating or deleting a table, a
+  column, an index or a relation takes a lock on the table, which another change to it waits for.
+  The lock was taken in a way PostgreSQL released at once, so concurrent changes to one table were
+  never serialized; it is now held until the change is done. A relation locks both of its tables in
+  a fixed order, and a table related to itself once.
+  (Verified-by: AdvisoryLockManagerTests.A_held_lock_is_not_taken_again_until_its_handle_is_disposed)
 - **A hierarchy query that names no columns returns rows.** The `ancestors`, `descendants`,
   `subtree` and `path` routes — which never name columns — and an in-process
   `HierarchyQueryRequest` with `Columns` left unset failed with `An item with the same key has

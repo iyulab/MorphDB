@@ -1136,16 +1136,25 @@ public sealed class PostgresSchemaManager : ISchemaManager
         var enforceOnWrite = request.EnforceOnWrite ?? await GetDefaultEnforceOnWriteAsync(
             request.ProjectId, cancellationToken);
 
-        // Acquire advisory lock for both tables
-        await using var sourceLock = await _lockManager.AcquireDdlLockAsync(
-            $"table:{request.SourceTableId}",
+        // Lock both tables, in one order whichever end each is — two requests relating the same pair
+        // in opposite directions would otherwise each hold one lock and wait for the other — and a
+        // table related to itself once: each lock is held by a connection of its own, so a second
+        // lock on the same table would wait for the first.
+        var (firstTable, secondTable) = request.SourceTableId.CompareTo(request.TargetTableId) <= 0
+            ? (request.SourceTableId, request.TargetTableId)
+            : (request.TargetTableId, request.SourceTableId);
+
+        await using var firstLock = await _lockManager.AcquireDdlLockAsync(
+            $"table:{firstTable}",
             _options.LockTimeout,
             cancellationToken);
 
-        await using var targetLock = await _lockManager.AcquireDdlLockAsync(
-            $"table:{request.TargetTableId}",
-            _options.LockTimeout,
-            cancellationToken);
+        await using var secondLock = secondTable == firstTable
+            ? null
+            : await _lockManager.AcquireDdlLockAsync(
+                $"table:{secondTable}",
+                _options.LockTimeout,
+                cancellationToken);
 
         var relationId = Guid.NewGuid();
         Guid? junctionTableId = null;

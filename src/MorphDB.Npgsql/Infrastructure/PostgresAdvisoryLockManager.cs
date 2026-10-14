@@ -9,6 +9,14 @@ namespace MorphDB.Npgsql.Infrastructure;
 /// <summary>
 /// PostgreSQL advisory lock manager for DDL serialization.
 /// </summary>
+/// <remarks>
+/// Every lock is a session-level advisory lock held by a connection of its own, for as long as the
+/// handle is not disposed: the schema change it guards runs on other connections, in transactions of
+/// their own, so a lock bound to a transaction on the lock's connection would protect nothing. A
+/// transaction-level lock taken outside a transaction is released by the very statement that takes
+/// it. Disposing the handle unlocks and returns the connection; if the unlock never runs, the pool's
+/// reset on return releases every advisory lock the session held.
+/// </remarks>
 public sealed class PostgresAdvisoryLockManager : IAdvisoryLockManager
 {
     private readonly MorphConnectionFactory _connections;
@@ -20,49 +28,11 @@ public sealed class PostgresAdvisoryLockManager : IAdvisoryLockManager
         _options = options ?? new AdvisoryLockOptions();
     }
 
-    public async Task<IAsyncDisposable> AcquireDdlLockAsync(
+    public Task<IAsyncDisposable> AcquireDdlLockAsync(
         string resourceIdentifier,
         TimeSpan timeout,
         CancellationToken cancellationToken = default)
-    {
-        var lockKey = ComputeLockKey(resourceIdentifier);
-        var connection = await _connections.OpenSystemAsync(cancellationToken);
-
-        try
-        {
-            var acquired = false;
-            var elapsed = TimeSpan.Zero;
-
-            while (!acquired && elapsed < timeout)
-            {
-                await using var cmd = connection.CreateCommand();
-                cmd.CommandText = "SELECT pg_try_advisory_xact_lock(@key)";
-                cmd.Parameters.AddWithValue("key", lockKey);
-
-                var result = await cmd.ExecuteScalarAsync(cancellationToken);
-                acquired = result is true;
-
-                if (!acquired)
-                {
-                    await Task.Delay(_options.RetryInterval, cancellationToken);
-                    elapsed += _options.RetryInterval;
-                }
-            }
-
-            if (!acquired)
-            {
-                await connection.DisposeAsync();
-                throw new LockAcquisitionException(resourceIdentifier, timeout);
-            }
-
-            return new TransactionLockHandle(connection);
-        }
-        catch
-        {
-            await connection.DisposeAsync();
-            throw;
-        }
-    }
+        => AcquireAsync(resourceIdentifier, timeout, cancellationToken);
 
     public async Task<(bool Acquired, IAsyncDisposable? Lock)> TryAcquireDdlLockAsync(
         string resourceIdentifier,
@@ -73,16 +43,9 @@ public sealed class PostgresAdvisoryLockManager : IAdvisoryLockManager
 
         try
         {
-            await using var cmd = connection.CreateCommand();
-            cmd.CommandText = "SELECT pg_try_advisory_xact_lock(@key)";
-            cmd.Parameters.AddWithValue("key", lockKey);
-
-            var result = await cmd.ExecuteScalarAsync(cancellationToken);
-            var acquired = result is true;
-
-            if (acquired)
+            if (await TryLockAsync(connection, lockKey, cancellationToken))
             {
-                return (true, new TransactionLockHandle(connection));
+                return (true, new SessionLockHandle(connection, lockKey));
             }
 
             await connection.DisposeAsync();
@@ -95,33 +58,30 @@ public sealed class PostgresAdvisoryLockManager : IAdvisoryLockManager
         }
     }
 
-    public async Task<IAsyncDisposable> AcquireSessionLockAsync(
+    public Task<IAsyncDisposable> AcquireSessionLockAsync(
         string resourceIdentifier,
         TimeSpan timeout,
         CancellationToken cancellationToken = default)
+        => AcquireAsync(resourceIdentifier, timeout, cancellationToken);
+
+    private async Task<IAsyncDisposable> AcquireAsync(
+        string resourceIdentifier,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
     {
         var lockKey = ComputeLockKey(resourceIdentifier);
         var connection = await _connections.OpenSystemAsync(cancellationToken);
 
         try
         {
-            var acquired = false;
+            var acquired = await TryLockAsync(connection, lockKey, cancellationToken);
             var elapsed = TimeSpan.Zero;
 
             while (!acquired && elapsed < timeout)
             {
-                await using var cmd = connection.CreateCommand();
-                cmd.CommandText = "SELECT pg_try_advisory_lock(@key)";
-                cmd.Parameters.AddWithValue("key", lockKey);
-
-                var result = await cmd.ExecuteScalarAsync(cancellationToken);
-                acquired = result is true;
-
-                if (!acquired)
-                {
-                    await Task.Delay(_options.RetryInterval, cancellationToken);
-                    elapsed += _options.RetryInterval;
-                }
+                await Task.Delay(_options.RetryInterval, cancellationToken);
+                elapsed += _options.RetryInterval;
+                acquired = await TryLockAsync(connection, lockKey, cancellationToken);
             }
 
             if (!acquired)
@@ -139,26 +99,19 @@ public sealed class PostgresAdvisoryLockManager : IAdvisoryLockManager
         }
     }
 
+    private static async Task<bool> TryLockAsync(NpgsqlConnection connection, long lockKey, CancellationToken cancellationToken)
+    {
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT pg_try_advisory_lock(@key)";
+        cmd.Parameters.AddWithValue("key", lockKey);
+        return await cmd.ExecuteScalarAsync(cancellationToken) is true;
+    }
+
     private static long ComputeLockKey(string resourceIdentifier)
     {
         var bytes = Encoding.UTF8.GetBytes(resourceIdentifier);
         var hash = SHA256.HashData(bytes);
         return BitConverter.ToInt64(hash, 0);
-    }
-
-    private sealed class TransactionLockHandle : IAsyncDisposable
-    {
-        private readonly NpgsqlConnection _connection;
-
-        public TransactionLockHandle(NpgsqlConnection connection)
-        {
-            _connection = connection;
-        }
-
-        public async ValueTask DisposeAsync()
-        {
-            await _connection.DisposeAsync();
-        }
     }
 
     private sealed class SessionLockHandle : IAsyncDisposable

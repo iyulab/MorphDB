@@ -527,6 +527,42 @@ public class SchemaManagerTests
     /// indexes that no longer existed anywhere — and a relation kept pointing at a table that was
     /// gone. Hiding the physical schema is what obliges this layer to keep it tidy.
     /// </summary>
+    /// <summary>
+    /// A relation from a table to itself locks the table once. Each DDL lock is held by a connection
+    /// of its own, so taking it a second time for the other end would wait for the first until the
+    /// lock timeout.
+    /// </summary>
+    [Fact]
+    public async Task A_table_can_be_related_to_itself_without_waiting_on_its_own_lock()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var table = await _schemaManager.CreateTableAsync(new CreateTableRequest
+        {
+            ProjectId = Guid.NewGuid(),
+            LogicalName = "self_rel_" + suffix,
+            Columns =
+            [
+                new CreateColumnRequest { LogicalName = "code", DataType = MorphDataType.Text, IsUnique = true },
+                new CreateColumnRequest { LogicalName = "parent_code", DataType = MorphDataType.Text }
+            ]
+        }, TestContext.Current.CancellationToken);
+
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var relation = await _schemaManager.CreateRelationAsync(new CreateRelationRequest
+        {
+            ProjectId = table.ProjectId,
+            LogicalName = "rel_self_" + suffix,
+            SourceTableId = table.TableId,
+            SourceColumnId = table.Columns.First(c => c.LogicalName == "parent_code").ColumnId,
+            TargetTableId = table.TableId,
+            TargetColumnId = table.Columns.First(c => c.LogicalName == "code").ColumnId,
+            RelationType = RelationType.OneToMany
+        }, TestContext.Current.CancellationToken);
+
+        relation.SourceTableId.Should().Be(table.TableId);
+        stopwatch.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(10), "the second end is the same table and is not locked again");
+    }
+
     [Fact]
     public async Task Deleting_a_table_retires_its_columns_indexes_and_relations_with_it()
     {

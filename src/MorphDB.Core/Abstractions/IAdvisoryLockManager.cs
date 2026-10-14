@@ -6,8 +6,8 @@ namespace MorphDB.Core.Abstractions;
 public interface IAdvisoryLockManager
 {
     /// <summary>
-    /// Acquires a transaction-level advisory lock for DDL operations.
-    /// The lock is automatically released when the transaction commits or rolls back.
+    /// Acquires an advisory lock for DDL operations on a resource, held until the returned handle is
+    /// disposed. Another acquisition of the same resource waits for it, up to <paramref name="timeout"/>.
     /// </summary>
     Task<IAsyncDisposable> AcquireDdlLockAsync(
         string resourceIdentifier,
@@ -15,7 +15,7 @@ public interface IAdvisoryLockManager
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Tries to acquire a DDL lock without waiting.
+    /// Tries to acquire a DDL lock without waiting; held until the returned handle is disposed.
     /// </summary>
     Task<(bool Acquired, IAsyncDisposable? Lock)> TryAcquireDdlLockAsync(
         string resourceIdentifier,
