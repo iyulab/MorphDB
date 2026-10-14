@@ -150,7 +150,7 @@ public sealed class BulkController : ControllerBase
     {
         var job = await _bulkService.GetImportJobAsync(jobId, cancellationToken);
 
-        if (job == null)
+        if (job == null || job.ProjectId != GetProjectId())
         {
             return NotFound(new ErrorResponse
             {
@@ -277,7 +277,7 @@ public sealed class BulkController : ControllerBase
     {
         var job = await _bulkService.GetExportJobAsync(jobId, cancellationToken);
 
-        if (job == null)
+        if (job == null || job.ProjectId != GetProjectId())
         {
             return NotFound(new ErrorResponse
             {
@@ -301,7 +301,7 @@ public sealed class BulkController : ControllerBase
     {
         var job = await _bulkService.GetExportJobAsync(jobId, cancellationToken);
 
-        if (job == null)
+        if (job == null || job.ProjectId != GetProjectId())
         {
             return NotFound(new ErrorResponse
             {
@@ -381,7 +381,9 @@ public sealed class BulkController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetJobProgress(Guid jobId, CancellationToken cancellationToken = default)
     {
-        var progress = await _bulkService.GetJobProgressAsync(jobId, cancellationToken);
+        var progress = await IsJobInProjectAsync(jobId, cancellationToken)
+            ? await _bulkService.GetJobProgressAsync(jobId, cancellationToken)
+            : null;
 
         if (progress == null)
         {
@@ -414,7 +416,8 @@ public sealed class BulkController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> CancelJob(Guid jobId, CancellationToken cancellationToken = default)
     {
-        var cancelled = await _bulkService.CancelJobAsync(jobId, cancellationToken);
+        var cancelled = await IsJobInProjectAsync(jobId, cancellationToken)
+            && await _bulkService.CancelJobAsync(jobId, cancellationToken);
 
         if (!cancelled)
         {
@@ -432,6 +435,17 @@ public sealed class BulkController : ControllerBase
     #endregion
 
     #region Helper Methods
+
+    /// <summary>
+    /// Whether the job exists in the request's project. A job of another project is answered as an
+    /// unknown id: knowing a job's id does not reach it from outside its project.
+    /// </summary>
+    private async Task<bool> IsJobInProjectAsync(Guid jobId, CancellationToken cancellationToken)
+    {
+        var projectId = (await _bulkService.GetImportJobAsync(jobId, cancellationToken))?.ProjectId
+            ?? (await _bulkService.GetExportJobAsync(jobId, cancellationToken))?.ProjectId;
+        return projectId == GetProjectId();
+    }
 
     private static ImportJobApiResponse ToImportJobResponse(BulkImportJob job) => new()
     {

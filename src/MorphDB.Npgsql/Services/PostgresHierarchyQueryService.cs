@@ -57,7 +57,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         var maxDepth = request.MaxDepth ?? DefaultMaxDepth;
 
         // Build recursive CTE for descendants
-        var sql = BuildDescendantsCte(table.PhysicalName, request.ParentColumn, request.Columns, maxDepth, request.OrderBy);
+        var sql = BuildDescendantsCte(table.PhysicalName, request.ParentColumn, request.Columns, maxDepth, OrderTerms(table, request.OrderBy));
 
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
         var results = await connection.QueryAsync<dynamic>(sql, new { recordId = request.RecordId });
@@ -353,12 +353,57 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
 
     #region Helpers
 
+    /// <summary>
+    /// The caller's order as <c>ORDER BY</c> terms the server wrote: parsed as comma-separated
+    /// <c>column [asc|desc]</c>, each column a stored column of the table named by its declared or
+    /// stored name, or a system column — never pasted into the query.
+    /// </summary>
+    private static string? OrderTerms(Core.Models.TableMetadata table, string? orderBy)
+    {
+        if (string.IsNullOrWhiteSpace(orderBy))
+        {
+            return null;
+        }
+
+        var syntaxError = Infrastructure.DeclaredOrder.SyntaxErrors(orderBy).FirstOrDefault();
+        if (syntaxError is not null)
+        {
+            throw new Core.Exceptions.ValidationException("orderBy", syntaxError);
+        }
+
+        var terms = orderBy.Split(',').Select(term =>
+        {
+            var parts = term.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var column = OrderColumn(table, parts[0])
+                ?? throw new Core.Exceptions.ValidationException("orderBy", $"Order column '{parts[0]}' is not a stored column of '{table.LogicalName}'.");
+            var descending = parts.Length == 2 && parts[1].Equals("desc", StringComparison.OrdinalIgnoreCase);
+            return $"{DdlBuilder.QuoteIdentifier(column)}{(descending ? " DESC" : " ASC")}";
+        });
+        return string.Join(", ", terms);
+    }
+
+    /// <summary>
+    /// The stored name of the column <paramref name="name"/> refers to: a non-derived column by its
+    /// declared name or its stored name (which these routes' results carry), or a system column.
+    /// </summary>
+    private static string? OrderColumn(Core.Models.TableMetadata table, string name)
+    {
+        var column = table.Columns.FirstOrDefault(c => c.LogicalName == name)
+            ?? table.Columns.FirstOrDefault(c => c.PhysicalName == name);
+        if (column is not null)
+        {
+            return column.IsDerived ? null : column.PhysicalName;
+        }
+
+        return Core.Models.SystemColumns.IsSystemColumn(name) ? name : null;
+    }
+
     private async Task<Core.Models.TableMetadata> GetTableMetadataAsync(
         Guid projectId,
         string tableName,
         CancellationToken cancellationToken)
     {
-        var table = await _metadataRepository.GetTableByNameAsync(projectId, tableName, cancellationToken: cancellationToken);
+        var table = await _metadataRepository.GetTableByNameAsync(projectId, tableName, includeColumns: true, cancellationToken);
         if (table == null)
         {
             throw new KeyNotFoundException($"Table '{tableName}' not found");
