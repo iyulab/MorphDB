@@ -39,10 +39,12 @@ a deployment that has policies.
   stored columns, in the names the table declares, and anything else is refused with `400
   VALIDATION_ERROR` before a statement is built. `parentColumn` and the columns an in-process
   request names are resolved the same way: a declared column name works where only a physical name
-  did, and a name the table does not store is refused by name.
+  did, and a name the table does not store is refused by name. (`0.18.1` already parses `orderBy`,
+  and also accepts there the stored names these routes used to return; from this release an order
+  names declared columns only.)
 - **A bulk job exists only for its project and the caller that requested it.** The routes that take
   a job id — its status, its progress, cancelling it, downloading an export — found the job by that
-  id alone. Anyone who knew a job id could read the job, cancel it and download its file, whatever
+  id alone (`0.18.1` already confines a job to its project; the requester is new here). Anyone who knew a job id could read the job, cancel it and download its file, whatever
   project the request named and whoever had requested the job, and the two job listings returned
   every job of the project to every caller of it. An export's file holds the rows its requester may
   read (see Breaking), so the download handed those rows to callers a policy hides them from. A job
@@ -157,6 +159,9 @@ a deployment that has policies.
   three reads used to fail with an error for a caller that does not bypass row-level security; they
   now return no rows, as every other read of such a table does.
   (Verified-by: NativePolicyProjectionTests.Start_up_closes_a_table_whose_stored_policy_cannot_be_translated)
+- **A hierarchy `orderBy` names declared columns only.** `0.18.1` also accepted the stored names its
+  hierarchy results carried; those results now carry declared names, and so must the order. See
+  Security.
 
 ### Added
 
@@ -355,6 +360,37 @@ a superuser, or a role with `BYPASSRLS` — which is the kind of role MorphDB it
   bypasses row-level security, and claims — as JSON, or `NULL` for a job requested without a caller.
   It is what the job's connections carry while the table is read or written, and what a request for
   the job is compared with; a job's status and listing do not return it.
+
+## 0.18.1
+
+A hotfix on `0.18.0`, carrying only the fixes below. Upgrade from `0.18.0` by changing the image tag
+or package version; nothing else changes.
+
+### Security
+
+- **The hierarchy routes' `orderBy` reached SQL as written.** `GET /api/hierarchy/{table}/{id}/descendants`
+  and `.../subtree` appended the `orderBy` query parameter to the query's `ORDER BY` unparsed, so the
+  text a caller sent ran as SQL — with the service's database role. It is now read as comma-separated
+  `column [asc|desc]` terms over the table's stored columns (by declared name, or by the stored name
+  these routes return) and system columns, the same parser lookups and rollups use; anything else is
+  a `400` naming the problem. An order over columns keeps working.
+- **A bulk job was reachable from any project by its id.** Job status, progress, cancel and export
+  download looked a job up by its id alone, so a request naming another project could read, cancel or
+  download it — and an export's file holds that table's rows. A job is now reached only from the
+  project it belongs to; from any other project it is answered as an unknown id (`404`).
+
+### Fixed
+
+- **The hierarchy routes' table metadata now carries its columns**, which the `orderBy` check reads.
+
+### Dependencies
+
+- **ASP.NET Core packages `10.0.12` → `10.0.13`** (`Microsoft.AspNetCore.SignalR.Client`,
+  `Microsoft.AspNetCore.Authentication.JwtBearer`, `Microsoft.Extensions.Caching.StackExchangeRedis`,
+  and the test host). `10.0.12`'s `Microsoft.AspNetCore.SignalR.Common` carries a high-severity
+  denial-of-service advisory (CVE-2026-70159), which `MorphDB.Client` passed on to every consumer —
+  a build that treats audit warnings as errors stopped restoring. The image's runtime comes from the
+  `aspnet:10.0` base and is rebuilt with it.
 
 ## 0.18.0
 
