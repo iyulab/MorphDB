@@ -66,7 +66,18 @@ a deployment that has policies.
   with `FORCE ROW LEVEL SECURITY` — so security policies would be stored and never enforced, and a
   superuser connection could drop the database. An in-process (embedded) host meets the same check
   in `EnsureGlobalSchemaAsync`. Connect as a role created `NOSUPERUSER NOBYPASSRLS` that owns the
-  database; nothing else is required.
+  database.
+- **The login role has to be a member of `morphdb_bypass`, or MorphDB refuses to start**
+  (`MISSING_BYPASS_ROLE`). Policies restrict the login role; a request that bypasses them — the
+  master secret — has its connection switched to `morphdb_bypass`, a `NOLOGIN` role with no special
+  attributes that no policy names. Only an administrator can create it:
+  `CREATE ROLE morphdb_bypass NOLOGIN; GRANT morphdb_bypass TO <login role>;` — `scripts/init.sql`
+  and `scripts/migrate-to-service-role.sql` do both (see Migration). MorphDB grants it access to its
+  schemas and tables at start-up and gives it no right to create anything. The name can be changed
+  with `MorphDbNpgsqlOptions.RowLevelSecurityBypassRole`.
+- **PostgreSQL 15 or later.** Views are created with `security_invoker`, so a view reads its tables
+  as whoever queries it — a view read with the master secret is not held to the policies on its
+  owner, the login role. Views an earlier version created are switched at start-up.
 - **`ConnectionPoolOptions.Multiplexing` is removed, and a connection string that sets
   `Multiplexing=true` or `No Reset On Close=true` is refused at start-up.** MorphDB writes the
   caller's security context to the session of each connection it opens. A multiplexed command runs
@@ -200,16 +211,15 @@ a deployment that has policies.
 - **The compose files and `scripts/init.sql` create the role MorphDB now has to connect as** (see
   Breaking). The image's bootstrap superuser
   (`POSTGRES_USER`, now the default `postgres`) is for administration only; `init.sql` creates
-  `morph` as the service's login and makes it the database owner. The README quick-start carries
-  the same two statements inline, so it is still one file.
-- **A policy's condition is not served by an index.** PostgreSQL checks a policy on each row a
-  statement reads, and the form MorphDB gives a policy — the caller's exemption and the
-  condition in one expression — keeps the planner from using an index on the column the
-  condition compares. A read of a table with a policy by a caller the policy applies to scans
-  the table: on 200,000 rows with an indexed owner column, counting one owner's 200 rows took
-  about 60 ms where the bare comparison takes under 1 ms. A table without a policy, and a
-  caller exempt from policies, are unaffected. The condition MorphDB used to add to its own
-  queries could use the index.
+  `morph` as the service's login, makes it the database owner, and creates `morphdb_bypass` for
+  it. The README quick-start carries the same statements inline, so it is still one file.
+- **A policy's condition is answered from an index on the column it compares**, as the condition
+  MorphDB used to add to its own queries was: the policy holds the condition alone, and who may pass
+  it is a matter of role, not of the expression.
+  (Verified-by: NativeRowLevelSecurityTests.A_policy_condition_over_an_indexed_column_is_answered_from_the_index)
+- **A role you grant access to MorphDB's tables yourself is not restricted by the policies.** They
+  name the login role only. A connection that logs in as the login role without going through
+  MorphDB sees nothing a policy guards.
 - **A placeholder takes its type from where it stands, as before.** A placeholder used to be
   substituted as a quoted literal, which PostgreSQL typed by its position; it is now read from the
   connection and cast to the type PostgreSQL infers for that same position. `owner_id = {{user_id}}`
@@ -285,9 +295,11 @@ docker compose exec -T postgres psql -U morph -d morphdb \
 ```
 
 Then set `ConnectionStrings__MorphDB` to `Username=morphdb_service;Password=<password>`, keep
-`POSTGRES_USER` as it was, and start the new image. A development volume can instead be recreated
-with `docker compose down -v`. See "Database role" in the README for a database you provision
-yourself.
+`POSTGRES_USER` as it was, and start the new image. The script also creates `morphdb_bypass` and
+grants it to the service role. A development volume can instead be recreated with
+`docker compose down -v`. For a database you provision yourself — already on a role of its own, or
+on a managed PostgreSQL — run `CREATE ROLE morphdb_bypass NOLOGIN; GRANT morphdb_bypass TO <login
+role>;` as an administrator; see "Database role" in the README.
 
 **Policies already stored are handed to PostgreSQL on the first start.** Nothing has to be run. For
 every table that has a stored policy, start-up creates the matching PostgreSQL policies; later
@@ -325,25 +337,28 @@ and refreshed again.
 
 **Connecting to the database directly.** PostgreSQL now applies policies to the service role itself,
 so a `psql` session logged in as that role sees no row of a table that has a policy. For
-maintenance in such a session, run `SET morphdb.bypass = 'on';` first. `pg_dump` and a restore of
+maintenance in such a session, run `SET ROLE morphdb_bypass;` first. `pg_dump` and a restore of
 its output do not work as the service role on a table that has a policy (`query would be affected
-by row-level security policy`), with or without that setting: run both as an administrative role —
+by row-level security policy`), with or without that role: run both as an administrative role —
 a superuser, or a role with `BYPASSRLS` — which is the kind of role MorphDB itself must not be.
 
 ### Internal
 
 - Every connection is opened through one factory, which writes a security context to the
   connection's session before handing it out: `morphdb.project_id`, `morphdb.user_id`,
-  `morphdb.role`, `morphdb.email`, `morphdb.is_authenticated`, `morphdb.claims` and
-  `morphdb.bypass`. A statement run for a caller carries that caller's context; one run for
-  MorphDB's own bookkeeping — metadata, schema changes, jobs, audit — carries no caller and
-  `morphdb.bypass = on`. The PostgreSQL policies described under Security read these settings. The
+  `morphdb.role`, `morphdb.email`, `morphdb.is_authenticated` and `morphdb.claims`, and — in the
+  same statement — the role: `morphdb_bypass` for a caller that bypasses row-level security, the
+  login role otherwise. A statement run for a caller carries that caller's context; one run for
+  MorphDB's own bookkeeping — metadata, schema changes, jobs, audit — carries no caller and stays
+  the login role, which owns everything it creates. The PostgreSQL policies described under
+  Security read these settings. The
   triggers behind change notifications are now installed over the service's connection pool rather
   than a data source built per call.
 - On a table with a policy MorphDB sets `ENABLE` and `FORCE ROW LEVEL SECURITY` and creates one
-  permissive policy, `morphdb_allow`, and one restrictive policy per stored policy, named
-  `morphdb_p_<policy id>_<hash>`; the hash follows the command and the expression, so a changed
-  policy is a new native policy. The stored policy's type is the command: `FOR SELECT USING (…)`,
+  permissive policy, `morphdb_allow`, and one restrictive policy per stored policy `TO` the login
+  role, named `morphdb_p_<policy id>_<hash>`; the hash follows the command, the role and the
+  expression, so a changed policy — or a deployment moved to another login role — gets new native
+  policies at the next start. The stored policy's type is the command: `FOR SELECT USING (…)`,
   `FOR INSERT WITH CHECK (…)`, `FOR UPDATE USING (…) WITH CHECK (…)`, `FOR DELETE USING (…)`, and
   `FOR ALL USING (…) WITH CHECK (…)`, each with the same expression in every clause it has. A
   `Delete` policy on a table with soft delete has a second native policy, `FOR UPDATE`, that checks

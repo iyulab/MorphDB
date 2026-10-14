@@ -53,6 +53,7 @@ public sealed partial class PostgresSchemaLayerService : ISchemaLayerService
         // later policy be stored and silently ignored. Checked here rather than in the host so an
         // in-process (embedded) caller meets the same refusal as the service.
         await EnsureRoleIsSubjectToRowLevelSecurityAsync(connection);
+        await EnsureLoginRoleCanBypassAsync(connection, _connections.BypassRole);
 
         // Repair first: the canonical DDL is IF NOT EXISTS throughout, so it can neither remove nor
         // reshape anything an older version left behind.
@@ -62,6 +63,9 @@ public sealed partial class PostgresSchemaLayerService : ISchemaLayerService
         await connection.ExecuteAsync(ddl);
 
         LogGlobalSchemaEnsured(_logger);
+
+        await GrantToBypassRoleAsync(connection, _connections.BypassRole);
+        await MakeViewsReadAsTheirCallerAsync(connection);
 
         // Last, because it reads the tables just ensured: every stored security policy is projected
         // onto PostgreSQL's own row-level security. A database whose policies were stored by a
@@ -84,6 +88,86 @@ public sealed partial class PostgresSchemaLayerService : ISchemaLayerService
         if (role.IsSuperuser || role.BypassesRls)
         {
             throw new InsecureDatabaseRoleException(role.Name, role.IsSuperuser, role.BypassesRls);
+        }
+    }
+
+    /// <summary>
+    /// Refuses a login role that is not a member of <paramref name="bypassRole"/>. A request that
+    /// bypasses row-level security switches its connection to that role; without the membership
+    /// every such request would fail on the switch.
+    /// </summary>
+    private static async Task EnsureLoginRoleCanBypassAsync(NpgsqlConnection connection, string bypassRole)
+    {
+        var state = await connection.QuerySingleAsync<(string Login, bool Exists, bool Member)>(
+            """
+            SELECT session_user::text,
+                   EXISTS (SELECT 1 FROM pg_roles WHERE rolname = @Role),
+                   CASE WHEN EXISTS (SELECT 1 FROM pg_roles WHERE rolname = @Role)
+                        THEN pg_has_role(session_user, @Role, 'MEMBER') ELSE false END
+            """,
+            new { Role = bypassRole });
+
+        if (!state.Member)
+        {
+            throw new MissingBypassRoleException(state.Login, bypassRole, state.Exists);
+        }
+    }
+
+    /// <summary>
+    /// Lets <paramref name="bypassRole"/> read and write what the login role creates: every schema,
+    /// table and sequence that exists, and — through the login role's default privileges — every one
+    /// it creates later. The role passes row-level security because no policy names it; these grants
+    /// are what it needs to reach the tables at all. It is given no right to create anything, so a
+    /// connection switched to it cannot change the schema, and everything stays owned by the login
+    /// role. Idempotent: run on every start.
+    /// </summary>
+    private static async Task GrantToBypassRoleAsync(NpgsqlConnection connection, string bypassRole)
+    {
+        var role = DdlBuilder.QuoteIdentifier(bypassRole);
+        var schemas = await connection.QueryAsync<string>(
+            """
+            SELECT nspname::text FROM pg_namespace
+            WHERE nspowner = (SELECT oid FROM pg_roles WHERE rolname = session_user)
+            """);
+
+        var statements = new List<string>
+        {
+            $"ALTER DEFAULT PRIVILEGES GRANT USAGE ON SCHEMAS TO {role}",
+            $"ALTER DEFAULT PRIVILEGES GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO {role}",
+            $"ALTER DEFAULT PRIVILEGES GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO {role}"
+        };
+        foreach (var schema in schemas)
+        {
+            var name = DdlBuilder.QuoteIdentifier(schema);
+            statements.Add($"GRANT USAGE ON SCHEMA {name} TO {role}");
+            statements.Add($"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {name} TO {role}");
+            statements.Add($"GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA {name} TO {role}");
+        }
+
+        await connection.ExecuteAsync(string.Join(";\n", statements));
+    }
+
+    /// <summary>
+    /// Sets <c>security_invoker</c> on every view the login role owns that does not have it — the
+    /// views an earlier version created as plain views, which read their tables as their owner and so
+    /// held a caller that bypasses row-level security to the policies on the owner. A view already
+    /// set is left alone, so a start with nothing to change issues no DDL.
+    /// </summary>
+    private static async Task MakeViewsReadAsTheirCallerAsync(NpgsqlConnection connection)
+    {
+        var views = (await connection.QueryAsync<string>(
+            """
+            SELECT format('%I.%I', n.nspname, c.relname)
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE c.relkind = 'v'
+              AND c.relowner = (SELECT oid FROM pg_roles WHERE rolname = session_user)
+              AND NOT coalesce('security_invoker=true' = ANY (c.reloptions), false)
+            """)).ToList();
+
+        foreach (var view in views)
+        {
+            await connection.ExecuteAsync($"ALTER VIEW {view} SET (security_invoker = true)");
         }
     }
 

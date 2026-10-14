@@ -25,6 +25,11 @@ namespace MorphDB.Npgsql.Security;
 /// service role owns its tables, and an owner is exempt unless forced), one permissive policy that
 /// admits everything, and one restrictive policy per stored policy. Stored policies therefore
 /// combine with <c>AND</c>, as they always have.</para>
+/// <para>The restrictive policies are for the role MorphDB logs in as, and only for it. A caller
+/// that bypasses row-level security reaches the table as <see cref="MorphConnectionFactory.BypassRole"/>,
+/// which no restrictive policy names and the permissive one admits — so the expression itself carries
+/// no bypass branch, and PostgreSQL can answer it from an index. A connection that never went through
+/// the factory is the login role with no context, and sees nothing a policy guards.</para>
 /// <para>A stored policy's type is the command its native policy is for, and decides which rows its
 /// expression is asked about: the rows a statement finds (<c>USING</c> — a row that fails is not
 /// there for the statement), the rows it would leave (<c>WITH CHECK</c> — a row that fails refuses
@@ -42,7 +47,9 @@ internal sealed partial class NativePolicyProjector
     /// <summary>What the name of every native policy projected from a stored one starts with.</summary>
     internal const string PolicyNamePrefix = "morphdb_p_";
 
-    private const string BypassIsOn = $"current_setting('{MorphConnectionFactory.BypassSetting}', true) = 'on'";
+    // What a stored policy that cannot be translated is projected as: no row, for the role the
+    // policies restrict. A caller that bypasses row-level security still reaches the table.
+    private const string NoRow = "false";
 
     private const string IndeterminateDatatype = "42P18";
 
@@ -67,7 +74,7 @@ internal sealed partial class NativePolicyProjector
     /// A native policy a table is expected to carry: the command it is for, and the clauses
     /// PostgreSQL accepts for that command — <c>null</c> for one it does not take.
     /// </summary>
-    internal sealed record NativePolicy(string Name, string Command, string? Using, string? Check);
+    internal sealed record NativePolicy(string Name, string Command, string Role, string? Using, string? Check);
 
     /// <summary>
     /// Brings the native policies of every table that has a stored policy row in line with those
@@ -283,6 +290,7 @@ internal sealed partial class NativePolicyProjector
         CancellationToken cancellationToken)
     {
         var plan = new List<NativePolicy>();
+        string? loginRole = null;
 
         foreach (var policy in policies)
         {
@@ -296,18 +304,20 @@ internal sealed partial class NativePolicyProjector
             string expression;
             try
             {
-                var translated = await TranslateAsync(connection, policy.Expression, table, cancellationToken);
-                expression = $"CASE WHEN {BypassIsOn} THEN true ELSE ({translated}) END";
+                expression = await TranslateAsync(connection, policy.Expression, table, cancellationToken);
             }
             catch (SchemaException ex) when (!strict)
             {
                 LogUntranslatablePolicy(_logger, table.LogicalName, policy.Name, ex.Message);
-                expression = BypassIsOn;
+                expression = NoRow;
             }
 
             if (projected)
             {
-                plan.AddRange(NativeFor(table, policy, expression));
+                loginRole ??= await connection.ExecuteScalarAsync<string>(new CommandDefinition(
+                    "SELECT session_user::text", cancellationToken: cancellationToken))
+                    ?? throw new InvalidOperationException("The connection reports no session user.");
+                plan.AddRange(NativeFor(table, policy, expression, loginRole));
             }
         }
 
@@ -316,7 +326,7 @@ internal sealed partial class NativePolicyProjector
 
     /// <summary>
     /// The native policies one stored policy stands for. <paramref name="expression"/> is its
-    /// translated predicate, already exempting a connection that bypasses row-level security.
+    /// translated predicate; <paramref name="role"/> is the login role they restrict.
     /// </summary>
     /// <remarks>
     /// <para>PostgreSQL takes <c>USING</c> for the rows a command finds and <c>WITH CHECK</c> for
@@ -331,29 +341,29 @@ internal sealed partial class NativePolicyProjector
     /// and as it is after in one expression, so this is a check on the row the update leaves — the
     /// statement is refused, where a <c>DELETE</c> would have found no row.</para>
     /// </remarks>
-    private static IEnumerable<NativePolicy> NativeFor(TableMetadata table, StoredPolicy policy, string expression)
+    private static IEnumerable<NativePolicy> NativeFor(TableMetadata table, StoredPolicy policy, string expression, string role)
     {
         yield return policy.PolicyType switch
         {
-            PolicyType.Select => Native(policy.Id, "SELECT", expression, check: null),
-            PolicyType.Insert => Native(policy.Id, "INSERT", usingExpression: null, expression),
-            PolicyType.Update => Native(policy.Id, "UPDATE", expression, expression),
-            PolicyType.Delete => Native(policy.Id, "DELETE", expression, check: null),
+            PolicyType.Select => Native(policy.Id, "SELECT", role, expression, check: null),
+            PolicyType.Insert => Native(policy.Id, "INSERT", role, usingExpression: null, expression),
+            PolicyType.Update => Native(policy.Id, "UPDATE", role, expression, expression),
+            PolicyType.Delete => Native(policy.Id, "DELETE", role, expression, check: null),
 
             // All — and a type this version does not know, which restricts every command rather
             // than none.
-            _ => Native(policy.Id, "ALL", expression, expression),
+            _ => Native(policy.Id, "ALL", role, expression, expression),
         };
 
         if (policy.PolicyType == PolicyType.Delete && table.SoftDeleteEnabled)
         {
             var deletedAt = DdlBuilder.QuoteIdentifier(SystemColumns.DeletedAt);
-            yield return Native(policy.Id, "UPDATE", "true", $"{deletedAt} IS NULL OR ({expression})");
+            yield return Native(policy.Id, "UPDATE", role, "true", $"{deletedAt} IS NULL OR ({expression})");
         }
     }
 
-    private static NativePolicy Native(Guid policyId, string command, string? usingExpression, string? check) =>
-        new(NameFor(policyId, command, usingExpression, check), command, usingExpression, check);
+    private static NativePolicy Native(Guid policyId, string command, string role, string? usingExpression, string? check) =>
+        new(NameFor(policyId, command, role, usingExpression, check), command, role, usingExpression, check);
 
     /// <summary>
     /// Issues the DDL that takes the table from the native policies it has to the ones in
@@ -418,7 +428,7 @@ internal sealed partial class NativePolicyProjector
                     (policy.Check is null ? "" : $" WITH CHECK ({policy.Check})");
                 statements.Add(
                     $"CREATE POLICY {DdlBuilder.QuoteIdentifier(policy.Name)} ON {tableName} " +
-                    $"AS RESTRICTIVE FOR {policy.Command}{clauses}");
+                    $"AS RESTRICTIVE FOR {policy.Command} TO {DdlBuilder.QuoteIdentifier(policy.Role)}{clauses}");
             }
 
             var expected = plan.Select(p => p.Name).ToHashSet(StringComparer.Ordinal);
@@ -692,12 +702,13 @@ internal sealed partial class NativePolicyProjector
 
     /// <summary>
     /// Deterministic, and different whenever what PostgreSQL is asked to enforce differs — the
-    /// command, either clause, or which clauses there are — so a changed policy is a policy to
-    /// create and a policy to drop, and an unchanged one is neither.
+    /// command, the role it restricts, either clause, or which clauses there are — so a changed
+    /// policy is a policy to create and a policy to drop, and an unchanged one is neither. A
+    /// deployment that moves to another login role has every policy rebuilt for it at start-up.
     /// </summary>
-    private static string NameFor(Guid policyId, string command, string? usingExpression, string? check)
+    private static string NameFor(Guid policyId, string command, string role, string? usingExpression, string? check)
     {
-        var enforced = command + "\nUSING " + usingExpression + "\nWITH CHECK " + check;
+        var enforced = command + "\nTO " + role + "\nUSING " + usingExpression + "\nWITH CHECK " + check;
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(enforced));
         return $"{PolicyNamePrefix}{policyId:N}_{Convert.ToHexStringLower(hash, 0, 4)}";
     }

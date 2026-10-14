@@ -316,11 +316,51 @@ internal sealed class RowLevelSecurityHarness
         await connection.ExecuteAsync(sql);
     }
 
-    /// <summary>One value read as MorphDB itself, past every policy and every filter a read applies.</summary>
+    /// <summary>
+    /// Runs a data statement past every policy — as the role a bypassing caller is switched to — for
+    /// rows a test has to put in a state no caller could. Not for DDL: that role may create nothing.
+    /// </summary>
+    public async Task ExecutePastPoliciesAsync(string sql)
+    {
+        await using var connection = await OpenPastPoliciesAsync();
+        await connection.ExecuteAsync(sql);
+    }
+
+    /// <summary>One value read past every policy and every filter a read applies.</summary>
     public async Task<T?> ScalarAsSystemAsync<T>(string sql)
     {
-        await using var connection = await _fixture.Connections.OpenSystemAsync();
+        await using var connection = await OpenPastPoliciesAsync();
         return await connection.ExecuteScalarAsync<T>(sql);
+    }
+
+    /// <summary>
+    /// PostgreSQL's plan for <paramref name="sql"/> on a connection opened for <paramref name="caller"/>,
+    /// with sequential scans priced out — so a condition PostgreSQL can answer from an index shows up
+    /// as an index condition, and one it cannot is still a sequential scan.
+    /// </summary>
+    public Task<string> PlanAsync(SecurityContext? caller, string sql) => As(caller, async () =>
+    {
+        await using var connection = await _fixture.Connections.OpenAsync();
+        await connection.ExecuteAsync("SET enable_seqscan = off");
+        var lines = await connection.QueryAsync<string>($"EXPLAIN (COSTS OFF) {sql}");
+        return string.Join('\n', lines);
+    });
+
+    /// <summary>
+    /// One value read on a connection that never went through the factory — the login role with no
+    /// context, as a tool pointed at the database with MorphDB's credentials would be.
+    /// </summary>
+    public async Task<T?> ScalarAsLoginWithoutContextAsync<T>(string sql)
+    {
+        await using var connection = await _fixture.DataSource.OpenConnectionAsync();
+        return await connection.ExecuteScalarAsync<T>(sql);
+    }
+
+    private async Task<NpgsqlConnection> OpenPastPoliciesAsync()
+    {
+        var connection = await _fixture.Connections.OpenSystemAsync();
+        await connection.ExecuteAsync("SELECT set_config('role', @Role, false)", new { Role = _fixture.Connections.BypassRole });
+        return connection;
     }
 
     /// <summary>A connection of MorphDB's own, for a test that has to hold a transaction open.</summary>

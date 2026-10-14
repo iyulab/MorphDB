@@ -63,7 +63,10 @@ public static partial class ServiceCollectionExtensions
         services.AddSingleton(dataSource);
 
         // The one place a connection is opened; everything below opens through it.
-        services.AddSingleton<MorphConnectionFactory>();
+        services.AddSingleton(sp => new MorphConnectionFactory(
+            sp.GetRequiredService<NpgsqlDataSource>(),
+            sp.GetRequiredService<ISecurityContextAccessor>(),
+            options.RowLevelSecurityBypassRole));
 
         // Register core infrastructure
         services.AddSingleton<INameHasher, Sha256NameHasher>();
@@ -314,6 +317,14 @@ public sealed class MorphDbNpgsqlOptions
     /// Options for query diagnostics and slow query detection.
     /// </summary>
     public QueryDiagnosticsOptions QueryDiagnosticsOptions { get; set; } = new();
+
+    /// <summary>
+    /// The role a connection switches to when its caller bypasses row-level security (the master
+    /// secret). The login role must be a member of it, or MorphDB refuses to start. Default:
+    /// <c>morphdb_bypass</c>, the role <c>scripts/init.sql</c> and
+    /// <c>scripts/migrate-to-service-role.sql</c> create.
+    /// </summary>
+    public string RowLevelSecurityBypassRole { get; set; } = MorphConnectionFactory.DefaultBypassRole;
 }
 
 /// <summary>

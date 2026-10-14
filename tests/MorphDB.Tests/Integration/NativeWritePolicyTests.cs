@@ -314,7 +314,7 @@ public class NativeWritePolicyTests
         inATransaction.Success.Should().BeFalse();
 
         // Finalizing a draft reads the row, which this caller may, and then updates its state.
-        await _rls.ExecuteAsSystemAsync($"""UPDATE "{scene.Table.PhysicalName}" SET "_row_state" = 'draft' """);
+        await _rls.ExecutePastPoliciesAsync($"""UPDATE "{scene.Table.PhysicalName}" SET "_row_state" = 'draft' """);
         var finalized = await As(scene.A, () => _rls.Transactions.FinalizeAsync(scene.ProjectId, scene.Name, scene.RowB));
         finalized.Success.Should().BeFalse();
         finalized.Errors.Should().ContainSingle(e => e.Error == "not_found");

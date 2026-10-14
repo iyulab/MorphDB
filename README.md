@@ -105,7 +105,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: morphdb
     configs:
-      # Runs once, on an empty volume: creates the role MorphDB logs in as.
+      # Runs once, on an empty volume: creates the roles MorphDB logs in as and switches to.
       - source: morphdb-service-role
         target: /docker-entrypoint-initdb.d/morphdb-service-role.sql
     volumes:
@@ -121,6 +121,8 @@ configs:
     content: |
       CREATE ROLE morph LOGIN PASSWORD 'morph' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
       ALTER DATABASE morphdb OWNER TO morph;
+      CREATE ROLE morphdb_bypass NOLOGIN;
+      GRANT morphdb_bypass TO morph;
 
 volumes:
   postgres_data:
@@ -152,6 +154,16 @@ MorphDB would be stored and silently ignored; a superuser connection would also 
 the database. The role needs no other privilege than owning its database: MorphDB creates its schemas and
 tables there, and it never needs `CREATE EXTENSION`.
 
+It also needs to be a member of a second role, `morphdb_bypass`, which logs in to nothing and has no
+special attributes. Row-level security policies restrict the service role; a request made with the
+master secret, which bypasses them, has its connection switched to `morphdb_bypass`, which no policy
+names. MorphDB grants that role access to its tables itself, and refuses to start if the membership
+is missing (`MISSING_BYPASS_ROLE`). The role name can be changed with
+`MorphDbNpgsqlOptions.RowLevelSecurityBypassRole`.
+
+MorphDB needs PostgreSQL 15 or later: views are created with `security_invoker`, so they read their
+tables as whoever queries them.
+
 The official `postgres` image always makes `POSTGRES_USER` a superuser, so that account is for
 administration only and the service logs in as a second role. The quick-start above creates it; on
 any other PostgreSQL, run this as a superuser, with your own password:
@@ -159,16 +171,20 @@ any other PostgreSQL, run this as a superuser, with your own password:
 ```sql
 CREATE ROLE morph LOGIN PASSWORD '<password>' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
 ALTER DATABASE morphdb OWNER TO morph;
+CREATE ROLE morphdb_bypass NOLOGIN;
+GRANT morphdb_bypass TO morph;
 ```
 
-On a managed PostgreSQL (Azure, Cloud SQL, RDS), create the same role for MorphDB rather than
+On a managed PostgreSQL (Azure, Cloud SQL, RDS), create the same roles for MorphDB rather than
 pointing it at the administrator account the provider gives you: what that account may do is the
 provider's choice, and the start-up check reads `rolsuper` and `rolbypassrls` of whatever role it is
-given.
+given. The administrator accounts these providers give out can create both roles — neither needs
+superuser or `BYPASSRLS`.
 
 **Reaching the database directly.** Security policies are enforced by PostgreSQL against the
 service role itself, so a `psql` session logged in as that role sees no row of a table that has a
-policy until it runs `SET morphdb.bypass = 'on';`. `pg_dump`, and a restore of its output, do not
+policy until it runs `SET ROLE morphdb_bypass;`. A role you grant access to MorphDB's tables yourself
+is not restricted by the policies — they name the service role only. `pg_dump`, and a restore of its output, do not
 work as the service role on such a table at all — run backups and restores as an administrative
 role (a superuser, or one with `BYPASSRLS`).
 
@@ -176,7 +192,7 @@ role (a superuser, or one with `BYPASSRLS`).
 bootstrap superuser — `POSTGRES_USER: morph` — the service's login, so that database has no service
 role yet, and PostgreSQL does not let the bootstrap superuser be demoted. Hand the database over to
 a new role with [`scripts/migrate-to-service-role.sql`](scripts/migrate-to-service-role.sql), which
-changes only ownership — no data is touched:
+changes only ownership — no data is touched — and creates `morphdb_bypass` for it:
 
 ```bash
 docker compose exec -T postgres psql -U morph -d morphdb \

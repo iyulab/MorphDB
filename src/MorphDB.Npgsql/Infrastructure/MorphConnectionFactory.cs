@@ -19,6 +19,12 @@ namespace MorphDB.Npgsql.Infrastructure;
 /// nobody, and nobody is not allowed through. <see cref="OpenSystemAsync"/> is for MorphDB's own
 /// bookkeeping — metadata, schema changes, jobs, audit — which is not done on anyone's behalf and
 /// must not be filtered by whoever happened to trigger it.</para>
+/// <para>Row-level security policies restrict the role MorphDB logs in as, and nothing in them says
+/// who may pass: a caller that bypasses row-level security has its connection switch to the
+/// <see cref="BypassRole"/>, which no policy names. The switch is part of the same statement that
+/// writes the context, and the pool's reset on return switches back. A system connection keeps the
+/// login role — it creates and alters tables, which must stay owned by that role — and reads no
+/// caller's rows, so the policies it is subject to find nothing to filter.</para>
 /// <para>The context is written per open rather than once per physical connection because a pooled
 /// connection serves a different caller each time it is handed out. Npgsql resets session state when
 /// a connection goes back to the pool, so a value written here cannot reach the next caller; the two
@@ -44,16 +50,23 @@ public sealed class MorphConnectionFactory
     /// <summary>The caller's claims as a JSON object of strings; <c>{}</c> when it has none.</summary>
     public const string ClaimsSetting = "morphdb.claims";
 
-    /// <summary><c>on</c> when row-level security does not apply to this connection, otherwise <c>off</c>.</summary>
-    public const string BypassSetting = "morphdb.bypass";
+    /// <summary>
+    /// The role a connection switches to when its caller bypasses row-level security, unless the
+    /// host names another. It logs in to nothing and needs no <c>BYPASSRLS</c>: it passes because no
+    /// policy names it. The login role must be a member of it.
+    /// </summary>
+    public const string DefaultBypassRole = "morphdb_bypass";
 
     private const string WriteContextSql =
         $"SELECT set_config('{ProjectIdSetting}', $1, false), set_config('{UserIdSetting}', $2, false), " +
         $"set_config('{RoleSetting}', $3, false), set_config('{EmailSetting}', $4, false), " +
         $"set_config('{IsAuthenticatedSetting}', $5, false), set_config('{ClaimsSetting}', $6, false), " +
-        $"set_config('{BypassSetting}', $7, false)";
+        "set_config('role', $7, false)";
 
     private const string NoClaims = "{}";
+
+    // set_config('role', 'none') is RESET ROLE: back to the role the connection logged in as.
+    private const string LoginRole = "none";
 
     private readonly NpgsqlDataSource _dataSource;
     private readonly ISecurityContextAccessor _securityContext;
@@ -61,10 +74,14 @@ public sealed class MorphConnectionFactory
     /// <exception cref="ArgumentException">
     /// The data source multiplexes, or keeps session state when a connection is returned to the pool.
     /// </exception>
-    public MorphConnectionFactory(NpgsqlDataSource dataSource, ISecurityContextAccessor securityContext)
+    public MorphConnectionFactory(
+        NpgsqlDataSource dataSource,
+        ISecurityContextAccessor securityContext,
+        string bypassRole = DefaultBypassRole)
     {
         ArgumentNullException.ThrowIfNull(dataSource);
         ArgumentNullException.ThrowIfNull(securityContext);
+        ArgumentException.ThrowIfNullOrWhiteSpace(bypassRole);
 
         var settings = new NpgsqlConnectionStringBuilder(dataSource.ConnectionString);
         if (settings.Multiplexing)
@@ -86,7 +103,14 @@ public sealed class MorphConnectionFactory
 
         _dataSource = dataSource;
         _securityContext = securityContext;
+        BypassRole = bypassRole;
     }
+
+    /// <summary>
+    /// The role a connection switches to for a caller that bypasses row-level security. Policies
+    /// name the login role, never this one.
+    /// </summary>
+    public string BypassRole { get; }
 
     /// <summary>
     /// Opens a connection for a statement run on a caller's behalf, with the ambient security context
@@ -96,13 +120,12 @@ public sealed class MorphConnectionFactory
         => OpenWithAsync(_securityContext.ContextOrNull, cancellationToken);
 
     /// <summary>
-    /// Opens a connection for MorphDB's own bookkeeping: no caller, and row-level security bypassed.
-    /// Not for reading or writing a caller's rows on that caller's behalf.
+    /// Opens a connection for MorphDB's own bookkeeping: no caller, as the login role — the role that
+    /// owns what it creates. Not for reading or writing a caller's rows: a policy on a table sees
+    /// nobody here.
     /// </summary>
     public Task<NpgsqlConnection> OpenSystemAsync(CancellationToken cancellationToken = default)
-        => OpenWithAsync(SystemContext, cancellationToken);
-
-    private static readonly SecurityContext SystemContext = new() { BypassRls = true };
+        => OpenWithAsync(context: null, cancellationToken);
 
     private async Task<NpgsqlConnection> OpenWithAsync(SecurityContext? context, CancellationToken cancellationToken)
     {
@@ -116,7 +139,7 @@ public sealed class MorphConnectionFactory
             command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = context?.Email ?? string.Empty });
             command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = context?.IsAuthenticated == true ? "true" : "false" });
             command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = ClaimsOf(context) });
-            command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = context?.BypassRls == true ? "on" : "off" });
+            command.Parameters.Add(new NpgsqlParameter<string> { TypedValue = context?.BypassRls == true ? BypassRole : LoginRole });
             await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
             return connection;
         }

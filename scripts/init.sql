@@ -3,8 +3,8 @@
 -- This runs once, from docker-entrypoint-initdb.d, as the image's bootstrap superuser
 -- (POSTGRES_USER), on an empty data directory only.
 --
--- What it does is the one thing the service cannot do for itself: create the role the service
--- connects as. That role must be NOSUPERUSER and NOBYPASSRLS -- PostgreSQL applies no row-level
+-- What it does is the one thing the service cannot do for itself: create the roles. The role the
+-- service connects as must be NOSUPERUSER and NOBYPASSRLS -- PostgreSQL applies no row-level
 -- security to a superuser or a BYPASSRLS role, so MorphDB refuses to start on one -- and it owns the
 -- database, which is what lets it create the global schema and one schema pair per project.
 --
@@ -33,5 +33,13 @@ BEGIN
     -- current_database(), not a literal name: the same script initialises every database this
     -- repository starts (the development bundle, the test bundle, the test suite's containers).
     EXECUTE format('ALTER DATABASE %I OWNER TO morph', current_database());
+
+    -- The role a request that bypasses row-level security (the master secret) is switched to. It
+    -- logs in to nothing and has no BYPASSRLS: policies restrict the service role, and none names
+    -- this one. The service grants it what it needs on the tables it creates; it may create nothing.
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'morphdb_bypass') THEN
+        CREATE ROLE morphdb_bypass NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
+    END IF;
+    GRANT morphdb_bypass TO morph;
 END
 $$;

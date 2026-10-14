@@ -45,7 +45,8 @@ public class MorphConnectionFactoryTests
         session.Role.Should().Be("editor");
         session.Email.Should().Be("user-42@example.com");
         session.IsAuthenticated.Should().Be("true");
-        session.Bypass.Should().Be("off");
+        session.ActingRole.Should().Be(TestPostgres.ServiceRole,
+            "a caller that does not bypass row-level security stays the login role, the one policies restrict");
 
         using var claims = JsonDocument.Parse(session.Claims);
         claims.RootElement.GetProperty("department").GetString().Should().Be("it's \"R&D\"",
@@ -66,12 +67,12 @@ public class MorphConnectionFactoryTests
             Email: string.Empty,
             IsAuthenticated: "false",
             Claims: "{}",
-            Bypass: "off"),
+            ActingRole: TestPostgres.ServiceRole),
             "a statement nobody asked for must look like nobody to a policy, not like the last caller or like the service");
     }
 
     [Fact]
-    public async Task A_system_connection_bypasses_and_carries_no_caller_even_while_a_caller_is_ambient()
+    public async Task A_system_connection_is_the_login_role_and_carries_no_caller_even_while_a_caller_is_ambient()
     {
         var ct = TestContext.Current.CancellationToken;
         var caller = new SecurityContext
@@ -85,12 +86,28 @@ public class MorphConnectionFactoryTests
 
         var session = await UnderAsync(caller, () => ReadSessionAsync(_fixture.Connections.OpenSystemAsync(ct), ct));
 
-        session.Bypass.Should().Be("on");
+        session.ActingRole.Should().Be(TestPostgres.ServiceRole,
+            "a system connection creates and alters tables, which must stay owned by the login role");
         session.UserId.Should().BeEmpty(
             "bookkeeping is not done on behalf of whoever happened to trigger it, so it must not be attributed to them");
         session.ProjectId.Should().BeEmpty();
         session.Role.Should().BeEmpty();
         session.IsAuthenticated.Should().Be("false");
+    }
+
+    [Fact]
+    public async Task A_caller_that_bypasses_row_level_security_acts_as_the_bypass_role_until_the_connection_is_returned()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var master = new SecurityContext { ProjectId = Guid.NewGuid(), BypassRls = true, IsAuthenticated = true };
+
+        var bypassing = await UnderAsync(master, () => ReadSessionAsync(_fixture.Connections.OpenAsync(ct), ct));
+        bypassing.ActingRole.Should().Be(MorphConnectionFactory.DefaultBypassRole,
+            "no policy names the bypass role, so this is how a bypassing caller passes them");
+
+        var next = await WithNoAmbientContextAsync(() => ReadSessionAsync(_fixture.Connections.OpenAsync(ct), ct));
+        next.ActingRole.Should().Be(TestPostgres.ServiceRole,
+            "the next open writes the login role back, whichever physical connection it gets");
     }
 
     [Fact]
@@ -170,7 +187,7 @@ public class MorphConnectionFactoryTests
                    current_setting('{MorphConnectionFactory.EmailSetting}', true),
                    current_setting('{MorphConnectionFactory.IsAuthenticatedSetting}', true),
                    current_setting('{MorphConnectionFactory.ClaimsSetting}', true),
-                   current_setting('{MorphConnectionFactory.BypassSetting}', true)
+                   current_user::text
             """,
             connection);
         await using var reader = await command.ExecuteReaderAsync(ct);
@@ -206,5 +223,5 @@ public class MorphConnectionFactoryTests
         string Email,
         string IsAuthenticated,
         string Claims,
-        string Bypass);
+        string ActingRole);
 }

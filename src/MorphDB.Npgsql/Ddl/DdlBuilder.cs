@@ -392,6 +392,14 @@ public static class DdlBuilder
     #region View Operations
 
     /// <summary>
+    /// The options every view is created with. A view reads its tables as whoever queries it
+    /// (<c>security_invoker</c>, PostgreSQL 15+), not as its owner: row-level security policies
+    /// restrict the role MorphDB logs in as, which owns every view, so an owner's view would hold a
+    /// caller that bypasses them to those policies.
+    /// </summary>
+    public const string ViewOptions = "WITH (security_invoker = true)";
+
+    /// <summary>
     /// Builds a CREATE VIEW statement.
     /// </summary>
     public static string BuildCreateView(
@@ -400,7 +408,7 @@ public static class DdlBuilder
         string? schema = null)
     {
         var qualifiedName = QualifyName(physicalName, schema);
-        return $"CREATE VIEW {qualifiedName} AS\n{selectStatement}";
+        return $"CREATE VIEW {qualifiedName} {ViewOptions} AS\n{selectStatement}";
     }
 
     /// <summary>
@@ -412,7 +420,7 @@ public static class DdlBuilder
         string? schema = null)
     {
         var qualifiedName = QualifyName(physicalName, schema);
-        return $"CREATE OR REPLACE VIEW {qualifiedName} AS\n{selectStatement}";
+        return $"CREATE OR REPLACE VIEW {qualifiedName} {ViewOptions} AS\n{selectStatement}";
     }
 
     /// <summary>

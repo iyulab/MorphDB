@@ -12,7 +12,9 @@
 -- then point ConnectionStrings__MorphDB at that role and start MorphDB. The bootstrap superuser
 -- keeps its name and stays a superuser (PostgreSQL does not let it be demoted); it simply stops
 -- being the service's login. If the role already exists it is reused, provided it is neither a
--- superuser nor BYPASSRLS; the password is then left as it is.
+-- superuser nor BYPASSRLS; the password is then left as it is. It also creates the role a request
+-- that bypasses row-level security is switched to (morphdb_bypass, NOLOGIN) and grants it to the
+-- service role -- MorphDB refuses to start without that membership.
 --
 -- What moves is everything the old login owns where MorphDB keeps things: the database itself, the
 -- global morphdb schema, every project schema recorded in morphdb._morph_projects, and every table,
@@ -45,6 +47,14 @@ BEGIN
     END IF;
 
     EXECUTE format('ALTER DATABASE %I OWNER TO %I', current_database(), target);
+
+    -- The role a request that bypasses row-level security (the master secret) is switched to:
+    -- policies restrict the service role and none names this one. NOLOGIN, no BYPASSRLS. The
+    -- service grants it access to its tables at start-up.
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'morphdb_bypass') THEN
+        CREATE ROLE morphdb_bypass NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
+    END IF;
+    EXECUTE format('GRANT morphdb_bypass TO %I', target);
 
     -- Read the schema list up front: a loop driven by a query on morphdb._morph_projects would keep
     -- that table open, and its owner cannot change while it is.

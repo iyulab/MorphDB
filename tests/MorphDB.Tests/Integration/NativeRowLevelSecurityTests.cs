@@ -206,6 +206,41 @@ public class NativeRowLevelSecurityTests
         }
     }
 
+    // ---- the shape of the policy --------------------------------------------------------------
+
+    /// <summary>
+    /// The policy's condition is a plain comparison PostgreSQL can answer from an index on the
+    /// column. When the policy carried its own bypass check, the check wrapped the comparison and
+    /// every read of a policy table scanned it whole — about 140 times slower over 200,000 rows.
+    /// </summary>
+    [Fact]
+    public async Task A_policy_condition_over_an_indexed_column_is_answered_from_the_index()
+    {
+        var docs = await CreateDocumentsWithOwnerPolicyAsync();
+        var table = docs.Table.PhysicalName;
+        var owner = docs.Table.Columns.Single(c => c.LogicalName == "owner").PhysicalName;
+        await _rls.ExecuteAsSystemAsync($"""CREATE INDEX "ix_{table}_owner" ON "{table}" ("{owner}")""");
+
+        var plan = await _rls.PlanAsync(docs.A, $"""SELECT count(*) FROM "{table}" """);
+
+        plan.Should().Contain("Index Cond").And.Contain(owner,
+            "the policy's comparison is the index condition, not a filter over every row");
+    }
+
+    /// <summary>
+    /// A connection that never went through MorphDB — a tool given MorphDB's credentials — is the
+    /// role the policies restrict, with nobody in its context, and sees none of the rows a policy guards.
+    /// </summary>
+    [Fact]
+    public async Task A_connection_that_did_not_come_from_MorphDB_sees_none_of_the_guarded_rows()
+    {
+        var docs = await CreateDocumentsWithOwnerPolicyAsync();
+
+        var count = await _rls.ScalarAsLoginWithoutContextAsync<long>($"""SELECT count(*) FROM "{docs.Table.PhysicalName}" """);
+
+        count.Should().Be(0);
+    }
+
     private static CreateViewRequest TitlesView(Guid projectId, string viewName, string tableName, bool materialized) => new()
     {
         ProjectId = projectId,

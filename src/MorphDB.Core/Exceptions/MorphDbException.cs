@@ -302,3 +302,34 @@ public class InsecureDatabaseRoleException : MorphDbException
             _ => "a role with BYPASSRLS"
         };
 }
+
+/// <summary>
+/// Thrown at start-up when the role MorphDB logs in as is not a member of the role a caller that
+/// bypasses row-level security is switched to. Policies restrict the login role; that other role is
+/// how the master secret reaches rows past them. Without the membership every such request would fail
+/// on the switch, so the service refuses to start instead of failing those requests one by one.
+/// </summary>
+public class MissingBypassRoleException : MorphDbException
+{
+    public string LoginRole { get; }
+
+    public string BypassRole { get; }
+
+    public bool BypassRoleExists { get; }
+
+    public MissingBypassRoleException(string loginRole, string bypassRole, bool bypassRoleExists)
+        : base(
+            "MISSING_BYPASS_ROLE",
+            (bypassRoleExists
+                ? $"MorphDB logs in as role '{loginRole}', which is not a member of role '{bypassRole}'. "
+                : $"Role '{bypassRole}' does not exist. ")
+            + $"A request that bypasses row-level security (the master secret) switches its connection to '{bypassRole}', "
+            + "which no policy restricts. Create it and grant it to the login role as a database administrator: "
+            + $"CREATE ROLE {bypassRole} NOLOGIN; GRANT {bypassRole} TO {loginRole}; "
+            + "(scripts/init.sql and scripts/migrate-to-service-role.sql do both).")
+    {
+        LoginRole = loginRole;
+        BypassRole = bypassRole;
+        BypassRoleExists = bypassRoleExists;
+    }
+}
