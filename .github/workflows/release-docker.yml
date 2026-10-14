@@ -45,6 +45,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       major_minor: ${{ steps.version.outputs.major_minor }}
       image: ${{ steps.version.outputs.image }}
+      latest: ${{ steps.version.outputs.latest }}
       already: ${{ steps.published.outputs.already }}
 
     steps:
@@ -63,6 +64,13 @@ jobs:
           echo "major_minor=$(echo $VERSION | cut -d. -f1,2)" >> "$GITHUB_OUTPUT"
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
           echo "Detected version: $VERSION, image: $IMAGE"
+          # `latest` names the newest release. A hotfix of an older line (0.18.1 after 0.19.0) is
+          # released from its own branch and must not move it back.
+          git fetch --quiet --tags origin
+          NEWEST=$( (git tag --list 'v*' | sed 's/^v//'; echo "$VERSION") | sort -V | tail -n 1)
+          if [ "$NEWEST" = "$VERSION" ]; then LATEST=true; else LATEST=false; fi
+          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
+          echo "Newest version: $NEWEST, tag latest: $LATEST"
 
       # Every green CI run reaches this workflow, and most carry a version that is already out —
       # without this the job below would rebuild that version from the current commit and move its
@@ -169,10 +177,21 @@ jobs:
           docker network create morphdb-verify
           # Initialised by the same scripts/init.sql the compose files mount: the service logs in as
           # the non-superuser role it creates, because the image refuses a superuser at start-up.
+          # This workflow runs from the default branch for every release, a hotfix branch included,
+          # and a hotfix tree from before that script (0.18.x and earlier) has neither the script
+          # nor the refusal: its image is verified the way it was built to run, as the bootstrap
+          # superuser.
+          if [ -f "${GITHUB_WORKSPACE}/scripts/init.sql" ]; then
+            db_setup=(-e POSTGRES_PASSWORD=postgres
+              -v "${GITHUB_WORKSPACE}/scripts/init.sql:/docker-entrypoint-initdb.d/init.sql:ro")
+            bootstrap_user=postgres
+          else
+            db_setup=(-e POSTGRES_USER=morph -e POSTGRES_PASSWORD=morph)
+            bootstrap_user=morph
+          fi
           docker run -d --name verify-db --network morphdb-verify \
-            -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=morphdb \
-            -v "${GITHUB_WORKSPACE}/scripts/init.sql:/docker-entrypoint-initdb.d/init.sql:ro" \
-            --health-cmd 'pg_isready -h 127.0.0.1 -U postgres -d morphdb' --health-interval 2s --health-retries 15 \
+            -e POSTGRES_DB=morphdb "${db_setup[@]}" \
+            --health-cmd "pg_isready -h 127.0.0.1 -U ${bootstrap_user} -d morphdb" --health-interval 2s --health-retries 15 \
             postgres:16-alpine
           for _ in $(seq 30); do
             [ "$(docker inspect -f '{{.State.Health.Status}}' verify-db)" = healthy ] && break
@@ -217,7 +236,7 @@ jobs:
           tags: |
             ${{ needs.gate.outputs.image }}:${{ needs.gate.outputs.version }}
             ${{ needs.gate.outputs.image }}:${{ needs.gate.outputs.major_minor }}
-            ${{ needs.gate.outputs.image }}:latest
+            ${{ needs.gate.outputs.latest == 'true' && format('{0}:latest', needs.gate.outputs.image) || '' }}
           labels: |
             org.opencontainers.image.version=${{ needs.gate.outputs.version }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
