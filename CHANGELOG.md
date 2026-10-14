@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.18.1
+
+A hotfix on `0.18.0`, carrying only the fixes below. Upgrade from `0.18.0` by changing the image tag
+or package version; nothing else changes.
+
+### Security
+
+- **The hierarchy routes' `orderBy` reached SQL as written.** `GET /api/hierarchy/{table}/{id}/descendants`
+  and `.../subtree` appended the `orderBy` query parameter to the query's `ORDER BY` unparsed, so the
+  text a caller sent ran as SQL — with the service's database role. It is now read as comma-separated
+  `column [asc|desc]` terms over the table's stored columns (by declared name, or by the stored name
+  these routes return) and system columns, the same parser lookups and rollups use; anything else is
+  a `400` naming the problem. An order over columns keeps working.
+- **A bulk job was reachable from any project by its id.** Job status, progress, cancel and export
+  download looked a job up by its id alone, so a request naming another project could read, cancel or
+  download it — and an export's file holds that table's rows. A job is now reached only from the
+  project it belongs to; from any other project it is answered as an unknown id (`404`).
+
+### Fixed
+
+- **The hierarchy routes' table metadata now carries its columns**, which the `orderBy` check reads.
+
+### Dependencies
+
+- **ASP.NET Core packages `10.0.12` → `10.0.13`** (`Microsoft.AspNetCore.SignalR.Client`,
+  `Microsoft.AspNetCore.Authentication.JwtBearer`, `Microsoft.Extensions.Caching.StackExchangeRedis`,
+  and the test host). `10.0.12`'s `Microsoft.AspNetCore.SignalR.Common` carries a high-severity
+  denial-of-service advisory (CVE-2026-70159), which `MorphDB.Client` passed on to every consumer —
+  a build that treats audit warnings as errors stopped restoring. The image's runtime comes from the
+  `aspnet:10.0` base and is rebuilt with it.
+
 ## 0.18.0
 
 A minor release for writers that build or rebuild a lookup's target table. A lookup may now name a target
