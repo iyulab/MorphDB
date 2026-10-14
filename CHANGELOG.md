@@ -40,8 +40,8 @@ a deployment that has policies.
   VALIDATION_ERROR` before a statement is built. `parentColumn` and the columns an in-process
   request names are resolved the same way: a declared column name works where only a physical name
   did, and a name the table does not store is refused by name. (`0.18.1` already parses `orderBy`,
-  and also accepts there the stored names these routes used to return; from this release an order
-  names declared columns only.)
+  and also accepts a column's stored name there; from this release an order names declared columns
+  only.)
 - **A bulk job exists only for its project and the caller that requested it.** The routes that take
   a job id — its status, its progress, cancelling it, downloading an export — found the job by that
   id alone (`0.18.1` already confines a job to its project; the requester is new here). Anyone who knew a job id could read the job, cancel it and download its file, whatever
@@ -159,9 +159,9 @@ a deployment that has policies.
   three reads used to fail with an error for a caller that does not bypass row-level security; they
   now return no rows, as every other read of such a table does.
   (Verified-by: NativePolicyProjectionTests.Start_up_closes_a_table_whose_stored_policy_cannot_be_translated)
-- **A hierarchy `orderBy` names declared columns only.** `0.18.1` also accepted the stored names its
-  hierarchy results carried; those results now carry declared names, and so must the order. See
-  Security.
+- **A hierarchy `orderBy` names declared columns only.** `0.18.1` also accepted a column's
+  stored name there, as an in-process caller of these queries saw it in their rows; the rows now
+  carry declared names, and so must the order. See Security.
 
 ### Added
 
