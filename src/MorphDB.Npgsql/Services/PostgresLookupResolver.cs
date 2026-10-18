@@ -70,6 +70,9 @@ public sealed class PostgresLookupResolver : ILookupResolver
                 $"FROM {DdlBuilder.QuoteIdentifier(target.PhysicalName)} AS {alias} " +
                 $"WHERE {alias}.{DdlBuilder.QuoteIdentifier(validation.MatchColumnPhysical!)} = " +
                 $"base_table.{DdlBuilder.QuoteIdentifier(validation.RelationColumn!.PhysicalName)}" +
+                // A target row a soft delete has marked is not there to read, as it is not there to
+                // list: the lookup reads what it reads for a missing row.
+                (target.SoftDeleteEnabled ? $" AND {alias}.{SystemColumns.DeletedAt} IS NULL" : "") +
                 $"{DeclaredOrder.Sql(order, target, alias)} LIMIT 1)";
         }
 

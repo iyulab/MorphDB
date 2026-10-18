@@ -115,38 +115,46 @@ public sealed class ViewQueryBuilder
             }
             sb.Append(" ON ");
             sb.Append(await TranslateConditionAsync(join.Condition, baseTable, tableQualifiers, cancellationToken));
+            if (joinTable.SoftDeleteEnabled)
+            {
+                // In the ON clause, not the WHERE: a marked row is not joined, and an outer join keeps
+                // the base row with nulls on that side, as it would for a row that is not there.
+                sb.Append(" AND ");
+                sb.Append(tableQualifiers[join.Table]);
+                sb.Append('.');
+                sb.Append(SystemColumns.DeletedAt);
+                sb.Append(" IS NULL");
+            }
         }
 
-        // Build WHERE clause
+        // Build WHERE clause. The declared filters are one parenthesised group, joined in order by each
+        // filter's own operator, and the conditions MorphDB adds stand beside that group with AND -- so
+        // an OR among the declared filters cannot reach past them.
+        var whereParts = new List<string>();
         if (definition.Filters.Count > 0)
         {
-            sb.Append("\nWHERE ");
-            var filterConditions = new List<string>();
+            var declared = new StringBuilder();
             for (int i = 0; i < definition.Filters.Count; i++)
             {
                 var filter = definition.Filters[i];
-                var condition = await BuildFilterConditionAsync(filter, baseTable, tableQualifiers, cancellationToken);
                 if (i > 0)
                 {
-                    sb.Append(filter.LogicalOp == LogicalOperator.And ? " AND " : " OR ");
+                    declared.Append(filter.LogicalOp == LogicalOperator.And ? " AND " : " OR ");
                 }
-                filterConditions.Add(condition);
+                declared.Append(await BuildFilterConditionAsync(filter, baseTable, tableQualifiers, cancellationToken));
             }
-            sb.Append(string.Join("", filterConditions.Select((c, i) => i == 0 ? c : c)));
+            whereParts.Add($"({declared})");
         }
 
-        // Add project isolation
-        var projectCondition = $"base_table.\"project_id\" = '{_projectId}'";
-        if (definition.Filters.Count > 0)
+        // Add project isolation -- and, on a soft-delete base table, only the rows a list of it shows.
+        whereParts.Add($"base_table.\"project_id\" = '{_projectId}'");
+        if (baseTable.SoftDeleteEnabled)
         {
-            sb.Append(" AND ");
-            sb.Append(projectCondition);
+            whereParts.Add($"base_table.{SystemColumns.DeletedAt} IS NULL");
         }
-        else
-        {
-            sb.Append("\nWHERE ");
-            sb.Append(projectCondition);
-        }
+
+        sb.Append("\nWHERE ");
+        sb.Append(string.Join(" AND ", whereParts));
 
         // Build GROUP BY clause
         if (definition.GroupBy.Count > 0)

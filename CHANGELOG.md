@@ -8,7 +8,14 @@
   a delete marked the row and every read went on returning it — a list and its total, a filter, a
   single record, the complex query, an aggregate, a hierarchy walk and an export all counted marked
   rows as live. Every read of such a table now sees only unmarked rows, and a marked row read by id
-  answers `404`, as the soft-delete documentation always said.
+  answers `404`, as the soft-delete documentation always said. The reads that reach such a table
+  from another one follow suit: a lookup whose target row is marked reads `null`, a rollup does not
+  count a marked child, and a view leaves marked rows of its base table out and does not join marked
+  rows of a joined one.
+- **A view with two or more filters can be created.** The filters' `AND`/`OR` operators were written
+  ahead of the conditions instead of between them, so any view declaring more than one filter was
+  refused by the database. The declared filters are now one group, so an `OR` among them cannot
+  reach past the conditions MorphDB adds.
 
 ### Added
 

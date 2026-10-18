@@ -102,7 +102,9 @@ Enabled explicitly, per table, where the capability is needed.
 | `_deleted_by` | UUID | Deleter id |
 
 - Every read gets the filter automatically (`_deleted_at IS NULL`): a list and its total, a filter,
-  a single record (a marked row read by id is `404`), an aggregate, a hierarchy walk and an export
+  a single record (a marked row read by id is `404`), an aggregate, a hierarchy walk and an export —
+  and the reads that reach the table from another: a lookup reads `null` for a marked target row, a
+  rollup does not count a marked child, a view neither shows nor joins marked rows
 - To read marked rows as well, ask for them: `includeDeleted=true` on `GET /api/data/{table}` and in
   the `POST /api/data/{table}/query` body, `IncludeDeleted()` on a query built in process
 

@@ -153,7 +153,10 @@ public sealed class PostgresRollupResolver : IRollupResolver
         var orderBy = DeclaredOrder.Sql(config.OrderBy, targetTable, "sub");
         var aggregateExpr = BuildAggregateExpression(config.Aggregation, quotedSource, config, orderBy);
 
-        var whereClause = $"sub.{quotedFk} = base_table.{quotedPk}";
+        // A child row a soft delete has marked does not count, as it does not list.
+        var whereClause = targetTable.SoftDeleteEnabled
+            ? $"sub.{quotedFk} = base_table.{quotedPk} AND sub.{SystemColumns.DeletedAt} IS NULL"
+            : $"sub.{quotedFk} = base_table.{quotedPk}";
         var filterClause = config.Filter != null
             ? $" AND {BuildFilter(config.Filter, targetTable)}"
             : "";
