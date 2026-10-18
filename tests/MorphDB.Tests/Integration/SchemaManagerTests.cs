@@ -95,6 +95,48 @@ public class SchemaManagerTests
         storedTable.Columns.Should().HaveCount(7);
     }
 
+    // The API reference documents SYSTEM_COLUMN and UNSAFE_TYPE_CAST as codes a caller branches on.
+    // Both were raised as ValidationException(field, message), which always answers VALIDATION_ERROR.
+    [Fact]
+    public async Task Changing_a_system_columns_type_is_refused_with_SYSTEM_COLUMN()
+    {
+        var table = await _schemaManager.CreateTableAsync(new CreateTableRequest
+        {
+            ProjectId = Guid.NewGuid(),
+            LogicalName = "system_col_" + Guid.NewGuid().ToString("N")[..8],
+            Columns = [new CreateColumnRequest { LogicalName = "title", DataType = MorphDataType.Text }]
+        }, TestContext.Current.CancellationToken);
+
+        var act = () => _schemaManager.UpdateColumnAsync(new UpdateColumnRequest
+        {
+            ColumnId = table.Columns.Single(c => c.LogicalName == "_version").ColumnId,
+            DataType = MorphDataType.Text,
+            ExpectedVersion = table.SchemaVersion
+        }, TestContext.Current.CancellationToken);
+
+        (await act.Should().ThrowAsync<SchemaException>()).Which.ErrorCode.Should().Be("SYSTEM_COLUMN");
+    }
+
+    [Fact]
+    public async Task An_unsafe_type_change_without_force_is_refused_with_UNSAFE_TYPE_CAST()
+    {
+        var table = await _schemaManager.CreateTableAsync(new CreateTableRequest
+        {
+            ProjectId = Guid.NewGuid(),
+            LogicalName = "unsafe_cast_" + Guid.NewGuid().ToString("N")[..8],
+            Columns = [new CreateColumnRequest { LogicalName = "amount", DataType = MorphDataType.Text }]
+        }, TestContext.Current.CancellationToken);
+
+        var act = () => _schemaManager.UpdateColumnAsync(new UpdateColumnRequest
+        {
+            ColumnId = table.Columns.Single(c => c.LogicalName == "amount").ColumnId,
+            DataType = MorphDataType.Integer,
+            ExpectedVersion = table.SchemaVersion
+        }, TestContext.Current.CancellationToken);
+
+        (await act.Should().ThrowAsync<SchemaException>()).Which.ErrorCode.Should().Be("UNSAFE_TYPE_CAST");
+    }
+
     [Fact]
     public async Task CreateTableAsync_WithDuplicateName_ShouldThrow()
     {

@@ -652,7 +652,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         if (column.IsSystemColumn &&
             (request.DataType.HasValue || request.IsNullable.HasValue || request.IsUnique.HasValue))
         {
-            throw new ValidationException("SYSTEM_COLUMN", "System columns cannot be modified");
+            throw new SchemaException("SYSTEM_COLUMN", "System columns cannot be modified");
         }
 
         // Validate new name if provided
@@ -760,7 +760,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
                 var newNativeType = TypeMapper.ToNativeType(request.DataType.Value);
                 if (!TypeMapper.IsTypeCastSafe(column.DataType, request.DataType.Value) && !request.ForceCast)
                 {
-                    throw new ValidationException("UNSAFE_TYPE_CAST",
+                    throw new SchemaException("UNSAFE_TYPE_CAST",
                         $"Cannot safely convert column '{column.LogicalName}' from {column.DataType} to {request.DataType.Value}. " +
                         "Data loss may occur. Set ForceCast=true to attempt the conversion, or create a new column and migrate data manually.");
                 }
@@ -1488,8 +1488,8 @@ public sealed class PostgresSchemaManager : ISchemaManager
                         break;
 
                     default:
-                        throw new ValidationException("INVALID_OPERATION",
-                            $"Unknown or incomplete batch operation type: '{op.Type}'");
+                        throw new ValidationException("type",
+                            $"unknown or incomplete batch operation type '{op.Type}'.");
                 }
 
                 executedCount++;

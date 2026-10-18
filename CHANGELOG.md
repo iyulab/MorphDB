@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Two schema refusals answer the code the API reference documents.** Changing the type or
+  constraints of a system column answers `400 SYSTEM_COLUMN`, and a column type change whose values
+  cannot be converted (without `forceCast`) answers `400 UNSAFE_TYPE_CAST` — both answered
+  `VALIDATION_ERROR` with a message naming the code as if it were a field. A batch DDL operation of
+  an unknown type still answers `VALIDATION_ERROR`, now naming its `type` field.
+
 ## 0.19.0
 
 Row-level security moves into PostgreSQL. A policy used to be a condition MorphDB added to three
