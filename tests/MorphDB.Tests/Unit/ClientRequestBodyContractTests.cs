@@ -355,11 +355,11 @@ public class ClientRequestBodyContractTests
                 (c, m) => c.Batch.ExecuteAsync((BatchRequest)m, cancellationToken)),
             ("transaction", new TransactionRequest
             {
-                Operations = [new TransactionOperation { Ref = "a", Table = "t", Operation = "insert", Data = record }],
+                Operations = [new TransactionOperation { Method = BatchMethod.Insert, Table = "t", Ref = "a", Data = record }],
             }, """{"success":true,"results":[]}""",
                 (c, m) => c.Transactions.ExecuteAsync((TransactionRequest)m, cancellationToken)),
             ("finalize", new FinalizeRequest { RecordIds = [Guid.Parse("11111111-1111-1111-1111-111111111111")] },
-                """{"success":true,"finalizedCount":1,"errorCount":0,"errors":[]}""",
+                """{"results":[],"validCount":1,"errorCount":0}""",
                 (c, m) => c.Transactions.FinalizeBatchAsync("t", (FinalizeRequest)m, cancellationToken)),
             ("createTable", new CreateTableRequest
             {

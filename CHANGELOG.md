@@ -9,6 +9,12 @@
   by `Filters` (`ViewFilter`) and `Materialized`, beside `Joins`, `GroupBy`, `OrderBy`, `Limit`,
   `Distinct`, `RefreshPolicy`, `RefreshSchedule` and `Description`. `ViewClient.QueryAsync` returns
   `ViewRows` (`Data` · `TotalCount` · `HasMore`) instead of `PagedResponse<DataRecord>`.
+- **`MorphDB.Client` transactions take the service's shape.** `TransactionOperation.Operation` is
+  `Method` (a `BatchMethod` value), `Id` is a string so it can be a `$ref`, and `KeyColumns`, `Mode`,
+  `TimeoutMs` and `ReturnFullRecords` are added. A result carries `Index`, `Id`, `AffectedRows`,
+  `Error` and `ValidationErrors`. `FinalizeResponse` is `Results` (`FinalizeResult` — record, new
+  state, failed columns) with `ValidCount` and `ErrorCount`, replacing `Success`, `FinalizedCount` and
+  `Errors`.
 
 ### Fixed
 
@@ -18,6 +24,9 @@
   which the view endpoint ignores, and expected a paged response the endpoint does not return. A view
   read now applies `QueryRequest`'s selection, filters, order and paging, and `ViewInfo` carries the
   view's joins, filters, grouping, order, limit and refresh policy.
+- **Transactions and finalization work through `MorphDB.Client`.** An operation named its kind
+  `operation` where the service reads `method`, so every `TransactionClient.ExecuteAsync` was
+  refused; a finalization read counts the service does not send and reported nothing finalized.
 
 - **Two schema refusals answer the code the API reference documents.** Changing the type or
   constraints of a system column answers `400 SYSTEM_COLUMN`, and a column type change whose values
