@@ -9,6 +9,17 @@
   cannot be converted (without `forceCast`) answers `400 UNSAFE_TYPE_CAST` — both answered
   `VALIDATION_ERROR` with a message naming the code as if it were a field. A batch DDL operation of
   an unknown type still answers `VALIDATION_ERROR`, now naming its `type` field.
+- **A subtree includes its root, and `includeSelf` keeps the record a walk starts from.** The walks
+  began one step away from the record, so `/subtree` returned only the descendants and
+  `includeSelf=true` on `/ancestors` and `/descendants` returned nothing more. The record is now
+  depth 0. `reachedMaxDepth` on `/ancestors` counts steps, not rows.
+- **Root records are siblings of each other.** `/siblings` compared parents with `=`, so a record
+  without a parent had none; a record that does not exist still has none.
+
+### Docs
+
+- **The hierarchy routes are in the API reference** — routes, query parameters, the response, and how
+  a walk meets a row-level security policy.
 
 ## 0.19.0
 

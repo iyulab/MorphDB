@@ -79,6 +79,42 @@ public class HierarchyQueryServiceTests
         result.Records.Should().OnlyContain(r => !r.Data.ContainsKey("depth"));
     }
 
+    // includeSelf keeps the record the walk starts from, at depth 0; a subtree is the record and its
+    // descendants. The walks used to start one step away from it, so includeSelf kept nothing and a
+    // subtree had no root.
+    [Fact]
+    public async Task IncludeSelf_keeps_the_starting_record_and_a_subtree_starts_at_its_root()
+    {
+        var tree = await CreateTreeAsync();
+        var ct = TestContext.Current.CancellationToken;
+
+        IdsAndDepths(await _harness.Hierarchy.GetDescendantsAsync(tree.Request(tree.Root, null) with { IncludeSelf = true }, ct))
+            .Should().Equal((tree.Root, 0), (tree.Child, 1), (tree.Grandchild, 2));
+        IdsAndDepths(await _harness.Hierarchy.GetAncestorsAsync(tree.Request(tree.Grandchild, null) with { IncludeSelf = true }, ct))
+            .Should().Equal((tree.Grandchild, 0), (tree.Child, 1), (tree.Root, 2));
+        IdsAndDepths(await _harness.Hierarchy.GetSubtreeAsync(tree.Request(tree.Child, null), ct))
+            .Should().Equal((tree.Child, 0), (tree.Grandchild, 1));
+
+        var ancestors = await _harness.Hierarchy.GetAncestorsAsync(tree.Request(tree.Grandchild, null) with { IncludeSelf = true, MaxDepth = 2 }, ct);
+        ancestors.ReachedMaxDepth.Should().BeTrue("the walk went the two steps it was allowed");
+        (await _harness.Hierarchy.GetAncestorsAsync(tree.Request(tree.Grandchild, null) with { IncludeSelf = true, MaxDepth = 3 }, ct))
+            .ReachedMaxDepth.Should().BeFalse("the record itself is not a step");
+    }
+
+    // Two records with no parent are siblings: both are roots. Comparing parents with = made a root's
+    // parent NULL equal to nothing. A record that does not exist has no siblings rather than every root.
+    [Fact]
+    public async Task Roots_are_siblings_of_each_other_and_a_missing_record_has_none()
+    {
+        var tree = await CreateTreeAsync();
+        var other = await _harness.SeedAsync(tree.Table, new Dictionary<string, object?> { ["title"] = "other root", [SystemColumns.ParentId] = null });
+        var ct = TestContext.Current.CancellationToken;
+
+        IdsAndDepths(await _harness.Hierarchy.GetSiblingsAsync(tree.Request(tree.Root, null), ct)).Select(r => r.Id)
+            .Should().Equal(other);
+        (await _harness.Hierarchy.GetSiblingsAsync(tree.Request(Guid.NewGuid(), null), ct)).Records.Should().BeEmpty();
+    }
+
     /// <summary>The path carries a second computed column, <c>path</c>, built the same way.</summary>
     [Theory]
     [InlineData(null)]

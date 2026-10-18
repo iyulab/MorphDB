@@ -344,6 +344,50 @@ POST /api/batch/data/customers/insert
 
 ---
 
+### Hierarchy
+
+A table whose rows point at a parent row — the `_parent_id` system column (`systemColumns.hierarchy`),
+or any stored column holding a parent's `_id` — can be walked as a tree:
+
+```yaml
+GET    /api/hierarchy/{table}/{id}/ancestors     # Parent, grandparent, ... — nearest first
+GET    /api/hierarchy/{table}/{id}/descendants   # Children, grandchildren, ... — nearest first
+GET    /api/hierarchy/{table}/{id}/subtree       # The record and its descendants
+GET    /api/hierarchy/{table}/{id}/path          # The record up to its root — root first
+GET    /api/hierarchy/{table}/{id}/siblings      # Records with the same parent (roots are siblings of each other)
+POST   /api/hierarchy/{table}/check-cycle        # Would giving recordId the parent newParentId make a cycle?
+GET    /api/hierarchy/{table}/detect-cycles      # Records already in a cycle
+```
+
+| Query parameter | Routes | Meaning |
+|---|---|---|
+| `parentColumn` | all | The column that holds the parent's `_id`, by its declared name. Default `_parent_id`. A name the table does not store is `400 VALIDATION_ERROR` |
+| `maxDepth` | ancestors · descendants · subtree · path | How many steps the walk may take. Default 100 |
+| `includeSelf` | ancestors · descendants · siblings | Also return the record the walk starts from, at depth 0. Default `false` |
+| `orderBy` | descendants · subtree | `column [asc\|desc]`, comma-separated, over the table's columns — within each depth. Anything else is `400 VALIDATION_ERROR` |
+
+`check-cycle` takes `{"recordId": "…", "newParentId": "…", "parentColumn": "_parent_id"}` and answers
+`{"wouldCreateCycle": true|false}`; `detect-cycles` answers `{"hasCycles", "cyclicRecordIds", "cycleDescriptions"}`.
+
+A walk answers
+
+```json
+{
+  "records": [{ "data": { "_id": "…", "title": "…" }, "depth": 1, "path": null }],
+  "totalCount": 1,
+  "maxDepth": 1,
+  "reachedMaxDepth": false
+}
+```
+
+`data` is the row in its declared names, as every other read returns it. `depth` counts steps from the
+record the walk starts at (0 is that record). `path` is set only by `/path`: the `_id`s from the
+record up to that row. `reachedMaxDepth` says the walk stopped at `maxDepth` rather than at the
+tree's end. A record that does not exist, or that a `Select` policy hides from the caller, answers
+an empty walk — the walk reads only the rows the caller may read, like every other read, so it also
+stops at a row the caller may not read: what lies past it is not reached. An unknown table is
+`404 TABLE_NOT_FOUND`.
+
 ## GraphQL
 
 **Endpoint**: `/graphql`

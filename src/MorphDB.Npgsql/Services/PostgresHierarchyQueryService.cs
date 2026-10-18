@@ -33,7 +33,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         var maxDepth = request.MaxDepth ?? DefaultMaxDepth;
 
         // Build recursive CTE for ancestors
-        var sql = BuildAncestorsCte(table.PhysicalName, StoredColumn(table, request.ParentColumn, "parentColumn"), StoredColumns(table, request.Columns), maxDepth);
+        var sql = BuildAncestorsCte(table.PhysicalName, StoredColumn(table, request.ParentColumn, "parentColumn"), StoredColumns(table, request.Columns), maxDepth, request.IncludeSelf);
 
         await using var connection = await _connections.OpenAsync(cancellationToken);
         var results = await connection.QueryAsync<dynamic>(sql, new { recordId = request.RecordId });
@@ -45,7 +45,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
             Records = records,
             TotalCount = records.Count,
             MaxDepth = records.Count > 0 ? records.Max(r => r.Depth) : 0,
-            ReachedMaxDepth = records.Count >= maxDepth
+            ReachedMaxDepth = records.Any(r => r.Depth >= maxDepth)
         };
     }
 
@@ -57,7 +57,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         var maxDepth = request.MaxDepth ?? DefaultMaxDepth;
 
         // Build recursive CTE for descendants
-        var sql = BuildDescendantsCte(table.PhysicalName, StoredColumn(table, request.ParentColumn, "parentColumn"), StoredColumns(table, request.Columns), maxDepth, OrderTerms(table, request.OrderBy));
+        var sql = BuildDescendantsCte(table.PhysicalName, StoredColumn(table, request.ParentColumn, "parentColumn"), StoredColumns(table, request.Columns), maxDepth, OrderTerms(table, request.OrderBy), request.IncludeSelf);
 
         await using var connection = await _connections.OpenAsync(cancellationToken);
         var results = await connection.QueryAsync<dynamic>(sql, new { recordId = request.RecordId });
@@ -185,28 +185,30 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         string physicalName,
         string parentColumn,
         List<string>? columns,
-        int maxDepth)
+        int maxDepth,
+        bool includeSelf)
     {
         var tableName = DdlBuilder.QuoteIdentifier(physicalName);
         var parentCol = DdlBuilder.QuoteIdentifier(parentColumn);
         var selectCols = SelectList(columns, "depth");
+        var lowest = includeSelf ? 0 : 1;
 
+        // The walk starts at the record itself (depth 0), so includeSelf can keep it; the parent is
+        // depth 1 either way.
         return $"""
             WITH RECURSIVE ancestors AS (
-                -- Base case: start with the parent of the given record
-                SELECT t.*, 1 AS depth
+                SELECT t.*, 0 AS depth
                 FROM {tableName} t
-                WHERE t."_id" = (SELECT {parentCol} FROM {tableName} WHERE "_id" = @recordId)
+                WHERE t."_id" = @recordId
 
                 UNION ALL
 
-                -- Recursive case: get parent of current ancestor
                 SELECT t.*, a.depth + 1
                 FROM {tableName} t
                 INNER JOIN ancestors a ON t."_id" = a.{parentCol}
                 WHERE a.depth < {maxDepth}
             )
-            SELECT {selectCols} FROM ancestors ORDER BY depth ASC
+            SELECT {selectCols} FROM ancestors WHERE depth >= {lowest} ORDER BY depth ASC
             """;
     }
 
@@ -215,32 +217,34 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         string parentColumn,
         List<string>? columns,
         int maxDepth,
-        string? orderBy)
+        string? orderBy,
+        bool includeSelf)
     {
         var tableName = DdlBuilder.QuoteIdentifier(physicalName);
         var parentCol = DdlBuilder.QuoteIdentifier(parentColumn);
         var selectCols = SelectList(columns, "depth");
+        var lowest = includeSelf ? 0 : 1;
 
         var orderClause = string.IsNullOrEmpty(orderBy)
             ? "depth ASC"
             : $"depth ASC, {orderBy}";
 
+        // The walk starts at the record itself (depth 0) — what a subtree's root is — and its
+        // children are depth 1 either way.
         return $"""
             WITH RECURSIVE descendants AS (
-                -- Base case: direct children
-                SELECT t.*, 1 AS depth
+                SELECT t.*, 0 AS depth
                 FROM {tableName} t
-                WHERE t.{parentCol} = @recordId
+                WHERE t."_id" = @recordId
 
                 UNION ALL
 
-                -- Recursive case: children of current descendants
                 SELECT t.*, d.depth + 1
                 FROM {tableName} t
                 INNER JOIN descendants d ON t.{parentCol} = d."_id"
                 WHERE d.depth < {maxDepth}
             )
-            SELECT {selectCols} FROM descendants ORDER BY {orderClause}
+            SELECT {selectCols} FROM descendants WHERE depth >= {lowest} ORDER BY {orderClause}
             """;
     }
 
@@ -290,7 +294,8 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         return $"""
             SELECT {selectCols}
             FROM {tableName} s
-            WHERE s.{parentCol} = (SELECT {parentCol} FROM {tableName} WHERE "_id" = @recordId)
+            WHERE EXISTS (SELECT 1 FROM {tableName} WHERE "_id" = @recordId)
+              AND s.{parentCol} IS NOT DISTINCT FROM (SELECT {parentCol} FROM {tableName} WHERE "_id" = @recordId)
             {selfFilter}
             ORDER BY s."_id"
             """;
