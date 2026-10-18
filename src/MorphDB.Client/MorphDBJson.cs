@@ -74,6 +74,7 @@ internal static class MorphDBJson
 [JsonSerializable(typeof(IReadOnlyList<ViewInfo>))]
 [JsonSerializable(typeof(ViewInfo))]
 [JsonSerializable(typeof(CreateViewRequest))]
+[JsonSerializable(typeof(ViewRows))]
 // Webhooks.
 [JsonSerializable(typeof(List<WebhookInfo>))]
 [JsonSerializable(typeof(WebhookInfo))]

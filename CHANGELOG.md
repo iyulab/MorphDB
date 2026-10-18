@@ -2,7 +2,22 @@
 
 ## Unreleased
 
+### Breaking
+
+- **`MorphDB.Client` view requests take the service's shape.** `CreateViewRequest.Columns` is a list
+  of `ViewColumn` (source or expression, under an alias); `Filter` and `IsMaterialized` are replaced
+  by `Filters` (`ViewFilter`) and `Materialized`, beside `Joins`, `GroupBy`, `OrderBy`, `Limit`,
+  `Distinct`, `RefreshPolicy`, `RefreshSchedule` and `Description`. `ViewClient.QueryAsync` returns
+  `ViewRows` (`Data` · `TotalCount` · `HasMore`) instead of `PagedResponse<DataRecord>`.
+
 ### Fixed
+
+- **Views can be created and read through `MorphDB.Client`.** The create request sent columns as
+  names, a `filter` string and `isMaterialized`, none of which the service reads — it refuses a member
+  it does not know, so every `ViewClient.CreateAsync` failed. A view read sent `page`/`pageSize`,
+  which the view endpoint ignores, and expected a paged response the endpoint does not return. A view
+  read now applies `QueryRequest`'s selection, filters, order and paging, and `ViewInfo` carries the
+  view's joins, filters, grouping, order, limit and refresh policy.
 
 - **Two schema refusals answer the code the API reference documents.** Changing the type or
   constraints of a system column answers `400 SYSTEM_COLUMN`, and a column type change whose values

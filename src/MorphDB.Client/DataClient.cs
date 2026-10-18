@@ -217,7 +217,7 @@ public sealed class DataClient
     /// instant round-trips with its offset), so the query means the same whatever culture the caller
     /// runs in.
     /// </summary>
-    private static string FormatFilterValue(object? value) => value switch
+    internal static string FormatFilterValue(object? value) => value switch
     {
         null => string.Empty,
         DateTimeOffset instant => instant.ToString("O", CultureInfo.InvariantCulture),
@@ -227,7 +227,7 @@ public sealed class DataClient
         _ => value.ToString() ?? string.Empty,
     };
 
-    private static string GetOperatorString(FilterOperator op) => op switch
+    internal static string GetOperatorString(FilterOperator op) => op switch
     {
         FilterOperator.Equal => "eq",
         FilterOperator.NotEqual => "neq",
