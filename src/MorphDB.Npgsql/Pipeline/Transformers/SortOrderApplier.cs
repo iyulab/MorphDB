@@ -38,13 +38,26 @@ public sealed class SortOrderApplier : ITransformer
             return;
         }
 
-        // Get parent_id (can be null for root level items)
+        // Get parent_id (can be null for root level items). The REST path delivers it as a
+        // JsonElement, which Dapper binds as jsonb -- and `uuid = jsonb` is no operator PostgreSQL
+        // has, so every child inserted over HTTP failed with a 500 before it was written. Convert it
+        // to the column's DB value first, as the foreign-key and unique validators do. A value that
+        // is not a uuid at all is left for TypeValidator to refuse; this step only numbers rows.
         context.Data.TryGetValue(ParentIdColumn, out var parentIdValue);
+        object? parentId;
+        try
+        {
+            parentId = TypeMapper.ToDbValue(parentIdValue, MorphDataType.Uuid);
+        }
+        catch (Exception e) when (e is FormatException or InvalidOperationException)
+        {
+            return;
+        }
 
         // Calculate next sort order for this parent
         var nextSortOrder = await GetNextSortOrderAsync(
             context.Table.PhysicalName,
-            parentIdValue,
+            parentId,
             context.CancellationToken);
 
         context.Data[SortOrderColumn] = nextSortOrder;

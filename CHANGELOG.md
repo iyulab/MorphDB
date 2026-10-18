@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **A child row can be inserted into a hierarchy table over HTTP.** Inserting a row that names its
+  parent (`_parent_id`) through `POST /api/data/{table}` failed with `500` (`operator does not exist:
+  uuid = jsonb`) before anything was written: numbering the row among its siblings (`_sort_order`)
+  compared the parent column with the request's JSON value as given. The value is now read as the
+  id it is, as the foreign-key and unique checks already read theirs; a parent that is not an id is
+  refused as a bad value (`400`). Roots, and writes through in-process services, were not affected.
+- **A value that cannot be read as its column's type is a `400`, not a `500`.** Every insert or
+  update over HTTP binds each value as its column's type, and a value that did not convert — text
+  in an `integer` column, a word in a `uuid` column — failed there as an unhandled error. It is now
+  a validation error (`VALIDATION_ERROR`) naming each such column, reported together, before
+  anything is written.
+
 ## 0.20.0
 
 A minor, mostly fixes to what 0.19.0 and earlier releases got wrong. The server's wire and its

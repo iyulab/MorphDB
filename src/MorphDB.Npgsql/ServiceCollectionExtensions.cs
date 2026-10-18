@@ -263,6 +263,7 @@ public static partial class ServiceCollectionExtensions
 
         // Register Validators (virtual constraint enforcement)
         services.AddSingleton<IValidator, UnknownFieldValidator>();
+        services.AddSingleton<IValidator, TypeValidator>();
         services.AddSingleton<IValidator, RequiredValidator>();
         services.AddSingleton<IValidator, UniqueValidator>();
         services.AddSingleton<IValidator, ForeignKeyValidator>();
