@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.20.0
+
+A minor, mostly fixes to what 0.19.0 and earlier releases got wrong. The server's wire and its
+database roles are unchanged from 0.19.0. The breaking changes are `MorphDB.Client`'s: its view and
+transaction requests now take the shape the service reads — the earlier shapes were refused by every
+server, so no working call changes. Changing a column's type, nullability or uniqueness, which failed
+in 0.19.0, works.
 
 ### Breaking
 
