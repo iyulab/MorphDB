@@ -13,6 +13,7 @@ using MorphDB.Core.Security;
 using MorphDB.Npgsql.Dml;
 using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Security;
+using Npgsql;
 
 namespace MorphDB.Npgsql.Services;
 
@@ -863,7 +864,11 @@ public sealed class PostgresBulkOperationService : IBulkOperationService, IBulkJ
             {
                 RowNumber = rowNumber,
                 Success = false,
-                Error = ex.Message
+                // A row's error is read by whoever requested the job. MorphDB's own errors name logical
+                // columns; PostgreSQL's name physical ones, which are not the caller's to see.
+                Error = ex is PostgresException pg
+                    ? $"The row could not be written (SQLSTATE {pg.SqlState})."
+                    : ex.Message
             };
         }
     }
@@ -1044,32 +1049,22 @@ public sealed class PostgresBulkOperationService : IBulkOperationService, IBulkJ
         }
     }
 
+    /// <summary>
+    /// A JSON or NDJSON row as the write pipeline receives a JSON row from <c>POST /api/data</c>: each
+    /// value the element it is, read against its column's type by the one conversion every JSON door
+    /// shares (<see cref="Infrastructure.TypeMapper.ToDbValue"/>). Converting here instead, by the
+    /// value's JSON kind alone, handed a date or an id column a string, which PostgreSQL refused.
+    /// </summary>
     private static Dictionary<string, object?> JsonElementToDictionary(JsonElement element)
     {
         var dict = new Dictionary<string, object?>();
 
         foreach (var property in element.EnumerateObject())
         {
-            dict[property.Name] = ConvertJsonValue(property.Value);
+            dict[property.Name] = property.Value.ValueKind == JsonValueKind.Null ? null : property.Value.Clone();
         }
 
         return dict;
-    }
-
-    private static object? ConvertJsonValue(JsonElement element)
-    {
-        return element.ValueKind switch
-        {
-            JsonValueKind.Null => null,
-            JsonValueKind.True => true,
-            JsonValueKind.False => false,
-            JsonValueKind.Number when element.TryGetInt64(out var l) => l,
-            JsonValueKind.Number => element.GetDecimal(),
-            JsonValueKind.String => element.GetString(),
-            JsonValueKind.Array => element.EnumerateArray().Select(ConvertJsonValue).ToList(),
-            JsonValueKind.Object => JsonElementToDictionary(element),
-            _ => element.GetRawText()
-        };
     }
 
     #endregion

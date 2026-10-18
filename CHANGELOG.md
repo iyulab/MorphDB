@@ -12,6 +12,16 @@
   from another one follow suit: a lookup whose target row is marked reads `null`, a rollup does not
   count a marked child, and a view leaves marked rows of its base table out and does not join marked
   rows of a joined one.
+- **A bulk import refuses a mistyped value by its column's name.** A CSV cell or JSON value that
+  could not be read as its column's type reached PostgreSQL as text, and the job's `errorDetails`
+  carried PostgreSQL's own error — the column's physical name and a statement position — where a
+  single or batch write answers `Field 'qty' holds integer values; …`. The type check now covers a
+  plain string as it covers a JSON value, so every write door refuses the same value the same way,
+  and a row's error never repeats PostgreSQL's text.
+- **A JSON or NDJSON import writes date and id columns.** The import converted each value by its JSON
+  kind before the write, so a date or a uuid arrived as a string and PostgreSQL refused it — the same
+  row posted to `POST /api/data/{table}` was written. An import row now reaches the pipeline as a JSON
+  row from that endpoint does, and is converted by the same rule.
 - **A view with two or more filters can be created.** The filters' `AND`/`OR` operators were written
   ahead of the conditions instead of between them, so any view declaring more than one filter was
   refused by the database. The declared filters are now one group, so an `OR` among them cannot

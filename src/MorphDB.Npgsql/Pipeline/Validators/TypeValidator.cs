@@ -34,6 +34,15 @@ public sealed class TypeValidator : IValidator
             try
             {
                 _ = TypeMapper.ToDbValue(value, column.DataType);
+
+                // A value that arrives as a JSON element converts above, and fails there when it cannot.
+                // A plain string -- a CSV cell its parser could not read, or an in-process caller's
+                // value -- binds as text, which PostgreSQL refuses for any column that is not text:
+                // so it is refused here, by name, instead of there. System columns are the pipeline's.
+                if (value is string && !TakesText(column.DataType) && !SystemColumns.IsSystemColumn(name))
+                {
+                    throw new FormatException();
+                }
             }
             catch (Exception e) when (e is FormatException or InvalidOperationException or InvalidCastException or OverflowException)
             {
@@ -47,4 +56,14 @@ public sealed class TypeValidator : IValidator
 
         return Task.CompletedTask;
     }
+
+    /// <summary>
+    /// Whether a column of <paramref name="type"/> stores a string as given: the text types, and the
+    /// JSON-backed ones, which store any value serialized.
+    /// </summary>
+    private static bool TakesText(MorphDataType type) => type is
+        MorphDataType.Text or MorphDataType.LongText or MorphDataType.Email or MorphDataType.Url
+        or MorphDataType.Phone or MorphDataType.SingleSelect
+        or MorphDataType.Json or MorphDataType.Array or MorphDataType.MultiSelect or MorphDataType.Attachment
+        or MorphDataType.Formula or MorphDataType.Computed or MorphDataType.Lookup or MorphDataType.Rollup;
 }

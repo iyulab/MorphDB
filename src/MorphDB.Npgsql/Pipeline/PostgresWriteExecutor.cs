@@ -511,7 +511,9 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
         pg.SqlState is PostgresErrorCodes.NotNullViolation
             or PostgresErrorCodes.UniqueViolation
             or PostgresErrorCodes.ForeignKeyViolation
-            or PostgresErrorCodes.InsufficientPrivilege;
+            or PostgresErrorCodes.InsufficientPrivilege
+            or PostgresErrorCodes.DatatypeMismatch
+            or PostgresErrorCodes.InvalidTextRepresentation;
 
     /// <summary>
     /// Turns a physical NOT NULL / UNIQUE violation into the same kind of error the app-layer
@@ -532,6 +534,14 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             return logical is null
                 ? new MorphDB.Core.Exceptions.ValidationException("A required column does not allow null values.")
                 : new MorphDB.Core.Exceptions.ValidationException(logical, "a value is required and cannot be null");
+        }
+
+        if (pg.SqlState is PostgresErrorCodes.DatatypeMismatch or PostgresErrorCodes.InvalidTextRepresentation)
+        {
+            // Reached when the type validator did not answer first. PostgreSQL's text names the physical
+            // column, so it is not repeated.
+            return new MorphDB.Core.Exceptions.ValidationException(
+                "A value in this request cannot be read as its column's type.");
         }
 
         if (pg.SqlState == PostgresErrorCodes.ForeignKeyViolation)
