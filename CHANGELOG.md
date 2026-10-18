@@ -15,6 +15,15 @@
   in an `integer` column, a word in a `uuid` column — failed there as an unhandled error. It is now
   a validation error (`VALIDATION_ERROR`) naming each such column, reported together, before
   anything is written.
+- **A bulk delete on a soft-delete table marks the rows, as a delete by id does.**
+  `DELETE /api/batch/data/{table}?filter=…` removed the rows outright even on a table created with
+  `systemColumns.softDelete`, where `DELETE /api/data/{table}/{id}` marks them (`_deleted_at`, and
+  `_deleted_by` with audit fields). It now marks them too; a row already marked is not marked again,
+  so `affectedRows` counts the rows this request deleted. A table without soft delete is unchanged.
+- **An import job that fails part-way is marked `failed` with the reason.** When processing an
+  import threw — stored data cut off mid-row, data that is not the format named — the job stayed
+  `processing` for good, so a caller polling it could not tell it from a job still running. It now
+  ends `failed` with `errorMessage` and `completedAt`, as an export job does.
 
 ## 0.20.0
 

@@ -5,6 +5,7 @@ using MorphDB.Core.Abstractions;
 using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
 using MorphDB.Core.Pipeline;
+using MorphDB.Core.Security;
 using MorphDB.Npgsql.Dml;
 using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Query;
@@ -27,6 +28,7 @@ public sealed class PostgresDataService : IMorphDataService
     private readonly IRollupResolver? _rollupResolver;
     private readonly IFormulaResolver? _formulaResolver;
     private readonly string _primaryKeyLogicalName;
+    private readonly ISecurityContextAccessor? _securityContext;
 
     /// <summary>
     /// Creates a new PostgresDataService.
@@ -38,7 +40,8 @@ public sealed class PostgresDataService : IMorphDataService
         ILookupResolver? lookupResolver = null,
         IRollupResolver? rollupResolver = null,
         IFormulaResolver? formulaResolver = null,
-        string primaryKeyLogicalName = "id")
+        string primaryKeyLogicalName = "id",
+        ISecurityContextAccessor? securityContext = null)
     {
         _connections = connections ?? throw new ArgumentNullException(nameof(connections));
         _metadataRepository = metadataRepository ?? throw new ArgumentNullException(nameof(metadataRepository));
@@ -47,6 +50,7 @@ public sealed class PostgresDataService : IMorphDataService
         _rollupResolver = rollupResolver;
         _formulaResolver = formulaResolver;
         _primaryKeyLogicalName = primaryKeyLogicalName;
+        _securityContext = securityContext;
     }
 
     /// <inheritdoc />
@@ -226,14 +230,35 @@ public sealed class PostgresDataService : IMorphDataService
         // Get physical WHERE clause SQL from the query
         var (whereSql, whereParams) = await whereClause.GetPhysicalWhereClauseAsync(cancellationToken);
 
-        // Build DELETE statement with WHERE clause if present
-        var sql = string.IsNullOrEmpty(whereSql)
-            ? $"DELETE FROM {table.PhysicalName}"
-            : $"DELETE FROM {table.PhysicalName} WHERE {whereSql}";
+        var where = string.IsNullOrEmpty(whereSql) ? null : $"({whereSql})";
+        string sql;
+        var parameters = new DynamicParameters(whereParams);
+        if (table.SoftDeleteEnabled)
+        {
+            // A soft-delete table marks rows instead of removing them -- the same meaning a delete by
+            // id has (SoftDeleteApplier). Rows already marked are not marked again, so the count is
+            // of rows this request deleted. _deleted_by is set as the single delete sets it: with
+            // audit fields on and a known caller.
+            var set = $"{SystemColumns.DeletedAt} = now()";
+            var actor = _securityContext?.ContextOrNull?.UserId;
+            var deletedBy = table.Columns.FirstOrDefault(c => c.LogicalName == SystemColumns.DeletedBy);
+            if (table.AuditFieldsEnabled && actor is not null && deletedBy is not null)
+            {
+                set += $", {deletedBy.PhysicalName} = @__deletedBy";
+                parameters.Add("__deletedBy", TypeMapper.ToDbValue(actor, deletedBy.DataType));
+            }
+
+            var notYet = $"{SystemColumns.DeletedAt} IS NULL";
+            sql = $"UPDATE {table.PhysicalName} SET {set} WHERE {(where is null ? notYet : $"{where} AND {notYet}")}";
+        }
+        else
+        {
+            sql = where is null ? $"DELETE FROM {table.PhysicalName}" : $"DELETE FROM {table.PhysicalName} WHERE {where}";
+        }
 
         await using var connection = await _connections.OpenAsync(cancellationToken);
         var affectedRows = await connection.ExecuteAsync(
-            new CommandDefinition(sql, whereParams, cancellationToken: cancellationToken));
+            new CommandDefinition(sql, parameters, cancellationToken: cancellationToken));
 
         return affectedRows;
     }

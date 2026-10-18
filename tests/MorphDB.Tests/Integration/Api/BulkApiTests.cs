@@ -197,6 +197,39 @@ public class BulkApiTests
         finalJob.ErrorDetails![0].Error.Should().NotBeNullOrWhiteSpace();
     }
 
+    /// <summary>
+    /// A job that fails part-way — here the stored JSON breaks off after its first row — is marked
+    /// failed with the reason, as an export job is. It used to stay 'processing', which a caller
+    /// polling it could not tell from a job still running.
+    /// </summary>
+    [Fact]
+    public async Task ImportJson_ThatFailsPartWay_IsMarkedFailedWithTheReason()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tableName = await SetupTestTableAsync();
+        var broken = """[{"name":"Alice","email":"alice@test.com","age":30,"is_active":true}, {"name": """;
+
+        using var scope = _fixture.Api.Services.CreateScope();
+        var bulkService = scope.ServiceProvider.GetRequiredService<IBulkOperationService>();
+        var executor = scope.ServiceProvider.GetRequiredService<IBulkJobExecutor>();
+
+        using var importStream = new MemoryStream(Encoding.UTF8.GetBytes(broken));
+        var importJob = await bulkService.StartJsonImportAsync(_fixture.Api.ProjectId, tableName, importStream, cancellationToken: ct);
+
+        var drain = async () =>
+        {
+            await foreach (var _ in executor.ProcessImportAsync(importJob.JobId, ct))
+            {
+            }
+        };
+        await drain.Should().ThrowAsync<Exception>("the caller driving the job still learns it failed");
+
+        var finalJob = await ReadImportJobAsync(bulkService, importJob.JobId);
+        finalJob!.Status.Should().Be(BulkJobStatus.Failed);
+        finalJob.ErrorMessage.Should().NotBeNullOrWhiteSpace();
+        finalJob.CompletedAt.Should().NotBeNull();
+    }
+
     [Fact]
     public async Task ImportCsv_WithEmptyContent_ShouldCreateJobWithZeroRows()
     {

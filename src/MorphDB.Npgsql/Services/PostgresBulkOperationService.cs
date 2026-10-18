@@ -176,6 +176,40 @@ public sealed class PostgresBulkOperationService : IBulkOperationService, IBulkJ
         Guid jobId,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        // A job that fails part-way is marked failed with the reason, as an export job is. Without
+        // this, an exception left the job in 'processing' forever -- indistinguishable, to whoever
+        // polls it, from a job still running. (An iterator cannot yield inside try/catch, so the
+        // rows are pulled here and yielded outside it.)
+        var rows = ProcessImportRowsAsync(jobId, cancellationToken).GetAsyncEnumerator(cancellationToken);
+        await using (rows.ConfigureAwait(false))
+        {
+            while (true)
+            {
+                ImportRowResult current;
+                try
+                {
+                    if (!await rows.MoveNextAsync().ConfigureAwait(false))
+                    {
+                        yield break;
+                    }
+
+                    current = rows.Current;
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException and not NotFoundException)
+                {
+                    await UpdateImportJobFailedAsync(jobId, ex.Message, CancellationToken.None).ConfigureAwait(false);
+                    throw;
+                }
+
+                yield return current;
+            }
+        }
+    }
+
+    private async IAsyncEnumerable<ImportRowResult> ProcessImportRowsAsync(
+        Guid jobId,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
         var job = await ReadImportJobForExecutionAsync(jobId, cancellationToken)
             ?? throw new NotFoundException("Import job", jobId.ToString());
 
@@ -1562,7 +1596,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService, IBulkJ
         await connection.ExecuteAsync(sql, new
         {
             JobId = jobId,
-            Status = (errorCount == 0 ? BulkJobStatus.Completed : BulkJobStatus.Completed).ToString().ToLowerInvariant(),
+            Status = BulkJobStatus.Completed.ToString().ToLowerInvariant(),
             TotalRows = totalRows,
             SuccessCount = successCount,
             ErrorCount = errorCount,
@@ -1584,6 +1618,21 @@ public sealed class PostgresBulkOperationService : IBulkOperationService, IBulkJ
 
         await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new { JobId = jobId, ProcessedRows = processedRows, Now = DateTimeOffset.UtcNow });
+    }
+
+    private async Task UpdateImportJobFailedAsync(
+        Guid jobId,
+        string errorMessage,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            UPDATE morphdb._morph_import_jobs
+            SET status = 'failed', error_message = @ErrorMessage, completed_at = @Now
+            WHERE job_id = @JobId
+            """;
+
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
+        await connection.ExecuteAsync(sql, new { JobId = jobId, ErrorMessage = errorMessage, Now = DateTimeOffset.UtcNow });
     }
 
     private async Task UpdateExportJobFailedAsync(
