@@ -234,19 +234,9 @@ internal sealed partial class NativePolicyProjector
 
         var stored = await LoadStoredAsync(connection, table.TableId, cancellationToken, transaction);
 
-        var alreadyUsing = stored
-            .Where(p => SqlIdentifierRewriter.Identifiers(p.Expression).Contains(newLogicalName, StringComparer.Ordinal))
-            .Select(p => $"'{p.Name}'")
-            .ToList();
-        if (alreadyUsing.Count > 0)
-        {
-            throw new SchemaException(
-                "COLUMN_USED_BY_POLICY",
-                $"Column '{oldLogicalName}' of table '{table.LogicalName}' cannot be renamed to '{newLogicalName}': " +
-                $"row-level security {(alreadyUsing.Count == 1 ? "policy" : "policies")} {string.Join(", ", alreadyUsing)} " +
-                $"already {(alreadyUsing.Count == 1 ? "uses" : "use")} that name for something that is not a column. " +
-                "Change the policy first, or choose another name.");
-        }
+        EnsureNameUnused(
+            stored, newLogicalName,
+            $"Column '{oldLogicalName}' of table '{table.LogicalName}' cannot be renamed to '{newLogicalName}'");
 
         var written = BareIdentifier().IsMatch(newLogicalName) ? newLogicalName : DdlBuilder.QuoteIdentifier(newLogicalName);
 
@@ -268,6 +258,32 @@ internal sealed partial class NativePolicyProjector
                 new { policy.Id, Expression = expression },
                 transaction,
                 cancellationToken: cancellationToken));
+        }
+    }
+
+    /// <summary>
+    /// Refuses to let a column take <paramref name="name"/> while a stored policy of its table uses
+    /// that name for something that is not a column — a function or a keyword. Once a column carried
+    /// the name, the policy would read it as the column, and mean something else or nothing at all.
+    /// Every stored policy counts, active or not: an inactive one is switched on as it stands.
+    /// </summary>
+    /// <param name="stored">The table's stored policies.</param>
+    /// <param name="name">The logical name the column would take.</param>
+    /// <param name="refused">What is refused, as the start of the refusal's message.</param>
+    /// <exception cref="SchemaException"><c>COLUMN_USED_BY_POLICY</c>, naming the policies.</exception>
+    internal static void EnsureNameUnused(IReadOnlyList<StoredPolicy> stored, string name, string refused)
+    {
+        var alreadyUsing = stored
+            .Where(p => SqlIdentifierRewriter.Identifiers(p.Expression).Contains(name, StringComparer.Ordinal))
+            .Select(p => $"'{p.Name}'")
+            .ToList();
+        if (alreadyUsing.Count > 0)
+        {
+            throw new SchemaException(
+                "COLUMN_USED_BY_POLICY",
+                $"{refused}: row-level security {(alreadyUsing.Count == 1 ? "policy" : "policies")} {string.Join(", ", alreadyUsing)} " +
+                $"already {(alreadyUsing.Count == 1 ? "uses" : "use")} that name for something that is not a column. " +
+                "Change the policy first, or choose another name.");
         }
     }
 

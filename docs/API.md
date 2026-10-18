@@ -1350,9 +1350,9 @@ the policy reads it; the request is refused with `400 COLUMN_USED_BY_POLICY`, na
 Change or delete the policy first. Renaming such a column is allowed: the policy's expression is
 rewritten to the new name in the same step (the name as an identifier — a string literal or a
 placeholder that happens to read the same is left alone), and the rows each caller may read do not
-change. A column cannot be renamed *to* a name a policy on the table already uses for something
-else, such as a function (`400 COLUMN_USED_BY_POLICY`). Deleting the table deletes its policies
-with it.
+change. A column cannot be renamed *to*, or added under, a name a policy on the table already uses
+for something else, such as a function (`400 COLUMN_USED_BY_POLICY`) — once a column had the name,
+the policy would read it as the column. Deleting the table deletes its policies with it.
 
 Because the service is unauthenticated, an HTTP request's context is the project's anonymous one:
 `{{project_id}}` carries the header's value, `{{is_authenticated}}` is `false`, and the
@@ -1465,7 +1465,7 @@ fixed string — internal exception text never reaches the wire) and retrying ma
 | 400 | `INVALID_PROJECT_ID` | `X-Project-Id` was sent but is not a GUID |
 | 400 | `INVALID_EXPRESSION` | A CHECK predicate, index predicate, policy expression, or a view's join condition or column expression that could escape the clause it is written into |
 | 400 | `TABLE_HAS_DEPENDENTS` | Deleting a table another table still references — delete those relations first |
-| 400 | `COLUMN_USED_BY_POLICY` | Deleting or retyping a column a row-level security policy reads, or renaming a column to a name a policy already uses for something else — change or delete the policy first |
+| 400 | `COLUMN_USED_BY_POLICY` | Deleting or retyping a column a row-level security policy reads, or renaming or adding a column under a name a policy already uses for something else — change or delete the policy first |
 | 400 | `EMPTY_BATCH` | A batch request with no operations |
 | 400 | `EMPTY_DATA` | A batch write with no rows |
 | 400 | `EMPTY_TRANSACTION` | A transaction with no operations |

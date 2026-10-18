@@ -22,6 +22,13 @@
   system text columns.
 - **A hierarchy `parentColumn` the table does not have is `400 VALIDATION_ERROR`**, a system column's
   name included — it reached the query and answered `500`.
+- **A column cannot be added under a name a row-level security policy uses for something else.**
+  Renaming a column to such a name was already refused; adding one was not, so a policy that called
+  `lower(...)` would afterwards read a new `lower` column instead — or, for a lookup, rollup or
+  formula column, could no longer be translated, closing the table to every caller. The request is
+  now `400 COLUMN_USED_BY_POLICY`, naming the policy. Writing a policy also reads the table's
+  columns after it waits for the table's policy lock, so a column renamed or added meanwhile is the
+  one the policy is checked against.
 - **Root records are siblings of each other.** `/siblings` compared parents with `=`, so a record
   without a parent had none; a record that does not exist still has none.
 

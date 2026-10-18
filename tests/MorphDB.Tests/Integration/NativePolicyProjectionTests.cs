@@ -662,6 +662,58 @@ public class NativePolicyProjectionTests
         await _rls.SeedAsync(table, new Dictionary<string, object?> { ["title"] = "c", ["scratch"] = "still a column" });
     }
 
+    /// <summary>
+    /// Adding a column is the other way a name becomes a column. A stored column would change what
+    /// the policy means; a derived one would leave a policy nothing can translate, closing the table
+    /// to every caller. Both are refused, and the table is left as it was.
+    /// </summary>
+    [Fact]
+    public async Task A_column_a_policy_names_as_something_else_cannot_be_added()
+    {
+        var (table, a) = await CreateTwoOwnersAsync();
+        await _rls.CreatePolicyAsync(table, "lower(owner) = {{user_id}}", "owner_only");
+        var before = await _rls.NativeStateAsync(table);
+        var current = await CurrentAsync(table);
+
+        var stored = () => _rls.Schema.AddColumnAsync(new AddColumnRequest
+        {
+            TableId = table.TableId,
+            LogicalName = "lower",
+            DataType = MorphDataType.Text,
+            IsNullable = true,
+            ExpectedVersion = current.SchemaVersion
+        }, TestContext.Current.CancellationToken);
+        var refusal = (await stored.Should().ThrowAsync<SchemaException>()).Which;
+        refusal.ErrorCode.Should().Be("COLUMN_USED_BY_POLICY");
+        refusal.Message.Should().Contain("'lower'").And.Contain("'owner_only'");
+
+        var derived = () => _rls.Schema.AddColumnAsync(new AddColumnRequest
+        {
+            TableId = table.TableId,
+            LogicalName = "lower",
+            DataType = MorphDataType.Text,
+            IsNullable = true,
+            ExpectedVersion = current.SchemaVersion,
+            FormulaConfig = new FormulaColumnConfig { Formula = "{title}", ReturnType = MorphDataType.Text }
+        }, TestContext.Current.CancellationToken);
+        (await derived.Should().ThrowAsync<SchemaException>()).Which.ErrorCode.Should().Be("COLUMN_USED_BY_POLICY");
+
+        (await CurrentAsync(table)).Columns.Should().NotContain(c => c.LogicalName == "lower");
+        (await _rls.NativeStateAsync(table)).Should().BeEquivalentTo(before);
+        (await CountAsync(table, a)).Should().Be(1);
+
+        // A name no policy uses is added as before.
+        await _rls.Schema.AddColumnAsync(new AddColumnRequest
+        {
+            TableId = table.TableId,
+            LogicalName = "note",
+            DataType = MorphDataType.Text,
+            IsNullable = true,
+            ExpectedVersion = current.SchemaVersion
+        }, TestContext.Current.CancellationToken);
+        (await CountAsync(table, a)).Should().Be(1);
+    }
+
     private sealed class RecordingLogger : ILogger<PostgresSchemaLayerService>
     {
         private readonly ConcurrentQueue<string> _warnings = new();

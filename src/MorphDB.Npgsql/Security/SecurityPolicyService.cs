@@ -2,6 +2,7 @@ using Dapper;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using MorphDB.Core.Exceptions;
+using MorphDB.Core.Models;
 using MorphDB.Core.Security;
 using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Repositories;
@@ -57,6 +58,8 @@ public sealed class SecurityPolicyService : ISecurityPolicyService
 
         await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await using var tableLock = await NativePolicyProjector.LockAsync(connection, table, cancellationToken);
+        table = await ReadUnderLockAsync(table, cancellationToken)
+            ?? throw new TableNotFoundException(request.TableName);
 
         // Get next ordinal position
         var maxOrdinal = await connection.QueryFirstOrDefaultAsync<int?>(
@@ -219,6 +222,14 @@ public sealed class SecurityPolicyService : ISecurityPolicyService
         await using var tableLock = table is null
             ? null
             : await NativePolicyProjector.LockAsync(connection, table, cancellationToken);
+        if (table is not null)
+        {
+            table = await ReadUnderLockAsync(table, cancellationToken);
+            if (table is null && request.Expression is not null)
+            {
+                throw new NotFoundException("Table", existing.TableId.ToString());
+            }
+        }
 
         // An expression the caller is writing now is theirs to get right, so it is verified even
         // when the policy is inactive — and so is one the caller is switching on. Otherwise a
@@ -301,6 +312,10 @@ public sealed class SecurityPolicyService : ISecurityPolicyService
         await using var tableLock = table is null
             ? null
             : await NativePolicyProjector.LockAsync(connection, table, cancellationToken);
+        if (table is not null)
+        {
+            table = await ReadUnderLockAsync(table, cancellationToken);
+        }
 
         IReadOnlyList<NativePolicyProjector.NativePolicy>? plan = null;
         if (table is not null)
@@ -326,6 +341,14 @@ public sealed class SecurityPolicyService : ISecurityPolicyService
 
         await transaction.CommitAsync(cancellationToken);
     }
+
+    /// <summary>
+    /// The table as it stands once the caller holds its policy lock. A column renamed or added while
+    /// the caller waited for the lock is then the one a policy is checked against, not the column
+    /// as it was before. <c>null</c> when the table was deleted meanwhile.
+    /// </summary>
+    private Task<TableMetadata?> ReadUnderLockAsync(TableMetadata table, CancellationToken cancellationToken) =>
+        _metadataRepository.GetTableByIdAsync(table.TableId, includeColumns: true, cancellationToken);
 
     private static NativePolicyProjector.StoredPolicy Stored(SecurityPolicy policy) =>
         new(policy.Id, policy.Name, policy.PolicyType, policy.Expression, policy.IsActive);

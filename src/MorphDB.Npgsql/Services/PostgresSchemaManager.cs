@@ -514,6 +514,16 @@ public sealed class PostgresSchemaManager : ISchemaManager
             _options.LockTimeout,
             cancellationToken);
 
+        // A policy that already uses the new name for a function or a keyword would read it as this
+        // column once it exists — whatever kind of column it is. Held until the column is in
+        // metadata, so a policy written meanwhile is checked against the table with the column.
+        await using var policyConnection = await _connections.OpenSystemAsync(cancellationToken);
+        await using var policyLock = await NativePolicyProjector.LockAsync(policyConnection, table, cancellationToken);
+        NativePolicyProjector.EnsureNameUnused(
+            await NativePolicyProjector.LoadStoredAsync(policyConnection, table.TableId, cancellationToken),
+            request.LogicalName,
+            $"Column '{request.LogicalName}' cannot be added to table '{table.LogicalName}'");
+
         var columnId = Guid.NewGuid();
         var ordinalPosition = await _repository.GetNextOrdinalPositionAsync(request.TableId, cancellationToken);
 
