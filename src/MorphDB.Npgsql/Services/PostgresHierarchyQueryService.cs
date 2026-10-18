@@ -191,15 +191,14 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         var tableName = DdlBuilder.QuoteIdentifier(physicalName);
         var parentCol = DdlBuilder.QuoteIdentifier(parentColumn);
         var selectCols = SelectList(columns, "depth");
-        var lowest = includeSelf ? 0 : 1;
 
-        // The walk starts at the record itself (depth 0), so includeSelf can keep it; the parent is
-        // depth 1 either way.
+        // The walk starts at the parent (depth 1); the record itself is depth 0 and joins only when
+        // includeSelf asks for it, so a caller who may not read it still gets nothing it may not read.
         return $"""
             WITH RECURSIVE ancestors AS (
-                SELECT t.*, 0 AS depth
+                SELECT t.*, 1 AS depth
                 FROM {tableName} t
-                WHERE t."_id" = @recordId
+                WHERE t."_id" = (SELECT {parentCol} FROM {tableName} WHERE "_id" = @recordId)
 
                 UNION ALL
 
@@ -208,7 +207,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
                 INNER JOIN ancestors a ON t."_id" = a.{parentCol}
                 WHERE a.depth < {maxDepth}
             )
-            SELECT {selectCols} FROM ancestors WHERE depth >= {lowest} ORDER BY depth ASC
+            SELECT {selectCols} FROM ({WithSelf("ancestors", tableName, includeSelf)}) walk ORDER BY depth ASC
             """;
     }
 
@@ -223,19 +222,19 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         var tableName = DdlBuilder.QuoteIdentifier(physicalName);
         var parentCol = DdlBuilder.QuoteIdentifier(parentColumn);
         var selectCols = SelectList(columns, "depth");
-        var lowest = includeSelf ? 0 : 1;
 
         var orderClause = string.IsNullOrEmpty(orderBy)
             ? "depth ASC"
             : $"depth ASC, {orderBy}";
 
-        // The walk starts at the record itself (depth 0) — what a subtree's root is — and its
-        // children are depth 1 either way.
+        // The walk starts at the children (depth 1) and never reads the record itself, so a caller
+        // who may read a child but not its parent still gets the child. The record is depth 0 — a
+        // subtree's root — and joins only when includeSelf asks for it.
         return $"""
             WITH RECURSIVE descendants AS (
-                SELECT t.*, 0 AS depth
+                SELECT t.*, 1 AS depth
                 FROM {tableName} t
-                WHERE t."_id" = @recordId
+                WHERE t.{parentCol} = @recordId
 
                 UNION ALL
 
@@ -244,9 +243,18 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
                 INNER JOIN descendants d ON t.{parentCol} = d."_id"
                 WHERE d.depth < {maxDepth}
             )
-            SELECT {selectCols} FROM descendants WHERE depth >= {lowest} ORDER BY {orderClause}
+            SELECT {selectCols} FROM ({WithSelf("descendants", tableName, includeSelf)}) walk ORDER BY {orderClause}
             """;
     }
+
+    /// <summary>
+    /// A walk's rows, and the record it started from at depth 0 when <paramref name="includeSelf"/>
+    /// asks for it — read as the caller, so a record the caller may not read is not added.
+    /// </summary>
+    private static string WithSelf(string walk, string tableName, bool includeSelf) =>
+        includeSelf
+            ? $"""SELECT * FROM {walk} UNION ALL SELECT t.*, 0 AS depth FROM {tableName} t WHERE t."_id" = @recordId"""
+            : $"SELECT * FROM {walk}";
 
     private static string BuildPathToRootCte(
         string physicalName,
@@ -373,11 +381,6 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         if (column is { IsDerived: false })
         {
             return column.PhysicalName;
-        }
-
-        if (column is null && Core.Models.SystemColumns.IsSystemColumn(name))
-        {
-            return name;
         }
 
         throw new Core.Exceptions.ValidationException(parameter, $"'{name}' is not a stored column of '{table.LogicalName}'.");

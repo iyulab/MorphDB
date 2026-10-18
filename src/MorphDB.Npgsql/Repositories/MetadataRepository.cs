@@ -342,8 +342,7 @@ public sealed class MetadataRepository : IMetadataRepository
                 native_type = COALESCE(@NativeType, native_type),
                 is_nullable = COALESCE(@IsNullable, is_nullable),
                 is_unique = COALESCE(@IsUnique, is_unique),
-                check_expression = CASE WHEN @CheckExpressionProvided THEN @CheckExpression ELSE check_expression END,
-                updated_at = NOW()
+                check_expr = CASE WHEN @CheckExpressionProvided THEN @CheckExpression ELSE check_expr END
             WHERE column_id = @ColumnId
             """;
 
@@ -770,6 +769,8 @@ public sealed class MetadataRepository : IMetadataRepository
         IsIndexed = row.is_indexed,
         DefaultValue = row.default_value,
         CheckExpression = row.check_expr,
+        // Not stored: a system column is one by its name, as when it was created.
+        IsSystemColumn = SystemColumns.IsSystemColumn(row.logical_name),
         OrdinalPosition = row.ordinal_position,
         Descriptor = row.descriptor is not null ? JsonDocument.Parse(row.descriptor) : null,
         LookupConfig = DeserializeConfig<LookupColumnConfig>(row.lookup_config),

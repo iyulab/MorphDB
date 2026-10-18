@@ -383,9 +383,11 @@ A walk answers
 `data` is the row in its declared names, as every other read returns it. `depth` counts steps from the
 record the walk starts at (0 is that record). `path` is set only by `/path`: the `_id`s from the
 record up to that row. `reachedMaxDepth` says the walk stopped at `maxDepth` rather than at the
-tree's end. A record that does not exist, or that a `Select` policy hides from the caller, answers
-an empty walk — the walk reads only the rows the caller may read, like every other read, so it also
-stops at a row the caller may not read: what lies past it is not reached. An unknown table is
+tree's end. A walk reads only the rows the caller may read, like every other read: it stops at a
+row a `Select` policy hides — what lies past it is not reached — and the record it starts from is
+returned (`includeSelf`) only if the caller may read it. Descendants of a record the caller may not
+read are still returned where the caller may read them; ancestors and siblings are found through the
+record, so a record the caller may not read, or that does not exist, has none. An unknown table is
 `404 TABLE_NOT_FOUND`.
 
 ## GraphQL

@@ -12,7 +12,16 @@
 - **A subtree includes its root, and `includeSelf` keeps the record a walk starts from.** The walks
   began one step away from the record, so `/subtree` returned only the descendants and
   `includeSelf=true` on `/ancestors` and `/descendants` returned nothing more. The record is now
-  depth 0. `reachedMaxDepth` on `/ancestors` counts steps, not rows.
+  depth 0, added only when the caller may read it; the walk itself is unchanged. `reachedMaxDepth` on
+  `/ancestors` counts steps, not rows.
+- **Changing a column's type, nullability or uniqueness works.** The metadata update named a column
+  the catalog table does not have (`check_expression`, and an `updated_at` it lacks), so every such
+  `PATCH /api/schema/columns/{columnId}` failed after the DDL ran and was rolled back.
+- **System columns are recognized when a table is read back.** The flag was not stored and read as
+  `false`, so the refusal to alter a system column never fired, and full-text `search` also looked in
+  system text columns.
+- **A hierarchy `parentColumn` the table does not have is `400 VALIDATION_ERROR`**, a system column's
+  name included — it reached the query and answered `500`.
 - **Root records are siblings of each other.** `/siblings` compared parents with `=`, so a record
   without a parent had none; a record that does not exist still has none.
 
