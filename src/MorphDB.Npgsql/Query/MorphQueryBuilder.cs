@@ -106,6 +106,7 @@ internal sealed class MorphQuery : IMorphQuery
     private readonly List<WhereCondition> _havingConditions = [];
     private int? _limit;
     private int? _offset;
+    private bool _includeDeleted;
 
     private sealed record WhereCondition(
         string Column,
@@ -160,6 +161,14 @@ internal sealed class MorphQuery : IMorphQuery
     public IMorphQuery SelectAll()
     {
         _selectAllCalled = true;
+        return this;
+    }
+
+    /// <inheritdoc />
+    public IMorphQuery IncludeDeleted()
+    {
+        _includeDeleted = true;
+        _source = null;
         return this;
     }
 
@@ -579,7 +588,8 @@ internal sealed class MorphQuery : IMorphQuery
             _lookupResolver,
             _rollupResolver,
             _formulaResolver,
-            cancellationToken);
+            cancellationToken,
+            activeRowsOnly: !_includeDeleted);
 
     /// <summary>
     /// Builds a SqlKata query with physical names for actual execution — FROM, WHERE, joins,

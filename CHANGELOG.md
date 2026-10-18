@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **A soft-deleted row is no longer read back.** On a table created with `systemColumns.softDelete`,
+  a delete marked the row and every read went on returning it — a list and its total, a filter, a
+  single record, the complex query, an aggregate, a hierarchy walk and an export all counted marked
+  rows as live. Every read of such a table now sees only unmarked rows, and a marked row read by id
+  answers `404`, as the soft-delete documentation always said.
+
+### Added
+
+- **`includeDeleted`** — `GET /api/data/{table}?includeDeleted=true` and `"includeDeleted": true` in
+  the `POST /api/data/{table}/query` body return marked rows too; `IMorphQuery.IncludeDeleted()` does
+  the same for a query built in process, and `MorphDB.Client`'s `QueryRequest.IncludeDeleted` sends it.
+
 ## 0.20.0
 
 A minor, mostly fixes to what 0.19.0 and earlier releases got wrong. The server's wire and its

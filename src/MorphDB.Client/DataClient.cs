@@ -209,6 +209,9 @@ public sealed class DataClient
         if (request.Offset is { } offset)
             parts.Add(string.Create(CultureInfo.InvariantCulture, $"offset={offset}"));
 
+        if (request.IncludeDeleted)
+            parts.Add("includeDeleted=true");
+
         return parts.Count > 0 ? "?" + string.Join("&", parts) : string.Empty;
     }
 

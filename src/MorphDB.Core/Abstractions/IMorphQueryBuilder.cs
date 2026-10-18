@@ -43,6 +43,13 @@ public interface IMorphQuery
     IMorphQuery SelectAll();
 
     /// <summary>
+    /// Reads the rows a soft delete has marked as well. Without it, a read of a table created with
+    /// soft delete sees only rows whose <c>_deleted_at</c> is null — lists, single reads, counts and
+    /// aggregates alike. No effect on a table without soft delete.
+    /// </summary>
+    IMorphQuery IncludeDeleted();
+
+    /// <summary>
     /// Adds a WHERE condition. <see cref="FilterOperator.IsNull"/> and <see cref="FilterOperator.IsNotNull"/>
     /// ignore <paramref name="value"/>. <see cref="FilterOperator.In"/>, <see cref="FilterOperator.NotIn"/> and
     /// <see cref="FilterOperator.Between"/> are refused with <see cref="NotSupportedException"/> — use

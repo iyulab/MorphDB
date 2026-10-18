@@ -101,8 +101,10 @@ Enabled explicitly, per table, where the capability is needed.
 | `_deleted_at` | Timestamp | Deletion time (NULL means active) |
 | `_deleted_by` | UUID | Deleter id |
 
-- Every SELECT gets the filter automatically (`_deleted_at IS NULL`)
-- An option to include deleted rows is available where needed
+- Every read gets the filter automatically (`_deleted_at IS NULL`): a list and its total, a filter,
+  a single record (a marked row read by id is `404`), an aggregate, a hierarchy walk and an export
+- To read marked rows as well, ask for them: `includeDeleted=true` on `GET /api/data/{table}` and in
+  the `POST /api/data/{table}/query` body, `IncludeDeleted()` on a query built in process
 
 #### Ownership
 

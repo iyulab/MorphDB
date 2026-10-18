@@ -212,6 +212,7 @@ GET /api/data/customers?filter=grade:eq:VIP&orderBy=_created_at:desc&page=1&page
 | `search` | Full-text search across text columns | `john` |
 | `select` | Comma-separated column names. `_id` is always fetched, so each row's envelope `id` is its own | `name,email,grade` |
 | `state` | Row state filter (if enabled) | `valid`, `draft`, `error`, `all` |
+| `includeDeleted` | On a [soft-delete](SYSTEM_COLUMNS.md#soft-delete) table, also return rows a delete has marked (`_deleted_at` set). Without it every read — list, total, filter, single record, aggregate, hierarchy walk, export — sees only unmarked rows, and a marked row read by id is `404` | `true` |
 | `page` | Page number | `1` |
 | `pageSize` | Records per page (max 1000) | `20` |
 | `offset` | Rows to skip, instead of `page` — a slice that need not start on a page boundary. Refused (`400`) below zero or beside a `page` other than 1; the response's `pagination` then carries `offset` | `5` |
@@ -285,6 +286,7 @@ X-Project-Id: <project id>
 - `orderBy` — optional `column` or `column:desc` entries.
 - `page` / `pageSize` — 1-based; `pageSize` is clamped to the server maximum.
 - `offset` — rows to skip instead of `page`, as on the `GET` route.
+- `includeDeleted` — `true` to also return soft-deleted rows, as on the `GET` route.
 
 The response is the same paged envelope as `GET /api/data/{table}`:
 `{ "data": [...], "pagination": { "page", "pageSize", "offset", "totalCount", "totalPages", "hasNext", "hasPrevious" } }` — `offset` only when the request gave one.

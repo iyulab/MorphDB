@@ -1000,6 +1000,12 @@ public sealed record DataQueryParameters
     /// Default: "valid" (excludes draft and error rows).
     /// </summary>
     public string? State { get; init; }
+
+    /// <summary>
+    /// On a table created with soft delete, also return the rows a delete has marked
+    /// (<c>_deleted_at</c> set). Default <c>false</c>: a list shows the rows that exist.
+    /// </summary>
+    public bool IncludeDeleted { get; init; }
 }
 
 /// <summary>
@@ -1997,6 +2003,11 @@ public sealed record ComplexQueryApiRequest
     /// start on a page boundary. Not with a page other than 1.
     /// </summary>
     public int? Offset { get; init; }
+
+    /// <summary>
+    /// On a table created with soft delete, also return the rows a delete has marked. Default <c>false</c>.
+    /// </summary>
+    public bool IncludeDeleted { get; init; }
 }
 
 /// <summary>

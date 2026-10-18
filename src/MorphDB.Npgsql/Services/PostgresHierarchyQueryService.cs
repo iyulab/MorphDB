@@ -33,7 +33,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         var maxDepth = request.MaxDepth ?? DefaultMaxDepth;
 
         // Build recursive CTE for ancestors
-        var sql = BuildAncestorsCte(table.PhysicalName, StoredColumn(table, request.ParentColumn, "parentColumn"), StoredColumns(table, request.Columns), maxDepth, request.IncludeSelf);
+        var sql = BuildAncestorsCte(Relation(table), StoredColumn(table, request.ParentColumn, "parentColumn"), StoredColumns(table, request.Columns), maxDepth, request.IncludeSelf);
 
         await using var connection = await _connections.OpenAsync(cancellationToken);
         var results = await connection.QueryAsync<dynamic>(sql, new { recordId = request.RecordId });
@@ -57,7 +57,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         var maxDepth = request.MaxDepth ?? DefaultMaxDepth;
 
         // Build recursive CTE for descendants
-        var sql = BuildDescendantsCte(table.PhysicalName, StoredColumn(table, request.ParentColumn, "parentColumn"), StoredColumns(table, request.Columns), maxDepth, OrderTerms(table, request.OrderBy), request.IncludeSelf);
+        var sql = BuildDescendantsCte(Relation(table), StoredColumn(table, request.ParentColumn, "parentColumn"), StoredColumns(table, request.Columns), maxDepth, OrderTerms(table, request.OrderBy), request.IncludeSelf);
 
         await using var connection = await _connections.OpenAsync(cancellationToken);
         var results = await connection.QueryAsync<dynamic>(sql, new { recordId = request.RecordId });
@@ -81,7 +81,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         var maxDepth = request.MaxDepth ?? DefaultMaxDepth;
 
         // Path to root is ancestors in reverse order (from root to record)
-        var sql = BuildPathToRootCte(table.PhysicalName, StoredColumn(table, request.ParentColumn, "parentColumn"), StoredColumns(table, request.Columns), maxDepth);
+        var sql = BuildPathToRootCte(Relation(table), StoredColumn(table, request.ParentColumn, "parentColumn"), StoredColumns(table, request.Columns), maxDepth);
 
         await using var connection = await _connections.OpenAsync(cancellationToken);
         var results = await connection.QueryAsync<dynamic>(sql, new { recordId = request.RecordId });
@@ -104,7 +104,7 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         var table = await GetTableMetadataAsync(request.ProjectId, request.TableName, cancellationToken);
 
         // Get siblings (same parent, exclude self unless requested)
-        var sql = BuildSiblingsSql(table.PhysicalName, StoredColumn(table, request.ParentColumn, "parentColumn"), StoredColumns(table, request.Columns), request.IncludeSelf);
+        var sql = BuildSiblingsSql(Relation(table), StoredColumn(table, request.ParentColumn, "parentColumn"), StoredColumns(table, request.Columns), request.IncludeSelf);
 
         await using var connection = await _connections.OpenAsync(cancellationToken);
         var results = await connection.QueryAsync<dynamic>(sql, new { recordId = request.RecordId });
@@ -181,14 +181,24 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
 
     #region SQL Builders
 
+    /// <summary>
+    /// What a walk reads the table as: itself, or — on a table created with soft delete — only the rows
+    /// a delete has not marked, so ancestors, descendants, a path and siblings show the rows a list of
+    /// the table shows. A marked row is not a node; the walk does not pass through it.
+    /// </summary>
+    private static string Relation(Core.Models.TableMetadata table) =>
+        table.SoftDeleteEnabled
+            ? $"(SELECT * FROM {DdlBuilder.QuoteIdentifier(table.PhysicalName)} WHERE {Core.Models.SystemColumns.DeletedAt} IS NULL)"
+            : DdlBuilder.QuoteIdentifier(table.PhysicalName);
+
     private static string BuildAncestorsCte(
-        string physicalName,
+        string relation,
         string parentColumn,
         List<string>? columns,
         int maxDepth,
         bool includeSelf)
     {
-        var tableName = DdlBuilder.QuoteIdentifier(physicalName);
+        var tableName = relation;
         var parentCol = DdlBuilder.QuoteIdentifier(parentColumn);
         var selectCols = SelectList(columns, "depth");
 
@@ -212,14 +222,14 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
     }
 
     private static string BuildDescendantsCte(
-        string physicalName,
+        string relation,
         string parentColumn,
         List<string>? columns,
         int maxDepth,
         string? orderBy,
         bool includeSelf)
     {
-        var tableName = DdlBuilder.QuoteIdentifier(physicalName);
+        var tableName = relation;
         var parentCol = DdlBuilder.QuoteIdentifier(parentColumn);
         var selectCols = SelectList(columns, "depth");
 
@@ -257,12 +267,12 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
             : $"SELECT * FROM {walk}";
 
     private static string BuildPathToRootCte(
-        string physicalName,
+        string relation,
         string parentColumn,
         List<string>? columns,
         int maxDepth)
     {
-        var tableName = DdlBuilder.QuoteIdentifier(physicalName);
+        var tableName = relation;
         var parentCol = DdlBuilder.QuoteIdentifier(parentColumn);
         var selectCols = SelectList(columns, "depth", "path");
 
@@ -286,12 +296,12 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
     }
 
     private static string BuildSiblingsSql(
-        string physicalName,
+        string relation,
         string parentColumn,
         List<string>? columns,
         bool includeSelf)
     {
-        var tableName = DdlBuilder.QuoteIdentifier(physicalName);
+        var tableName = relation;
         var parentCol = DdlBuilder.QuoteIdentifier(parentColumn);
         var selectCols = columns == null || columns.Count == 0
             ? "*"

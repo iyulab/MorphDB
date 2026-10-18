@@ -32,13 +32,15 @@ internal sealed class TableSource
     private readonly TableMetadata _table;
     private readonly SqlKataQuery? _derived;
     private readonly HashSet<string> _derivedColumns;
+    private readonly bool _activeRowsOnly;
 
-    private TableSource(TableMetadata table, string name, SqlKataQuery? derived, HashSet<string> derivedColumns)
+    private TableSource(TableMetadata table, string name, SqlKataQuery? derived, HashSet<string> derivedColumns, bool activeRowsOnly)
     {
         _table = table;
         Name = name;
         _derived = derived;
         _derivedColumns = derivedColumns;
+        _activeRowsOnly = activeRowsOnly && table.SoftDeleteEnabled;
     }
 
     /// <summary>What the statement calls the table (unquoted).</summary>
@@ -47,7 +49,12 @@ internal sealed class TableSource
     /// <summary>Whether the table has derived columns, read through a derived table.</summary>
     public bool IsDerived => _derived is not null;
 
-    /// <summary>Puts the source in the FROM clause of <paramref name="query"/>.</summary>
+    /// <summary>
+    /// Puts the source in the FROM clause of <paramref name="query"/> — and, on a table created with
+    /// soft delete, the condition that keeps marked rows out, unless the read asked for them. The
+    /// condition lives here, with the FROM, because every read of a table starts from its source:
+    /// a list, a single record, a count and an aggregate cannot disagree about which rows exist.
+    /// </summary>
     public void ApplyFrom(SqlKataQuery query)
     {
         if (_derived is not null)
@@ -57,6 +64,11 @@ internal sealed class TableSource
         else
         {
             query.From(Name == _table.PhysicalName ? _table.PhysicalName : $"{_table.PhysicalName} as {Name}");
+        }
+
+        if (_activeRowsOnly)
+        {
+            query.WhereNull($"{Name}.{SystemColumns.DeletedAt}");
         }
     }
 
@@ -149,7 +161,8 @@ internal sealed class TableSource
         ILookupResolver? lookupResolver,
         IRollupResolver? rollupResolver,
         IFormulaResolver? formulaResolver,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool activeRowsOnly = true)
     {
         var name = string.IsNullOrEmpty(alias) ? table.PhysicalName : alias;
 
@@ -183,7 +196,7 @@ internal sealed class TableSource
 
         if (expressions.Count == 0)
         {
-            return new TableSource(table, name, derived: null, []);
+            return new TableSource(table, name, derived: null, [], activeRowsOnly);
         }
 
         // Lookup and rollup subqueries and formula expressions all name the table base_table.
@@ -195,6 +208,6 @@ internal sealed class TableSource
             derived.SelectRaw($"{sql} AS \"{column.Replace("\"", "\"\"", StringComparison.Ordinal)}\"");
         }
 
-        return new TableSource(table, name, derived, expressions.Select(e => e.Column).ToHashSet(StringComparer.Ordinal));
+        return new TableSource(table, name, derived, expressions.Select(e => e.Column).ToHashSet(StringComparer.Ordinal), activeRowsOnly);
     }
 }

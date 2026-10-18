@@ -84,6 +84,10 @@ public sealed class DataController : ControllerBase
 
             // Build query
             var morphQuery = _dataService.Query(projectId).From(table);
+            if (query.IncludeDeleted)
+            {
+                morphQuery = morphQuery.IncludeDeleted();
+            }
 
             // Select columns
             if (!string.IsNullOrEmpty(query.Select))
@@ -206,6 +210,10 @@ public sealed class DataController : ControllerBase
             var skip = PaginationInfo.Skip(page, pageSize, request.Offset);
 
             var morphQuery = _dataService.Query(projectId).From(table);
+            if (request.IncludeDeleted)
+            {
+                morphQuery = morphQuery.IncludeDeleted();
+            }
 
             // Select
             if (request.Select is { Count: > 0 })

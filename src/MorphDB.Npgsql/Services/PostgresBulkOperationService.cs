@@ -1324,11 +1324,18 @@ public sealed class PostgresBulkOperationService : IBulkOperationService, IBulkJ
         var table = await _schemaManager.GetTableAsync(projectId, tableName, cancellationToken)
             ?? throw new TableNotFoundException(tableName);
 
-        var sql = $"SELECT COUNT(*) FROM {table.PhysicalName}";
+        var sql = $"SELECT COUNT(*) FROM {table.PhysicalName}{ActiveRowsOnly(table)}";
 
         await using var connection = await _connections.OpenAsync(cancellationToken);
         return await connection.ExecuteScalarAsync<long>(sql);
     }
+
+    /// <summary>
+    /// The condition an export reads a soft-delete table under: the rows a list of it would show, not
+    /// the rows a delete has marked. Empty for a table without soft delete.
+    /// </summary>
+    private static string ActiveRowsOnly(TableMetadata table) =>
+        table.SoftDeleteEnabled ? $" WHERE {SystemColumns.DeletedAt} IS NULL" : "";
 
     private async IAsyncEnumerable<IDictionary<string, object?>> StreamTableDataAsync(
         Guid projectId,
@@ -1345,7 +1352,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService, IBulkJ
         var selectList = string.Join(", ", exportColumns.Select(c => DmlBuilder.QuoteIdentifier(c.PhysicalName)));
 
         // An export is the whole table in storage order; a subset is the query API's job.
-        var sql = $"SELECT {selectList} FROM {table.PhysicalName}";
+        var sql = $"SELECT {selectList} FROM {table.PhysicalName}{ActiveRowsOnly(table)}";
 
         await using var connection = await _connections.OpenAsync(cancellationToken);
         using var reader = await connection.ExecuteReaderAsync(sql);

@@ -37,6 +37,13 @@ public sealed class QueryRequest
     /// start on a page boundary. The server refuses it beside a page other than 1. Needs a 0.16.0 server.
     /// </summary>
     public int? Offset { get; init; }
+
+    /// <summary>
+    /// On a table created with soft delete, also return the rows a delete has marked. Default
+    /// <c>false</c>: a query sees the rows that exist. Needs a server that reads <c>includeDeleted</c>
+    /// (the release after 0.20.0); an earlier one ignores it.
+    /// </summary>
+    public bool IncludeDeleted { get; init; }
 }
 
 /// <summary>
