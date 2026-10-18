@@ -12,6 +12,14 @@
   from another one follow suit: a lookup whose target row is marked reads `null`, a rollup does not
   count a marked child, and a view leaves marked rows of its base table out and does not join marked
   rows of a joined one.
+- **An upsert that updates a row keeps the row's id.** When `PUT /api/batch/data/{table}` (or a
+  transaction's upsert) landed on an existing row, it set every non-key column from the insert it
+  had prepared — `_id` and `_created_at` included — so the row came back under a new id and a new
+  creation time, and anything holding the old id lost it. The update now leaves `_id`,
+  `_created_at` and `_created_by` as they were.
+- **A soft-deleted row is not written either.** An update or a delete by id of a marked row answers
+  `404`, as reading it does — a second delete used to answer `204` and mark the row again — and a
+  bulk update by filter leaves marked rows as they were and does not count them.
 - **A bulk import refuses a mistyped value by its column's name.** A CSV cell or JSON value that
   could not be read as its column's type reached PostgreSQL as text, and the job's `errorDetails`
   carried PostgreSQL's own error — the column's physical name and a statement position — where a

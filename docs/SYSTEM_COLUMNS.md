@@ -107,6 +107,8 @@ Enabled explicitly, per table, where the capability is needed.
   rollup does not count a marked child, a view neither shows nor joins marked rows
 - To read marked rows as well, ask for them: `includeDeleted=true` on `GET /api/data/{table}` and in
   the `POST /api/data/{table}/query` body, `IncludeDeleted()` on a query built in process
+- A marked row is not written either: an update or a delete of it by id answers `404`, and a bulk
+  update by filter leaves it as it was
 
 #### Ownership
 

@@ -142,6 +142,14 @@ public static class DmlBuilder
         return sb.ToString();
     }
 
+    /// <summary>The system columns a row is given when it is created and keeps afterwards.</summary>
+    private static readonly string[] InsertOnlyColumns =
+    [
+        Core.Models.SystemColumns.Id,
+        Core.Models.SystemColumns.CreatedAt,
+        Core.Models.SystemColumns.CreatedBy,
+    ];
+
     /// <summary>
     /// Builds an UPSERT (INSERT ... ON CONFLICT UPDATE) statement.
     /// </summary>
@@ -169,8 +177,10 @@ public static class DmlBuilder
         if (keyColumns.Count == 0)
             throw new ArgumentException("At least one key column is required", nameof(keyColumnNames));
 
-        // Non-key columns for update
-        var updateColumns = columns.Except(keyColumns).ToList();
+        // Non-key columns for update -- less the ones a row is given once, when it is created: an
+        // upsert that lands on an existing row updates that row, it does not give it a new identity.
+        // Setting them from EXCLUDED replaced the row's _id with the one generated for the insert.
+        var updateColumns = columns.Except(keyColumns).Except(InsertOnlyColumns).ToList();
 
         var sb = new StringBuilder();
         sb.Append("INSERT INTO ");

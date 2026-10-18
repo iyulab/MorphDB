@@ -571,7 +571,7 @@ public sealed class PostgresTransactionService : ITransactionService
         var sql = $"""
             UPDATE {table.PhysicalName}
             SET {string.Join(", ", setClauses)}
-            WHERE {idColumn.PhysicalName} = @id
+            WHERE {idColumn.PhysicalName} = @id{(table.SoftDeleteEnabled ? $" AND {SystemColumns.DeletedAt} IS NULL" : "")}
             RETURNING *
             """;
 

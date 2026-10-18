@@ -202,6 +202,12 @@ public sealed class PostgresDataService : IMorphDataService
             }
         }
 
+        // On a soft-delete table a bulk update writes the rows a list shows, not the marked ones.
+        if (table.SoftDeleteEnabled)
+        {
+            whereSql = $"({whereSql}) AND {SystemColumns.DeletedAt} IS NULL";
+        }
+
         var sql = DmlBuilder.BuildBatchUpdate(table.PhysicalName, setColumns, whereSql);
 
         await using var connection = await _connections.OpenAsync(cancellationToken);

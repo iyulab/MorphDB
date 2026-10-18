@@ -185,7 +185,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             var (setColumns, values) = PrepareUpdateParameters(context.Data, table.Columns);
             ((IDictionary<string, object?>)values)["id"] = context.RecordId.Value;
 
-            var whereClause = DmlBuilder.BuildIdWhereClause(idColumn.PhysicalName);
+            var whereClause = ActiveRowById(table, idColumn);
             var sql = DmlBuilder.BuildUpdate(table.PhysicalName, setColumns, whereClause);
 
             await using var conn = await GetScopedConnectionAsync(context.CancellationToken);
@@ -322,7 +322,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             var (setColumns, values) = PrepareUpdateParameters(context.Data, table.Columns);
             ((IDictionary<string, object?>)values)["id"] = context.RecordId.Value;
 
-            var whereClause = DmlBuilder.BuildIdWhereClause(idColumn.PhysicalName);
+            var whereClause = ActiveRowById(table, idColumn);
             var sql = DmlBuilder.BuildUpdate(table.PhysicalName, setColumns, whereClause);
 
             await using var conn = await GetScopedConnectionAsync(context.CancellationToken);
@@ -502,6 +502,16 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
         return (setColumns, values);
     }
 
+
+    /// <summary>
+    /// The row an update or a soft delete by id writes: the one with that id -- and, on a table
+    /// created with soft delete, only while no delete has marked it. A marked row is not there to be
+    /// written, as it is not there to be read, so the write answers not found.
+    /// </summary>
+    private static string ActiveRowById(TableMetadata table, ColumnMetadata idColumn) =>
+        table.SoftDeleteEnabled
+            ? $"{DmlBuilder.BuildIdWhereClause(idColumn.PhysicalName)} AND {SystemColumns.DeletedAt} IS NULL"
+            : DmlBuilder.BuildIdWhereClause(idColumn.PhysicalName);
 
     /// <summary>
     /// The refusals PostgreSQL answers a write with that say something about the request rather
