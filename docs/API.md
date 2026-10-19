@@ -96,6 +96,21 @@ DELETE /api/schema/indexes/{id}                # Delete index
 POST   /api/schema/batch                       # Batch DDL operations
 ```
 
+**A table can carry its creator's notes.** `metadata` on `POST /api/schema/tables` is a map of
+strings MorphDB stores with the table, returns as `metadata` on every table response, and never
+reads — which writer owns the table, what produced it:
+
+```json
+{ "name": "orders", "columns": [ … ], "metadata": { "owner": "billing-sync", "origin": "projection" } }
+```
+
+The notes are recorded when the table is created, with it, and are not changed afterwards: a writer
+that drops and recreates its table gives them again, and a writer that finds a table carrying another
+writer's notes can tell it is not its own before replacing it. A table created without them reads
+`{}`. At most 32 entries, keys 1–128 characters and not blank, values up to 1,024 characters;
+anything else is refused with `400 VALIDATION_ERROR` and no table is created. A project's own notes
+live in its settings (`settings.metadata`).
+
 A relation is a **virtual** foreign key: it is metadata this layer checks, not (by default) a
 constraint the database holds. Two flags decide how far that goes, and both default to `true`:
 

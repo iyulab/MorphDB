@@ -28,6 +28,12 @@ public sealed class CreateTableRequest
     /// Optional system column configuration (timestamps, versioning, soft delete, etc.).
     /// </summary>
     public SystemColumnOptions? SystemColumns { get; init; }
+
+    /// <summary>
+    /// The creator's own notes on the table — strings the server stores with it, returns in
+    /// <see cref="TableInfo.Metadata"/> and never reads. Recorded at creation.
+    /// </summary>
+    public Dictionary<string, string>? Metadata { get; init; }
 }
 
 /// <summary>
@@ -255,6 +261,11 @@ public sealed class TableInfo
     /// Last update timestamp.
     /// </summary>
     public DateTimeOffset UpdatedAt { get; init; }
+
+    /// <summary>
+    /// The creator's notes recorded when the table was created; empty when none were given.
+    /// </summary>
+    public Dictionary<string, string> Metadata { get; init; } = [];
 }
 
 /// <summary>

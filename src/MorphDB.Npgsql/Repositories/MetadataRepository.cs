@@ -599,6 +599,7 @@ public sealed class MetadataRepository : IMetadataRepository
         PhysicalName = table.PhysicalName,
         SchemaVersion = table.SchemaVersion,
         Descriptor = table.Descriptor,
+        Metadata = table.Metadata,
         IsActive = table.IsActive,
         CreatedAt = table.CreatedAt,
         UpdatedAt = table.UpdatedAt,
@@ -627,6 +628,7 @@ public sealed class MetadataRepository : IMetadataRepository
             PhysicalName = table.PhysicalName,
             SchemaVersion = table.SchemaVersion,
             Descriptor = table.Descriptor,
+            Metadata = table.Metadata,
             IsActive = table.IsActive,
             CreatedAt = table.CreatedAt,
             UpdatedAt = table.UpdatedAt,
@@ -725,6 +727,14 @@ public sealed class MetadataRepository : IMetadataRepository
 
         // Restore system column options from descriptor
         var sc = descriptor?.RootElement.TryGetProperty("systemColumns", out var sysEl) == true ? sysEl : (JsonElement?)null;
+        var metadata = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (descriptor?.RootElement.TryGetProperty("metadata", out var metaEl) == true && metaEl.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var entry in metaEl.EnumerateObject())
+            {
+                metadata[entry.Name] = entry.Value.GetString() ?? "";
+            }
+        }
 
         return new TableMetadata
         {
@@ -734,6 +744,7 @@ public sealed class MetadataRepository : IMetadataRepository
             PhysicalName = row.physical_name,
             SchemaVersion = row.schema_version,
             Descriptor = descriptor,
+            Metadata = metadata,
             IsActive = row.is_active,
             CreatedAt = row.created_at,
             UpdatedAt = row.updated_at,

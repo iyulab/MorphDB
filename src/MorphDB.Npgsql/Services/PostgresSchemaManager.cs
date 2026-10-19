@@ -232,7 +232,8 @@ public sealed class PostgresSchemaManager : ISchemaManager
         }
 
         // Serialize system column options into descriptor for persistence
-        var descriptor = BuildSystemColumnsDescriptor(sysOpts);
+        TableMetadataLimits.EnsureValid(request.Metadata);
+        var descriptor = BuildDescriptor(sysOpts, request.Metadata);
 
         // Create table metadata with system column options
         var tableMetadata = new TableMetadata
@@ -243,6 +244,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
             PhysicalName = physicalTableName,
             SchemaVersion = 1,
             Descriptor = descriptor,
+            Metadata = request.Metadata is { } given ? new Dictionary<string, string>(given, StringComparer.Ordinal) : new Dictionary<string, string>(),
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
             IsActive = true,
@@ -348,6 +350,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
             PhysicalName = insertedTable.PhysicalName,
             SchemaVersion = insertedTable.SchemaVersion,
             Descriptor = insertedTable.Descriptor,
+            Metadata = insertedTable.Metadata,
             CreatedAt = insertedTable.CreatedAt,
             UpdatedAt = insertedTable.UpdatedAt,
             IsActive = insertedTable.IsActive,
@@ -1429,10 +1432,11 @@ public sealed class PostgresSchemaManager : ISchemaManager
 
     #endregion
 
-    private static JsonDocument BuildSystemColumnsDescriptor(SystemColumnOptions sysOpts)
+    private static JsonDocument BuildDescriptor(SystemColumnOptions sysOpts, IReadOnlyDictionary<string, string>? metadata)
     {
         var json = JsonSerializer.SerializeToUtf8Bytes(new
         {
+            metadata = metadata is { Count: > 0 } ? metadata : null,
             systemColumns = new
             {
                 timestamps = true,

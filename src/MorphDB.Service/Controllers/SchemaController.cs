@@ -96,7 +96,8 @@ public sealed class SchemaController : ControllerBase
                     RollupConfig = c.Rollup?.ToModel(),
                     FormulaConfig = c.Formula?.ToModel()
                 }).ToList(),
-                SystemColumns = request.SystemColumns?.ToOptions()
+                SystemColumns = request.SystemColumns?.ToOptions(),
+                Metadata = request.Metadata
             };
 
             var table = await _schemaManager.CreateTableAsync(createRequest, cancellationToken);

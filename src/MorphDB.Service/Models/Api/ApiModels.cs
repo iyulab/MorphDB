@@ -95,6 +95,14 @@ public sealed record CreateTableApiRequest
     /// - Other columns: Disabled by default
     /// </summary>
     public SystemColumnOptionsApiRequest? SystemColumns { get; init; }
+
+    /// <summary>
+    /// The creator's own notes on the table — strings MorphDB stores with it and returns with it, and
+    /// never reads (which writer owns it, where it came from). Recorded at creation; a table created
+    /// again carries what that creation gives. At most 32 entries, keys 1–128 characters, values up to
+    /// 1,024.
+    /// </summary>
+    public Dictionary<string, string>? Metadata { get; init; }
 }
 
 /// <summary>
@@ -608,8 +616,14 @@ public sealed record TableApiResponse
     /// </summary>
     public SystemColumnOptionsApiResponse SystemColumns { get; init; } = new();
 
+    /// <summary>
+    /// The creator's notes recorded when the table was created; empty when none were given.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> Metadata { get; init; } = new Dictionary<string, string>();
+
     public static TableApiResponse FromMetadata(TableMetadata table) => new()
     {
+        Metadata = table.Metadata,
         Id = table.TableId,
         Name = table.LogicalName,
         Version = table.SchemaVersion,

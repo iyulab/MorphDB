@@ -13,6 +13,11 @@ public sealed class TableMetadata
     public required string PhysicalName { get; init; }
     public int SchemaVersion { get; init; }
     public JsonDocument? Descriptor { get; init; }
+
+    /// <summary>
+    /// The creator's notes recorded with the table when it was created; empty when none were given.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> Metadata { get; init; } = new Dictionary<string, string>();
     public DateTimeOffset CreatedAt { get; init; }
     public DateTimeOffset UpdatedAt { get; init; }
     public bool IsActive { get; init; } = true;

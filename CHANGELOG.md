@@ -12,6 +12,10 @@
 
 ### Added
 
+- **A table carries its creator's notes.** `metadata` on table creation — a map of strings stored
+  with the table, returned on every table response (`TableInfo.Metadata` in the client) and never read
+  by MorphDB. Two writers sharing a project can tell their tables apart by it before one replaces the
+  other's. Recorded at creation; bounded to 32 entries, 128-character keys and 1,024-character values.
 - **`whenTargetMissing` on a rollup.** `empty` accepts a rollup while its target table does not exist
   or lacks a column the rollup names, and reads it as summarising no rows until the target answers —
   for tables built in an order the writer does not control, or a target rebuilt by dropping and

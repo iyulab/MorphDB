@@ -168,6 +168,14 @@ public sealed record CreateTableRequest
     /// Options for system columns. If null, defaults are applied.
     /// </summary>
     public SystemColumnOptions? SystemColumns { get; init; }
+
+    /// <summary>
+    /// The creator's own notes on the table — opaque strings MorphDB stores with the table and returns
+    /// with it, and never reads: which writer owns the table, where it came from. Recorded when the
+    /// table is created, in the same transaction, so a table recreated by its writer carries the
+    /// writer's notes again. Null or empty records none.
+    /// </summary>
+    public IReadOnlyDictionary<string, string>? Metadata { get; init; }
 }
 
 /// <summary>
