@@ -88,14 +88,8 @@ public sealed class UniqueValidator : IValidator
 
         var sql = $"SELECT EXISTS(SELECT 1 FROM {tableName} WHERE {columnName} = @value";
 
-        // Add condition (e.g., exclude soft-deleted)
-        if (!string.IsNullOrEmpty(column.UniqueCondition))
-        {
-            sql += $" AND ({column.UniqueCondition})";
-        }
-
-        // For soft-delete enabled tables, auto-exclude deleted records
-        if (context.Table.SoftDeleteEnabled && string.IsNullOrEmpty(column.UniqueCondition))
+        // On a soft-delete table uniqueness covers the unmarked rows, as its unique index does.
+        if (context.Table.SoftDeleteEnabled)
         {
             sql += " AND _deleted_at IS NULL";
         }

@@ -27,6 +27,10 @@
   such a table is now a unique index over unmarked rows, and an upsert targets it, so a deleted row's
   value is written as a new row. A table created by an earlier version is converted on start-up
   (each constraint replaced in place by the index of the same name; a second start changes nothing).
+- **A transaction's `UPSERT` upserts.** `POST /api/batch/transaction` ran an `UPSERT` operation as an
+  insert, so an upsert on a key that already existed failed validation and rolled the transaction
+  back. It now runs the same upsert as `PUT /api/batch/data/{table}`: the row holding the key is
+  updated, and keeps its id.
 - **A bulk import refuses a mistyped value by its column's name.** A CSV cell or JSON value that
   could not be read as its column's type reached PostgreSQL as text, and the job's `errorDetails`
   carried PostgreSQL's own error — the column's physical name and a statement position — where a
@@ -47,6 +51,11 @@
 - **`includeDeleted`** — `GET /api/data/{table}?includeDeleted=true` and `"includeDeleted": true` in
   the `POST /api/data/{table}/query` body return marked rows too; `IMorphQuery.IncludeDeleted()` does
   the same for a query built in process, and `MorphDB.Client`'s `QueryRequest.IncludeDeleted` sends it.
+
+### Removed
+
+- **`ColumnMetadata.UniqueCondition`** (`MorphDB.Core`). No request set it and nothing stored it, so it
+  was always empty; uniqueness on a soft-delete table covers unmarked rows on its own (see Fixed).
 
 ## 0.20.0
 

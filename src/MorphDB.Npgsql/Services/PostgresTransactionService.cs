@@ -408,21 +408,10 @@ public sealed class PostgresTransactionService : ITransactionService
                 error: "One or more key columns not found in table");
         }
 
-        // Use write pipeline for upsert (it handles UPSERT operation type)
-        var writeContext = new WriteContext
-        {
-            ProjectId = projectId,
-            Table = table,
-            OperationType = WriteOperationType.Upsert,
-            Data = new Dictionary<string, object?>(resolvedData),
-            OriginalData = new Dictionary<string, object?>(resolvedData),
-            Options = operation.Options ?? WriteOptions.Default,
-            CancellationToken = cancellationToken
-        };
-
-        // Execute as insert with conflict handling
+        // The pipeline's upsert, on the caller's key columns -- the one PUT /api/batch/data/{table}
+        // runs. This used to run an insert, so an upsert on a key that existed failed the transaction.
         var options = operation.Options ?? WriteOptions.Default;
-        var result = await _writePipeline.InsertAsync(projectId, table, resolvedData, options, cancellationToken);
+        var result = await _writePipeline.UpsertAsync(projectId, table, resolvedData, operation.KeyColumns, options, cancellationToken);
 
         if (!result.Success)
         {

@@ -695,7 +695,6 @@ public sealed class MetadataRepository : IMetadataRepository
                     IsRequired = col.IsRequired,
                     DefaultType = col.DefaultType,
                     EnforceUniqueOnWrite = col.EnforceUniqueOnWrite,
-                    UniqueCondition = col.UniqueCondition,
                     ComputedConfig = col.ComputedConfig,
                     LookupConfig = col.LookupConfig,
                     RollupConfig = col.RollupConfig,

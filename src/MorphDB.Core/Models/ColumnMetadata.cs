@@ -49,12 +49,6 @@ public sealed class ColumnMetadata
     /// </summary>
     public bool EnforceUniqueOnWrite { get; init; } = true;
 
-    /// <summary>
-    /// Condition for unique check (e.g., exclude soft-deleted rows).
-    /// Example: "_deleted_at IS NULL"
-    /// </summary>
-    public string? UniqueCondition { get; init; }
-
     // Computed/Derived Column Properties
 
     /// <summary>
