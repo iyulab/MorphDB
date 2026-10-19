@@ -500,7 +500,9 @@ public sealed class PostgresTransactionService : ITransactionService
             "draft" => RowStateValue.Draft,
             "valid" => RowStateValue.Valid,
             "error" => RowStateValue.Error,
-            _ => RowStateValue.Valid
+            null or "" => RowStateValue.Valid,
+            _ => throw new MorphDB.Core.Exceptions.ValidationException(
+                SystemColumns.RowState, $"'{stateValue}' is not a row state; use valid, draft or error.")
         };
     }
 

@@ -2223,7 +2223,7 @@ public static class ApiModelExtensions
             "gist" => IndexType.GiST,
             "gin" => IndexType.GIN,
             "brin" => IndexType.BRIN,
-            _ => IndexType.BTree
+            _ => throw new ArgumentException($"Unknown index type '{type}'. Supported types: btree, hash, gist, gin, brin.")
         };
     }
 
@@ -2232,9 +2232,13 @@ public static class ApiModelExtensions
         return type.ToLowerInvariant().Replace("-", "").Replace("_", "") switch
         {
             "onetoone" => RelationType.OneToOne,
-            "onetomany" => RelationType.OneToMany,
+            // The same shape named from either end: the source column references one target row, which
+            // many source rows may reference.
+            "onetomany" or "manytoone" => RelationType.OneToMany,
             "manytomany" => RelationType.ManyToMany,
-            _ => RelationType.OneToMany
+            // An unknown type used to read as one-to-many — a misspelt many-to-many got a physical
+            // foreign key instead of a junction table.
+            _ => throw new ArgumentException($"Unknown relation type '{type}'. Supported types: one-to-one, one-to-many (also written many-to-one), many-to-many.")
         };
     }
 

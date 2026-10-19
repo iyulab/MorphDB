@@ -490,7 +490,8 @@ public sealed class BulkController : ControllerBase
         "emptyasnull" => NullHandling.EmptyAsNull,
         "preserveempty" => NullHandling.PreserveEmpty,
         "nullstringasnull" => NullHandling.NullStringAsNull,
-        _ => NullHandling.EmptyAsNull
+        null or "" => NullHandling.EmptyAsNull,
+        _ => throw new ArgumentException($"Unknown null handling '{value}'. Supported: empty-as-null, preserve-empty, null-string-as-null.")
     };
 
     private static DuplicateHandling ParseDuplicateHandling(string? value) => value?.ToLowerInvariant() switch
@@ -500,7 +501,10 @@ public sealed class BulkController : ControllerBase
         "upsert" => DuplicateHandling.Upsert,
         "skip" => DuplicateHandling.Skip,
         "error" => DuplicateHandling.Error,
-        _ => DuplicateHandling.Insert
+        null or "" => DuplicateHandling.Insert,
+        // An unknown choice used to read as insert: a misspelt "skip" wrote the duplicates it was
+        // meant to skip.
+        _ => throw new ArgumentException($"Unknown duplicate handling '{value}'. Supported: insert, update, upsert, skip, error.")
     };
 
     #endregion

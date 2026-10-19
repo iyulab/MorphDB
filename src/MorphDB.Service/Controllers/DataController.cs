@@ -619,8 +619,8 @@ public sealed class DataController : ControllerBase
             // "valid" returns valid records only
             "valid" => query.Where(SystemColumns.RowState, FilterOperator.Equals, RowStateValue.Valid.ToString().ToLowerInvariant()),
 
-            // Unknown state values are ignored (no filter applied)
-            _ => query
+            // An unknown state used to apply no filter at all — an answer wider than the question.
+            _ => throw new ArgumentException($"Unknown row state '{state}'. Supported: valid, draft, error, all.")
         };
     }
 

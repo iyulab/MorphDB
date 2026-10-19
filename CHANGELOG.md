@@ -24,6 +24,13 @@
 - **GraphQL mutations answer the REST codes.** A missing table is `TABLE_NOT_FOUND` and a missing row
   `RECORD_NOT_FOUND` (both were `NOT_FOUND`); any caller's mistake a mutation meets is answered in its
   result with the REST code, not only validation and not-found ones.
+- **Every fixed set of choices refuses what is not in it** (`400 INVALID_ARGUMENT`, naming the set):
+  an index type, a relation type (`many-to-one` is accepted as the other end's name for
+  `one-to-many`), a view's join type, filter logic, null ordering and refresh policy, a bulk import's
+  null handling and duplicate handling, and the REST list's `state`; a written `_row_state` outside
+  `valid`/`draft`/`error` is a `VALIDATION_ERROR`. Each read an unknown value as its default — a
+  misspelt `many-to-many` declared a one-to-many relation with a physical foreign key, a misspelt
+  `skip` imported the duplicates it was meant to skip, and an unknown `state` listed every row.
 - **An unknown relation `onDelete` is refused** (`400 INVALID_ARGUMENT`, listing `no-action`, `cascade`,
   `set-null`, `set-default`, `restrict`). It was read as `no-action`, so a misspelt `cascades` declared a
   relation that refuses the delete it was meant to cascade.

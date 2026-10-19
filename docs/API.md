@@ -117,6 +117,11 @@ constraint the database holds. Two flags decide how far that goes, and both defa
   relation also gets no physical constraint, so nothing rejects the write underneath either.
 - **`virtualCascade`** — whether cascade behaviour is handled at the application layer.
 
+`type` is `one-to-one`, `one-to-many` (the same shape is accepted written from the source's end,
+`many-to-one`) or `many-to-many`; `onDelete` is `no-action` (default), `cascade`, `set-null`,
+`set-default` or `restrict`. Anything else is refused (`400 INVALID_ARGUMENT`) rather than read as a
+default.
+
 Both are echoed back on the response, so you can see what you got rather than what you asked for.
 
 **Omit `enforceOnWrite` and the project answers.** A deployment that rebuilds its tables wholesale

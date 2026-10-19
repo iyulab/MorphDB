@@ -588,7 +588,7 @@ public sealed class ViewController : ControllerBase
             "right" => ViewJoinType.Right,
             "full" => ViewJoinType.Full,
             "cross" => ViewJoinType.Cross,
-            _ => ViewJoinType.Left
+            _ => throw new ArgumentException($"Unknown join type '{joinType}'. Supported types: inner, left, right, full, cross.")
         };
     }
 
@@ -596,8 +596,9 @@ public sealed class ViewController : ControllerBase
     {
         return logicalOp.ToLowerInvariant() switch
         {
+            "and" => LogicalOperator.And,
             "or" => LogicalOperator.Or,
-            _ => LogicalOperator.And
+            _ => throw new ArgumentException($"Unknown logical operator '{logicalOp}'. Supported: and, or.")
         };
     }
 
@@ -606,7 +607,8 @@ public sealed class ViewController : ControllerBase
         return nullOrdering.ToLowerInvariant() switch
         {
             "first" => NullOrdering.First,
-            _ => NullOrdering.Last
+            "last" => NullOrdering.Last,
+            _ => throw new ArgumentException($"Unknown null ordering '{nullOrdering}'. Supported: first, last.")
         };
     }
 
@@ -616,7 +618,8 @@ public sealed class ViewController : ControllerBase
         {
             "scheduled" => MaterializedViewRefreshPolicy.Scheduled,
             "incremental" => MaterializedViewRefreshPolicy.Incremental,
-            _ => MaterializedViewRefreshPolicy.OnDemand
+            "ondemand" or "on-demand" or "on_demand" => MaterializedViewRefreshPolicy.OnDemand,
+            _ => throw new ArgumentException($"Unknown refresh policy '{policy}'. Supported: on-demand, scheduled, incremental.")
         };
     }
 
