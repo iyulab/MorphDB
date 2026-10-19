@@ -405,6 +405,14 @@ public sealed record RollupConfigApiRequest
     public string? OrderBy { get; init; }
 
     /// <summary>
+    /// What a read does while the target cannot answer the declaration — the table absent, or
+    /// without a column the rollup names: <c>fail</c> (default — the rollup is refused when declared
+    /// and fails reads, naming what is missing) or <c>empty</c> (it reads what a row no target row
+    /// points at reads, until the target answers).
+    /// </summary>
+    public string? WhenTargetMissing { get; init; }
+
+    /// <summary>
     /// Converts to core RollupColumnConfig model.
     /// </summary>
     public RollupColumnConfig ToModel() => new()
@@ -416,7 +424,13 @@ public sealed record RollupConfigApiRequest
         Aggregation = ParseRollupAggregation(Aggregation),
         Filter = Filter?.ToModel(),
         Delimiter = Delimiter,
-        OrderBy = OrderBy
+        OrderBy = OrderBy,
+        WhenTargetMissing = WhenTargetMissing?.ToLowerInvariant() switch
+        {
+            null or "fail" => RollupTargetMissing.Fail,
+            "empty" => RollupTargetMissing.Empty,
+            _ => throw new ArgumentException($"Unknown whenTargetMissing '{WhenTargetMissing}'. Supported: fail, empty.")
+        }
     };
 
     private static RollupAggregation ParseRollupAggregation(string aggregation)
@@ -762,8 +776,14 @@ public sealed record RollupConfigApiResponse
     /// </summary>
     public string? OrderBy { get; init; }
 
+    /// <summary>
+    /// What a read does while the target cannot answer: <c>fail</c> or <c>empty</c>.
+    /// </summary>
+    public required string WhenTargetMissing { get; init; }
+
     public static RollupConfigApiResponse FromModel(RollupColumnConfig config) => new()
     {
+        WhenTargetMissing = config.WhenTargetMissing == RollupTargetMissing.Empty ? "empty" : "fail",
         Relation = config.Relation,
         TargetTable = config.TargetTable,
         ForeignKeyColumn = config.ForeignKeyColumn,

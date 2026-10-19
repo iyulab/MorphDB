@@ -1078,6 +1078,11 @@ customer's orders, their total. It is declared like any other column, with a `ro
 | `filter` | Optional: only target rows where `field` (a stored column of the target) compares to `value` — `eq` `neq` `gt` `gte` `lt` `lte` `contains` `startswith` `endswith` `isnull` `isnotnull`. The value is a string, number, boolean or null; it is stored as a literal, never as SQL text. |
 | `orderBy` | For `stringConcat` and `arrayValues`: the order values are collected in, as comma-separated `column [asc|desc]` terms over the target's stored columns. |
 | `delimiter` | For `stringConcat`: the separator (default `, `). |
+| `whenTargetMissing` | What a read does while the target cannot answer the declaration — the table does not exist, or exists without `foreignKeyColumn`, `sourceColumn`, the filter's `field` or a column `orderBy` names. `fail` (default): the rollup is refused when declared, and a read that needs it fails naming what is missing. `empty`: the rollup is accepted and reads what a row no target row points at reads (below) until the target answers, then summarises it as usual; a target dropped and created again reads empty in between. The counterpart of a lookup's `whenTargetMissing: null`. A source column of a type the aggregation does not take, a foreign key column that is not a key type, a filter value with no literal form or an `orderBy` that is not a column list is a wrong declaration, not a missing target, and is refused either way. |
+
+**With nothing to summarise** — no target row points at this row, or none passes the filter — `count`,
+`countValues` and `countEmpty` read `0`, and every other aggregation reads `null`, as SQL's aggregates
+read over no rows: a `sum` of nothing is `null`, not `0`.
 
 **Checked when declared.** A lookup, rollup or formula column is checked by planning the read that
 would compute it, when it is declared: a target table or column that does not exist, a filter or

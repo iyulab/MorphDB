@@ -141,6 +141,33 @@ public sealed class RollupColumnConfig
     /// For StringAgg/ArrayAgg: the ordering.
     /// </summary>
     public string? OrderBy { get; init; }
+
+    /// <summary>
+    /// What a read does while the target cannot answer the declaration.
+    /// </summary>
+    public RollupTargetMissing WhenTargetMissing { get; init; }
+}
+
+/// <summary>
+/// What a rollup does while its target cannot answer the declaration — the table absent, or without
+/// the foreign key, source, filter or ordering column the rollup names.
+/// </summary>
+public enum RollupTargetMissing
+{
+    /// <summary>
+    /// The rollup is refused when declared and fails every read that needs it, naming what is missing.
+    /// </summary>
+    Fail = 0,
+
+    /// <summary>
+    /// The rollup is accepted and reads what it reads for a row no target row points at — no rows to
+    /// summarise — until the target answers the declaration, from then on reading it as usual. The
+    /// counterpart of a lookup's <see cref="LookupTargetMissing.Null"/>, for a writer that builds tables
+    /// in an order it does not control or rebuilds a target by dropping and recreating it. A source
+    /// column of a type the aggregation does not take is refused either way: that is not a missing
+    /// target but a wrong declaration.
+    /// </summary>
+    Empty = 1,
 }
 
 /// <summary>

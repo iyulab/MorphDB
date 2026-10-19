@@ -123,4 +123,12 @@ public sealed class RollupValidationResult
         IsValid = false,
         Errors = errors
     };
+
+    /// <summary>
+    /// The target cannot answer the declaration and the rollup reads as summarising no rows
+    /// (<see cref="RollupTargetMissing.Empty"/>).
+    /// </summary>
+    public bool IsTargetMissing { get; init; }
+
+    public static RollupValidationResult TargetMissing() => new() { IsValid = true, IsTargetMissing = true };
 }

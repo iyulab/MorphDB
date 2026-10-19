@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Breaking
+
+- **A rollup `sum` over no rows reads `null`, not `0`.** A row no target row points at — or none
+  passing the rollup's filter — read `0` for `sum` while `average`, `min` and every other
+  aggregation read `null`; a total of nothing is now `null`, as SQL's `SUM` reads over no rows. The
+  counts (`count`, `countValues`, `countEmpty`) still read `0`. A client that showed `0` coalesces
+  `null` to `0` itself.
+
+### Added
+
+- **`whenTargetMissing` on a rollup.** `empty` accepts a rollup while its target table does not exist
+  or lacks a column the rollup names, and reads it as summarising no rows until the target answers —
+  for tables built in an order the writer does not control, or a target rebuilt by dropping and
+  recreating it. The default, `fail`, keeps refusing the declaration and failing reads. The
+  counterpart of a lookup's `whenTargetMissing: null`; read back on the column's `rollup` object and in
+  the client's `RollupConfig`.
+
 ### Fixed
 
 - **A webhook no longer loses the changes committed while no instance was listening.** Deliveries

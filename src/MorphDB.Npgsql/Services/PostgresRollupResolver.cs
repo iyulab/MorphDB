@@ -52,6 +52,13 @@ public sealed class PostgresRollupResolver : IRollupResolver
                     $"Rollup column '{rollup.ColumnName}' cannot be computed: {string.Join(" ", validation.Errors)}");
             }
 
+            // A target that cannot answer yet, under WhenTargetMissing = Empty: no rows to summarise.
+            if (validation.IsTargetMissing)
+            {
+                subqueryExpressions[rollup.ColumnName] = EmptyValue(rollup);
+                continue;
+            }
+
             subqueryExpressions[rollup.ColumnName] = BuildAggregationSubquery(
                 validation.TargetTable!,
                 validation.ForeignKeyColumn!.PhysicalName,
@@ -72,7 +79,12 @@ public sealed class PostgresRollupResolver : IRollupResolver
         RollupColumnConfig config,
         CancellationToken cancellationToken = default)
     {
-        var errors = new List<string>();
+        // What is wrong in the declaration itself fails whatever the target: the shape of the order.
+        var syntaxErrors = DeclaredOrder.SyntaxErrors(config.OrderBy).ToArray();
+        if (syntaxErrors.Length > 0)
+        {
+            return RollupValidationResult.Invalid(syntaxErrors);
+        }
 
         // Get target table — the table in hand when the rollup reads its own table (it may not be
         // stored yet: a table is checked while it is being declared)
@@ -80,61 +92,80 @@ public sealed class PostgresRollupResolver : IRollupResolver
             ? sourceTable
             : await _metadataRepository.GetTableByNameAsync(projectId, config.TargetTable, includeColumns: true, cancellationToken);
 
+        // What the target cannot answer — the table, or a column the rollup names in it — fails, or
+        // under WhenTargetMissing = Empty reads as no rows to summarise until the target answers.
+        var targetErrors = new List<string>();
+        var declarationErrors = new List<string>();
+        ColumnMetadata? fkColumn = null;
+        ColumnMetadata? sourceColumn = null;
+
         if (targetTable == null)
         {
-            errors.Add($"Target table '{config.TargetTable}' not found.");
-            return RollupValidationResult.Invalid([.. errors]);
+            targetErrors.Add($"Target table '{config.TargetTable}' not found.");
         }
-
-        // Find foreign key column in target table
-        var fkColumn = targetTable.Columns
-            .FirstOrDefault(c => c.LogicalName == config.ForeignKeyColumn);
-
-        if (fkColumn == null)
+        else
         {
-            errors.Add($"Foreign key column '{config.ForeignKeyColumn}' not found in table '{config.TargetTable}'.");
-            return RollupValidationResult.Invalid([.. errors]);
-        }
-
-        // Find source column (column to aggregate) - may be "*" for COUNT
-        ColumnMetadata? sourceColumn = null;
-        if (config.SourceColumn != "*")
-        {
-            sourceColumn = targetTable.Columns
-                .FirstOrDefault(c => c.LogicalName == config.SourceColumn);
-
-            if (sourceColumn == null)
+            fkColumn = targetTable.Columns.FirstOrDefault(c => c.LogicalName == config.ForeignKeyColumn);
+            if (fkColumn == null)
             {
-                errors.Add($"Source column '{config.SourceColumn}' not found in table '{config.TargetTable}'.");
-                return RollupValidationResult.Invalid([.. errors]);
+                targetErrors.Add($"Foreign key column '{config.ForeignKeyColumn}' not found in table '{config.TargetTable}'.");
+            }
+            else if (fkColumn.DataType != MorphDataType.Uuid &&
+                fkColumn.DataType != MorphDataType.Relation &&
+                fkColumn.DataType != MorphDataType.BigInteger &&
+                fkColumn.DataType != MorphDataType.Integer)
+            {
+                declarationErrors.Add($"Foreign key column '{config.ForeignKeyColumn}' should be a UUID, Relation, or integer type.");
             }
 
-            // Validate aggregation is compatible with column type
-            if (!IsAggregationCompatible(config.Aggregation, sourceColumn.DataType))
+            // The source column may be "*" for COUNT.
+            if (config.SourceColumn != "*")
             {
-                errors.Add($"Aggregation '{config.Aggregation}' is not compatible with column type '{sourceColumn.DataType}'.");
+                sourceColumn = targetTable.Columns.FirstOrDefault(c => c.LogicalName == config.SourceColumn);
+                if (sourceColumn == null)
+                {
+                    targetErrors.Add($"Source column '{config.SourceColumn}' not found in table '{config.TargetTable}'.");
+                }
+                else if (!IsAggregationCompatible(config.Aggregation, sourceColumn.DataType))
+                {
+                    declarationErrors.Add($"Aggregation '{config.Aggregation}' is not compatible with column type '{sourceColumn.DataType}'.");
+                }
             }
+
+            foreach (var error in FilterErrors(config.Filter, targetTable))
+            {
+                (error.StartsWith("Filter value:", StringComparison.Ordinal) ? declarationErrors : targetErrors).Add(error);
+            }
+
+            targetErrors.AddRange(DeclaredOrder.ColumnErrors(config.OrderBy, targetTable));
         }
 
-        // Verify FK column type is compatible
-        if (fkColumn.DataType != MorphDataType.Uuid &&
-            fkColumn.DataType != MorphDataType.Relation &&
-            fkColumn.DataType != MorphDataType.BigInteger &&
-            fkColumn.DataType != MorphDataType.Integer)
+        // A target that is there but declared against wrongly is not a missing target.
+        if (declarationErrors.Count > 0)
         {
-            errors.Add($"Foreign key column '{config.ForeignKeyColumn}' should be a UUID, Relation, or integer type.");
+            return RollupValidationResult.Invalid([.. declarationErrors, .. targetErrors]);
         }
 
-        errors.AddRange(FilterErrors(config.Filter, targetTable));
-        errors.AddRange(DeclaredOrder.Errors(config.OrderBy, targetTable));
-
-        if (errors.Count > 0)
+        if (targetErrors.Count > 0)
         {
-            return RollupValidationResult.Invalid([.. errors]);
+            return config.WhenTargetMissing == RollupTargetMissing.Empty
+                ? RollupValidationResult.TargetMissing()
+                : RollupValidationResult.Invalid([.. targetErrors]);
         }
 
-        return RollupValidationResult.Valid(targetTable, sourceColumn, fkColumn);
+        return RollupValidationResult.Valid(targetTable!, sourceColumn, fkColumn!);
     }
+
+    /// <summary>
+    /// What a rollup reads over no rows: a count is 0, every other aggregation has nothing to summarise
+    /// and reads null — as SQL's aggregates read over an empty set. A row no target row points at reads
+    /// this through its subquery; a rollup whose target cannot answer reads it directly.
+    /// </summary>
+    private static string EmptyValue(RollupColumnInfo rollup) => rollup.Config.Aggregation switch
+    {
+        RollupAggregation.Count or RollupAggregation.CountValues or RollupAggregation.CountEmpty => "0::bigint",
+        _ => rollup.DataType is { } type ? $"NULL::{TypeMapper.ToNativeType(type)}" : "NULL",
+    };
 
     private static string BuildAggregationSubquery(
         TableMetadata targetTable,
@@ -175,7 +206,7 @@ public sealed class PostgresRollupResolver : IRollupResolver
             RollupAggregation.Count => "COUNT(*)",
             RollupAggregation.CountValues => $"COUNT({quotedColumn})",
             RollupAggregation.CountEmpty => $"COUNT(*) - COUNT({quotedColumn})",
-            RollupAggregation.Sum => $"COALESCE(SUM({quotedColumn}), 0)",
+            RollupAggregation.Sum => $"SUM({quotedColumn})",
             RollupAggregation.Average => $"AVG({quotedColumn})",
             RollupAggregation.Min => $"MIN({quotedColumn})",
             RollupAggregation.Max => $"MAX({quotedColumn})",

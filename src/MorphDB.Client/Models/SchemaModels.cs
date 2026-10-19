@@ -487,6 +487,13 @@ public sealed class RollupConfig
 
     /// <summary>For <c>stringConcat</c>/<c>arrayValues</c>: <c>column [asc|desc]</c> terms.</summary>
     public string? OrderBy { get; init; }
+
+    /// <summary>
+    /// What a read does while the target cannot answer the declaration — the table absent, or without
+    /// a column the rollup names: <c>"fail"</c> (default — refused when declared, reads fail) or
+    /// <c>"empty"</c> (it reads what a row no target row points at reads, until the target answers).
+    /// </summary>
+    public string? WhenTargetMissing { get; init; }
 }
 
 /// <summary>
