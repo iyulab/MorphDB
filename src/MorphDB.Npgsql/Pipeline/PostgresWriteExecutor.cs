@@ -281,6 +281,17 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             scope.SetRowCount(1);
             return WriteResult.Ok(mapped);
         }
+        catch (PostgresException pg) when (pg.SqlState == PostgresErrorCodes.InvalidColumnReference)
+        {
+            // ON CONFLICT names columns no unique constraint covers: the caller keyed the upsert on
+            // columns that do not identify a row. Their mistake, not a server fault.
+            var keys = context.KeyColumns is { Count: > 0 } named ? named : [GetPrimaryKeyColumn(table).LogicalName];
+            var refusal = new MorphDB.Core.Exceptions.ValidationException(
+                "keyColumns",
+                $"no unique constraint covers {string.Join(", ", keys.Select(k => $"'{k}'"))}; an upsert matches rows on columns that are unique together");
+            scope.SetError(refusal.Message);
+            throw refusal;
+        }
         catch (PostgresException pg) when (IsCallersMistake(pg))
         {
             // A physical constraint the app-layer validators did not intercept — or a row-level

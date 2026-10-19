@@ -6,7 +6,7 @@ A minor, mostly security. Routes that name an object by id — a schema index, r
 table, a webhook dead letter — reached other projects' objects, and with secrets enforced any issued
 secret could read and reset the service's diagnostics; all of them now answer only within the
 caller's project or to the master secret. A webhook receives one delivery per change however many
-instances run. Columns are changed and dropped by table and name, the id routes are gone, and
+instances run, and a bulk import enforces every constraint a single write does. Columns are changed and dropped by table and name, the id routes are gone, and
 `MorphDB.Client`'s webhook models and xlsx export options take the service's shapes — the client's
 webhook calls, column changes and xlsx exports never reached the service before — and the client
 gains the rest of the webhook surface: changing a webhook, replacing its secret, and the dead-letter
@@ -60,6 +60,14 @@ queue. Upgrading needs no step: the service adds what it needs to the control pl
 
 - **`MorphDB.Client`'s `AlterColumnAsync` and `DropColumnAsync` work.** They called the name routes
   above, which the service did not have, so neither could succeed.
+- **A bulk import enforces every constraint a single write does.** Imported rows were written with
+  CHECK and foreign-key validation off — for a deferred validation nothing ran — so a row that broke
+  a `check` or a relation was imported where a single insert refused it, and a repeated unique value
+  was reported with no column named. Each row is now validated as a single insert is, and refused in
+  the job's `errorDetails` by the column's name. Its system columns are applied as a single insert
+  applies them.
+- **An upsert or seed keyed on columns no unique constraint covers is a `400`**, naming the key
+  columns. It was a `500` (and, in a seed, «An unexpected error occurred» per record).
 - **`MorphDB.Client` exports to xlsx.** Every xlsx export request carried a `dateFormat` member,
   which the service refuses (`400`), so none could be requested.
 - **`MorphDB.Client` creates and lists webhooks.** Its request named the table `tableName` where the

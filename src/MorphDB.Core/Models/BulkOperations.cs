@@ -221,21 +221,6 @@ public sealed record WriteOptions
     public static WriteOptions Default { get; } = new();
 
     /// <summary>
-    /// Options for bulk import with deferred validation.
-    /// </summary>
-    public static WriteOptions BulkImport { get; } = new()
-    {
-        ValidateRequired = true,
-        ValidateForeignKeys = false,
-        ValidateUnique = false,
-        ValidateCheck = false,
-        ApplyDefaults = true,
-        ApplyTimestamps = true,
-        ApplyVersion = false,
-        DeferValidation = true
-    };
-
-    /// <summary>
     /// Options that skip all validation (use with caution).
     /// </summary>
     public static WriteOptions NoValidation { get; } = new()
@@ -316,12 +301,6 @@ public sealed record WriteOptions
     /// When true, auto-manages _sort_order for hierarchy-enabled tables.
     /// </summary>
     public bool ApplySortOrder { get; init; } = true;
-
-    /// <summary>
-    /// When true, validation is deferred until after all rows are inserted.
-    /// Useful for bulk imports where post-import validation is preferred.
-    /// </summary>
-    public bool DeferValidation { get; init; }
 
     /// <summary>
     /// When true, fields naming no declared column are silently dropped instead of failing the

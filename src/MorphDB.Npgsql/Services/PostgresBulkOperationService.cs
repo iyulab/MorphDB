@@ -867,14 +867,17 @@ public sealed class PostgresBulkOperationService : IBulkOperationService, IBulkJ
         {
             IDictionary<string, object?> insertResult;
 
-            // Use WritePipeline with BulkImport options if available
+            // An imported row is written as a single insert is: every constraint the write pipeline
+            // checks — required, unique, foreign key, CHECK — and every system column it applies. The
+            // import once ran with CHECK, foreign-key and unique validation off, for a "deferred"
+            // validation nothing ever ran, so a row a single insert refused was imported.
             if (_writePipeline is not null && table is not null)
             {
                 var writeResult = await _writePipeline.InsertAsync(
                     job.ProjectId,
                     table,
                     row,
-                    WriteOptions.BulkImport,
+                    WriteOptions.Default,
                     CancellationToken.None);
 
                 if (!writeResult.Success)
