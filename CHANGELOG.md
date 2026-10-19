@@ -56,6 +56,8 @@
   a webhook records one delivery per change. The notification function is replaced when the service
   starts; while instances of an earlier version still run beside a new one, they can still add a
   duplicate.
+- **Security policies refuse a project that does not exist or was deleted**, as every other
+  project-scoped route does. A deleted project's policies could still be read and changed.
 - **A table's indexes are read back.** `GET /api/schema/tables/{name}` and the table list returned
   `indexes: []` for every table, whatever indexes it had.
 

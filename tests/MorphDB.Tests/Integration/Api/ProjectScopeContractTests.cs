@@ -34,6 +34,7 @@ public class ProjectScopeContractTests
         "/api/schema/tables",
         "/api/views",
         "/api/webhooks",
+        "/api/security/policies/any_table",
     };
 
     [Theory]
@@ -131,6 +132,7 @@ public class ProjectScopeContractTests
             await client.PostAsJsonAsync($"/api/data/{table}", new Dictionary<string, object?> { ["label"] = "after" }, ct),
             await client.GetAsync($"/api/data/{table}", ct),
             await client.GetAsync("/api/schema/tables", ct),
+            await client.GetAsync($"/api/security/policies/{table}", ct),
             await client.PostAsJsonAsync("/api/schema/tables", new CreateTableApiRequest
             {
                 Name = $"del2_{Guid.NewGuid():N}"[..24],

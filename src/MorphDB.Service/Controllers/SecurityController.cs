@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using MorphDB.Core.Security;
+using MorphDB.Service.Filters;
 using MorphDB.Service.Services;
 
 namespace MorphDB.Service.Controllers;
@@ -9,6 +10,7 @@ namespace MorphDB.Service.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/security")]
+[RequireProject]
 public sealed class SecurityController : ControllerBase
 {
     private readonly ISecurityPolicyService _policyService;
