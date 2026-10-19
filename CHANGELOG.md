@@ -1,6 +1,15 @@
 # Changelog
 
-## Unreleased
+## 0.21.0
+
+A minor, mostly fixes to what earlier releases got wrong about soft delete, bulk jobs and the write
+doors. On a soft-delete table a deleted row is now gone for every read and write, and its unique
+values are free again — a table created by an earlier version is converted when the service starts,
+with no step to run. An upsert that updates a row keeps the row's id. Bulk jobs stay cancelled when
+cancelled, export files expire, and `MorphDB.Client`'s bulk imports and cancellations reach the
+service. Reads change for any caller of a soft-delete table: rows a delete marked are no longer
+returned (`includeDeleted` asks for them). `MorphDB.Client` drops `JsonImportOptions.JsonPath`,
+which nothing read.
 
 ### Breaking
 
