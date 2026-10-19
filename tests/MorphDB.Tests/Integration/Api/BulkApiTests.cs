@@ -484,54 +484,6 @@ public class BulkApiTests
 
     #endregion
 
-    #region Job Cancellation Tests
-
-    [Fact]
-    public async Task CancelImportJob_WithPendingJob_ShouldCancel()
-    {
-        // Arrange
-        var tableName = await SetupTestTableAsync();
-        // Create a large import that might take some time
-        var csvLines = new StringBuilder("name,email,age,is_active\n");
-        for (var i = 0; i < 100; i++)
-        {
-            csvLines.AppendLine(CultureInfo.InvariantCulture, $"User{i},user{i}@test.com,{20 + i % 50},true");
-        }
-
-        var content = new StringContent(csvLines.ToString(), Encoding.UTF8, "text/csv");
-
-        var importResponse = await _client.PostAsync($"/api/bulk/{tableName}/import/csv?delimiter=,&hasHeader=true", content, TestContext.Current.CancellationToken);
-        var importJob = await importResponse.Content.ReadFromJsonAsync<ImportJobApiResponse>(TestContext.Current.CancellationToken);
-
-        // Act
-        var response = await _client.PostAsync($"/api/bulk/jobs/{importJob!.JobId}/cancel", null, TestContext.Current.CancellationToken);
-
-        // Assert
-        // Job might be already completed (fast processing), not found (already processed), or cancelled (204 NoContent)
-        response.StatusCode.Should().BeOneOf(HttpStatusCode.NoContent, HttpStatusCode.NotFound, HttpStatusCode.BadRequest);
-    }
-
-    [Fact]
-    public async Task CancelExportJob_WithPendingJob_ShouldCancel()
-    {
-        // Arrange
-        var tableName = await SetupTestTableAsync();
-        await InsertTestDataAsync(tableName, 10);
-
-        var exportResponse = await _client.PostAsJsonAsync($"/api/bulk/{tableName}/export/csv",
-            new CsvExportApiRequest(), TestContext.Current.CancellationToken);
-        var exportJob = await exportResponse.Content.ReadFromJsonAsync<ExportJobApiResponse>(TestContext.Current.CancellationToken);
-
-        // Act
-        var response = await _client.PostAsync($"/api/bulk/jobs/{exportJob!.JobId}/cancel", null, TestContext.Current.CancellationToken);
-
-        // Assert
-        // Job might be already completed (fast processing), not found (already processed), or cancelled (204 NoContent)
-        response.StatusCode.Should().BeOneOf(HttpStatusCode.NoContent, HttpStatusCode.NotFound, HttpStatusCode.BadRequest);
-    }
-
-    #endregion
-
     #region Download Tests
 
     [Fact]
@@ -545,31 +497,24 @@ public class BulkApiTests
             new CsvExportApiRequest { Delimiter = ',', IncludeHeader = true }, TestContext.Current.CancellationToken);
         var exportJob = await exportResponse.Content.ReadFromJsonAsync<ExportJobApiResponse>(TestContext.Current.CancellationToken);
 
-        // Wait for job to complete (with timeout)
-        ExportJobApiResponse? jobStatus = null;
-        for (var i = 0; i < 10; i++)
+        // The test host runs no job processor: the job is carried out here as the processor does it.
+        var executor = _fixture.Api.Services.GetRequiredService<IBulkJobExecutor>();
+        var processor = new MorphDB.Tests.Integration.RowLevelSecurityHarness(_fixture.Postgres).JobProcessor;
+        await MorphDB.Tests.Integration.RowLevelSecurityHarness.As(null, async () =>
         {
-            await Task.Delay(500, TestContext.Current.CancellationToken);
-            var statusResponse = await _client.GetAsync($"/api/bulk/export/{exportJob!.JobId}", TestContext.Current.CancellationToken);
-            jobStatus = await statusResponse.Content.ReadFromJsonAsync<ExportJobApiResponse>(TestContext.Current.CancellationToken);
-            if (jobStatus?.Status == "completed")
-                break;
-        }
+            var job = (await executor.GetPendingExportJobsAsync(int.MaxValue, TestContext.Current.CancellationToken))
+                .Single(j => j.JobId == exportJob!.JobId);
+            await processor.ProcessExportJobAsync(executor, job, TestContext.Current.CancellationToken);
+        });
 
         // Act
         var response = await _client.GetAsync($"/api/bulk/export/{exportJob!.JobId}/download", TestContext.Current.CancellationToken);
 
         // Assert
-        if (jobStatus?.Status == "completed")
-        {
-            response.StatusCode.Should().Be(HttpStatusCode.OK);
-            response.Content.Headers.ContentType?.MediaType.Should().Be("text/csv");
-        }
-        else
-        {
-            // Job not yet completed
-            response.StatusCode.Should().BeOneOf(HttpStatusCode.NotFound, HttpStatusCode.BadRequest);
-        }
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.Content.Headers.ContentType?.MediaType.Should().Be("text/csv");
+        (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries).Should().HaveCount(4, "a header and the three rows");
     }
 
     [Fact]

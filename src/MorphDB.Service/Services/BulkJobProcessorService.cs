@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using MorphDB.Core.Abstractions;
+using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
 
 namespace MorphDB.Service.Services;
@@ -107,6 +108,11 @@ public sealed partial class BulkJobProcessorService : BackgroundService
 
             LogExportJobCompleted(_logger, job.JobId, memoryStream.Length);
         }
+        catch (BulkJobCancelledException)
+        {
+            // Cancelled before or while it ran: it stays cancelled, and no file is stored for it.
+            LogJobCancelled(_logger, job.JobId);
+        }
         catch (Exception ex)
         {
             LogExportJobFailed(_logger, job.JobId, ex);
@@ -137,6 +143,11 @@ public sealed partial class BulkJobProcessorService : BackgroundService
 
             LogImportJobCompleted(_logger, job.JobId, successCount, errorCount);
         }
+        catch (BulkJobCancelledException)
+        {
+            // The rows written before the cancellation was noticed stay written; the job stays cancelled.
+            LogJobCancelled(_logger, job.JobId);
+        }
         catch (Exception ex)
         {
             LogImportJobFailed(_logger, job.JobId, ex);
@@ -157,6 +168,9 @@ public sealed partial class BulkJobProcessorService : BackgroundService
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Export job {JobId} completed, file size: {FileSize} bytes")]
     private static partial void LogExportJobCompleted(ILogger logger, Guid jobId, long fileSize);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Bulk job {JobId} was cancelled; it stops where it is")]
+    private static partial void LogJobCancelled(ILogger logger, Guid jobId);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Export job {JobId} failed")]
     private static partial void LogExportJobFailed(ILogger logger, Guid jobId, Exception exception);

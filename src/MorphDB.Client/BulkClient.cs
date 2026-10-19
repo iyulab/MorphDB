@@ -126,7 +126,7 @@ public sealed class BulkClient
     /// </summary>
     public async Task CancelImportJobAsync(Guid jobId, CancellationToken cancellationToken = default)
     {
-        var response = await _httpClient.PostAsync($"/api/bulk/import/{jobId}/cancel", null, cancellationToken);
+        var response = await _httpClient.PostAsync($"/api/bulk/jobs/{jobId}/cancel", null, cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
     }
 
@@ -219,7 +219,7 @@ public sealed class BulkClient
     /// </summary>
     public async Task CancelExportJobAsync(Guid jobId, CancellationToken cancellationToken = default)
     {
-        var response = await _httpClient.PostAsync($"/api/bulk/export/{jobId}/cancel", null, cancellationToken);
+        var response = await _httpClient.PostAsync($"/api/bulk/jobs/{jobId}/cancel", null, cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
     }
 

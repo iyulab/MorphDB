@@ -27,6 +27,17 @@
   such a table is now a unique index over unmarked rows, and an upsert targets it, so a deleted row's
   value is written as a new row. A table created by an earlier version is converted on start-up
   (each constraint replaced in place by the index of the same name; a second start changes nothing).
+- **`MorphDB.Client` cancels bulk jobs.** `BulkClient.CancelImportJobAsync` and `CancelExportJobAsync`
+  posted to `/api/bulk/import/{id}/cancel` and `/api/bulk/export/{id}/cancel`, which the service does
+  not serve, so every call failed with `404`. Both now post to `/api/bulk/jobs/{id}/cancel`.
+- **A cancelled bulk job stays cancelled.** The processor set a job it picked up to `processing`
+  whatever its state, and a job that finished to `completed` whatever had happened to it meanwhile —
+  so a cancelled job ran anyway and was reported completed, and a running one could not be stopped.
+  A job now starts only from `pending`; one cancelled while it runs stops at its next progress report
+  (an import keeps the rows it already wrote; an export stores no file); and nothing marks a
+  cancelled job completed or failed afterwards. An export's progress is now recorded as it runs, and
+  downloading a completed export that has no stored file reads the table again without moving the
+  job back through `processing`.
 - **A transaction's `UPSERT` upserts.** `POST /api/batch/transaction` ran an `UPSERT` operation as an
   insert, so an upsert on a key that already existed failed validation and rolled the transaction
   back. It now runs the same upsert as `PUT /api/batch/data/{table}`: the row holding the key is

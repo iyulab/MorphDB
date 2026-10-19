@@ -214,8 +214,11 @@ public sealed class PostgresBulkOperationService : IBulkOperationService, IBulkJ
         var job = await ReadImportJobForExecutionAsync(jobId, cancellationToken)
             ?? throw new NotFoundException("Import job", jobId.ToString());
 
-        // Update status to processing
-        await UpdateImportJobStatusAsync(jobId, BulkJobStatus.Processing, cancellationToken);
+        // A job starts only from pending: one cancelled before the processor reached it stays so.
+        if (!await TryStartJobAsync("_morph_import_jobs", jobId, cancellationToken))
+        {
+            throw new BulkJobCancelledException(jobId);
+        }
 
         var requester = await GetRequesterAsync(ImportRequesterSql, jobId, cancellationToken);
 
@@ -264,7 +267,10 @@ public sealed class PostgresBulkOperationService : IBulkOperationService, IBulkJ
                 // Update progress periodically
                 if (rowNumber % _options.ProgressUpdateInterval == 0)
                 {
-                    await UpdateImportProgressAsync(jobId, rowNumber, successCount, errorCount, cancellationToken);
+                    if (!await UpdateImportProgressAsync(jobId, rowNumber, successCount, errorCount, cancellationToken))
+                    {
+                        throw new BulkJobCancelledException(jobId);
+                    }
                 }
 
                 yield return result;
@@ -402,42 +408,73 @@ public sealed class PostgresBulkOperationService : IBulkOperationService, IBulkJ
         var job = await ReadExportJobForExecutionAsync(jobId, cancellationToken)
             ?? throw new NotFoundException("Export job", jobId.ToString());
 
-        await UpdateExportJobStatusAsync(jobId, BulkJobStatus.Processing, cancellationToken);
+        if (!await TryStartJobAsync("_morph_export_jobs", jobId, cancellationToken))
+        {
+            throw new BulkJobCancelledException(jobId);
+        }
 
         try
         {
             var processedRows = 0L;
-            var requester = await GetRequesterAsync(ExportRequesterSql, jobId, cancellationToken);
 
-            // The table is read as the caller the job was requested by — nobody, when the job's row
-            // holds no caller — and whoever is ambient here is ambient again once it has been read.
-            using (SecurityContextScope.Begin(_securityContext, requester))
+            // Each progress report is also where a cancellation is noticed: the write that records the
+            // count finds the job no longer processing, and the export stops there.
+            async Task Progress(long rows)
             {
-                switch (job.Format)
+                processedRows = rows;
+                if (!await UpdateExportProgressAsync(jobId, rows, cancellationToken))
                 {
-                    case ExportFormat.Csv:
-                        var csvOptions = job.Options?.Deserialize<CsvExportOptions>() ?? new CsvExportOptions();
-                        await StreamCsvExportAsync(job, csvOptions, outputStream, p => processedRows = p, cancellationToken);
-                        break;
-
-                    case ExportFormat.Json:
-                        var jsonOptions = job.Options?.Deserialize<JsonExportOptions>() ?? new JsonExportOptions();
-                        await StreamJsonExportAsync(job, jsonOptions, outputStream, p => processedRows = p, cancellationToken);
-                        break;
-
-                    case ExportFormat.Xlsx:
-                        var xlsxOptions = job.Options?.Deserialize<XlsxExportOptions>() ?? new XlsxExportOptions();
-                        await StreamXlsxExportAsync(job, xlsxOptions, outputStream, p => processedRows = p, cancellationToken);
-                        break;
+                    throw new BulkJobCancelledException(jobId);
                 }
             }
 
-            await UpdateExportJobCompletedAsync(jobId, processedRows, cancellationToken);
+            await WriteExportAsync(job, outputStream, Progress, cancellationToken);
+
+            if (!await UpdateExportJobCompletedAsync(jobId, processedRows, cancellationToken))
+            {
+                throw new BulkJobCancelledException(jobId);
+            }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not BulkJobCancelledException)
         {
             await UpdateExportJobFailedAsync(jobId, ex.Message, cancellationToken);
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Writes an export job's file to <paramref name="outputStream"/>, reading the table as the
+    /// requester the job's row holds — nobody, when it holds none — and leaving whoever is ambient
+    /// ambient again once it has been read. Carrying the job out and reading a completed job again
+    /// for a download both write the file this way; only the first moves the job through its states.
+    /// </summary>
+    private async Task WriteExportAsync(
+        BulkExportJob job,
+        Stream outputStream,
+        Func<long, Task> progress,
+        CancellationToken cancellationToken)
+    {
+        var requester = await GetRequesterAsync(ExportRequesterSql, job.JobId, cancellationToken);
+
+        using (SecurityContextScope.Begin(_securityContext, requester))
+        {
+            switch (job.Format)
+            {
+                case ExportFormat.Csv:
+                    var csvOptions = job.Options?.Deserialize<CsvExportOptions>() ?? new CsvExportOptions();
+                    await StreamCsvExportAsync(job, csvOptions, outputStream, progress, cancellationToken);
+                    break;
+
+                case ExportFormat.Json:
+                    var jsonOptions = job.Options?.Deserialize<JsonExportOptions>() ?? new JsonExportOptions();
+                    await StreamJsonExportAsync(job, jsonOptions, outputStream, progress, cancellationToken);
+                    break;
+
+                case ExportFormat.Xlsx:
+                    var xlsxOptions = job.Options?.Deserialize<XlsxExportOptions>() ?? new XlsxExportOptions();
+                    await StreamXlsxExportAsync(job, xlsxOptions, outputStream, progress, cancellationToken);
+                    break;
+            }
         }
     }
 
@@ -673,11 +710,13 @@ public sealed class PostgresBulkOperationService : IBulkOperationService, IBulkJ
             return new MemoryStream(stored);
         }
 
-        // No file was stored: the table is read now. StreamExportAsync reads it as the requester the
-        // job's row holds, so a caller that bypasses row-level security opening another caller's job
-        // is handed that caller's rows, not every row.
+        // No file was stored: the table is read now, as the requester the job's row holds, so a caller
+        // that bypasses row-level security opening another caller's job is handed that caller's rows,
+        // not every row. A read of a completed job leaves the job as it is.
+        var job = await ReadExportJobForExecutionAsync(jobId, cancellationToken)
+            ?? throw new NotFoundException("Export job", jobId.ToString());
         var streamed = new MemoryStream();
-        await StreamExportAsync(jobId, streamed, cancellationToken);
+        await WriteExportAsync(job, streamed, _ => Task.CompletedTask, cancellationToken);
         streamed.Position = 0;
         return streamed;
     }
@@ -1075,7 +1114,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService, IBulkJ
         BulkExportJob job,
         CsvExportOptions options,
         Stream outputStream,
-        Action<long> progressCallback,
+        Func<long, Task> progressCallback,
         CancellationToken cancellationToken)
     {
         await using var writer = new StreamWriter(outputStream, Encoding.UTF8, leaveOpen: true);
@@ -1101,19 +1140,19 @@ public sealed class PostgresBulkOperationService : IBulkOperationService, IBulkJ
             processedRows++;
             if (processedRows % _options.ProgressUpdateInterval == 0)
             {
-                progressCallback(processedRows);
+                await progressCallback(processedRows);
             }
         }
 
         await writer.FlushAsync(cancellationToken);
-        progressCallback(processedRows);
+        await progressCallback(processedRows);
     }
 
     private async Task StreamJsonExportAsync(
         BulkExportJob job,
         JsonExportOptions options,
         Stream outputStream,
-        Action<long> progressCallback,
+        Func<long, Task> progressCallback,
         CancellationToken cancellationToken)
     {
         var jsonOptions = new JsonWriterOptions { Indented = options.Pretty };
@@ -1141,20 +1180,20 @@ public sealed class PostgresBulkOperationService : IBulkOperationService, IBulkJ
             if (processedRows % _options.ProgressUpdateInterval == 0)
             {
                 await writer.FlushAsync(cancellationToken);
-                progressCallback(processedRows);
+                await progressCallback(processedRows);
             }
         }
 
         writer.WriteEndArray();
         await writer.FlushAsync(cancellationToken);
-        progressCallback(processedRows);
+        await progressCallback(processedRows);
     }
 
     private async Task StreamXlsxExportAsync(
         BulkExportJob job,
         XlsxExportOptions options,
         Stream outputStream,
-        Action<long> progressCallback,
+        Func<long, Task> progressCallback,
         CancellationToken cancellationToken)
     {
         // Builds the workbook in memory via ClosedXML, then serializes once at the end. OOXML is a
@@ -1194,13 +1233,13 @@ public sealed class PostgresBulkOperationService : IBulkOperationService, IBulkJ
             processedRows++;
             if (processedRows % _options.ProgressUpdateInterval == 0)
             {
-                progressCallback(processedRows);
+                await progressCallback(processedRows);
             }
         }
 
         cancellationToken.ThrowIfCancellationRequested();
         workbook.SaveAs(outputStream);
-        progressCallback(processedRows);
+        await progressCallback(processedRows);
     }
 
     private static void SetXlsxCellValue(IXLCell cell, object? value)
@@ -1527,41 +1566,37 @@ public sealed class PostgresBulkOperationService : IBulkOperationService, IBulkJ
         });
     }
 
-    private async Task UpdateImportJobStatusAsync(Guid jobId, BulkJobStatus status, CancellationToken cancellationToken)
+    /// <summary>
+    /// Moves a job from pending to processing. False when it was not pending — cancelled before it
+    /// started — and the job is left as it is.
+    /// </summary>
+    private async Task<bool> TryStartJobAsync(string jobTable, Guid jobId, CancellationToken cancellationToken)
     {
-        const string sql = """
-            UPDATE morphdb._morph_import_jobs
-            SET status = @Status, started_at = COALESCE(started_at, @Now)
-            WHERE job_id = @JobId
+        var sql = $"""
+            UPDATE morphdb.{jobTable}
+            SET status = 'processing', started_at = COALESCE(started_at, @Now)
+            WHERE job_id = @JobId AND status = 'pending'
             """;
 
         await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-        await connection.ExecuteAsync(sql, new
-        {
-            JobId = jobId,
-            Status = status.ToString().ToLowerInvariant(),
-            Now = DateTimeOffset.UtcNow
-        });
+        return await connection.ExecuteAsync(sql, new { JobId = jobId, Now = DateTimeOffset.UtcNow }) > 0;
     }
 
-    private async Task UpdateExportJobStatusAsync(Guid jobId, BulkJobStatus status, CancellationToken cancellationToken)
+    /// <summary>Records an export's progress. False when the job is no longer processing.</summary>
+    private async Task<bool> UpdateExportProgressAsync(Guid jobId, long processedRows, CancellationToken cancellationToken)
     {
         const string sql = """
             UPDATE morphdb._morph_export_jobs
-            SET status = @Status, started_at = COALESCE(started_at, @Now)
-            WHERE job_id = @JobId
+            SET processed_rows = @ProcessedRows
+            WHERE job_id = @JobId AND status = 'processing'
             """;
 
         await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-        await connection.ExecuteAsync(sql, new
-        {
-            JobId = jobId,
-            Status = status.ToString().ToLowerInvariant(),
-            Now = DateTimeOffset.UtcNow
-        });
+        return await connection.ExecuteAsync(sql, new { JobId = jobId, ProcessedRows = processedRows }) > 0;
     }
 
-    private async Task UpdateImportProgressAsync(
+    /// <summary>Records an import's progress. False when the job is no longer processing.</summary>
+    private async Task<bool> UpdateImportProgressAsync(
         Guid jobId,
         long processedRows,
         long successCount,
@@ -1571,11 +1606,11 @@ public sealed class PostgresBulkOperationService : IBulkOperationService, IBulkJ
         const string sql = """
             UPDATE morphdb._morph_import_jobs
             SET processed_rows = @ProcessedRows, success_count = @SuccessCount, error_count = @ErrorCount
-            WHERE job_id = @JobId
+            WHERE job_id = @JobId AND status = 'processing'
             """;
 
         await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-        await connection.ExecuteAsync(sql, new { JobId = jobId, ProcessedRows = processedRows, SuccessCount = successCount, ErrorCount = errorCount });
+        return await connection.ExecuteAsync(sql, new { JobId = jobId, ProcessedRows = processedRows, SuccessCount = successCount, ErrorCount = errorCount }) > 0;
     }
 
     private async Task UpdateImportJobCompletedAsync(
@@ -1591,7 +1626,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService, IBulkJ
             SET status = @Status, total_rows = @TotalRows, processed_rows = @TotalRows,
                 success_count = @SuccessCount, error_count = @ErrorCount,
                 error_details = @ErrorDetails::jsonb, completed_at = @Now
-            WHERE job_id = @JobId
+            WHERE job_id = @JobId AND status = 'processing'
             """;
 
         await using var connection = await _connections.OpenSystemAsync(cancellationToken);
@@ -1607,7 +1642,8 @@ public sealed class PostgresBulkOperationService : IBulkOperationService, IBulkJ
         });
     }
 
-    private async Task UpdateExportJobCompletedAsync(
+    /// <summary>Completes an export. False when it is no longer processing — cancelled while it ran.</summary>
+    private async Task<bool> UpdateExportJobCompletedAsync(
         Guid jobId,
         long processedRows,
         CancellationToken cancellationToken)
@@ -1615,11 +1651,11 @@ public sealed class PostgresBulkOperationService : IBulkOperationService, IBulkJ
         const string sql = """
             UPDATE morphdb._morph_export_jobs
             SET status = 'completed', processed_rows = @ProcessedRows, completed_at = @Now
-            WHERE job_id = @JobId
+            WHERE job_id = @JobId AND status = 'processing'
             """;
 
         await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-        await connection.ExecuteAsync(sql, new { JobId = jobId, ProcessedRows = processedRows, Now = DateTimeOffset.UtcNow });
+        return await connection.ExecuteAsync(sql, new { JobId = jobId, ProcessedRows = processedRows, Now = DateTimeOffset.UtcNow }) > 0;
     }
 
     private async Task UpdateImportJobFailedAsync(
@@ -1630,7 +1666,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService, IBulkJ
         const string sql = """
             UPDATE morphdb._morph_import_jobs
             SET status = 'failed', error_message = @ErrorMessage, completed_at = @Now
-            WHERE job_id = @JobId
+            WHERE job_id = @JobId AND status IN ('pending', 'processing')
             """;
 
         await using var connection = await _connections.OpenSystemAsync(cancellationToken);
@@ -1645,7 +1681,7 @@ public sealed class PostgresBulkOperationService : IBulkOperationService, IBulkJ
         const string sql = """
             UPDATE morphdb._morph_export_jobs
             SET status = 'failed', error_message = @ErrorMessage, completed_at = @Now
-            WHERE job_id = @JobId
+            WHERE job_id = @JobId AND status IN ('pending', 'processing')
             """;
 
         await using var connection = await _connections.OpenSystemAsync(cancellationToken);
