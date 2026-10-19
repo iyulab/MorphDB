@@ -1,6 +1,15 @@
 # Changelog
 
-## Unreleased
+## 0.22.0
+
+A minor, mostly security. Routes that name an object by id — a schema index, relation or batch
+table, a webhook dead letter — reached other projects' objects, and with secrets enforced any issued
+secret could read and reset the service's diagnostics; all of them now answer only within the
+caller's project or to the master secret. A webhook receives one delivery per change however many
+instances run. Columns are changed and dropped by table and name, the id routes are gone, and
+`MorphDB.Client`'s webhook models and xlsx export options take the service's shapes — the client's
+webhook calls, column changes and xlsx exports never reached the service before. Upgrading needs no
+step: the service adds what it needs to the control plane when it starts.
 
 ### Security
 
