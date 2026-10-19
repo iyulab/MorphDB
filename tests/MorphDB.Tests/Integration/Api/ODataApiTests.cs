@@ -344,7 +344,7 @@ public class ODataApiTests
                 {
                     Id = "1",
                     Method = "POST",
-                    EntitySet = entitySetName,
+                    Url = entitySetName,
                     Body = JsonSerializer.SerializeToElement(new Dictionary<string, object?>
                     {
                         ["name"] = "New User",
@@ -356,15 +356,13 @@ public class ODataApiTests
                 {
                     Id = "2",
                     Method = "GET",
-                    EntitySet = entitySetName,
-                    Key = id
+                    Url = $"{entitySetName}({id})"
                 },
                 new ODataBatchRequestItem
                 {
                     Id = "3",
                     Method = "DELETE",
-                    EntitySet = entitySetName,
-                    Key = id
+                    Url = $"{entitySetName}({id})"
                 }
             ]
         };
@@ -384,7 +382,131 @@ public class ODataApiTests
         batchResponse.Responses[2].Status.Should().Be(204); // DELETE no content
     }
 
+    /// <summary>
+    /// A batch request is answered exactly as the same request on its own: a collection read takes
+    /// the query options in its URL, a create carries its location, an entity read is the entity
+    /// object, and a delete answers nothing.
+    /// </summary>
+    [Fact]
+    public async Task A_batch_request_answers_as_the_same_request_on_its_own()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tableName = await SetupTestTableAsync();
+        var john = await InsertTestRecordAsync(tableName, "John", "john@example.com", 30, true);
+        await InsertTestRecordAsync(tableName, "Jane", "jane@example.com", 25, false);
+        var set = ToPascalCase(tableName);
+
+        var response = await _client.PostAsJsonAsync("/odata/$batch", new
+        {
+            requests = new object[]
+            {
+                new { id = "list", method = "get", url = $"{set}?$filter=age gt 26&$select=name&$count=true" },
+                new { id = "one", method = "GET", url = $"/odata/{set}({john})" },
+                new { id = "new", method = "POST", url = set, body = new { name = "Ann", email = "ann@example.com", age = 41, is_active = true } },
+                new { id = "gone", method = "DELETE", url = $"{set}({john})", dependsOn = DependsOn("one") },
+                new { id = "put", method = "PUT", url = $"{set}({john})", body = new { name = "x" } },
+            },
+        }, ct);
+        var payload = await response.Content.ReadAsStringAsync(ct);
+        response.StatusCode.Should().Be(HttpStatusCode.OK, payload);
+        var items = JsonDocument.Parse(payload).RootElement.GetProperty("responses");
+
+        var list = items[0].GetProperty("body");
+        items[0].GetProperty("status").GetInt32().Should().Be(200);
+        list.GetProperty("@odata.count").GetInt64().Should().Be(1);
+        list.GetProperty("value")[0].GetProperty("name").GetString().Should().Be("John");
+
+        items[1].GetProperty("body").GetProperty("name").GetString().Should().Be("John", "an entity is the entity object");
+
+        items[2].GetProperty("status").GetInt32().Should().Be(201);
+        items[2].GetProperty("headers").GetProperty("location").GetString().Should().StartWith($"/odata/{set}(");
+        items[2].GetProperty("body").GetProperty("name").GetString().Should().Be("Ann");
+
+        items[3].GetProperty("status").GetInt32().Should().Be(204);
+        items[3].TryGetProperty("body", out _).Should().BeFalse();
+
+        items[4].GetProperty("status").GetInt32().Should().Be(405, "an entity is replaced by PATCH here, as on its own route");
+    }
+
+    /// <summary>
+    /// <c>$count</c> counts the rows <c>$filter</c> selects — it counted the whole set — and a read
+    /// without <c>$top</c> that the server cuts at its page size says where the next page is, so
+    /// following <c>@odata.nextLink</c> reads every row once. It used to stop at 100 rows silently.
+    /// </summary>
+    [Fact]
+    public async Task A_collection_read_counts_what_it_filters_and_pages_with_a_next_link()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tableName = await SetupTestTableAsync();
+        var rows = Enumerable.Range(0, 105).Select(i => new Dictionary<string, object?>
+        {
+            ["name"] = $"P{i:000}",
+            ["email"] = $"p{i}@example.com",
+            ["age"] = i,
+            ["is_active"] = i % 2 == 0,
+        }).ToList();
+        (await _client.PostAsJsonAsync($"/api/batch/data/{tableName}/insert", rows, ct)).EnsureSuccessStatusCode();
+        var set = ToPascalCase(tableName);
+
+        var filtered = await _client.GetFromJsonAsync<JsonElement>($"/odata/{set}?$filter=age lt 10&$count=true", ct);
+        filtered.GetProperty("@odata.count").GetInt64().Should().Be(10);
+        filtered.TryGetProperty("@odata.nextLink", out _).Should().BeFalse();
+
+        var seen = new List<string>();
+        var url = $"/odata/{set}?$count=true";
+        for (var page = 0; page < 3 && url is not null; page++)
+        {
+            var body = await _client.GetFromJsonAsync<JsonElement>(url, ct);
+            body.GetProperty("@odata.count").GetInt64().Should().Be(105);
+            seen.AddRange(body.GetProperty("value").EnumerateArray().Select(r => r.GetProperty("name").GetString()!));
+            url = body.TryGetProperty("@odata.nextLink", out var next) ? new Uri(next.GetString()!).PathAndQuery : null;
+        }
+
+        url.Should().BeNull("the second page is the last");
+        seen.Should().HaveCount(105).And.OnlyHaveUniqueItems();
+    }
+
+    [Fact]
+    public async Task A_request_whose_dependency_failed_is_not_run()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var set = ToPascalCase(await SetupTestTableAsync());
+
+        var response = await _client.PostAsJsonAsync("/odata/$batch", new
+        {
+            requests = new object[]
+            {
+                new { id = "a", method = "GET", url = $"{set}({Guid.NewGuid()})" },
+                new { id = "b", method = "POST", url = set, body = new { name = "Never", email = "never@example.com", is_active = true }, dependsOn = DependsOn("a") },
+            },
+        }, ct);
+        var items = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct)).RootElement.GetProperty("responses");
+
+        items[0].GetProperty("status").GetInt32().Should().Be(404);
+        items[1].GetProperty("status").GetInt32().Should().Be(424);
+        var all = await _client.GetFromJsonAsync<JsonElement>($"/odata/{set}?$count=true", ct);
+        all.GetProperty("@odata.count").GetInt64().Should().Be(0, "the dependent create did not run");
+    }
+
+    [Fact]
+    public async Task An_atomicity_group_is_refused_rather_than_claimed()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var set = ToPascalCase(await SetupTestTableAsync());
+
+        var response = await _client.PostAsJsonAsync("/odata/$batch", new
+        {
+            requests = new object[] { new { id = "1", method = "POST", url = set, atomicityGroup = "g", body = new { name = "A", email = "a@example.com", is_active = true } } },
+        }, ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync(ct)).Should().Contain("atomicity group");
+        (await _client.GetFromJsonAsync<JsonElement>($"/odata/{set}?$count=true", ct)).GetProperty("@odata.count").GetInt64().Should().Be(0);
+    }
+
     #endregion
+
+    private static string[] DependsOn(params string[] ids) => ids;
 
     private static string ToPascalCase(string name)
     {

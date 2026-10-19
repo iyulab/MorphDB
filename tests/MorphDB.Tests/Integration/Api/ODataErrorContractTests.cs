@@ -140,17 +140,18 @@ public class ODataErrorContractTests
         {
             Requests =
             [
-                new ODataBatchRequestItem { Id = "1", Method = "POST", EntitySet = entitySet, Body = JsonSerializer.SerializeToElement(new { name = (string?)null }) },
-                new ODataBatchRequestItem { Id = "2", Method = "DELETE", EntitySet = entitySet, Key = missing },
+                new ODataBatchRequestItem { Id = "1", Method = "POST", Url = entitySet, Body = JsonSerializer.SerializeToElement(new { name = (string?)null }) },
+                new ODataBatchRequestItem { Id = "2", Method = "DELETE", Url = $"{entitySet}({missing})" },
             ],
         }, TestContext.Current.CancellationToken);
         response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         var items = (await response.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken)).GetProperty("responses");
 
         items[0].GetProperty("status").GetInt32().Should().Be(400);
-        items[0].GetProperty("error").GetProperty("code").GetString().Should().Be("VALIDATION_ERROR");
+        items[0].GetProperty("body").GetProperty("error").GetProperty("code").GetString().Should().Be("VALIDATION_ERROR",
+            "a failed request's body is the OData error object the request would have answered on its own");
         items[1].GetProperty("status").GetInt32().Should().Be(404);
-        items[1].GetProperty("error").GetProperty("code").GetString().Should().Be("RECORD_NOT_FOUND");
+        items[1].GetProperty("body").GetProperty("error").GetProperty("code").GetString().Should().Be("RECORD_NOT_FOUND");
     }
 
     [Fact]

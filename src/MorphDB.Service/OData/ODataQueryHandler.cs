@@ -11,6 +11,9 @@ namespace MorphDB.Service.OData;
 /// </summary>
 public sealed partial class ODataQueryHandler
 {
+    /// <summary>The rows a collection read answers when the request does not say <c>$top</c>.</summary>
+    public const int ServerPageSize = 100;
+
     private readonly ISchemaManager _schemaManager;
     private readonly IMorphDataService _dataService;
 
@@ -69,15 +72,9 @@ public sealed partial class ODataQueryHandler
             query = ApplyOrderBy(query, options.OrderBy);
         }
 
-        // Get total count if requested
-        long? totalCount = null;
-        if (options.Count)
-        {
-            totalCount = await _dataService.Query(projectId)
-                .From(tableName)
-                .SelectAll()
-                .CountAsync(cancellationToken);
-        }
+        // $count counts the rows $filter selects, before $skip and $top (OData 4.01 §11.2.6.5). It used
+        // to count the whole set whatever the filter.
+        long? totalCount = options.Count ? await query.CountAsync(cancellationToken) : null;
 
         // Apply $skip
         if (options.Skip > 0)
@@ -85,23 +82,23 @@ public sealed partial class ODataQueryHandler
             query = query.Offset(options.Skip);
         }
 
-        // Apply $top
-        if (options.Top > 0)
-        {
-            query = query.Limit(options.Top);
-        }
-        else
-        {
-            // Default page size
-            query = query.Limit(100);
-        }
+        // Without $top the server pages (OData 4.01 §11.2.5.7): one row past the page tells whether
+        // there is a next one, and the answer then says where it is instead of stopping silently.
+        var paged = options.Top <= 0;
+        query = query.Limit(paged ? ServerPageSize + 1 : options.Top);
 
         var records = await query.ToListAsync(cancellationToken);
+        var more = paged && records.Count > ServerPageSize;
+        if (more)
+        {
+            records = [.. records.Take(ServerPageSize)];
+        }
 
         return new ODataQueryResult
         {
             Records = records,
             TotalCount = totalCount,
+            NextSkip = more ? Math.Max(options.Skip, 0) + ServerPageSize : null,
             EntitySetName = entitySetName,
             TableMetadata = table
         };
@@ -327,6 +324,9 @@ public sealed class ODataQueryResult
 {
     public required IReadOnlyList<IDictionary<string, object?>> Records { get; init; }
     public long? TotalCount { get; init; }
+
+    /// <summary>The <c>$skip</c> of the next page when the server cut this one, else null.</summary>
+    public int? NextSkip { get; init; }
     public required string EntitySetName { get; init; }
     public required TableMetadata TableMetadata { get; init; }
 }

@@ -630,8 +630,26 @@ Errors are OData error objects (`{"error": {"code", "message"}}`) carrying the c
 the entity object itself, its properties beside `@odata.context` (`…/$metadata#Customers/$entity`),
 as OData JSON writes it.
 
-`$count` is a query option, not a path segment: `?$count=true` puts `@odata.count` on the
-collection response, and `/odata/Customers/$count` is not a route. Relations are not navigable
+`$count` is a query option, not a path segment: `?$count=true` puts `@odata.count` — the rows
+`$filter` selects, before `$skip` and `$top` — on the collection response, and
+`/odata/Customers/$count` is not a route. A read without `$top` answers at most 100 rows; when there
+are more it carries `@odata.nextLink`, the same request with `$skip` moved on, and following it reads
+every row once.
+
+**`$batch` takes a JSON batch** (OData JSON Format 4.01 §19). Each request names its `method` and its
+`url` relative to the service root, and is answered exactly as the same request on its own — the
+same route does the work, so a collection read takes its query options, a create carries its
+`location` header, and an error is an OData error object in the response's `body`:
+
+```json
+{ "requests": [
+    { "id": "1", "method": "GET", "url": "Customers?$filter=grade eq 'VIP'&$top=10" },
+    { "id": "2", "method": "POST", "url": "Customers", "body": { "name": "Ann" } },
+    { "id": "3", "method": "DELETE", "url": "Customers(00000000-0000-0000-0000-000000000000)", "dependsOn": ["1"] } ] }
+```
+
+Requests run in order, each on its own: a request whose `dependsOn` names one that failed is not run
+(`424`). An `atomicityGroup` is refused (`400`) — nothing here would make a group all-or-nothing. Relations are not navigable
 from this surface — the metadata document declares no navigation properties, so there is nothing
 for `$expand` to reach. Read a related table as its own entity set instead.
 

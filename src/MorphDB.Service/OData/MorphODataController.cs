@@ -1,12 +1,14 @@
 using System.Text.Json;
 using System.Xml;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.OData.Edm.Csdl;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Models;
 using MorphDB.Core.Pipeline;
 using MorphDB.Npgsql.Repositories;
 using MorphDB.Service.Filters;
+using MorphDB.Service.Models.Api;
 using MorphDB.Service.Services;
 
 namespace MorphDB.Service.OData;
@@ -118,6 +120,26 @@ public sealed partial class MorphODataController : ControllerBase
         if (count && result.TotalCount.HasValue)
         {
             response.Count = result.TotalCount.Value;
+        }
+
+        if (result.NextSkip is { } nextSkip)
+        {
+            // The same request, the next page: every option kept, $skip moved on.
+            var next = new Dictionary<string, string?>(StringComparer.Ordinal);
+            foreach (var (name, value) in new (string Name, string? Value)[]
+                     {
+                         ("$filter", filter), ("$orderby", orderBy), ("$select", select), ("$count", count ? "true" : null),
+                     })
+            {
+                if (value is not null)
+                {
+                    next[name] = value;
+                }
+            }
+
+            next["$skip"] = nextSkip.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            response.NextLink = Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString(
+                $"{Request.Scheme}://{Request.Host}/odata/{entitySet}", next);
         }
 
         return Ok(response);
@@ -319,7 +341,9 @@ public sealed partial class MorphODataController : ControllerBase
     }
 
     /// <summary>
-    /// Executes a batch of operations.
+    /// Executes a JSON batch (OData JSON Format 4.01 §19): each request names a method and a URL
+    /// relative to the service root (<c>Customers</c>, <c>Customers(…)</c>, <c>Customers?$filter=…</c>)
+    /// and is answered exactly as the same request on its own would be — the same route does the work.
     /// POST /odata/$batch
     /// </summary>
     [HttpPost("$batch")]
@@ -327,170 +351,98 @@ public sealed partial class MorphODataController : ControllerBase
         [FromBody] ODataBatchRequest batchRequest,
         CancellationToken cancellationToken)
     {
-        var projectId = _projectAccessor.ProjectId;
-        var modelResult = await _modelProvider.GetModelWithMappingAsync(projectId, cancellationToken);
-        var responses = new List<ODataBatchResponseItem>();
+        if (batchRequest.Requests.FirstOrDefault(r => r.AtomicityGroup is not null) is { } grouped)
+        {
+            // Saying yes would claim all-or-nothing for requests that each apply on their own.
+            return BadRequest(ODataError.Of("INVALID_ARGUMENT",
+                $"Request '{grouped.Id}' names an atomicity group; this service applies each request of a batch on its own and does not support atomicity groups."));
+        }
 
+        var responses = new List<ODataBatchResponseItem>(batchRequest.Requests.Count);
+        var failed = new HashSet<string>(StringComparer.Ordinal);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var request in batchRequest.Requests)
         {
-            var response = await ExecuteBatchItemAsync(projectId, request, modelResult.EntitySetToTableNameMap, cancellationToken);
+            ODataBatchResponseItem response;
+            if (request.DependsOn?.FirstOrDefault(d => !seen.Contains(d)) is { } unknown)
+            {
+                response = Item(request.Id, StatusCodes.Status400BadRequest, ODataError.Of("INVALID_ARGUMENT",
+                    $"Request '{request.Id}' depends on '{unknown}', which is not an earlier request of this batch."));
+            }
+            else if (request.DependsOn?.FirstOrDefault(failed.Contains) is { } failedDependency)
+            {
+                response = Item(request.Id, StatusCodes.Status424FailedDependency, ODataError.Of("FAILED_DEPENDENCY",
+                    $"Request '{request.Id}' was not run: '{failedDependency}', which it depends on, failed."));
+            }
+            else
+            {
+                response = await ExecuteBatchItemAsync(request, cancellationToken);
+            }
+
+            seen.Add(request.Id);
+            if (response.Status >= StatusCodes.Status400BadRequest)
+            {
+                failed.Add(request.Id);
+            }
+
             responses.Add(response);
         }
 
         return Ok(new ODataBatchResponse { Responses = responses });
     }
 
-    private async Task<ODataBatchResponseItem> ExecuteBatchItemAsync(
-        Guid projectId,
-        ODataBatchRequestItem request,
-        IReadOnlyDictionary<string, string> entitySetToTableNameMap,
-        CancellationToken cancellationToken)
+    private async Task<ODataBatchResponseItem> ExecuteBatchItemAsync(ODataBatchRequestItem request, CancellationToken cancellationToken)
     {
         try
         {
-            var tableName = ResolveTableName(request.EntitySet, entitySetToTableNameMap);
-
-            // Resolve table metadata for write operations
-            var tableMetadata = await _metadataRepository.GetTableByNameAsync(
-                projectId, tableName, includeColumns: true, cancellationToken);
-
-            switch (request.Method.ToUpperInvariant())
+            if (!ODataBatchUrl.TryParse(request.Url, out var target, out var problem))
             {
-                case "POST":
-                    if (tableMetadata is null)
-                    {
-                        return new ODataBatchResponseItem { Id = request.Id, Status = 404, Error = TableMissing(tableName) };
-                    }
-                    var insertData = request.Body != null
-                        ? JsonElementToDictionary(request.Body.Value)
-                        : new Dictionary<string, object?>();
-                    var insertWriteResult = await _writePipeline.InsertAsync(projectId, tableMetadata, insertData, cancellationToken: cancellationToken);
-                    if (!insertWriteResult.Success)
-                    {
-                        return new ODataBatchResponseItem { Id = request.Id, Status = 400, Error = Refusal(insertWriteResult) };
-                    }
-                    return new ODataBatchResponseItem
-                    {
-                        Id = request.Id,
-                        Status = 201,
-                        Body = insertWriteResult.Data
-                    };
-
-                case "PATCH":
-                case "PUT":
-                    if (!request.Key.HasValue)
-                    {
-                        return new ODataBatchResponseItem
-                        {
-                            Id = request.Id,
-                            Status = 400,
-                            Error = new ODataErrorDetail("INVALID_ARGUMENT", "Key is required for PATCH/PUT operations.")
-                        };
-                    }
-                    if (tableMetadata is null)
-                    {
-                        return new ODataBatchResponseItem { Id = request.Id, Status = 404, Error = TableMissing(tableName) };
-                    }
-                    var existing = await _dataService.GetByIdAsync(projectId, tableName, request.Key.Value, cancellationToken);
-                    var updateData = request.Body != null
-                        ? JsonElementToDictionary(request.Body.Value)
-                        : new Dictionary<string, object?>();
-                    var updateWriteResult = await _writePipeline.UpdateAsync(projectId, tableMetadata, request.Key.Value, updateData, existing, cancellationToken: cancellationToken);
-                    if (ErrorHandling.WriteFailure.IsNotFound(updateWriteResult))
-                    {
-                        return new ODataBatchResponseItem { Id = request.Id, Status = 404, Error = EntityMissing(request.EntitySet, request.Key.Value) };
-                    }
-                    if (!updateWriteResult.Success)
-                    {
-                        return new ODataBatchResponseItem { Id = request.Id, Status = 400, Error = Refusal(updateWriteResult) };
-                    }
-                    return new ODataBatchResponseItem
-                    {
-                        Id = request.Id,
-                        Status = 200,
-                        Body = updateWriteResult.Data
-                    };
-
-                case "DELETE":
-                    if (!request.Key.HasValue)
-                    {
-                        return new ODataBatchResponseItem
-                        {
-                            Id = request.Id,
-                            Status = 400,
-                            Error = new ODataErrorDetail("INVALID_ARGUMENT", "Key is required for DELETE operations.")
-                        };
-                    }
-                    if (tableMetadata is null)
-                    {
-                        return new ODataBatchResponseItem { Id = request.Id, Status = 404, Error = TableMissing(tableName) };
-                    }
-                    var deleteWriteResult = await _writePipeline.DeleteAsync(projectId, tableMetadata, request.Key.Value, cancellationToken: cancellationToken);
-                    if (ErrorHandling.WriteFailure.IsNotFound(deleteWriteResult))
-                    {
-                        return new ODataBatchResponseItem { Id = request.Id, Status = 404, Error = EntityMissing(request.EntitySet, request.Key.Value) };
-                    }
-                    return deleteWriteResult.Success
-                        ? new ODataBatchResponseItem { Id = request.Id, Status = 204 }
-                        : new ODataBatchResponseItem { Id = request.Id, Status = 400, Error = Refusal(deleteWriteResult) };
-
-                case "GET":
-                    if (request.Key.HasValue)
-                    {
-                        var entity = await _dataService.GetByIdAsync(projectId, tableName, request.Key.Value, cancellationToken);
-                        if (entity == null)
-                        {
-                            return new ODataBatchResponseItem
-                            {
-                                Id = request.Id,
-                                Status = 404,
-                                Error = EntityMissing(request.EntitySet, request.Key.Value)
-                            };
-                        }
-                        return new ODataBatchResponseItem
-                        {
-                            Id = request.Id,
-                            Status = 200,
-                            Body = entity
-                        };
-                    }
-                    else
-                    {
-                        var query = _dataService.Query(projectId).From(tableName).SelectAll();
-                        if (request.Top > 0)
-                            query = query.Limit(request.Top);
-                        var records = await query.ToListAsync(cancellationToken);
-                        return new ODataBatchResponseItem
-                        {
-                            Id = request.Id,
-                            Status = 200,
-                            Body = records
-                        };
-                    }
-
-                default:
-                    return new ODataBatchResponseItem
-                    {
-                        Id = request.Id,
-                        Status = 400,
-                        Error = new ODataErrorDetail("INVALID_ARGUMENT", $"Unsupported method: {request.Method}")
-                    };
+                return Item(request.Id, StatusCodes.Status400BadRequest, ODataError.Of("INVALID_ARGUMENT", $"Request '{request.Id}': {problem}"));
             }
+
+            var body = request.Body ?? JsonSerializer.SerializeToElement(new Dictionary<string, object?>());
+            var result = (request.Method.ToUpperInvariant(), target.Key) switch
+            {
+                ("GET", null) => await GetEntitySet(target.EntitySet, target.Query("$filter"), target.Query("$orderby"),
+                    target.IntQuery("$top"), target.IntQuery("$skip"), target.Query("$select"),
+                    string.Equals(target.Query("$count"), "true", StringComparison.OrdinalIgnoreCase), cancellationToken),
+                ("GET", { } key) => await GetEntity(target.EntitySet, key, target.Query("$select"), cancellationToken),
+                ("POST", null) => await CreateEntity(target.EntitySet, body, cancellationToken),
+                ("PATCH", { } key) => await UpdateEntity(target.EntitySet, key, body, cancellationToken),
+                ("DELETE", { } key) => await DeleteEntity(target.EntitySet, key, cancellationToken),
+                _ => StatusCode(StatusCodes.Status405MethodNotAllowed, ODataError.Of("METHOD_NOT_ALLOWED",
+                    $"Request '{request.Id}': {request.Method.ToUpperInvariant()} is not served on {(target.Key is null ? "an entity set" : "an entity")}. " +
+                    "An entity set takes GET and POST; an entity GET, PATCH and DELETE.")),
+            };
+
+            return FromResult(request.Id, result);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // One item's failure is that item's answer, classified as any request's would be: a
+            // One request's failure is that request's answer, classified as it would be on its own: a
             // caller's mistake keeps its status and code, a service defect stays unexplained.
-            var (status, _, code) = ErrorHandling.ErrorClassification.Classify(ex);
+            var (status, envelope) = ErrorHandling.ErrorClassification.Envelope(ex);
             if (status >= StatusCodes.Status500InternalServerError)
             {
                 LogBatchItemError(_logger, request.Id, ex);
-                return new ODataBatchResponseItem { Id = request.Id, Status = status, Error = new ODataErrorDetail(code, "An unexpected error occurred") };
             }
 
-            return new ODataBatchResponseItem { Id = request.Id, Status = status, Error = new ODataErrorDetail(code, ex.Message) };
+            return Item(request.Id, status, ODataError.From(envelope));
         }
     }
+
+    private static ODataBatchResponseItem FromResult(string id, IActionResult result) => result switch
+    {
+        CreatedResult created => Item(id, created.StatusCode ?? StatusCodes.Status201Created, created.Value,
+            created.Location is { } location ? new Dictionary<string, string> { ["location"] = location } : null),
+        ObjectResult o => Item(id, o.StatusCode ?? StatusCodes.Status200OK, o.Value is ErrorResponse e ? ODataError.From(e) : o.Value),
+        JsonResult j => Item(id, j.StatusCode ?? StatusCodes.Status200OK, j.Value is ErrorResponse e ? ODataError.From(e) : j.Value),
+        IStatusCodeActionResult s => Item(id, s.StatusCode ?? StatusCodes.Status200OK, null),
+        _ => throw new InvalidOperationException($"A batch request was answered with an unexpected result ({result.GetType().Name})."),
+    };
+
+    private static ODataBatchResponseItem Item(string id, int status, object? body, IReadOnlyDictionary<string, string>? headers = null) =>
+        new() { Id = id, Status = status, Body = body, Headers = headers };
 
     private NotFoundObjectResult EntityNotFound(string entitySet, Guid key) => NotFound(new ODataError(EntityMissing(entitySet, key)));
 
@@ -586,10 +538,14 @@ internal sealed class ODataResponse
 
     [System.Text.Json.Serialization.JsonPropertyName("value")]
     public IReadOnlyList<IDictionary<string, object?>>? Value { get; set; }
+
+    [System.Text.Json.Serialization.JsonPropertyName("@odata.nextLink")]
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? NextLink { get; set; }
 }
 
 /// <summary>
-/// OData batch request format.
+/// A JSON batch request (OData JSON Format 4.01 §19).
 /// </summary>
 public sealed class ODataBatchRequest
 {
@@ -598,7 +554,8 @@ public sealed class ODataBatchRequest
 }
 
 /// <summary>
-/// Individual request item in a batch.
+/// One request of a JSON batch: a method and a URL relative to the service root, the body a POST or
+/// PATCH carries, and the ids of earlier requests it may run only after.
 /// </summary>
 public sealed class ODataBatchRequestItem
 {
@@ -608,21 +565,24 @@ public sealed class ODataBatchRequestItem
     [System.Text.Json.Serialization.JsonPropertyName("method")]
     public string Method { get; set; } = "GET";
 
-    [System.Text.Json.Serialization.JsonPropertyName("entitySet")]
-    public string EntitySet { get; set; } = string.Empty;
+    [System.Text.Json.Serialization.JsonPropertyName("url")]
+    public string Url { get; set; } = string.Empty;
 
-    [System.Text.Json.Serialization.JsonPropertyName("key")]
-    public Guid? Key { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("headers")]
+    public IReadOnlyDictionary<string, string>? Headers { get; set; }
 
     [System.Text.Json.Serialization.JsonPropertyName("body")]
     public System.Text.Json.JsonElement? Body { get; set; }
 
-    [System.Text.Json.Serialization.JsonPropertyName("top")]
-    public int Top { get; set; }
+    [System.Text.Json.Serialization.JsonPropertyName("dependsOn")]
+    public IReadOnlyList<string>? DependsOn { get; set; }
+
+    [System.Text.Json.Serialization.JsonPropertyName("atomicityGroup")]
+    public string? AtomicityGroup { get; set; }
 }
 
 /// <summary>
-/// OData batch response format.
+/// A JSON batch response: one response per request, in request order.
 /// </summary>
 public sealed class ODataBatchResponse
 {
@@ -631,7 +591,8 @@ public sealed class ODataBatchResponse
 }
 
 /// <summary>
-/// Individual response item in a batch.
+/// One response of a JSON batch: the status and body the same request would have answered on its own —
+/// an error is an OData error object in <c>body</c>.
 /// </summary>
 public sealed class ODataBatchResponseItem
 {
@@ -641,11 +602,11 @@ public sealed class ODataBatchResponseItem
     [System.Text.Json.Serialization.JsonPropertyName("status")]
     public int Status { get; set; }
 
+    [System.Text.Json.Serialization.JsonPropertyName("headers")]
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyDictionary<string, string>? Headers { get; set; }
+
     [System.Text.Json.Serialization.JsonPropertyName("body")]
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public object? Body { get; set; }
-
-    [System.Text.Json.Serialization.JsonPropertyName("error")]
-    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-    public ODataErrorDetail? Error { get; set; }
 }

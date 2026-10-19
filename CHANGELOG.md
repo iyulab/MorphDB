@@ -15,6 +15,13 @@
   comma-packed string is now one condition, not several. The operators are the REST set: `isnull` and
   `isnotnull` work, and the `ne`, `ge` and `le` spellings are gone (`neq`, `gte`, `lte`).
 
+- **OData `$batch` takes a JSON batch** (OData JSON Format 4.01 §19): each request names `method` and a
+  `url` relative to the service root (`Customers`, `Customers(<id>)`, `Customers?$filter=…`) instead of
+  `entitySet`, `key` and `top`, and is answered by the same route the request would reach on its own —
+  query options, the `location` of a create, the entity object. A response carries `headers` and
+  `body`; a failure is an OData error object in `body` (there is no `error` member). `dependsOn` is
+  honoured (a request whose dependency failed answers `424`); `atomicityGroup` is refused. `PUT` is not
+  served, as on the entity route.
 - **OData errors are OData error objects.** Every error under `/odata` — an unknown column or entity
   set, a key the set does not hold, a refused write, a missing project or refused secret, a failed
   `$batch` item — answers `{"error": {"code", "message", "details"?}}` with the code of the REST error
@@ -37,6 +44,9 @@
 
 ### Fixed
 
+- **OData `$count` counts what `$filter` selects.** It counted the whole entity set whatever the filter.
+- **An OData read the server cuts says where the next page is.** Without `$top` a read answered the
+  first 100 rows and stopped; it now carries `@odata.nextLink`.
 - **Deleting a row another table still references answers `409 ROW_REFERENCED`**, saying the row is still
   referenced and what to do — on a delete by id, a bulk delete by filter, OData and GraphQL. It answered
   «a value in this request references a row that does not exist» (the message for the opposite
