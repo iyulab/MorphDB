@@ -3,10 +3,10 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Dapper;
 using MorphDB.Npgsql.Schema;
-using Npgsql;
 using MorphDB.Service.Controllers;
 using MorphDB.Service.Models.Api;
 using MorphDB.Tests.Fixtures;
+using Npgsql;
 
 namespace MorphDB.Tests.Integration.Api;
 
