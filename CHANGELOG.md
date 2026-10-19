@@ -16,6 +16,11 @@
   a dead letter could be read, resolved or replayed by id from any project. Listing and archiving
   now cover the caller's project only, and another project's dead letter is answered `404`.
 
+- **Service diagnostics answer the master secret only** when secrets are enforced. Any issued
+  secret — one confined to a project included — could read every project's query statistics and slow
+  queries, the database connection the service uses (host, database, user) and reset the statistics.
+  Without an injected master secret nothing changes.
+
 ### Breaking
 
 - **Columns are updated and deleted by table and name:** `PATCH` and `DELETE`

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using MorphDB.Core.Diagnostics;
 using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Service.Infrastructure;
+using MorphDB.Service.Security;
 using Npgsql;
 
 namespace MorphDB.Service.Controllers;
@@ -9,6 +10,10 @@ namespace MorphDB.Service.Controllers;
 /// <summary>
 /// API controller for system diagnostics and performance monitoring.
 /// Provides endpoints for health metrics, query performance, and connection pool status.
+/// <para>
+/// These describe the whole service — every project's queries, the database it connects to — so
+/// while secrets are enforced they answer the master secret only, as administering projects does.
+/// </para>
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
@@ -21,14 +26,19 @@ public partial class DiagnosticsController : ControllerBase
     private readonly NpgsqlDataSource _dataSource;
     private readonly GracefulShutdownService _shutdownService;
     private readonly ILogger<DiagnosticsController> _logger;
+    private readonly ProjectAccess _access;
+
+    private const string OperatorOnly = "Only the master secret may read or reset service diagnostics.";
 
     public DiagnosticsController(
         IQueryDiagnostics queryDiagnostics,
         MorphConnectionFactory connections,
         NpgsqlDataSource dataSource,
         GracefulShutdownService shutdownService,
-        ILogger<DiagnosticsController> logger)
+        ILogger<DiagnosticsController> logger,
+        ProjectAccess access)
     {
+        _access = access;
         _queryDiagnostics = queryDiagnostics;
         _connections = connections;
         _dataSource = dataSource;
@@ -45,6 +55,7 @@ public partial class DiagnosticsController : ControllerBase
     [ProducesResponseType(typeof(QueryStatisticsResponse), StatusCodes.Status200OK)]
     public IActionResult GetQueryStatistics([FromQuery] DateTimeOffset? since = null)
     {
+        _access.RequireMaster(OperatorOnly);
         var stats = _queryDiagnostics.GetStatistics(since);
         return Ok(new QueryStatisticsResponse
         {
@@ -78,6 +89,7 @@ public partial class DiagnosticsController : ControllerBase
     [ProducesResponseType(typeof(SlowQueriesResponse), StatusCodes.Status200OK)]
     public IActionResult GetSlowQueries([FromQuery] int count = 50)
     {
+        _access.RequireMaster(OperatorOnly);
         count = Math.Clamp(count, 1, 500);
         var entries = _queryDiagnostics.GetRecentSlowQueries(count);
 
@@ -109,6 +121,7 @@ public partial class DiagnosticsController : ControllerBase
     [ProducesResponseType(typeof(ConnectionPoolResponse), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetConnectionPoolStats()
     {
+        _access.RequireMaster(OperatorOnly);
         // Test connection to verify pool health
         var isHealthy = true;
         var healthCheckMs = 0L;
@@ -149,6 +162,7 @@ public partial class DiagnosticsController : ControllerBase
     [ProducesResponseType(typeof(ShutdownStatusResponse), StatusCodes.Status200OK)]
     public IActionResult GetShutdownStatus()
     {
+        _access.RequireMaster(OperatorOnly);
         return Ok(new ShutdownStatusResponse
         {
             IsShuttingDown = _shutdownService.IsShuttingDown,
@@ -165,6 +179,7 @@ public partial class DiagnosticsController : ControllerBase
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
     public IActionResult ResetStatistics()
     {
+        _access.RequireMaster(OperatorOnly);
         _queryDiagnostics.ClearStatistics();
         LogStatisticsCleared();
         return Ok(new { message = "Statistics cleared", timestamp = DateTimeOffset.UtcNow });

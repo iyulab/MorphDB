@@ -504,4 +504,28 @@ public class SecretEnforcementTests
         serialized.Should().Contain(subject.SecretId.ToString(),
             "the secret's id names the actor without being the credential");
     }
+
+    // Diagnostics describe the whole service — every project's queries and the database the service
+    // connects to — so a secret confined to one project, or any issued secret, reads none of them.
+    [Fact]
+    public async Task Only_the_master_secret_reads_or_resets_service_diagnostics()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var master = EnforcedClient(MasterSecret);
+        var confined = EnforcedClient(await IssueAsync(master, "diag-confined", "reader", _fixture.Api.ProjectId));
+        var unconfined = EnforcedClient(await IssueAsync(master, "diag-unconfined", "writer"));
+
+        foreach (var client in new[] { confined, unconfined })
+        {
+            foreach (var get in new[] { "/api/diagnostics/queries/stats", "/api/diagnostics/queries/slow", "/api/diagnostics/pool", "/api/diagnostics/shutdown" })
+            {
+                (await client.GetAsync(get, ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden, get);
+            }
+
+            (await client.PostAsync("/api/diagnostics/queries/stats/reset", null, ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        }
+
+        (await master.GetAsync("/api/diagnostics/pool", ct)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await master.GetAsync("/api/diagnostics/queries/slow", ct)).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
 }

@@ -34,7 +34,10 @@ public sealed class ProjectAccess
     public Guid? ConfinedTo => _options.IsEnforced ? _securityContext.ContextOrNull?.ConfinedToProjectId : null;
 
     /// <summary>Refuses anything but the master secret while secrets are enforced.</summary>
-    public void RequireMaster()
+    public void RequireMaster() => RequireMaster("Only the master secret may create, change or delete projects.");
+
+    /// <summary>Refuses anything but the master secret while secrets are enforced, saying why.</summary>
+    public void RequireMaster(string refusal)
     {
         if (!_options.IsEnforced)
         {
@@ -43,7 +46,7 @@ public sealed class ProjectAccess
 
         if (!string.Equals(_securityContext.ContextOrNull?.Role, SecretRoles.Master, StringComparison.Ordinal))
         {
-            throw new ForbiddenException("Only the master secret may create, change or delete projects.");
+            throw new ForbiddenException(refusal);
         }
     }
 
