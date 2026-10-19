@@ -688,6 +688,18 @@ public sealed class PostgresBulkOperationService : IBulkOperationService, IBulkJ
         return null;
     }
 
+    public async Task<int> DeleteExpiredExportFilesAsync(DateTimeOffset now, CancellationToken cancellationToken = default)
+    {
+        const string sql = """
+            DELETE FROM morphdb._morph_export_data data
+            USING morphdb._morph_export_jobs job
+            WHERE data.job_id = job.job_id AND job.expires_at IS NOT NULL AND job.expires_at <= @Now
+            """;
+
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
+        return await connection.ExecuteAsync(sql, new { Now = now });
+    }
+
     public async Task<Stream?> OpenExportFileAsync(Guid projectId, Guid jobId, CancellationToken cancellationToken = default)
     {
         // The lookup is the gate: past it, the caller is the job's requester or bypasses row-level

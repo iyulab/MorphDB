@@ -27,6 +27,10 @@
   such a table is now a unique index over unmarked rows, and an upsert targets it, so a deleted row's
   value is written as a new row. A table created by an earlier version is converted on start-up
   (each constraint replaced in place by the index of the same name; a second start changes nothing).
+- **A materialized view over a table whose policies bind only writes can be built.** The guard that
+  keeps materialized views off tables with row-level security counted every policy, though a policy
+  for `Insert`, `Update` or `Delete` alone leaves every row of the table readable — so the copy hands
+  out nothing a caller could not read directly. Only a `Select` or `All` policy now stands in the way.
 - **`MorphDB.Client` cancels bulk jobs.** `BulkClient.CancelImportJobAsync` and `CancelExportJobAsync`
   posted to `/api/bulk/import/{id}/cancel` and `/api/bulk/export/{id}/cancel`, which the service does
   not serve, so every call failed with `404`. Both now post to `/api/bulk/jobs/{id}/cancel`.
@@ -59,6 +63,11 @@
 
 ### Added
 
+- **Export files expire.** A finished export's file is kept until the job's `expiresAt` (24 hours
+  after it was requested, by default — the value every job has always carried, and nothing acted
+  on). After it, `GET /api/bulk/export/{jobId}/download` answers `410 EXPORT_EXPIRED` and the job
+  processor removes the stored copy; the job's status stays readable. `IBulkJobExecutor` gains
+  `DeleteExpiredExportFilesAsync`, which the processor calls on every poll.
 - **`includeDeleted`** — `GET /api/data/{table}?includeDeleted=true` and `"includeDeleted": true` in
   the `POST /api/data/{table}/query` body return marked rows too; `IMorphQuery.IncludeDeleted()` does
   the same for a query built in process, and `MorphDB.Client`'s `QueryRequest.IncludeDeleted` sends it.

@@ -52,4 +52,11 @@ public interface IBulkJobExecutor
         Guid jobId,
         Stream dataStream,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Removes the stored file of every export job whose <c>ExpiresAt</c> is at or before
+    /// <paramref name="now"/>, and returns how many it removed. The job stays, so its status can still
+    /// be read; its download answers that it has expired.
+    /// </summary>
+    Task<int> DeleteExpiredExportFilesAsync(DateTimeOffset now, CancellationToken cancellationToken = default);
 }

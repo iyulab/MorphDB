@@ -891,6 +891,10 @@ before anything runs. An export is the whole table in storage order — there is
 `orderBy` on an export request (a body naming either is refused as an unknown member, like any
 other). Filter first through the query API if you need a subset.
 
+A finished export's file is kept until the job's `expiresAt` (24 hours after it was requested, by
+default). After that the job processor removes the file, and a download answers
+`410 EXPORT_EXPIRED` — the job's status can still be read. Request the export again for a fresh file.
+
 An import job that finishes with `errorCount > 0` carries `errorDetails` — up to the first 100
 per-row failures, each `{ "rowNumber": <1-based>, "error": "<message>" }` — so a row-level failure
 is diagnosable without re-sending the file. `errorDetailsTruncated` is `true` once `errorCount`
@@ -1330,8 +1334,10 @@ Three cases follow PostgreSQL's own rules rather than the table above:
 query's result, filled when it is created or refreshed, and PostgreSQL reads the copy without the
 base table's policies. So the combination is refused, with `400 INVALID_OPERATION`, from both
 sides: a materialized view cannot be created or refreshed if its query reads a table that has an
-active policy (directly, through a join, or through another view), and a policy cannot be created
-or switched back on for a table a materialized view reads — the message names the view. Use a plain
+active policy that narrows reads — a `Select` or `All` policy — (directly, through a join, or through
+another view), and such a policy cannot be created or switched back on for a table a materialized
+view reads — the message names the view. A policy for `Insert`, `Update` or `Delete` alone does not
+narrow what a caller reads, so it does not stand in the way of a materialized view. Use a plain
 (non-materialized) view, which shows each caller only the rows that caller may read. A database
 that already holds such a pair keeps both, but reading the view is answered with the same `400`
 until the view is deleted or the policy is deleted or deactivated; the service log names each pair
@@ -1482,7 +1488,7 @@ fixed string — internal exception text never reaches the wire) and retrying ma
 | 400 | `RESERVED_NAME` | A name in the space the system reserves for itself (a leading underscore on a column, the system prefix on a table) |
 | 400 | `SYSTEM_COLUMN` | An attempt to alter or drop a column the table owns rather than the caller |
 | 400 | `UNSAFE_TYPE_CAST` | A column type change whose existing values cannot be converted — export, reload, and change the declaration instead |
-| 400 | `INVALID_OPERATION` | A schema operation that is well-formed but cannot apply to this target — creating, refreshing or reading a materialized view over a table that has a row-level security policy, or giving a policy to a table a materialized view reads |
+| 400 | `INVALID_OPERATION` | A schema operation that is well-formed but cannot apply to this target — creating, refreshing or reading a materialized view over a table that has a row-level security policy that narrows reads (`Select` or `All`), or giving such a policy to a table a materialized view reads |
 | 400 | `DDL_EXECUTION_FAILED` | The database refused the schema statement — the message carries what it said |
 | 400 | `BATCH_DDL_FAILED` | One operation in a batch DDL request failed; the batch is not applied |
 | 404 | `TABLE_NOT_FOUND` | The table (or the project the request scoped it to) does not exist |
@@ -1502,5 +1508,6 @@ fixed string — internal exception text never reaches the wire) and retrying ma
 | 409 | `DUPLICATE_PROJECT_ID` | Creating a project under an id that is taken — only reachable when the request chooses the id. A deleted project still holds its id |
 | 409 | `SCHEMA_VERSION_CONFLICT` | An optimistic schema update lost the race |
 | 409 | `LOCK_ACQUISITION_FAILED` | A concurrent schema operation holds the lock — retry |
+| 410 | `EXPORT_EXPIRED` | Downloading an export whose `expiresAt` has passed — its file is no longer kept; request the export again |
 | 500 | `INTERNAL_ERROR` | Our defect, logged on the server — never your request's fault |
 | 503 | `SECRETS_NOT_CONFIGURED` | A secret-management route was called on a service that has no master secret injected — there is no caller it could tell apart, so it declines rather than issuing credentials to anyone who reaches the port |

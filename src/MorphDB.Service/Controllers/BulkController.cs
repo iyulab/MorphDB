@@ -321,6 +321,18 @@ public sealed class BulkController : ControllerBase
             });
         }
 
+        // A file kept past its expiry is removed by the job processor; the download says so whether
+        // or not the sweep has reached it yet.
+        if (job.ExpiresAt is { } expiresAt && expiresAt <= DateTimeOffset.UtcNow)
+        {
+            return StatusCode(StatusCodes.Status410Gone, new ErrorResponse
+            {
+                Error = "Gone",
+                Message = $"Export job '{jobId}' expired at {expiresAt:O}; its file is no longer kept. Request the export again.",
+                Code = "EXPORT_EXPIRED"
+            });
+        }
+
         var contentType = job.Format switch
         {
             ExportFormat.Csv => "text/csv",

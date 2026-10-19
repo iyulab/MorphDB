@@ -1,6 +1,7 @@
 using Dapper;
 using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
+using MorphDB.Core.Security;
 using MorphDB.Npgsql.Ddl;
 using Npgsql;
 
@@ -23,9 +24,17 @@ internal static class MaterializedViewPolicyGuard
     internal const string ErrorCode = "INVALID_OPERATION";
 
     /// <summary>
-    /// Every materialized view that reads a table with an active stored policy, one row per view,
-    /// table and policy — narrowed to one view (by physical name), to one table, or to both.
+    /// Every materialized view that reads a table with an active stored policy that narrows reads,
+    /// one row per view, table and policy — narrowed to one view (by physical name), to one table, or
+    /// to both.
     /// </summary>
+    /// <remarks>
+    /// A policy narrows reads when it is for <c>Select</c> or <c>All</c> — or of a type this version
+    /// does not know, which restricts every command. A policy for <c>Insert</c>, <c>Update</c> or
+    /// <c>Delete</c> is projected as a restrictive policy for that command alone beside the table's
+    /// permissive one, so every caller reads every row of the table directly, and a copy of it hands
+    /// out nothing a caller could not read.
+    /// </remarks>
     public static async Task<IReadOnlyList<Conflict>> FindAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction? transaction,
@@ -64,12 +73,20 @@ internal static class MaterializedViewPolicyGuard
                 ON source.physical_name = relation.relname AND source.is_active = true
             INNER JOIN morphdb._morph_security_policies policy
                 ON policy.table_id = source.table_id AND policy.is_active = true
+               AND policy.policy_type NOT IN (@Insert, @Update, @Delete)
             LEFT JOIN morphdb._morph_views declared
                 ON declared.physical_name = materialized.relname AND declared.is_active = true
             WHERE (@TableId::uuid IS NULL OR source.table_id = @TableId)
             ORDER BY 1, 2, 3
             """,
-            new { View = viewPhysicalName is null ? null : DdlBuilder.QuoteIdentifier(viewPhysicalName), TableId = tableId },
+            new
+            {
+                View = viewPhysicalName is null ? null : DdlBuilder.QuoteIdentifier(viewPhysicalName),
+                TableId = tableId,
+                Insert = (int)PolicyType.Insert,
+                Update = (int)PolicyType.Update,
+                Delete = (int)PolicyType.Delete,
+            },
             transaction,
             cancellationToken: cancellationToken));
 

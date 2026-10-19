@@ -254,6 +254,33 @@ public class NativeRowLevelSecurityTests
     };
 
     /// <summary>
+    /// A policy for writes alone does not narrow what a caller reads — every row of the table is
+    /// read directly — so a materialized view over the table hands out nothing more, and is built.
+    /// A policy for every command narrows reads, and the view is still refused.
+    /// </summary>
+    [Fact]
+    public async Task A_materialized_view_is_built_over_a_table_whose_policies_only_bind_writes()
+    {
+        var table = await _rls.CreateDocumentsAsync(Guid.NewGuid());
+        await _rls.SeedAsync(table, Row("root-a", UserA));
+        await _rls.CreatePolicyAsync(table, "owner = {{user_id}}", "inserts", PolicyType.Insert);
+        await _rls.CreatePolicyAsync(table, "owner = {{user_id}}", "updates", PolicyType.Update);
+        await _rls.CreatePolicyAsync(table, "owner = {{user_id}}", "deletes", PolicyType.Delete);
+        var viewName = "rls_mwrite_" + Guid.NewGuid().ToString("N")[..8];
+
+        var view = await _rls.Views.CreateViewAsync(TitlesView(table.ProjectId, viewName, table.LogicalName, materialized: true), TestContext.Current.CancellationToken);
+
+        view.Should().NotBeNull();
+
+        var other = await _rls.CreateDocumentsAsync(table.ProjectId, "rls_all");
+        await _rls.CreatePolicyAsync(other, "owner = {{user_id}}", "everything", PolicyType.All);
+        var refused = () => _rls.Views.CreateViewAsync(
+            TitlesView(other.ProjectId, "rls_mall_" + Guid.NewGuid().ToString("N")[..8], other.LogicalName, materialized: true));
+
+        (await refused.Should().ThrowAsync<SchemaException>()).Which.ErrorCode.Should().Be("INVALID_OPERATION");
+    }
+
+    /// <summary>
     /// A materialized view is a table of its own, filled when it is created or refreshed. PostgreSQL
     /// applies the base table's policies to the statement that fills it — which MorphDB runs as
     /// itself — and none to the copy, so every caller would read every row. It is not built.

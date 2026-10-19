@@ -81,6 +81,14 @@ public sealed partial class BulkJobProcessorService : BackgroundService
 
             await ProcessImportJobAsync(bulkService, job, cancellationToken);
         }
+
+        // An export's file is kept until the job expires: a copy of the rows read when it ran, which
+        // would otherwise outlive every later change to them, deletes included.
+        var expired = await bulkService.DeleteExpiredExportFilesAsync(DateTimeOffset.UtcNow, cancellationToken);
+        if (expired > 0)
+        {
+            LogExportFilesExpired(_logger, expired);
+        }
     }
 
     /// <summary>Carries out one export job and stores the file a download serves.</summary>
@@ -168,6 +176,9 @@ public sealed partial class BulkJobProcessorService : BackgroundService
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Export job {JobId} completed, file size: {FileSize} bytes")]
     private static partial void LogExportJobCompleted(ILogger logger, Guid jobId, long fileSize);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Removed {Count} expired export file(s)")]
+    private static partial void LogExportFilesExpired(ILogger logger, int count);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Bulk job {JobId} was cancelled; it stops where it is")]
     private static partial void LogJobCancelled(ILogger logger, Guid jobId);
