@@ -216,11 +216,13 @@ public sealed class PostgresDataService : IMorphDataService
             return await connection.ExecuteAsync(
                 new CommandDefinition(sql, values, cancellationToken: cancellationToken));
         }
-        catch (PostgresException pg) when (pg.SqlState == PostgresErrorCodes.InsufficientPrivilege)
+        catch (PostgresException pg) when (Pipeline.PostgresWriteRefusal.IsCallersMistake(pg))
         {
-            // Rows a policy keeps from the caller are simply not matched. This is the other case:
-            // the update would turn a row the caller may update into one a policy does not admit.
-            throw RowLevelSecurityRefusal.ForWrite(table);
+            // Rows a policy keeps from the caller are simply not matched; a policy refusal here is the
+            // other case — the update would turn a row the caller may update into one a policy does
+            // not admit. A physical constraint (a NULL into a required column, a duplicate, a key a
+            // reference needs) is the caller's mistake as on a single write.
+            throw Pipeline.PostgresWriteRefusal.Translate(pg, table);
         }
     }
 
@@ -263,10 +265,16 @@ public sealed class PostgresDataService : IMorphDataService
         }
 
         await using var connection = await _connections.OpenAsync(cancellationToken);
-        var affectedRows = await connection.ExecuteAsync(
-            new CommandDefinition(sql, parameters, cancellationToken: cancellationToken));
-
-        return affectedRows;
+        try
+        {
+            return await connection.ExecuteAsync(
+                new CommandDefinition(sql, parameters, cancellationToken: cancellationToken));
+        }
+        catch (PostgresException pg) when (Pipeline.PostgresWriteRefusal.IsCallersMistake(pg))
+        {
+            // One statement: a row still referenced refuses the whole delete, and nothing is deleted.
+            throw Pipeline.PostgresWriteRefusal.Translate(pg, table);
+        }
     }
 
     private static string ExtractWhereClause(IMorphQuery query)

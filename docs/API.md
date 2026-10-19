@@ -1526,6 +1526,7 @@ both.
 | 401 | `UNAUTHENTICATED` | Authentication is enforced and the request presented no valid secret — send `Authorization: Bearer <secret>`. Only answered when a master secret is injected; see [Connection secrets](#connection-secrets) |
 | 403 | `FORBIDDEN` | The secret is recognized but may not do this — it is confined to another project, or the route requires the master secret. Also a write a row-level security policy refuses: a policy of the table does not admit the row the write would create or leave |
 | 404 | `NOT_FOUND` | Another addressable resource (entity set, policy…) does not exist |
+| 409 | `ROW_REFERENCED` | Deleting a row (by id, by filter, through OData or GraphQL) that rows of another table still reference through an enforcing relation — delete or re-point those rows first, or declare the relation with `onDelete` `cascade` or `set-null`. A bulk delete is one statement, so nothing it selected is deleted |
 | 409 | `DUPLICATE_NAME` | Creating a table/column under a name that is taken |
 | 409 | `DUPLICATE_SLUG` | Creating a project under a slug that is taken |
 | 409 | `DUPLICATE_PROJECT_ID` | Creating a project under an id that is taken — only reachable when the request chooses the id. A deleted project still holds its id |

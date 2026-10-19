@@ -42,7 +42,7 @@ public sealed class MorphDbMutation
                 {
                     Success = false,
                     Error = $"Table '{table}' not found",
-                    ErrorCode = "NOT_FOUND"
+                    ErrorCode = "TABLE_NOT_FOUND"
                 };
             }
 
@@ -67,23 +67,9 @@ public sealed class MorphDbMutation
                 Data = CreateRecordNode(writeResult.Data ?? normalizedData)
             };
         }
-        catch (ValidationException ex)
+        catch (Exception ex) when (IsCallersMistake(ex))
         {
-            return new MutationResult<RecordNode>
-            {
-                Success = false,
-                Error = ex.Message,
-                ErrorCode = ex.ErrorCode
-            };
-        }
-        catch (NotFoundException ex)
-        {
-            return new MutationResult<RecordNode>
-            {
-                Success = false,
-                Error = ex.Message,
-                ErrorCode = ex.ErrorCode
-            };
+            return Refused<RecordNode>(ex);
         }
     }
 
@@ -113,7 +99,7 @@ public sealed class MorphDbMutation
                 {
                     Success = false,
                     Error = $"Table '{table}' not found",
-                    ErrorCode = "NOT_FOUND"
+                    ErrorCode = "TABLE_NOT_FOUND"
                 };
             }
 
@@ -125,7 +111,7 @@ public sealed class MorphDbMutation
                 {
                     Success = false,
                     Error = $"Record with ID '{id}' not found in table '{table}'",
-                    ErrorCode = "NOT_FOUND"
+                    ErrorCode = "RECORD_NOT_FOUND"
                 };
             }
 
@@ -139,7 +125,7 @@ public sealed class MorphDbMutation
                 {
                     Success = false,
                     Error = $"Record with ID '{id}' not found in table '{table}'",
-                    ErrorCode = "NOT_FOUND"
+                    ErrorCode = "RECORD_NOT_FOUND"
                 };
             }
 
@@ -159,23 +145,9 @@ public sealed class MorphDbMutation
                 Data = CreateRecordNodeWithId(writeResult.Data ?? normalizedData, id)
             };
         }
-        catch (ValidationException ex)
+        catch (Exception ex) when (IsCallersMistake(ex))
         {
-            return new MutationResult<RecordNode>
-            {
-                Success = false,
-                Error = ex.Message,
-                ErrorCode = ex.ErrorCode
-            };
-        }
-        catch (NotFoundException ex)
-        {
-            return new MutationResult<RecordNode>
-            {
-                Success = false,
-                Error = ex.Message,
-                ErrorCode = ex.ErrorCode
-            };
+            return Refused<RecordNode>(ex);
         }
     }
 
@@ -203,20 +175,30 @@ public sealed class MorphDbMutation
                 {
                     Success = false,
                     Error = $"Table '{table}' not found",
-                    ErrorCode = "NOT_FOUND"
+                    ErrorCode = "TABLE_NOT_FOUND"
                 };
             }
 
             var writeResult = await writePipeline.DeleteAsync(
                 projectId, tableMetadata, id, cancellationToken: cancellationToken);
 
-            if (!writeResult.Success)
+            if (ErrorHandling.WriteFailure.IsNotFound(writeResult))
             {
                 return new MutationResult<bool>
                 {
                     Success = false,
                     Error = $"Record with ID '{id}' not found in table '{table}'",
-                    ErrorCode = "NOT_FOUND"
+                    ErrorCode = "RECORD_NOT_FOUND"
+                };
+            }
+
+            if (!writeResult.Success)
+            {
+                return new MutationResult<bool>
+                {
+                    Success = false,
+                    Error = string.Join("; ", writeResult.Errors.Select(e => e.Message)),
+                    ErrorCode = ErrorHandling.WriteFailure.CodeFor(writeResult)
                 };
             }
 
@@ -226,14 +208,9 @@ public sealed class MorphDbMutation
                 Data = true
             };
         }
-        catch (NotFoundException ex)
+        catch (Exception ex) when (IsCallersMistake(ex))
         {
-            return new MutationResult<bool>
-            {
-                Success = false,
-                Error = ex.Message,
-                ErrorCode = ex.ErrorCode
-            };
+            return Refused<bool>(ex);
         }
     }
 
@@ -264,23 +241,9 @@ public sealed class MorphDbMutation
                 Data = CreateRecordNode(result)
             };
         }
-        catch (ValidationException ex)
+        catch (Exception ex) when (IsCallersMistake(ex))
         {
-            return new MutationResult<RecordNode>
-            {
-                Success = false,
-                Error = ex.Message,
-                ErrorCode = ex.ErrorCode
-            };
-        }
-        catch (NotFoundException ex)
-        {
-            return new MutationResult<RecordNode>
-            {
-                Success = false,
-                Error = ex.Message,
-                ErrorCode = ex.ErrorCode
-            };
+            return Refused<RecordNode>(ex);
         }
     }
 
@@ -312,14 +275,9 @@ public sealed class MorphDbMutation
                 Data = nodes
             };
         }
-        catch (ValidationException ex)
+        catch (Exception ex) when (IsCallersMistake(ex))
         {
-            return new MutationResult<IReadOnlyList<RecordNode>>
-            {
-                Success = false,
-                Error = ex.Message,
-                ErrorCode = ex.ErrorCode
-            };
+            return Refused<IReadOnlyList<RecordNode>>(ex);
         }
     }
 
@@ -333,6 +291,22 @@ public sealed class MorphDbMutation
             UpdatedAt = r.TryGetValue("_updated_at", out var updatedAt) && updatedAt is DateTimeOffset ua ? ua : null
         };
     }
+
+    /// <summary>
+    /// Whether an exception is the caller's mistake rather than ours — the REST door's classification.
+    /// A mutation answers such a mistake in its result (<c>success: false</c>, the REST code as
+    /// <c>errorCode</c>); anything else escapes to the error filter and stays unexplained.
+    /// </summary>
+    private static bool IsCallersMistake(Exception exception) =>
+        exception is not OperationCanceledException
+        && ErrorHandling.ErrorClassification.Classify(exception).Status < StatusCodes.Status500InternalServerError;
+
+    private static MutationResult<T> Refused<T>(Exception exception) => new()
+    {
+        Success = false,
+        Error = exception.Message,
+        ErrorCode = ErrorHandling.ErrorClassification.Classify(exception).Code,
+    };
 
     private static RecordNode CreateRecordNodeWithId(IDictionary<string, object?> r, Guid id)
     {

@@ -250,6 +250,24 @@ public class ForbiddenException : MorphDbException
 }
 
 /// <summary>
+/// Thrown when a row cannot be deleted, or its key changed, because rows of another table still
+/// reference it through an enforcing relation. The state of the data, not the request, is what has to
+/// change first — hence a conflict.
+/// </summary>
+public class RowReferencedException : MorphDbException
+{
+    public RowReferencedException(string tableName)
+        : base("ROW_REFERENCED",
+            $"This row of '{tableName}' is still referenced by rows of another table through a relation. " +
+            "Delete or re-point those rows first, or declare the relation with onDelete 'cascade' or 'set-null'.")
+    {
+        TableName = tableName;
+    }
+
+    public string TableName { get; }
+}
+
+/// <summary>
 /// Thrown when input validation fails.
 /// </summary>
 public class ValidationException : MorphDbException

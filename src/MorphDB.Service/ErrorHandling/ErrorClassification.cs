@@ -44,6 +44,7 @@ internal static class ErrorClassification
             // A column is not an addressable resource of any route — an unknown column is a defect
             // in the request body/query, so it stays 400 (the contract aggregation documented).
             ColumnNotFoundException c => (StatusCodes.Status400BadRequest, "BadRequest", c.ErrorCode),
+            RowReferencedException r => (StatusCodes.Status409Conflict, "Conflict", r.ErrorCode),
             DuplicateNameException d => (StatusCodes.Status409Conflict, "Conflict", d.ErrorCode),
             DuplicateSlugException ds => (StatusCodes.Status409Conflict, "Conflict", ds.ErrorCode),
             DuplicateProjectIdException dp => (StatusCodes.Status409Conflict, "Conflict", dp.ErrorCode),

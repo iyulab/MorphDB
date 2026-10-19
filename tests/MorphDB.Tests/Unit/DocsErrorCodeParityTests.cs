@@ -26,7 +26,7 @@ public class DocsErrorCodeParityTests
         "DUPLICATE_NAME", "DUPLICATE_SLUG", "DUPLICATE_PROJECT_ID",
         "PROJECT_NOT_FOUND", "SCHEMA_VERSION_CONFLICT",
         "LOCK_ACQUISITION_FAILED", "NOT_FOUND", "INVALID_ARGUMENT", "INTERNAL_ERROR",
-        "UNAUTHENTICATED", "FORBIDDEN",
+        "UNAUTHENTICATED", "FORBIDDEN", "ROW_REFERENCED",
         // Secret enforcement — the middleware writes its own envelope (it denies before MVC) and
         // the management routes decline when no master secret is injected
         "SECRETS_NOT_CONFIGURED",

@@ -247,7 +247,7 @@ public class SecurityApiTests
             {
                 var result = body.RootElement.GetProperty("data").GetProperty("updateRecord");
                 result.GetProperty("success").GetBoolean().Should().BeFalse();
-                result.GetProperty("errorCode").GetString().Should().Be("NOT_FOUND");
+                result.GetProperty("errorCode").GetString().Should().Be("RECORD_NOT_FOUND", "the REST code for a row that is not there");
             }
 
             var entitySet = string.Concat(tableName.Split('_').Select(p => p.Length > 0 ? char.ToUpperInvariant(p[0]) + p[1..].ToLowerInvariant() : p));

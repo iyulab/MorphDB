@@ -21,8 +21,22 @@
   table. Before, some answered the REST envelope and some `{"error": "<text>"}`, and a batch item's
   `error` was a string.
 
+- **GraphQL mutations answer the REST codes.** A missing table is `TABLE_NOT_FOUND` and a missing row
+  `RECORD_NOT_FOUND` (both were `NOT_FOUND`); any caller's mistake a mutation meets is answered in its
+  result with the REST code, not only validation and not-found ones.
+- **An unknown relation `onDelete` is refused** (`400 INVALID_ARGUMENT`, listing `no-action`, `cascade`,
+  `set-null`, `set-default`, `restrict`). It was read as `no-action`, so a misspelt `cascades` declared a
+  relation that refuses the delete it was meant to cascade.
+
 ### Fixed
 
+- **Deleting a row another table still references answers `409 ROW_REFERENCED`**, saying the row is still
+  referenced and what to do — on a delete by id, a bulk delete by filter, OData and GraphQL. It answered
+  «a value in this request references a row that does not exist» (the message for the opposite
+  direction) with `400`, and a bulk delete answered `500`.
+- **A bulk update or delete that a physical constraint refuses answers the caller's mistake**, as a
+  single write does (a NULL into a required column, a duplicate, a reference), instead of `500`. A GraphQL
+  delete answers «not found» only when the row is not there.
 - **An OData delete answers `404` only when the row is not there.** Any failed delete (and any failed
   `$batch` delete) was reported as «not found», whatever the write pipeline said; another refusal now
   answers with its own status and code.

@@ -2247,7 +2247,10 @@ public static class ApiModelExtensions
             "setnull" => OnDeleteAction.SetNull,
             "setdefault" => OnDeleteAction.SetDefault,
             "restrict" => OnDeleteAction.Restrict,
-            _ => OnDeleteAction.NoAction
+            // An unknown action used to read as no-action: a misspelt "cascades" declared a relation
+            // that refuses the delete the caller asked it to cascade.
+            _ => throw new ArgumentException(
+                $"Unknown onDelete action '{action}'. Supported actions: no-action, cascade, set-null, set-default, restrict.")
         };
     }
 
