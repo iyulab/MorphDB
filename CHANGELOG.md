@@ -8,8 +8,17 @@ secret could read and reset the service's diagnostics; all of them now answer on
 caller's project or to the master secret. A webhook receives one delivery per change however many
 instances run. Columns are changed and dropped by table and name, the id routes are gone, and
 `MorphDB.Client`'s webhook models and xlsx export options take the service's shapes — the client's
-webhook calls, column changes and xlsx exports never reached the service before. Upgrading needs no
-step: the service adds what it needs to the control plane when it starts.
+webhook calls, column changes and xlsx exports never reached the service before — and the client
+gains the rest of the webhook surface: changing a webhook, replacing its secret, and the dead-letter
+queue. Upgrading needs no step: the service adds what it needs to the control plane when it starts.
+
+### Added
+
+- **`MorphDB.Client` covers the whole webhook surface.** `WebhookClient.UpdateAsync` (a member left
+  null is left as it is) and `RegenerateSecretAsync`, and the dead-letter queue: `GetDeadLettersAsync`
+  (by webhook and `WebhookDeadLetterStatus`), `GetDeadLetterAsync`, `GetDeadLetterStatisticsAsync`,
+  `ResolveDeadLetterAsync`, `ReplayDeadLetterAsync` — how a failed delivery is retried — and
+  `ArchiveDeadLettersAsync`.
 
 ### Security
 

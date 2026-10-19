@@ -150,3 +150,141 @@ public sealed class WebhookDelivery
     /// </summary>
     public DateTimeOffset? DeliveredAt { get; init; }
 }
+
+/// <summary>
+/// Changes to a webhook. A member left null is left as it is.
+/// </summary>
+public sealed class UpdateWebhookRequest
+{
+    /// <summary>
+    /// New delivery URL.
+    /// </summary>
+    public string? Url { get; init; }
+
+    /// <summary>
+    /// New set of subscribed events.
+    /// </summary>
+    public IReadOnlyList<string>? Events { get; init; }
+
+    /// <summary>
+    /// New delivery filter — field name to a scalar value.
+    /// </summary>
+    public IDictionary<string, object?>? Filter { get; init; }
+
+    /// <summary>
+    /// New headers sent with every delivery.
+    /// </summary>
+    public IDictionary<string, string>? Headers { get; init; }
+
+    /// <summary>
+    /// Activates or pauses the webhook.
+    /// </summary>
+    public bool? IsActive { get; init; }
+}
+
+/// <summary>
+/// The state a dead letter is in.
+/// </summary>
+public enum WebhookDeadLetterStatus
+{
+    /// <summary>Waiting for someone to look at it.</summary>
+    PendingReview,
+
+    /// <summary>Looked at and closed with a note.</summary>
+    Resolved,
+
+    /// <summary>Put away.</summary>
+    Archived,
+
+    /// <summary>Delivered again as a new delivery.</summary>
+    Replayed,
+}
+
+/// <summary>
+/// A delivery that gave up — kept for review, and replayable.
+/// </summary>
+public sealed class WebhookDeadLetter
+{
+    /// <summary>Dead letter ID.</summary>
+    public Guid DlqId { get; init; }
+
+    /// <summary>The delivery that gave up.</summary>
+    public Guid DeliveryId { get; init; }
+
+    /// <summary>The webhook it was for.</summary>
+    public Guid WebhookId { get; init; }
+
+    /// <summary>Record that triggered the delivery.</summary>
+    public Guid? RecordId { get; init; }
+
+    /// <summary>Event type.</summary>
+    public required string Event { get; init; }
+
+    /// <summary>Why it gave up (<c>MaxRetriesExceeded</c>, <c>PersistentClientError</c>, …).</summary>
+    public required string Reason { get; init; }
+
+    /// <summary>Delivery attempts made.</summary>
+    public int AttemptCount { get; init; }
+
+    /// <summary>HTTP status code of the last attempt.</summary>
+    public int? LastHttpStatusCode { get; init; }
+
+    /// <summary>Error message of the last attempt.</summary>
+    public string? LastErrorMessage { get; init; }
+
+    /// <summary>State: <c>PendingReview</c>, <c>Resolved</c>, <c>Archived</c> or <c>Replayed</c>.</summary>
+    public required string Status { get; init; }
+
+    /// <summary>The note it was resolved with.</summary>
+    public string? ResolutionNotes { get; init; }
+
+    /// <summary>When it was dead-lettered.</summary>
+    public DateTimeOffset DlqAt { get; init; }
+
+    /// <summary>When it was resolved.</summary>
+    public DateTimeOffset? ResolvedAt { get; init; }
+}
+
+/// <summary>
+/// Counts over the project's dead letters.
+/// </summary>
+public sealed class WebhookDeadLetterStatistics
+{
+    /// <summary>All dead letters.</summary>
+    public int TotalMessages { get; init; }
+
+    /// <summary>Waiting for review.</summary>
+    public int PendingReviewCount { get; init; }
+
+    /// <summary>Resolved.</summary>
+    public int ResolvedCount { get; init; }
+
+    /// <summary>Archived.</summary>
+    public int ArchivedCount { get; init; }
+
+    /// <summary>Count per reason.</summary>
+    public IReadOnlyDictionary<string, int> ByReason { get; init; } = new Dictionary<string, int>();
+
+    /// <summary>Count per webhook.</summary>
+    public IReadOnlyDictionary<Guid, int> ByWebhook { get; init; } = new Dictionary<Guid, int>();
+
+    /// <summary>The oldest dead letter still waiting for review.</summary>
+    public DateTimeOffset? OldestPendingAt { get; init; }
+}
+
+internal sealed class RegeneratedWebhookSecret
+{
+    public required string Secret { get; init; }
+}
+
+internal sealed class ResolveDeadLetterRequest
+{
+    public required string ResolutionNotes { get; init; }
+
+    public Guid? ResolvedBy { get; init; }
+}
+
+internal sealed class ArchivedDeadLetters
+{
+    public int ArchivedCount { get; init; }
+}

@@ -1,6 +1,10 @@
+using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using MorphDB.Client;
 using MorphDB.Client.Models;
 using MorphDB.Tests.Fixtures;
+using CoreAbstractions = MorphDB.Core.Abstractions;
+using CoreModels = MorphDB.Core.Models;
 
 namespace MorphDB.Tests.Integration.Client;
 
@@ -105,5 +109,76 @@ public class WebhookClientTests(ApiIntegrationFixture fixture)
         Assert.Equal(row.Id, delivery.RecordId);
         Assert.Equal("insert", delivery.Event, ignoreCase: true);
         Assert.False(string.IsNullOrEmpty(delivery.Status));
+    }
+
+    [Fact]
+    public async Task A_webhook_is_changed_and_its_secret_replaced()
+    {
+        await using var client = NewClient();
+        var table = await NewTableAsync(client);
+        var created = await client.Webhooks.CreateAsync(new CreateWebhookRequest { Name = "to change", Table = table, Url = Nowhere }, Ct);
+
+        var changed = await client.Webhooks.UpdateAsync(created.Id, new UpdateWebhookRequest
+        {
+            Url = "https://webhook.invalid/other",
+            Events = ["delete"],
+            IsActive = false,
+        }, Ct);
+        Assert.Equal("https://webhook.invalid/other", changed.Url);
+        Assert.Equal(["delete"], changed.Events);
+        Assert.False(changed.IsActive);
+        Assert.Equal("to change", (await client.Webhooks.GetByIdAsync(created.Id, Ct))!.Name);
+
+        var secret = await client.Webhooks.RegenerateSecretAsync(created.Id, Ct);
+        Assert.False(string.IsNullOrEmpty(secret));
+        Assert.NotEqual(created.Secret, secret);
+    }
+
+    [Fact]
+    public async Task Dead_letters_are_listed_counted_replayed_resolved_and_archived()
+    {
+        await using var client = NewClient();
+        var table = await NewTableAsync(client);
+        var webhook = await client.Webhooks.CreateAsync(new CreateWebhookRequest { Name = "dead", Table = table, Url = Nowhere }, Ct);
+
+        // Three deliveries that gave up, put where the delivery processor puts them.
+        var manager = fixture.Api.Services.GetRequiredService<CoreAbstractions.IWebhookManager>();
+        var dead = new List<Guid>();
+        for (var i = 0; i < 3; i++)
+        {
+            var delivery = await manager.CreateDeliveryAsync(new CoreAbstractions.CreateDeliveryRequest
+            {
+                WebhookId = webhook.Id,
+                Event = CoreModels.WebhookEvent.Insert,
+                Payload = JsonDocument.Parse("{}"),
+            }, Ct);
+            dead.Add((await manager.MoveToDlqAsync(new CoreAbstractions.MoveToDlqRequest
+            {
+                DeliveryId = delivery!.DeliveryId,
+                Reason = CoreModels.DlqReason.MaxRetriesExceeded,
+            }, Ct)).DlqId);
+        }
+
+        var listed = await client.Webhooks.GetDeadLettersAsync(webhook.Id, WebhookDeadLetterStatus.PendingReview, cancellationToken: Ct);
+        Assert.Equal(dead.Order(), listed.Select(d => d.DlqId).Order());
+        Assert.All(listed, d => Assert.Equal("MaxRetriesExceeded", d.Reason));
+        Assert.Null(await client.Webhooks.GetDeadLetterAsync(Guid.NewGuid(), Ct));
+
+        var stats = await client.Webhooks.GetDeadLetterStatisticsAsync(Ct);
+        Assert.Equal(3, stats.ByWebhook[webhook.Id]);
+        Assert.True(stats.PendingReviewCount >= 3);
+
+        var replayed = await client.Webhooks.ReplayDeadLetterAsync(dead[0], Ct);
+        Assert.NotEqual(Guid.Empty, replayed.Id);
+        Assert.Equal("Replayed", (await client.Webhooks.GetDeadLetterAsync(dead[0], Ct))!.Status);
+
+        await client.Webhooks.ResolveDeadLetterAsync(dead[1], "receiver was down; handled by hand", cancellationToken: Ct);
+        var resolved = await client.Webhooks.GetDeadLetterAsync(dead[1], Ct);
+        Assert.Equal("Resolved", resolved!.Status);
+        Assert.Equal("receiver was down; handled by hand", resolved.ResolutionNotes);
+
+        Assert.Equal(2, await client.Webhooks.ArchiveDeadLettersAsync(webhook.Id, cancellationToken: Ct)); // resolved + pending
+        Assert.Equal("Archived", (await client.Webhooks.GetDeadLetterAsync(dead[2], Ct))!.Status);
+        Assert.Empty(await client.Webhooks.GetDeadLettersAsync(webhook.Id, WebhookDeadLetterStatus.PendingReview, cancellationToken: Ct));
     }
 }
