@@ -1,6 +1,15 @@
 # Changelog
 
-## Unreleased
+## 0.24.0
+
+A minor about not losing what was committed, and saying plainly what is not there. A webhook is
+delivered for every change committed while it subscribes, including those committed while no
+instance was listening — the change is recorded in the writing transaction. A rollup over no rows
+counts zero and sums nothing (`null`), and a rollup whose target table cannot answer yet may be
+declared to read as summarising no rows (`whenTargetMissing: "empty"`), as a lookup already could.
+A table carries its creator's notes, so writers sharing a project can tell their tables apart.
+Upgrading needs no step: the outbox table and the trigger function are created on start. The one
+breaking change is a rollup `sum` over no rows, below.
 
 ### Breaking
 
