@@ -311,17 +311,25 @@ public static class DdlBuilder
     }
 
     /// <summary>
-    /// Builds an ALTER TABLE ADD CONSTRAINT UNIQUE statement.
+    /// Makes a column unique: an ALTER TABLE ADD CONSTRAINT UNIQUE — or, on a table created with soft
+    /// delete, a unique index over the rows no delete has marked (<see cref="ActiveRowsPredicate"/>),
+    /// so a marked row does not keep holding its value and the value can be written again.
     /// </summary>
     public static string BuildAddUniqueConstraint(
         string tablePhysicalName,
         string constraintName,
         string columnPhysicalName,
-        string? schema = null)
+        string? schema = null,
+        bool overActiveRowsOnly = false)
     {
         var qualifiedName = QualifyName(tablePhysicalName, schema);
-        return $"ALTER TABLE {qualifiedName} ADD CONSTRAINT {QuoteIdentifier(constraintName)} UNIQUE ({QuoteIdentifier(columnPhysicalName)})";
+        return overActiveRowsOnly
+            ? $"CREATE UNIQUE INDEX {QuoteIdentifier(constraintName)} ON {qualifiedName} ({QuoteIdentifier(columnPhysicalName)}) WHERE {ActiveRowsPredicate}"
+            : $"ALTER TABLE {qualifiedName} ADD CONSTRAINT {QuoteIdentifier(constraintName)} UNIQUE ({QuoteIdentifier(columnPhysicalName)})";
     }
+
+    /// <summary>The rows of a soft-delete table that exist: those no delete has marked.</summary>
+    public const string ActiveRowsPredicate = "\"_deleted_at\" IS NULL";
 
     /// <summary>
     /// Builds an ALTER TABLE ALTER COLUMN TYPE statement with USING cast.
@@ -345,8 +353,11 @@ public static class DdlBuilder
         string constraintName,
         string? schema = null)
     {
+        // Whichever form the uniqueness took (BuildAddUniqueConstraint): a constraint, or a partial
+        // unique index of the same name in the table's schema.
         var qualifiedName = QualifyName(tablePhysicalName, schema);
-        return $"ALTER TABLE {qualifiedName} DROP CONSTRAINT IF EXISTS {QuoteIdentifier(constraintName)}";
+        return $"ALTER TABLE {qualifiedName} DROP CONSTRAINT IF EXISTS {QuoteIdentifier(constraintName)}; " +
+               $"DROP INDEX IF EXISTS {QualifyName(constraintName, schema)}";
     }
 
     /// <summary>

@@ -20,6 +20,13 @@
 - **A soft-deleted row is not written either.** An update or a delete by id of a marked row answers
   `404`, as reading it does — a second delete used to answer `204` and mark the row again — and a
   bulk update by filter leaves marked rows as they were and does not count them.
+- **A value a soft-deleted row held can be written again.** A unique column of a soft-delete table
+  was made unique by a table constraint, which counts marked rows: once a row was deleted its value
+  was refused for every new row, and an upsert on that value landed on the marked row, updated it
+  and left it marked — the documentation always said uniqueness covers live rows only. Uniqueness on
+  such a table is now a unique index over unmarked rows, and an upsert targets it, so a deleted row's
+  value is written as a new row. A table created by an earlier version is converted on start-up
+  (each constraint replaced in place by the index of the same name; a second start changes nothing).
 - **A bulk import refuses a mistyped value by its column's name.** A CSV cell or JSON value that
   could not be read as its column's type reached PostgreSQL as text, and the job's `errorDetails`
   carried PostgreSQL's own error — the column's physical name and a statement position — where a

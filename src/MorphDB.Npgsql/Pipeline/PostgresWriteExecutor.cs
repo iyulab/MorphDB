@@ -268,7 +268,10 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             // Prepare insert parameters
             var (columns, parameters, values) = PrepareInsertParameters(dataWithProject, table.Columns);
 
-            var sql = DmlBuilder.BuildUpsert(table.PhysicalName, columns, parameters, conflictColumns);
+            // On a soft-delete table uniqueness covers the unmarked rows only, so the conflict target
+            // is that partial index: a value a marked row held is written as a new row.
+            var sql = DmlBuilder.BuildUpsert(table.PhysicalName, columns, parameters, conflictColumns,
+                table.SoftDeleteEnabled ? Ddl.DdlBuilder.ActiveRowsPredicate : null);
 
             await using var conn = await GetScopedConnectionAsync(context.CancellationToken);
             var result = await conn.Connection.QuerySingleAsync<dynamic>(

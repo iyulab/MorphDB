@@ -157,12 +157,17 @@ public static class DmlBuilder
     /// <param name="columnNames">Physical column names.</param>
     /// <param name="parameterNames">Parameter placeholder names.</param>
     /// <param name="keyColumnNames">Conflict target column names.</param>
+    /// <param name="conflictPredicate">
+    /// The rows the conflict target's uniqueness covers, when it is a partial unique index — on a
+    /// soft-delete table, the rows no delete has marked — so PostgreSQL infers that index.
+    /// </param>
     /// <returns>UPSERT SQL with RETURNING *.</returns>
     public static string BuildUpsert(
         string tableName,
         IEnumerable<string> columnNames,
         IEnumerable<string> parameterNames,
-        IEnumerable<string> keyColumnNames)
+        IEnumerable<string> keyColumnNames,
+        string? conflictPredicate = null)
     {
         var columns = columnNames.ToList();
         var parameters = parameterNames.ToList();
@@ -191,7 +196,14 @@ public static class DmlBuilder
         sb.Append(string.Join(", ", parameters));
         sb.Append(") ON CONFLICT (");
         sb.Append(string.Join(", ", keyColumns.Select(QuoteIdentifier)));
-        sb.Append(") DO UPDATE SET ");
+        sb.Append(')');
+        if (!string.IsNullOrEmpty(conflictPredicate))
+        {
+            sb.Append(" WHERE ");
+            sb.Append(conflictPredicate);
+        }
+
+        sb.Append(" DO UPDATE SET ");
 
         if (updateColumns.Count > 0)
         {

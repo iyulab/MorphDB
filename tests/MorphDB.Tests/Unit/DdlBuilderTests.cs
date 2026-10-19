@@ -469,7 +469,15 @@ public class DdlBuilderTests
         var sql = DdlBuilder.BuildDropUniqueConstraint("tbl_abc", "uq_tbl_abc_col_def");
 
         // Assert
-        sql.Should().Be("ALTER TABLE \"tbl_abc\" DROP CONSTRAINT IF EXISTS \"uq_tbl_abc_col_def\"");
+        sql.Should().Be("ALTER TABLE \"tbl_abc\" DROP CONSTRAINT IF EXISTS \"uq_tbl_abc_col_def\"; DROP INDEX IF EXISTS \"uq_tbl_abc_col_def\"");
+    }
+
+    [Fact]
+    public void BuildAddUniqueConstraint_OverActiveRows_IsAPartialUniqueIndex()
+    {
+        var sql = DdlBuilder.BuildAddUniqueConstraint("tbl_abc", "uq_tbl_abc_col_def", "col_def", overActiveRowsOnly: true);
+
+        sql.Should().Be("CREATE UNIQUE INDEX \"uq_tbl_abc_col_def\" ON \"tbl_abc\" (\"col_def\") WHERE \"_deleted_at\" IS NULL");
     }
 
     #endregion

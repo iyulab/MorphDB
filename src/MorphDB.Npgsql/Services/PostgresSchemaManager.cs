@@ -285,7 +285,8 @@ public sealed class PostgresSchemaManager : ISchemaManager
                 var uniqueConstraintSql = DdlBuilder.BuildAddUniqueConstraint(
                     physicalTableName,
                     $"uq_{physicalTableName}_{col.PhysicalName}",
-                    col.PhysicalName);
+                    col.PhysicalName,
+                    overActiveRowsOnly: sysOpts.SoftDeleteEnabled);
                 await connection.ExecuteAsync(new CommandDefinition(uniqueConstraintSql, transaction: transaction, cancellationToken: cancellationToken));
             }
 
@@ -583,7 +584,8 @@ public sealed class PostgresSchemaManager : ISchemaManager
                     var uniqueSql = DdlBuilder.BuildAddUniqueConstraint(
                         table.PhysicalName,
                         $"uq_{table.PhysicalName}_{physicalColName}",
-                        physicalColName);
+                        physicalColName,
+                        overActiveRowsOnly: table.SoftDeleteEnabled);
                     await connection.ExecuteAsync(new CommandDefinition(uniqueSql, transaction: transaction, cancellationToken: cancellationToken));
                 }
 
@@ -788,7 +790,8 @@ public sealed class PostgresSchemaManager : ISchemaManager
                 if (request.IsUnique.Value)
                 {
                     var addUniqueSql = DdlBuilder.BuildAddUniqueConstraint(
-                        table.PhysicalName, constraintName, column.PhysicalName);
+                        table.PhysicalName, constraintName, column.PhysicalName,
+                        overActiveRowsOnly: table.SoftDeleteEnabled);
                     await connection.ExecuteAsync(new CommandDefinition(
                         addUniqueSql, transaction: transaction, cancellationToken: cancellationToken));
                 }

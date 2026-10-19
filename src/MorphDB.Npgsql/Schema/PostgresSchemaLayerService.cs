@@ -61,6 +61,7 @@ public sealed partial class PostgresSchemaLayerService : ISchemaLayerService
 
         var ddl = DdlBuilder.BuildGlobalSystemSchemaDdl();
         await connection.ExecuteAsync(ddl);
+        await connection.ExecuteAsync(GlobalSchemaMigrations.BuildPostBootstrapDdl());
 
         LogGlobalSchemaEnsured(_logger);
 

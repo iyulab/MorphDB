@@ -164,4 +164,50 @@ public static class GlobalSchemaMigrations
             END LOOP;
         END $$;
         """;
+
+    /// <summary>
+    /// Repairs that read the control plane the canonical DDL has just ensured, so they run after it.
+    /// </summary>
+    public static string BuildPostBootstrapDdl() => """
+        -- A unique column of a table created with soft delete was made unique by a table constraint,
+        -- which counts a marked row as holding its value: once a row was deleted its value could not
+        -- be written again, and an upsert on that value landed on the marked row and left it marked.
+        -- Uniqueness on such a table is now a unique index over the unmarked rows, under the
+        -- constraint's own name. A table created before that still has the constraint; this replaces
+        -- each one in place. Idempotent: a replaced constraint is an index, which this does not select.
+        --
+        -- A control plane older than the descriptor column records no system-column options, so it
+        -- has no soft-delete table to repair: the loop is not reached, and its query never planned.
+        DO $$
+        DECLARE
+            target RECORD;
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'morphdb' AND table_name = '_morph_tables' AND column_name = 'descriptor')
+            THEN
+                RETURN;
+            END IF;
+
+            FOR target IN
+                SELECT nsp.nspname AS schema_name, rel.relname AS table_name,
+                       con.conname AS constraint_name, att.attname AS column_name
+                FROM morphdb._morph_tables t
+                -- Data tables share the public schema; a project's rows are told apart by project_id.
+                JOIN pg_namespace nsp ON nsp.nspname = 'public'
+                JOIN pg_class rel ON rel.relnamespace = nsp.oid AND rel.relname = t.physical_name AND rel.relkind = 'r'
+                JOIN pg_constraint con ON con.conrelid = rel.oid AND con.contype = 'u'
+                JOIN pg_attribute att ON att.attrelid = rel.oid AND att.attnum = con.conkey[1]
+                WHERE t.is_active
+                  AND (t.descriptor -> 'systemColumns' ->> 'softDelete')::boolean IS TRUE
+                  AND array_length(con.conkey, 1) = 1
+                  AND con.conname LIKE 'uq\_%'
+            LOOP
+                EXECUTE format('ALTER TABLE %I.%I DROP CONSTRAINT %I',
+                    target.schema_name, target.table_name, target.constraint_name);
+                EXECUTE format('CREATE UNIQUE INDEX %I ON %I.%I (%I) WHERE "_deleted_at" IS NULL',
+                    target.constraint_name, target.schema_name, target.table_name, target.column_name);
+            END LOOP;
+        END $$;
+        """;
 }
