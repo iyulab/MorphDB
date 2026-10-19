@@ -118,7 +118,7 @@ var table = await client.Schema.CreateTableAsync(new CreateTableRequest
 });
 CheckBody("""
     {"name":"products","columns":[{"name":"lot","type":"text","nullable":false,"unique":false,"indexed":false,
-    "default":null,"check":null}],"systemColumns":null}
+    "default":null,"check":null}],"systemColumns":null,"metadata":null}
     """, "create table body");
 Check(table.Columns is [{ Name: "lot", Nullable: false }], "create table response");
 
