@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased
+## 0.23.0
+
+A minor about saying the same thing on every door, and refusing what cannot be read. A filter, an
+order and an error read and answer alike on REST, GraphQL and OData: GraphQL `records` takes the REST
+filter language as a list, GraphQL and OData carry the REST error codes in their own protocols'
+error shapes, an OData single entity and `$batch` take the OData JSON forms, and `$count` follows
+`$filter`. A value a fixed set of choices does not hold — an operator, an order direction, an index or
+relation type, a bulk import's duplicate handling, a row state — is refused instead of read as a
+default. Pages hold every row once (a page's order now ends with `_id`, and GraphQL cursors follow
+the order asked for), and deleting a row another table still references answers `409 ROW_REFERENCED`.
+Upgrading needs no step; the breaking changes are on the wire, listed below.
 
 ### Breaking
 
