@@ -54,9 +54,10 @@ public interface IWebhookManager
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Records a delivery attempt.
+    /// Records a delivery to be attempted — or returns null when a delivery of the same change
+    /// (<see cref="CreateDeliveryRequest.ChangeKey"/>) to the same webhook is already recorded.
     /// </summary>
-    Task<WebhookDelivery> CreateDeliveryAsync(
+    Task<WebhookDelivery?> CreateDeliveryAsync(
         CreateDeliveryRequest request,
         CancellationToken cancellationToken = default);
 
@@ -110,6 +111,7 @@ public interface IWebhookManager
     /// Lists DLQ messages for a webhook.
     /// </summary>
     Task<IReadOnlyList<WebhookDlqMessage>> ListDlqMessagesAsync(
+        Guid projectId,
         Guid? webhookId = null,
         DlqStatus? status = null,
         int limit = 100,
@@ -141,6 +143,7 @@ public interface IWebhookManager
     /// Archives old DLQ messages.
     /// </summary>
     Task<int> ArchiveDlqMessagesAsync(
+        Guid projectId,
         Guid? webhookId = null,
         DateTimeOffset? olderThan = null,
         CancellationToken cancellationToken = default);
@@ -177,6 +180,12 @@ public sealed record CreateDeliveryRequest
     public Guid? RecordId { get; init; }
     public required WebhookEvent Event { get; init; }
     public required JsonDocument Payload { get; init; }
+
+    /// <summary>
+    /// The change this delivery reports, the same on every instance that heard of it; a second
+    /// delivery of one change to one webhook is not recorded. Null for a delivery of no change (a replay).
+    /// </summary>
+    public string? ChangeKey { get; init; }
 }
 
 public sealed record UpdateDeliveryRequest

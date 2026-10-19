@@ -788,7 +788,8 @@ public static class DdlBuilder
                 error_message TEXT,
                 next_retry_at TIMESTAMPTZ,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                delivered_at TIMESTAMPTZ
+                delivered_at TIMESTAMPTZ,
+                change_key TEXT
             );
 
             CREATE TABLE IF NOT EXISTS morphdb._morph_webhook_dlq (

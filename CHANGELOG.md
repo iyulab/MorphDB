@@ -11,6 +11,10 @@
   operations must also all belong to the batch's table (a column, an index or a relation of it, and a
   new relation only towards a table of the same project); the whole batch is checked before any
   operation runs.
+- **The webhook dead-letter queue is per project.** Listing dead letters without a `webhookId`
+  returned every project's, payloads included, and archiving without one archived every project's;
+  a dead letter could be read, resolved or replayed by id from any project. Listing and archiving
+  now cover the caller's project only, and another project's dead letter is answered `404`.
 
 ### Breaking
 
@@ -18,11 +22,29 @@
   `/api/schema/tables/{name}/columns/{col}`, like tables. The id routes `/api/schema/columns/{id}` are
   removed — they did not check the caller's project either. A column's `Location` after creation
   names the new route. To migrate, address the column by its table and name instead of its id.
+- **`MorphDB.Client` webhook models use the service's field names.** `CreateWebhookRequest.TableName`
+  is now `Table`, and `Filter` is a field-to-value map rather than a string; `WebhookInfo.WebhookId`
+  and `TableName` are now `Id` and `Table`, and it gains `Secret` (present in the create response
+  only), `Filter` and `Headers`; `WebhookDelivery.DeliveryId` is now `Id`, and its `WebhookId`, which
+  the service never sent, is gone. `WebhookClient.RetryDeliveryAsync` is removed — the service has no
+  such route; a failed delivery is retried by replaying its dead letter.
 
 ### Fixed
 
 - **`MorphDB.Client`'s `AlterColumnAsync` and `DropColumnAsync` work.** They called the name routes
   above, which the service did not have, so neither could succeed.
+- **`MorphDB.Client` creates and lists webhooks.** Its request named the table `tableName` where the
+  service requires `table`, so every create was refused, and `GetByTableAsync` sent a filter the
+  service ignores, so it listed every webhook of the project.
+- **Dead letters can be read.** Every read of a dead letter failed on its stored status, and listing by
+  `status` matched nothing. `status` accepts the names `PendingReview`, `Resolved`, `Archived`,
+  `Replayed` (any case, `pending_review` too); another value is a `400`.
+- **A webhook receives one delivery per change, however many instances run.** Every service instance
+  hears every change notification, and each recorded its own delivery — with two instances on one
+  database, each insert reached a webhook twice. A change notification now names its transaction, and
+  a webhook records one delivery per change. The notification function is replaced when the service
+  starts; while instances of an earlier version still run beside a new one, they can still add a
+  duplicate.
 - **A table's indexes are read back.** `GET /api/schema/tables/{name}` and the table list returned
   `indexes: []` for every table, whatever indexes it had.
 

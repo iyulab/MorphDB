@@ -43,7 +43,7 @@ public sealed class WebhookClient
     /// </summary>
     public async Task<IReadOnlyList<WebhookInfo>> GetByTableAsync(string tableName, CancellationToken cancellationToken = default)
     {
-        var response = await _httpClient.GetAsync($"/api/webhooks?tableName={Uri.EscapeDataString(tableName)}", cancellationToken);
+        var response = await _httpClient.GetAsync($"/api/webhooks?table={Uri.EscapeDataString(tableName)}", cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.ListWebhookInfo, cancellationToken) ?? [];
     }
@@ -82,14 +82,4 @@ public sealed class WebhookClient
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.ListWebhookDelivery, cancellationToken) ?? [];
     }
-
-    /// <summary>
-    /// Retries a failed delivery.
-    /// </summary>
-    public async Task RetryDeliveryAsync(Guid deliveryId, CancellationToken cancellationToken = default)
-    {
-        var response = await _httpClient.PostAsync($"/api/webhooks/deliveries/{deliveryId}/retry", null, cancellationToken);
-        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
-    }
-
 }

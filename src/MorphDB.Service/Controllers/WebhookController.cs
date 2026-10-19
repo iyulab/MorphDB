@@ -339,11 +339,25 @@ public sealed class WebhookController : ControllerBase
         [FromQuery] int offset = 0,
         CancellationToken cancellationToken = default)
     {
-        DlqStatus? dlqStatus = status is not null
-            ? Enum.Parse<DlqStatus>(status, ignoreCase: true)
-            : null;
+        DlqStatus? dlqStatus = null;
+        if (status is not null)
+        {
+            // Accepts the enum name in any case, with or without underscores (PendingReview, pending_review).
+            if (!Enum.TryParse<DlqStatus>(status.Replace("_", "", StringComparison.Ordinal), ignoreCase: true, out var parsed)
+                || !Enum.IsDefined(parsed))
+            {
+                return BadRequest(new ErrorResponse
+                {
+                    Error = "ValidationError",
+                    Message = $"Unknown status '{status}'. Use one of: {string.Join(", ", Enum.GetNames<DlqStatus>())}.",
+                    Code = "INVALID_ARGUMENT"
+                });
+            }
 
-        var messages = await _webhookManager.ListDlqMessagesAsync(webhookId, dlqStatus, limit, offset, cancellationToken);
+            dlqStatus = parsed;
+        }
+
+        var messages = await _webhookManager.ListDlqMessagesAsync(GetProjectId(), webhookId, dlqStatus, limit, offset, cancellationToken);
         return Ok(messages.Select(MapToDlqResponse));
     }
 
@@ -379,8 +393,9 @@ public sealed class WebhookController : ControllerBase
         Guid dlqId,
         CancellationToken cancellationToken = default)
     {
+        // A dead letter of another project is answered as one that does not exist.
         var message = await _webhookManager.GetDlqMessageAsync(dlqId, cancellationToken);
-        if (message is null)
+        if (message is null || message.ProjectId != GetProjectId())
         {
             return NotFound(new ErrorResponse
             {
@@ -404,8 +419,9 @@ public sealed class WebhookController : ControllerBase
         [FromBody] ResolveDlqApiRequest request,
         CancellationToken cancellationToken = default)
     {
+        // A dead letter of another project is answered as one that does not exist.
         var message = await _webhookManager.GetDlqMessageAsync(dlqId, cancellationToken);
-        if (message is null)
+        if (message is null || message.ProjectId != GetProjectId())
         {
             return NotFound(new ErrorResponse
             {
@@ -435,8 +451,9 @@ public sealed class WebhookController : ControllerBase
         Guid dlqId,
         CancellationToken cancellationToken = default)
     {
+        // A dead letter of another project is answered as one that does not exist.
         var message = await _webhookManager.GetDlqMessageAsync(dlqId, cancellationToken);
-        if (message is null)
+        if (message is null || message.ProjectId != GetProjectId())
         {
             return NotFound(new ErrorResponse
             {
@@ -464,7 +481,7 @@ public sealed class WebhookController : ControllerBase
             ? DateTimeOffset.UtcNow.AddDays(-olderThanDays.Value)
             : null;
 
-        var archivedCount = await _webhookManager.ArchiveDlqMessagesAsync(webhookId, olderThan, cancellationToken);
+        var archivedCount = await _webhookManager.ArchiveDlqMessagesAsync(GetProjectId(), webhookId, olderThan, cancellationToken);
         return Ok(new ArchiveDlqApiResponse { ArchivedCount = archivedCount });
     }
 

@@ -124,6 +124,12 @@ public static class GlobalSchemaMigrations
         ALTER TABLE IF EXISTS morphdb._morph_import_jobs ADD COLUMN IF NOT EXISTS requested_by JSONB;
         ALTER TABLE IF EXISTS morphdb._morph_export_jobs ADD COLUMN IF NOT EXISTS requested_by JSONB;
 
+        -- Every instance hears every change notification and used to record its own delivery of it,
+        -- so a webhook received one delivery per running instance. A delivery now names the change it
+        -- reports (the unique index that keeps it to one per webhook is created after bootstrap, when
+        -- the table is certain to exist). Existing rows name none.
+        ALTER TABLE IF EXISTS morphdb._morph_webhook_deliveries ADD COLUMN IF NOT EXISTS change_key TEXT;
+
         ALTER TABLE IF EXISTS morphdb._morph_tables ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
         ALTER TABLE IF EXISTS morphdb._morph_columns ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
         ALTER TABLE IF EXISTS morphdb._morph_indexes ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
@@ -169,6 +175,10 @@ public static class GlobalSchemaMigrations
     /// Repairs that read the control plane the canonical DDL has just ensured, so they run after it.
     /// </summary>
     public static string BuildPostBootstrapDdl() => """
+        -- One delivery per change per webhook, however many instances heard of the change.
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_morph_webhook_deliveries_change
+            ON morphdb._morph_webhook_deliveries(webhook_id, change_key) WHERE change_key IS NOT NULL;
+
         -- A unique column of a table created with soft delete was made unique by a table constraint,
         -- which counts a marked row as holding its value: once a row was deleted its value could not
         -- be written again, and an upsert on that value landed on the marked row and left it marked.

@@ -196,7 +196,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
         return results.Select(MapToMetadata).ToList();
     }
 
-    public async Task<WebhookDelivery> CreateDeliveryAsync(
+    public async Task<WebhookDelivery?> CreateDeliveryAsync(
         CreateDeliveryRequest request,
         CancellationToken cancellationToken = default)
     {
@@ -205,26 +205,28 @@ public sealed class PostgresWebhookManager : IWebhookManager
 
         const string sql = """
             INSERT INTO morphdb._morph_webhook_deliveries (
-                delivery_id, webhook_id, record_id, event, payload, status, created_at
+                delivery_id, webhook_id, record_id, event, payload, status, created_at, change_key
             ) VALUES (
-                @DeliveryId, @WebhookId, @RecordId, @Event, @Payload::jsonb, 'pending', @CreatedAt
+                @DeliveryId, @WebhookId, @RecordId, @Event, @Payload::jsonb, 'pending', @CreatedAt, @ChangeKey
             )
+            ON CONFLICT (webhook_id, change_key) WHERE change_key IS NOT NULL DO NOTHING
             RETURNING delivery_id, webhook_id, record_id, event, payload, status, attempt_count,
                       http_status_code, response_body, error_message, next_retry_at, created_at, delivered_at
             """;
 
         await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-        var result = await connection.QuerySingleAsync<DeliveryRow>(sql, new
+        var result = await connection.QuerySingleOrDefaultAsync<DeliveryRow>(sql, new
         {
             DeliveryId = deliveryId,
             request.WebhookId,
             request.RecordId,
             Event = request.Event.ToString().ToLowerInvariant(),
             Payload = request.Payload.RootElement.GetRawText(),
-            CreatedAt = now
+            CreatedAt = now,
+            request.ChangeKey
         });
 
-        return MapToDelivery(result);
+        return result is null ? null : MapToDelivery(result);
     }
 
     public async Task UpdateDeliveryAsync(
@@ -443,6 +445,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
     }
 
     public async Task<IReadOnlyList<WebhookDlqMessage>> ListDlqMessagesAsync(
+        Guid projectId,
         Guid? webhookId = null,
         DlqStatus? status = null,
         int limit = 100,
@@ -454,10 +457,11 @@ public sealed class PostgresWebhookManager : IWebhookManager
                    reason, attempt_count, last_http_status_code, last_error_message, status,
                    resolution_notes, dlq_at, resolved_at, resolved_by
             FROM morphdb._morph_webhook_dlq
-            WHERE 1=1
+            WHERE project_id = @ProjectId
             """;
 
         var parameters = new DynamicParameters();
+        parameters.Add("ProjectId", projectId);
 
         if (webhookId.HasValue)
         {
@@ -468,7 +472,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
         if (status.HasValue)
         {
             sql += " AND status = @Status";
-            parameters.Add("Status", status.Value.ToString().ToLowerInvariant());
+            parameters.Add("Status", ToStoredStatus(status.Value));
         }
 
         sql += " ORDER BY dlq_at DESC LIMIT @Limit OFFSET @Offset";
@@ -570,7 +574,8 @@ public sealed class PostgresWebhookManager : IWebhookManager
             RecordId = dlqMessage.RecordId,
             Event = dlqMessage.Event,
             Payload = dlqMessage.Payload
-        }, cancellationToken);
+        }, cancellationToken)
+            ?? throw new InvalidOperationException("A delivery that names no change is always recorded.");
 
         // Mark DLQ message as replayed
         const string sql = """
@@ -593,6 +598,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
     }
 
     public async Task<int> ArchiveDlqMessagesAsync(
+        Guid projectId,
         Guid? webhookId = null,
         DateTimeOffset? olderThan = null,
         CancellationToken cancellationToken = default)
@@ -600,10 +606,11 @@ public sealed class PostgresWebhookManager : IWebhookManager
         var sql = """
             UPDATE morphdb._morph_webhook_dlq
             SET status = 'archived'
-            WHERE status IN ('pending_review', 'resolved')
+            WHERE project_id = @ProjectId AND status IN ('pending_review', 'resolved')
             """;
 
         var parameters = new DynamicParameters();
+        parameters.Add("ProjectId", projectId);
 
         if (webhookId.HasValue)
         {
@@ -621,6 +628,25 @@ public sealed class PostgresWebhookManager : IWebhookManager
         return await connection.ExecuteAsync(sql, parameters);
     }
 
+    // A dead letter's status is stored snake_case ('pending_review'), which no enum name parses back to.
+    private static string ToStoredStatus(DlqStatus status) => status switch
+    {
+        DlqStatus.PendingReview => "pending_review",
+        DlqStatus.Resolved => "resolved",
+        DlqStatus.Archived => "archived",
+        DlqStatus.Replayed => "replayed",
+        _ => throw new ArgumentOutOfRangeException(nameof(status), status, null),
+    };
+
+    private static DlqStatus FromStoredStatus(string status) => status switch
+    {
+        "pending_review" => DlqStatus.PendingReview,
+        "resolved" => DlqStatus.Resolved,
+        "archived" => DlqStatus.Archived,
+        "replayed" => DlqStatus.Replayed,
+        _ => throw new InvalidOperationException($"Unknown dead-letter status '{status}'."),
+    };
+
     private static WebhookDlqMessage MapToDlqMessage(DlqRow row)
     {
         return new WebhookDlqMessage
@@ -636,7 +662,7 @@ public sealed class PostgresWebhookManager : IWebhookManager
             AttemptCount = row.attempt_count,
             LastHttpStatusCode = row.last_http_status_code,
             LastErrorMessage = row.last_error_message,
-            Status = Enum.Parse<DlqStatus>(row.status, ignoreCase: true),
+            Status = FromStoredStatus(row.status),
             ResolutionNotes = row.resolution_notes,
             DlqAt = row.dlq_at,
             ResolvedAt = row.resolved_at,

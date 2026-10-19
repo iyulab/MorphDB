@@ -8,11 +8,13 @@ namespace MorphDB.Core.Abstractions;
 public interface IWebhookDeliveryService
 {
     /// <summary>
-    /// Queues a webhook delivery for processing.
+    /// Queues a webhook delivery for processing. A change named by <paramref name="changeKey"/> is
+    /// queued once per webhook however many service instances report it.
     /// </summary>
     Task QueueDeliveryAsync(
         WebhookMetadata webhook,
         WebhookPayload payload,
+        string? changeKey = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

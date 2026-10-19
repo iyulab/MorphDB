@@ -76,7 +76,8 @@ public sealed partial class ChangeNotificationSetup : ITableNotificationTriggerM
                     'table', table_name,
                     'operation', TG_OP,
                     'record_id', record_id,
-                    'timestamp', NOW()
+                    'timestamp', NOW(),
+                    'transaction_id', pg_current_xact_id()::text
                 )::text);
 
                 RETURN COALESCE(NEW, OLD);

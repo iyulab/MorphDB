@@ -38,6 +38,7 @@ public sealed class WebhookDeliveryService : IWebhookDeliveryService
     public async Task QueueDeliveryAsync(
         WebhookMetadata webhook,
         WebhookPayload payload,
+        string? changeKey = null,
         CancellationToken cancellationToken = default)
     {
         var payloadJson = JsonDocument.Parse(
@@ -48,12 +49,15 @@ public sealed class WebhookDeliveryService : IWebhookDeliveryService
             WebhookId = webhook.WebhookId,
             RecordId = payload.RecordId,
             Event = ParseEvent(payload.Event),
-            Payload = payloadJson
+            Payload = payloadJson,
+            ChangeKey = changeKey
         };
 
-        await _webhookManager.CreateDeliveryAsync(request, cancellationToken);
-
-        WebhookDeliveryServiceLogs.DeliveryQueued(_logger, webhook.WebhookId, payload.Event.ToString());
+        // Another instance that heard of the same change may have recorded it first.
+        if (await _webhookManager.CreateDeliveryAsync(request, cancellationToken) is not null)
+        {
+            WebhookDeliveryServiceLogs.DeliveryQueued(_logger, webhook.WebhookId, payload.Event.ToString());
+        }
     }
 
     public async Task<DeliveryResult> DeliverAsync(

@@ -286,7 +286,7 @@ public sealed partial class PostgresChangeListener : BackgroundService
 
             try
             {
-                await deliveryService.QueueDeliveryAsync(webhook, payload);
+                await deliveryService.QueueDeliveryAsync(webhook, payload, changeEvent.ChangeKey);
             }
             catch (Exception ex)
             {
@@ -391,4 +391,18 @@ internal sealed class DatabaseChangeEvent
     public required string Operation { get; init; }
     public Guid? RecordId { get; init; }
     public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
+
+    /// <summary>
+    /// The writing transaction. Every instance listening receives the same notification, so the
+    /// transaction with the row and the operation names this change the same way on all of them.
+    /// </summary>
+    public string? TransactionId { get; init; }
+
+    /// <summary>
+    /// The change's identity across instances, or null for a notification from a trigger that does not
+    /// name its transaction (one installed by an earlier version, until the service replaces it).
+    /// </summary>
+    public string? ChangeKey => TransactionId is { Length: > 0 } tx
+        ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{tx}:{TableId}:{RecordId}:{Operation}")
+        : null;
 }

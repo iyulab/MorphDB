@@ -390,8 +390,8 @@ public class ClientRequestBodyContractTests
                 (c, m) => c.Views.CreateAsync((CreateViewRequest)m, cancellationToken)),
             ("createWebhook", new CreateWebhookRequest
             {
-                Name = "w", TableName = "t", Url = "https://example.test/hook", Headers = new Dictionary<string, string> { ["x"] = "y" },
-            }, """{"webhookId":"11111111-1111-1111-1111-111111111111","name":"w","tableName":"t","url":"https://example.test/hook"}""",
+                Name = "w", Table = "t", Url = "https://example.test/hook", Headers = new Dictionary<string, string> { ["x"] = "y" },
+            }, """{"id":"11111111-1111-1111-1111-111111111111","name":"w","table":"t","url":"https://example.test/hook"}""",
                 (c, m) => c.Webhooks.CreateAsync((CreateWebhookRequest)m, cancellationToken)),
             ("exportCsv", new CsvExportOptions { Columns = ["a"], Delimiter = ';' },
                 """{"jobId":"11111111-1111-1111-1111-111111111111","tableName":"t","format":"csv","status":"pending"}""",
