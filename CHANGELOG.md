@@ -2,8 +2,17 @@
 
 ## Unreleased
 
+### Breaking
+
+- **`MorphDB.Client`: `JsonImportOptions.JsonPath` is removed.** The service has no such option — an
+  import's JSON is an array of objects — so the value was never read. No working call changes.
+
 ### Fixed
 
+- **`MorphDB.Client` imports bulk files.** `BulkClient.ImportCsvAsync`, `ImportJsonAsync` and
+  `ImportNdjsonAsync` sent a multipart form, which the import routes refuse (`415`), so no import
+  could be requested through the client. The file is now the request body under its format's media
+  type (`text/csv`, `application/json`, `application/x-ndjson`), with the options in the query.
 - **A soft-deleted row is no longer read back.** On a table created with `systemColumns.softDelete`,
   a delete marked the row and every read went on returning it — a list and its total, a filter, a
   single record, the complex query, an aggregate, a hierarchy walk and an export all counted marked

@@ -47,11 +47,6 @@ public sealed class CsvImportOptions
 public sealed class JsonImportOptions
 {
     /// <summary>
-    /// JSON path to extract records from.
-    /// </summary>
-    public string? JsonPath { get; init; }
-
-    /// <summary>
     /// Date format for parsing date columns.
     /// </summary>
     public string? DateFormat { get; init; }

@@ -18,9 +18,9 @@ public sealed class BulkClient
     #region Import Operations
 
     /// <summary>
-    /// Imports data from a CSV file.
+    /// Imports data from a CSV file: the file is the request body, the options its query.
     /// </summary>
-    public async Task<ImportJobStatus> ImportCsvAsync(
+    public Task<ImportJobStatus> ImportCsvAsync(
         string tableName,
         Stream csvStream,
         CsvImportOptions? options = null,
@@ -28,78 +28,71 @@ public sealed class BulkClient
     {
         options ??= new CsvImportOptions();
 
-        using var content = new MultipartFormDataContent();
-        content.Add(new StreamContent(csvStream), "file", "import.csv");
-        content.Add(new StringContent(options.Delimiter.ToString()), "delimiter");
-        content.Add(new StringContent(options.HasHeader.ToString().ToLowerInvariant()), "hasHeader");
+        var query = new List<string>
+        {
+            Parameter("delimiter", options.Delimiter.ToString()),
+            Parameter("hasHeader", options.HasHeader ? "true" : "false"),
+            Parameter("trimWhitespace", options.TrimWhitespace ? "true" : "false"),
+            Parameter("nullHandling", options.NullHandling),
+            Parameter("duplicateHandling", options.DuplicateHandling),
+        };
         if (options.DateFormat != null)
-            content.Add(new StringContent(options.DateFormat), "dateFormat");
-        content.Add(new StringContent(options.TrimWhitespace.ToString().ToLowerInvariant()), "trimWhitespace");
-        content.Add(new StringContent(options.NullHandling), "nullHandling");
-        content.Add(new StringContent(options.DuplicateHandling), "duplicateHandling");
-        if (options.KeyColumns != null)
-            content.Add(new StringContent(string.Join(",", options.KeyColumns)), "keyColumns");
+            query.Add(Parameter("dateFormat", options.DateFormat));
+        query.AddRange(options.KeyColumns?.Select(k => Parameter("keyColumns", k)) ?? []);
 
-        var response = await _httpClient.PostAsync(
-            $"/api/bulk/{Uri.EscapeDataString(tableName)}/import/csv",
-            content,
-            cancellationToken);
-        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.ImportJobStatus, cancellationToken)
-            ?? throw new MorphDBException("Failed to deserialize import job response");
+        return ImportAsync(tableName, "csv", "text/csv", csvStream, query, cancellationToken);
     }
 
     /// <summary>
-    /// Imports data from a JSON file.
+    /// Imports data from a JSON file (an array of objects): the file is the request body, the options
+    /// its query.
     /// </summary>
-    public async Task<ImportJobStatus> ImportJsonAsync(
+    public Task<ImportJobStatus> ImportJsonAsync(
         string tableName,
         Stream jsonStream,
         JsonImportOptions? options = null,
-        CancellationToken cancellationToken = default)
-    {
-        options ??= new JsonImportOptions();
-
-        using var content = new MultipartFormDataContent();
-        content.Add(new StreamContent(jsonStream), "file", "import.json");
-        if (options.JsonPath != null)
-            content.Add(new StringContent(options.JsonPath), "jsonPath");
-        if (options.DateFormat != null)
-            content.Add(new StringContent(options.DateFormat), "dateFormat");
-        content.Add(new StringContent(options.DuplicateHandling), "duplicateHandling");
-        if (options.KeyColumns != null)
-            content.Add(new StringContent(string.Join(",", options.KeyColumns)), "keyColumns");
-
-        var response = await _httpClient.PostAsync(
-            $"/api/bulk/{Uri.EscapeDataString(tableName)}/import/json",
-            content,
-            cancellationToken);
-        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
-        return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.ImportJobStatus, cancellationToken)
-            ?? throw new MorphDBException("Failed to deserialize import job response");
-    }
+        CancellationToken cancellationToken = default) =>
+        ImportAsync(tableName, "json", "application/json", jsonStream, JsonQuery(options ?? new JsonImportOptions()), cancellationToken);
 
     /// <summary>
-    /// Imports data from an NDJSON file.
+    /// Imports data from an NDJSON file (one object per line): the file is the request body, the
+    /// options its query.
     /// </summary>
-    public async Task<ImportJobStatus> ImportNdjsonAsync(
+    public Task<ImportJobStatus> ImportNdjsonAsync(
         string tableName,
         Stream ndjsonStream,
         JsonImportOptions? options = null,
-        CancellationToken cancellationToken = default)
-    {
-        options ??= new JsonImportOptions();
+        CancellationToken cancellationToken = default) =>
+        ImportAsync(tableName, "ndjson", "application/x-ndjson", ndjsonStream, JsonQuery(options ?? new JsonImportOptions()), cancellationToken);
 
-        using var content = new MultipartFormDataContent();
-        content.Add(new StreamContent(ndjsonStream), "file", "import.ndjson");
+    private static List<string> JsonQuery(JsonImportOptions options)
+    {
+        var query = new List<string> { Parameter("duplicateHandling", options.DuplicateHandling) };
         if (options.DateFormat != null)
-            content.Add(new StringContent(options.DateFormat), "dateFormat");
-        content.Add(new StringContent(options.DuplicateHandling), "duplicateHandling");
-        if (options.KeyColumns != null)
-            content.Add(new StringContent(string.Join(",", options.KeyColumns)), "keyColumns");
+            query.Add(Parameter("dateFormat", options.DateFormat));
+        query.AddRange(options.KeyColumns?.Select(k => Parameter("keyColumns", k)) ?? []);
+        return query;
+    }
+
+    private static string Parameter(string name, string value) => $"{name}={Uri.EscapeDataString(value)}";
+
+    /// <summary>
+    /// Posts a file to an import route as the service reads it: the file is the whole request body,
+    /// under its format's media type. (A multipart form, which this client used to send, is refused.)
+    /// </summary>
+    private async Task<ImportJobStatus> ImportAsync(
+        string tableName,
+        string format,
+        string mediaType,
+        Stream file,
+        IReadOnlyList<string> query,
+        CancellationToken cancellationToken)
+    {
+        using var content = new StreamContent(file);
+        content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(mediaType);
 
         var response = await _httpClient.PostAsync(
-            $"/api/bulk/{Uri.EscapeDataString(tableName)}/import/ndjson",
+            $"/api/bulk/{Uri.EscapeDataString(tableName)}/import/{format}?{string.Join("&", query)}",
             content,
             cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
