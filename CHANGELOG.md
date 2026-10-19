@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+### Security
+
+- **Schema routes that take an id reach only the caller's project.** Deleting an index or a relation
+  by id, and a schema batch naming a table by id, acted on whatever the id named — a caller of one
+  project could drop another project's index or relation, or run a batch against another project's
+  table. Such an id is now answered `404`, as an id never issued is, and nothing is changed. A batch's
+  operations must also all belong to the batch's table (a column, an index or a relation of it, and a
+  new relation only towards a table of the same project); the whole batch is checked before any
+  operation runs.
+
+### Breaking
+
+- **Columns are updated and deleted by table and name:** `PATCH` and `DELETE`
+  `/api/schema/tables/{name}/columns/{col}`, like tables. The id routes `/api/schema/columns/{id}` are
+  removed — they did not check the caller's project either. A column's `Location` after creation
+  names the new route. To migrate, address the column by its table and name instead of its id.
+
+### Fixed
+
+- **`MorphDB.Client`'s `AlterColumnAsync` and `DropColumnAsync` work.** They called the name routes
+  above, which the service did not have, so neither could succeed.
+- **A table's indexes are read back.** `GET /api/schema/tables/{name}` and the table list returned
+  `indexes: []` for every table, whatever indexes it had.
+
 ## 0.21.0
 
 A minor, mostly fixes to what earlier releases got wrong about soft delete, bulk jobs and the write

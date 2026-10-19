@@ -340,7 +340,7 @@ public sealed class SchemaController : ControllerBase
 
             SchemaControllerLogs.ColumnAdded(_logger, column.LogicalName, tableName);
 
-            return Created($"/api/schema/columns/{column.ColumnId}", response);
+            return Created($"/api/schema/tables/{Uri.EscapeDataString(tableName)}/columns/{Uri.EscapeDataString(column.LogicalName)}", response);
         }
         catch (ValidationException ex)
         {
@@ -372,21 +372,29 @@ public sealed class SchemaController : ControllerBase
     }
 
     /// <summary>
-    /// Updates a column.
+    /// Updates a column, addressed by its table and its name like every other schema route.
     /// </summary>
-    [HttpPatch("columns/{id:guid}")]
+    [HttpPatch("tables/{tableName}/columns/{columnName}")]
     [ProducesResponseType(typeof(ColumnApiResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> UpdateColumn(
-        Guid id,
+        string tableName,
+        string columnName,
         [FromBody] UpdateColumnApiRequest request,
         CancellationToken cancellationToken)
     {
+        var (column, notFound) = await FindColumnAsync(tableName, columnName, cancellationToken);
+        if (notFound is not null)
+        {
+            return notFound;
+        }
+
         try
         {
             var updateRequest = new UpdateColumnRequest
             {
-                ColumnId = id,
+                ColumnId = column!.ColumnId,
                 LogicalName = request.Name,
                 DefaultValue = request.Default,
                 DataType = request.Type != null ? ApiModelExtensions.ParseDataType(request.Type) : null,
@@ -397,21 +405,14 @@ public sealed class SchemaController : ControllerBase
                 ForceCast = request.ForceCast
             };
 
-            var column = await _schemaManager.UpdateColumnAsync(updateRequest, cancellationToken);
+            var updated = await _schemaManager.UpdateColumnAsync(updateRequest, cancellationToken);
+            _edmModelProvider.InvalidateModel(GetProjectId());
 
-            // Invalidate all cached EDM models (column operations don't have project context)
-            _edmModelProvider.InvalidateAll();
-
-            return Ok(ColumnApiResponse.FromMetadata(column));
+            return Ok(ColumnApiResponse.FromMetadata(updated));
         }
-        catch (NotFoundException ex)
+        catch (Exception ex) when (ex is NotFoundException or ColumnNotFoundException)
         {
-            return NotFound(new ErrorResponse
-            {
-                Error = "ColumnNotFound",
-                Message = ex.Message,
-                Code = ex.ErrorCode
-            });
+            return ColumnNotFound(tableName, columnName);
         }
         catch (ValidationException ex)
         {
@@ -434,31 +435,69 @@ public sealed class SchemaController : ControllerBase
     }
 
     /// <summary>
-    /// Deletes a column.
+    /// Deletes a column, addressed by its table and its name.
     /// </summary>
-    [HttpDelete("columns/{id:guid}")]
+    [HttpDelete("tables/{tableName}/columns/{columnName}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> DeleteColumn(Guid id, CancellationToken cancellationToken)
+    public async Task<IActionResult> DeleteColumn(string tableName, string columnName, CancellationToken cancellationToken)
     {
+        var (column, notFound) = await FindColumnAsync(tableName, columnName, cancellationToken);
+        if (notFound is not null)
+        {
+            return notFound;
+        }
+
         try
         {
-            await _schemaManager.DeleteColumnAsync(id, cancellationToken);
-
-            // Invalidate all cached EDM models (column operations don't have project context)
-            _edmModelProvider.InvalidateAll();
+            await _schemaManager.DeleteColumnAsync(column!.ColumnId, cancellationToken);
+            _edmModelProvider.InvalidateModel(GetProjectId());
 
             return NoContent();
         }
-        catch (NotFoundException ex)
+        catch (Exception ex) when (ex is NotFoundException or ColumnNotFoundException)
         {
-            return NotFound(new ErrorResponse
-            {
-                Error = "ColumnNotFound",
-                Message = ex.Message,
-                Code = ex.ErrorCode
-            });
+            return ColumnNotFound(tableName, columnName);
         }
+    }
+
+    /// <summary>
+    /// The column of the caller's project's table — or the 404 to answer with. A table is looked up
+    /// in the caller's project only, so another project's table is answered as one that does not exist.
+    /// </summary>
+    private async Task<(ColumnMetadata? Column, IActionResult? NotFound)> FindColumnAsync(
+        string tableName, string columnName, CancellationToken cancellationToken)
+    {
+        var table = await _schemaManager.GetTableAsync(GetProjectId(), tableName, cancellationToken);
+        if (table is null)
+        {
+            return (null, NotFound(new ErrorResponse
+            {
+                Error = "TableNotFound",
+                Message = $"Table '{tableName}' not found",
+                Code = "TABLE_NOT_FOUND"
+            }));
+        }
+
+        var column = table.Columns.FirstOrDefault(c => c.LogicalName == columnName);
+        return column is null ? (null, ColumnNotFound(tableName, columnName)) : (column, null);
+    }
+
+    private NotFoundObjectResult ColumnNotFound(string tableName, string columnName) => NotFound(new ErrorResponse
+    {
+        Error = "ColumnNotFound",
+        Message = $"Column '{columnName}' not found in table '{tableName}'",
+        Code = "COLUMN_NOT_FOUND"
+    });
+
+    /// <summary>
+    /// The caller's project's table that holds an index or relation, or null. An id is a reference
+    /// into the caller's project: one that belongs to another project is answered as one never issued.
+    /// </summary>
+    private async Task<TableMetadata?> FindOwningTableAsync(Func<TableMetadata, bool> holds, CancellationToken cancellationToken)
+    {
+        var tables = await _schemaManager.ListTablesAsync(GetProjectId(), cancellationToken);
+        return tables.FirstOrDefault(holds);
     }
 
     #endregion
@@ -547,12 +586,15 @@ public sealed class SchemaController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteIndex(Guid id, CancellationToken cancellationToken)
     {
+        if (await FindOwningTableAsync(t => t.Indexes.Any(i => i.IndexId == id), cancellationToken) is null)
+        {
+            return NotFound(new ErrorResponse { Error = "IndexNotFound", Message = $"Index '{id}' not found", Code = "NOT_FOUND" });
+        }
+
         try
         {
             await _schemaManager.DeleteIndexAsync(id, cancellationToken);
-
-            // Invalidate all cached EDM models (index operations don't have project context)
-            _edmModelProvider.InvalidateAll();
+            _edmModelProvider.InvalidateModel(GetProjectId());
 
             return NoContent();
         }
@@ -672,12 +714,15 @@ public sealed class SchemaController : ControllerBase
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteRelation(Guid id, CancellationToken cancellationToken)
     {
+        if (await FindOwningTableAsync(t => t.Relations.Any(r => r.RelationId == id), cancellationToken) is null)
+        {
+            return NotFound(new ErrorResponse { Error = "RelationNotFound", Message = $"Relation '{id}' not found", Code = "NOT_FOUND" });
+        }
+
         try
         {
             await _schemaManager.DeleteRelationAsync(id, cancellationToken);
-
-            // Invalidate all cached EDM models (relation operations don't have project context)
-            _edmModelProvider.InvalidateAll();
+            _edmModelProvider.InvalidateModel(GetProjectId());
 
             return NoContent();
         }
@@ -707,6 +752,13 @@ public sealed class SchemaController : ControllerBase
         [FromBody] BatchDdlApiRequest request,
         CancellationToken cancellationToken)
     {
+        // The batch's table is looked up like every table: in the caller's project only.
+        var owned = await _schemaManager.GetTableByIdAsync(request.TableId, cancellationToken);
+        if (owned is null || owned.ProjectId != GetProjectId())
+        {
+            return NotFound(new ErrorResponse { Error = "TableNotFound", Message = $"Table '{request.TableId}' not found", Code = "TABLE_NOT_FOUND" });
+        }
+
         try
         {
             var batchRequest = new BatchDdlRequest
@@ -722,9 +774,15 @@ public sealed class SchemaController : ControllerBase
 
             return Ok(result);
         }
-        catch (NotFoundException ex)
+        catch (Exception ex) when (ex is NotFoundException or TableNotFoundException or ColumnNotFoundException)
         {
-            return NotFound(new ErrorResponse { Error = "TableNotFound", Message = ex.Message, Code = ex.ErrorCode });
+            var error = ex switch
+            {
+                TableNotFoundException => "TableNotFound",
+                ColumnNotFoundException => "ColumnNotFound",
+                _ => "NotFound",
+            };
+            return NotFound(new ErrorResponse { Error = error, Message = ex.Message, Code = ((MorphDbException)ex).ErrorCode });
         }
         catch (ValidationException ex)
         {

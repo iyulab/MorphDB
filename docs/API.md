@@ -83,15 +83,16 @@ GET    /api/schema/tables/{name}               # Get table details
 PATCH  /api/schema/tables/{name}               # Update table
 DELETE /api/schema/tables/{name}               # Delete table
 
-# Columns — a column is addressed by its id once created, not by table and name
+# Columns — addressed by their table and name, like tables
 POST   /api/schema/tables/{name}/columns       # Add column
-PATCH  /api/schema/columns/{columnId}          # Update column
-DELETE /api/schema/columns/{columnId}          # Delete column
+PATCH  /api/schema/tables/{name}/columns/{col} # Update column
+DELETE /api/schema/tables/{name}/columns/{col} # Delete column
 
 # Relations & Indexes
 POST   /api/schema/relations                   # Create relation
 DELETE /api/schema/relations/{id}              # Delete relation
 POST   /api/schema/tables/{name}/indexes       # Create index
+DELETE /api/schema/indexes/{id}                # Delete index
 POST   /api/schema/batch                       # Batch DDL operations
 ```
 
@@ -935,7 +936,7 @@ caller that requested the job, also when it is the master secret that downloads 
 Update a column's metadata and/or physical constraints:
 
 ```http
-PATCH /api/schema/columns/{columnId}
+PATCH /api/schema/tables/{name}/columns/{col}
 Content-Type: application/json
 
 {

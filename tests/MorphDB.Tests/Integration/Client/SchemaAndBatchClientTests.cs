@@ -1,0 +1,149 @@
+using MorphDB.Client;
+using MorphDB.Client.Models;
+using MorphDB.Tests.Fixtures;
+
+namespace MorphDB.Tests.Integration.Client;
+
+/// <summary>
+/// The client's schema and batch calls over the real service: every method reaches a route the
+/// service has, and what it reads back is what the service did. Altering and dropping a column used
+/// to name a route the service never had, so neither could succeed.
+/// </summary>
+[Collection("API")]
+[Trait("Category", "ApiIntegration")]
+public class SchemaAndBatchClientTests(ApiIntegrationFixture fixture)
+{
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    private MorphDBClient NewClient()
+    {
+        var http = new HttpClient(fixture.Api.CreateHandler()) { BaseAddress = fixture.Api.BaseAddress };
+        var client = new MorphDBClient(http);
+        client.SetProjectId(fixture.Api.ProjectId);
+        return client;
+    }
+
+    private static string Name(string prefix) => $"{prefix}_{Guid.NewGuid():N}"[..24];
+
+    [Fact]
+    public async Task A_column_is_altered_and_dropped_by_its_table_and_name()
+    {
+        await using var client = NewClient();
+        var table = await client.Schema.CreateTableAsync(new CreateTableRequest
+        {
+            Name = Name("alt"),
+            Columns =
+            [
+                new CreateColumnRequest { Name = "title", Type = "text" },
+                new CreateColumnRequest { Name = "note", Type = "text" },
+            ],
+        }, Ct);
+
+        var renamed = await client.Schema.AlterColumnAsync(table.Name, "note", new AlterColumnRequest
+        {
+            Name = "remark",
+            Nullable = false,
+            Default = "'-'",
+            Version = table.Version,
+        }, Ct);
+        Assert.Equal("remark", renamed.Name);
+        Assert.False(renamed.Nullable);
+
+        var afterRename = await client.Schema.GetTableAsync(table.Name, Ct);
+        Assert.NotNull(afterRename);
+        Assert.Contains(afterRename.Columns, c => c.Name == "remark");
+        Assert.DoesNotContain(afterRename.Columns, c => c.Name == "note");
+
+        await client.Schema.DropColumnAsync(table.Name, "remark", Ct);
+        var afterDrop = await client.Schema.GetTableAsync(table.Name, Ct);
+        Assert.DoesNotContain(afterDrop!.Columns, c => c.Name == "remark");
+
+        // A column that is not there is the service's 404, which the client raises as such.
+        await Assert.ThrowsAsync<MorphDBNotFoundException>(() => client.Schema.DropColumnAsync(table.Name, "remark", Ct));
+    }
+
+    [Fact]
+    public async Task Tables_list_and_a_relation_is_deleted_by_its_id()
+    {
+        await using var client = NewClient();
+        var parent = await client.Schema.CreateTableAsync(new CreateTableRequest
+        {
+            Name = Name("par"),
+            Columns = [new CreateColumnRequest { Name = "code", Type = "text", Nullable = false, Unique = true }],
+        }, Ct);
+        var child = await client.Schema.CreateTableAsync(new CreateTableRequest
+        {
+            Name = Name("chi"),
+            Columns = [new CreateColumnRequest { Name = "parent_code", Type = "text" }],
+        }, Ct);
+
+        var tables = await client.Schema.GetTablesAsync(Ct);
+        Assert.Contains(tables, t => t.Name == parent.Name && t.Columns.Any(c => c.Name == "code"));
+        Assert.Contains(tables, t => t.Name == child.Name);
+
+        var relation = await client.Schema.CreateRelationAsync(new CreateRelationRequest
+        {
+            Name = Name("rel"),
+            SourceTable = child.Name,
+            SourceColumn = "parent_code",
+            TargetTable = parent.Name,
+            TargetColumn = "code",
+        }, Ct);
+
+        await client.Schema.DeleteRelationAsync(relation.Id, Ct);
+
+        // The relation is gone: a child row naming no parent is written, where the relation refused it.
+        await client.Data.InsertAsync(child.Name, new Dictionary<string, object?> { ["parent_code"] = "nobody" }, Ct);
+        await Assert.ThrowsAsync<MorphDBNotFoundException>(() => client.Schema.DeleteRelationAsync(relation.Id, Ct));
+    }
+
+    [Fact]
+    public async Task A_batch_runs_its_operations_in_order_and_reports_each()
+    {
+        await using var client = NewClient();
+        var table = await client.Schema.CreateTableAsync(new CreateTableRequest
+        {
+            Name = Name("bat"),
+            Columns =
+            [
+                new CreateColumnRequest { Name = "sku", Type = "text", Nullable = false, Unique = true },
+                new CreateColumnRequest { Name = "qty", Type = "integer" },
+            ],
+        }, Ct);
+
+        var many = await client.Batch.InsertManyAsync(table.Name,
+        [
+            new Dictionary<string, object?> { ["sku"] = "a", ["qty"] = 1 },
+            new Dictionary<string, object?> { ["sku"] = "b", ["qty"] = 2 },
+        ], Ct);
+        Assert.Equal(2, many.SuccessCount);
+        Assert.Equal(0, many.FailureCount);
+        var a = (await client.Data.QueryAsync(table.Name, new QueryRequest
+        {
+            Filters = [new Filter("sku", FilterOperator.Equal, "a")],
+        }, Ct)).Data.Single();
+        var aId = a.Id;
+
+        var batch = await client.Batch.ExecuteAsync(new BatchRequest
+        {
+            Operations =
+            [
+                new BatchOperation { Method = BatchMethod.Update, Table = table.Name, Id = aId, Data = new Dictionary<string, object?> { ["qty"] = 10 } },
+                new BatchOperation { Method = BatchMethod.Upsert, Table = table.Name, KeyColumns = ["sku"], Data = new Dictionary<string, object?> { ["sku"] = "c", ["qty"] = 3 } },
+                new BatchOperation { Method = BatchMethod.Insert, Table = table.Name, Data = new Dictionary<string, object?> { ["sku"] = "c", ["qty"] = 4 } },
+            ],
+        }, Ct);
+
+        Assert.Equal([0, 1, 2], batch.Results.Select(r => r.Index));
+        Assert.True(batch.Results[0].Success);
+        Assert.True(batch.Results[1].Success);
+        Assert.False(batch.Results[2].Success); // "c" is taken by the upsert before it
+        Assert.False(string.IsNullOrEmpty(batch.Results[2].Error));
+        Assert.Equal(2, batch.SuccessCount);
+        Assert.Equal(1, batch.FailureCount);
+
+        var rows = (await client.Data.QueryAsync(table.Name, new QueryRequest(), Ct)).Data
+            .ToDictionary(r => r.Data["sku"]!.ToString()!, r => int.Parse(r.Data["qty"]!.ToString()!, System.Globalization.CultureInfo.InvariantCulture));
+        Assert.Equal(new Dictionary<string, int> { ["a"] = 10, ["b"] = 2, ["c"] = 3 }, rows);
+    }
+}

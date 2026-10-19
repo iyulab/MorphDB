@@ -74,7 +74,7 @@ public sealed class MetadataRepository : IMetadataRepository
             var columns = await GetColumnsByTableIdAsync(tableId, cancellationToken);
             var relations = await GetRelationsByTableIdAsync(tableId, cancellationToken);
             columns = AttachForeignKeyReferences(columns, relations);
-            table = WithColumnsAndRelations(table, columns, relations);
+            table = WithDetails(table, columns, relations, await GetIndexesByTableIdAsync(table.TableId, cancellationToken));
         }
 
         return table;
@@ -107,7 +107,7 @@ public sealed class MetadataRepository : IMetadataRepository
             var columns = await GetColumnsByTableIdAsync(table.TableId, cancellationToken);
             var relations = await GetRelationsByTableIdAsync(table.TableId, cancellationToken);
             columns = AttachForeignKeyReferences(columns, relations);
-            table = WithColumnsAndRelations(table, columns, relations);
+            table = WithDetails(table, columns, relations, await GetIndexesByTableIdAsync(table.TableId, cancellationToken));
         }
 
         return table;
@@ -138,7 +138,7 @@ public sealed class MetadataRepository : IMetadataRepository
                 var columns = await GetColumnsByTableIdAsync(tables[i].TableId, cancellationToken);
                 var relations = await GetRelationsByTableIdAsync(tables[i].TableId, cancellationToken);
                 columns = AttachForeignKeyReferences(columns, relations);
-                tables[i] = WithColumnsAndRelations(tables[i], columns, relations);
+                tables[i] = WithDetails(tables[i], columns, relations, await GetIndexesByTableIdAsync(tables[i].TableId, cancellationToken));
             }
         }
 
@@ -615,10 +615,11 @@ public sealed class MetadataRepository : IMetadataRepository
         RowStateEnabled = table.RowStateEnabled
     };
 
-    private static TableMetadata WithColumnsAndRelations(
+    private static TableMetadata WithDetails(
         TableMetadata table,
         IReadOnlyList<ColumnMetadata> columns,
-        IReadOnlyList<RelationMetadata> relations) => new()
+        IReadOnlyList<RelationMetadata> relations,
+        IReadOnlyList<IndexMetadata> indexes) => new()
         {
             TableId = table.TableId,
             ProjectId = table.ProjectId,
@@ -631,7 +632,7 @@ public sealed class MetadataRepository : IMetadataRepository
             UpdatedAt = table.UpdatedAt,
             Columns = columns,
             Relations = relations,
-            Indexes = table.Indexes,
+            Indexes = indexes,
             TimestampsEnabled = table.TimestampsEnabled,
             VersioningEnabled = table.VersioningEnabled,
             AuditFieldsEnabled = table.AuditFieldsEnabled,

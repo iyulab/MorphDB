@@ -1448,6 +1448,75 @@ public sealed class PostgresSchemaManager : ISchemaManager
         return JsonDocument.Parse(json);
     }
 
+    /// <summary>
+    /// A batch is a change to one table: every column, index and relation an operation names must be
+    /// that table's, and a new relation may only reach a table of the same project. Checked for the
+    /// whole batch before any operation runs, so a batch that strays changes nothing. An id that is
+    /// not the table's is answered as one that does not exist.
+    /// </summary>
+    private async Task EnsureBatchStaysOnTableAsync(
+        TableMetadata table,
+        IReadOnlyList<BatchDdlOperation> operations,
+        CancellationToken cancellationToken)
+    {
+        var columns = table.Columns.Select(c => c.ColumnId).ToHashSet();
+        void RequireColumn(Guid id)
+        {
+            if (!columns.Contains(id))
+            {
+                throw new ColumnNotFoundException(table.LogicalName, id.ToString());
+            }
+        }
+
+        foreach (var op in operations)
+        {
+            if (op.UpdateColumn is { } update)
+            {
+                RequireColumn(update.ColumnId);
+            }
+
+            if (op.DeleteColumnId is { } deleteColumn)
+            {
+                RequireColumn(deleteColumn);
+            }
+
+            if (op.CreateIndex is { } index)
+            {
+                foreach (var column in index.ColumnIds)
+                {
+                    RequireColumn(column);
+                }
+            }
+
+            if (op.DeleteIndexId is { } deleteIndex && table.Indexes.All(i => i.IndexId != deleteIndex))
+            {
+                throw new NotFoundException("Index", deleteIndex.ToString());
+            }
+
+            if (op.DeleteRelationId is { } deleteRelation && table.Relations.All(r => r.RelationId != deleteRelation))
+            {
+                throw new NotFoundException("Relation", deleteRelation.ToString());
+            }
+
+            if (op.CreateRelation is { } relation)
+            {
+                RequireColumn(relation.SourceColumnId);
+                var target = relation.TargetTableId == table.TableId
+                    ? table
+                    : await _repository.GetTableByIdAsync(relation.TargetTableId, includeColumns: true, cancellationToken);
+                if (target is null || target.ProjectId != table.ProjectId)
+                {
+                    throw new TableNotFoundException(relation.TargetTableId.ToString());
+                }
+
+                if (target.Columns.All(c => c.ColumnId != relation.TargetColumnId))
+                {
+                    throw new ColumnNotFoundException(target.LogicalName, relation.TargetColumnId.ToString());
+                }
+            }
+        }
+    }
+
     public async Task<BatchDdlResult> ExecuteBatchDdlAsync(
         BatchDdlRequest request,
         CancellationToken cancellationToken = default)
@@ -1461,6 +1530,8 @@ public sealed class PostgresSchemaManager : ISchemaManager
         {
             throw new SchemaVersionConflictException(request.ExpectedVersion, currentVersion);
         }
+
+        await EnsureBatchStaysOnTableAsync(table, request.Operations, cancellationToken);
 
         var executedCount = 0;
 
