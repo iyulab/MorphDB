@@ -620,7 +620,8 @@ POST /odata/$batch
 
 **Supported query options**: `$filter`, `$orderby`, `$top`, `$skip`, `$select`, `$count`
 
-A collection travels in `value`; one entity — read by key, or answered by a create or an update — is
+Errors are OData error objects (`{"error": {"code", "message"}}`) carrying the codes of the
+[error table](#errors). A collection travels in `value`; one entity — read by key, or answered by a create or an update — is
 the entity object itself, its properties beside `@odata.context` (`…/$metadata#Customers/$entity`),
 as OData JSON writes it.
 
@@ -1466,11 +1467,22 @@ unknown-field policy is the write pipeline's `UNKNOWN_COLUMN`.) A `4xx` means th
 request must change before retrying; a `500 INTERNAL_ERROR` is a service defect (its message is a
 fixed string — internal exception text never reaches the wire) and retrying may succeed.
 
-GraphQL answers with its own error shape (an `errors` entry inside a `200` payload), and the same
-codes travel there as `extensions.code`, with the status the REST door would answer as
-`extensions.status`: an unknown column in `aggregate` is `COLUMN_NOT_FOUND`, an unknown operator
-`INVALID_ARGUMENT`, a malformed `records` filter `INVALID_FILTER`. A service defect stays an
-unexplained execution error there too.
+A validation failure that names a field also carries it under `details` — `{"title": ["a value is
+required and cannot be null"]}`.
+
+**GraphQL and OData answer in their own protocols' error shapes, with the same codes.** GraphQL puts an
+`errors` entry inside a `200` payload, the code as `extensions.code` and the status the REST door would
+answer as `extensions.status`: an unknown column in `aggregate` is `COLUMN_NOT_FOUND`, an unknown
+operator `INVALID_ARGUMENT`, a malformed `records` filter `INVALID_FILTER`. OData answers with the HTTP
+status and an OData error object — every route under `/odata`, a missing project and a refused secret
+included:
+
+```json
+{ "error": { "code": "VALIDATION_ERROR", "message": "…", "details": [ { "code": "REQUIRED", "message": "…", "target": "name" } ] } }
+```
+
+A failed `$batch` item carries the same object as its `error`. A service defect stays unexplained on
+both.
 
 | Status | Code | When |
 |--------|------|------|

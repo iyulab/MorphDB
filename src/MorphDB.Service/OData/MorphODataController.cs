@@ -18,6 +18,7 @@ namespace MorphDB.Service.OData;
 [Route("odata")]
 [ApiController]
 [RequireProject]
+[TypeFilter(typeof(ODataErrorFilter))]
 public sealed partial class MorphODataController : ControllerBase
 {
     private readonly IEdmModelProvider _modelProvider;
@@ -151,7 +152,7 @@ public sealed partial class MorphODataController : ControllerBase
 
         if (entity == null)
         {
-            return NotFound(new { error = $"Entity with key '{key}' not found in '{entitySet}'." });
+            return EntityNotFound(entitySet, key);
         }
 
         var response = SingleEntity(entitySet, entity);
@@ -179,7 +180,7 @@ public sealed partial class MorphODataController : ControllerBase
                 projectId, tableName, includeColumns: true, cancellationToken);
             if (tableMetadata is null)
             {
-                return NotFound(new { error = $"Table '{tableName}' not found." });
+                return TableNotFound(tableName);
             }
 
             var data = JsonElementToDictionary(body);
@@ -189,7 +190,7 @@ public sealed partial class MorphODataController : ControllerBase
 
             if (!writeResult.Success)
             {
-                return BadRequest(new { error = string.Join("; ", writeResult.Errors.Select(e => e.Message)) });
+                return WriteRefused(writeResult);
             }
 
             var result = writeResult.Data ?? data;
@@ -200,7 +201,7 @@ public sealed partial class MorphODataController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(ODataError.Of("INVALID_ARGUMENT", ex.Message));
         }
     }
 
@@ -225,7 +226,7 @@ public sealed partial class MorphODataController : ControllerBase
                 projectId, tableName, includeColumns: true, cancellationToken);
             if (tableMetadata is null)
             {
-                return NotFound(new { error = $"Table '{tableName}' not found." });
+                return TableNotFound(tableName);
             }
 
             var existing = await _dataService.GetByIdAsync(projectId, tableName, key, cancellationToken);
@@ -236,12 +237,12 @@ public sealed partial class MorphODataController : ControllerBase
 
             if (ErrorHandling.WriteFailure.IsNotFound(writeResult))
             {
-                return NotFound(new { error = $"Entity with key '{key}' not found in '{entitySet}'." });
+                return EntityNotFound(entitySet, key);
             }
 
             if (!writeResult.Success)
             {
-                return BadRequest(new { error = string.Join("; ", writeResult.Errors.Select(e => e.Message)) });
+                return WriteRefused(writeResult);
             }
 
             var response = SingleEntity(entitySet, writeResult.Data ?? data);
@@ -250,7 +251,7 @@ public sealed partial class MorphODataController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(ODataError.Of("INVALID_ARGUMENT", ex.Message));
         }
     }
 
@@ -293,22 +294,27 @@ public sealed partial class MorphODataController : ControllerBase
                 projectId, tableName, includeColumns: true, cancellationToken);
             if (tableMetadata is null)
             {
-                return NotFound(new { error = $"Table '{tableName}' not found." });
+                return TableNotFound(tableName);
             }
 
             var writeResult = await _writePipeline.DeleteAsync(
                 projectId, tableMetadata, key, cancellationToken: cancellationToken);
 
+            if (ErrorHandling.WriteFailure.IsNotFound(writeResult))
+            {
+                return EntityNotFound(entitySet, key);
+            }
+
             if (!writeResult.Success)
             {
-                return NotFound(new { error = $"Entity with key '{key}' not found in '{entitySet}'." });
+                return WriteRefused(writeResult);
             }
 
             return NoContent();
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return BadRequest(ODataError.Of("INVALID_ARGUMENT", ex.Message));
         }
     }
 
@@ -353,7 +359,7 @@ public sealed partial class MorphODataController : ControllerBase
                 case "POST":
                     if (tableMetadata is null)
                     {
-                        return new ODataBatchResponseItem { Id = request.Id, Status = 404, Error = $"Table '{tableName}' not found." };
+                        return new ODataBatchResponseItem { Id = request.Id, Status = 404, Error = TableMissing(tableName) };
                     }
                     var insertData = request.Body != null
                         ? JsonElementToDictionary(request.Body.Value)
@@ -361,7 +367,7 @@ public sealed partial class MorphODataController : ControllerBase
                     var insertWriteResult = await _writePipeline.InsertAsync(projectId, tableMetadata, insertData, cancellationToken: cancellationToken);
                     if (!insertWriteResult.Success)
                     {
-                        return new ODataBatchResponseItem { Id = request.Id, Status = 400, Error = string.Join("; ", insertWriteResult.Errors.Select(e => e.Message)) };
+                        return new ODataBatchResponseItem { Id = request.Id, Status = 400, Error = Refusal(insertWriteResult) };
                     }
                     return new ODataBatchResponseItem
                     {
@@ -378,12 +384,12 @@ public sealed partial class MorphODataController : ControllerBase
                         {
                             Id = request.Id,
                             Status = 400,
-                            Error = "Key is required for PATCH/PUT operations."
+                            Error = new ODataErrorDetail("INVALID_ARGUMENT", "Key is required for PATCH/PUT operations.")
                         };
                     }
                     if (tableMetadata is null)
                     {
-                        return new ODataBatchResponseItem { Id = request.Id, Status = 404, Error = $"Table '{tableName}' not found." };
+                        return new ODataBatchResponseItem { Id = request.Id, Status = 404, Error = TableMissing(tableName) };
                     }
                     var existing = await _dataService.GetByIdAsync(projectId, tableName, request.Key.Value, cancellationToken);
                     var updateData = request.Body != null
@@ -392,11 +398,11 @@ public sealed partial class MorphODataController : ControllerBase
                     var updateWriteResult = await _writePipeline.UpdateAsync(projectId, tableMetadata, request.Key.Value, updateData, existing, cancellationToken: cancellationToken);
                     if (ErrorHandling.WriteFailure.IsNotFound(updateWriteResult))
                     {
-                        return new ODataBatchResponseItem { Id = request.Id, Status = 404, Error = "Entity not found." };
+                        return new ODataBatchResponseItem { Id = request.Id, Status = 404, Error = EntityMissing(request.EntitySet, request.Key.Value) };
                     }
                     if (!updateWriteResult.Success)
                     {
-                        return new ODataBatchResponseItem { Id = request.Id, Status = 400, Error = string.Join("; ", updateWriteResult.Errors.Select(e => e.Message)) };
+                        return new ODataBatchResponseItem { Id = request.Id, Status = 400, Error = Refusal(updateWriteResult) };
                     }
                     return new ODataBatchResponseItem
                     {
@@ -412,20 +418,21 @@ public sealed partial class MorphODataController : ControllerBase
                         {
                             Id = request.Id,
                             Status = 400,
-                            Error = "Key is required for DELETE operations."
+                            Error = new ODataErrorDetail("INVALID_ARGUMENT", "Key is required for DELETE operations.")
                         };
                     }
                     if (tableMetadata is null)
                     {
-                        return new ODataBatchResponseItem { Id = request.Id, Status = 404, Error = $"Table '{tableName}' not found." };
+                        return new ODataBatchResponseItem { Id = request.Id, Status = 404, Error = TableMissing(tableName) };
                     }
                     var deleteWriteResult = await _writePipeline.DeleteAsync(projectId, tableMetadata, request.Key.Value, cancellationToken: cancellationToken);
-                    return new ODataBatchResponseItem
+                    if (ErrorHandling.WriteFailure.IsNotFound(deleteWriteResult))
                     {
-                        Id = request.Id,
-                        Status = deleteWriteResult.Success ? 204 : 404,
-                        Error = deleteWriteResult.Success ? null : "Entity not found."
-                    };
+                        return new ODataBatchResponseItem { Id = request.Id, Status = 404, Error = EntityMissing(request.EntitySet, request.Key.Value) };
+                    }
+                    return deleteWriteResult.Success
+                        ? new ODataBatchResponseItem { Id = request.Id, Status = 204 }
+                        : new ODataBatchResponseItem { Id = request.Id, Status = 400, Error = Refusal(deleteWriteResult) };
 
                 case "GET":
                     if (request.Key.HasValue)
@@ -437,7 +444,7 @@ public sealed partial class MorphODataController : ControllerBase
                             {
                                 Id = request.Id,
                                 Status = 404,
-                                Error = "Entity not found."
+                                Error = EntityMissing(request.EntitySet, request.Key.Value)
                             };
                         }
                         return new ODataBatchResponseItem
@@ -466,21 +473,43 @@ public sealed partial class MorphODataController : ControllerBase
                     {
                         Id = request.Id,
                         Status = 400,
-                        Error = $"Unsupported method: {request.Method}"
+                        Error = new ODataErrorDetail("INVALID_ARGUMENT", $"Unsupported method: {request.Method}")
                     };
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            LogBatchItemError(_logger, request.Id, ex);
-            return new ODataBatchResponseItem
+            // One item's failure is that item's answer, classified as any request's would be: a
+            // caller's mistake keeps its status and code, a service defect stays unexplained.
+            var (status, _, code) = ErrorHandling.ErrorClassification.Classify(ex);
+            if (status >= StatusCodes.Status500InternalServerError)
             {
-                Id = request.Id,
-                Status = 500,
-                Error = "An unexpected error occurred"
-            };
+                LogBatchItemError(_logger, request.Id, ex);
+                return new ODataBatchResponseItem { Id = request.Id, Status = status, Error = new ODataErrorDetail(code, "An unexpected error occurred") };
+            }
+
+            return new ODataBatchResponseItem { Id = request.Id, Status = status, Error = new ODataErrorDetail(code, ex.Message) };
         }
     }
+
+    private NotFoundObjectResult EntityNotFound(string entitySet, Guid key) => NotFound(new ODataError(EntityMissing(entitySet, key)));
+
+    private NotFoundObjectResult TableNotFound(string tableName) => NotFound(new ODataError(TableMissing(tableName)));
+
+    private BadRequestObjectResult WriteRefused(WriteResult result) => BadRequest(new ODataError(Refusal(result)));
+
+    private static ODataErrorDetail EntityMissing(string entitySet, Guid key) =>
+        new("RECORD_NOT_FOUND", $"Entity with key '{key}' not found in '{entitySet}'.");
+
+    private static ODataErrorDetail TableMissing(string tableName) =>
+        new("TABLE_NOT_FOUND", $"Table '{tableName}' not found.");
+
+    /// <summary>A refused write: the REST code for it, each cause a <c>details</c> entry.</summary>
+    private static ODataErrorDetail Refusal(WriteResult result) =>
+        new(ErrorHandling.WriteFailure.CodeFor(result), string.Join("; ", result.Errors.Select(e => e.Message)))
+        {
+            Details = [.. result.Errors.Select(e => new ODataErrorDetail(e.Code, e.Message) { Target = e.Field })],
+        };
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Error executing batch item {RequestId}")]
     private static partial void LogBatchItemError(ILogger logger, string requestId, Exception exception);
@@ -618,5 +647,5 @@ public sealed class ODataBatchResponseItem
 
     [System.Text.Json.Serialization.JsonPropertyName("error")]
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
-    public string? Error { get; set; }
+    public ODataErrorDetail? Error { get; set; }
 }

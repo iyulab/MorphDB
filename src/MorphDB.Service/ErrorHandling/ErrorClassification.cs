@@ -1,4 +1,5 @@
 using MorphDB.Core.Exceptions;
+using MorphDB.Service.Models.Api;
 
 namespace MorphDB.Service.ErrorHandling;
 
@@ -9,6 +10,25 @@ namespace MorphDB.Service.ErrorHandling;
 /// </summary>
 internal static class ErrorClassification
 {
+    /// <summary>
+    /// The envelope an escaped exception answers with: its classification, its message (a fixed one
+    /// when the fault is ours), and — for a validation failure that names a field — that field's reason
+    /// under <c>details</c>.
+    /// </summary>
+    public static (int Status, ErrorResponse Envelope) Envelope(Exception exception)
+    {
+        var (status, error, code) = Classify(exception);
+        return (status, new ErrorResponse
+        {
+            Error = error,
+            Code = code,
+            Message = status >= StatusCodes.Status500InternalServerError ? "An unexpected error occurred" : exception.Message,
+            Details = exception is ValidationException { Field: { } field, Reason: { } reason }
+                ? new Dictionary<string, string[]> { [field] = [reason] }
+                : null,
+        });
+    }
+
     public static (int Status, string Error, string Code) Classify(Exception exception)
     {
         // Order matters: the most derived domain types come first (ValidationException and the

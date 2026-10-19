@@ -204,7 +204,8 @@ public class ProjectScopeContractTests
         {
             var odata = await client.GetAsync(route, ct);
             odata.StatusCode.Should().Be(HttpStatusCode.NotFound, $"{route} — the XML-only $metadata must not turn the refusal into 406");
-            (await odata.Content.ReadFromJsonAsync<ErrorResponse>(ct))!.Code.Should().Be("PROJECT_NOT_FOUND");
+            (await odata.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>(ct)).GetProperty("error").GetProperty("code").GetString()
+                .Should().Be("PROJECT_NOT_FOUND", "the OData surface writes its errors as OData error objects");
         }
     }
 }

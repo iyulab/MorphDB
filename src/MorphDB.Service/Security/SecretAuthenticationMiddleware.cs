@@ -130,12 +130,12 @@ public sealed class SecretAuthenticationMiddleware
     private static Task DenyAsync(HttpContext context, int status, string code, string message)
     {
         context.Response.StatusCode = status;
-        return context.Response.WriteAsJsonAsync(new ErrorResponse
+        return context.Response.WriteAsJsonAsync(OData.ErrorWire.Body(context.Request, new ErrorResponse
         {
             Error = status == StatusCodes.Status401Unauthorized ? "Unauthenticated" : "Forbidden",
             Message = message,
             Code = code
-        });
+        }));
     }
 }
 

@@ -37,23 +37,14 @@ internal sealed class GlobalExceptionHandler : IExceptionHandler
             return false;
         }
 
-        var (status, error, code) = ErrorClassification.Classify(exception);
-
-        string? message;
-        if (status == StatusCodes.Status500InternalServerError)
+        var (status, envelope) = ErrorClassification.Envelope(exception);
+        if (status >= StatusCodes.Status500InternalServerError)
         {
             GlobalExceptionHandlerLogs.UnexpectedError(_logger, exception, httpContext.Request.Method, httpContext.Request.Path);
-            message = "An unexpected error occurred";
-        }
-        else
-        {
-            message = exception.Message;
         }
 
         httpContext.Response.StatusCode = status;
-        await httpContext.Response.WriteAsJsonAsync(
-            new ErrorResponse { Error = error, Message = message, Code = code },
-            cancellationToken);
+        await httpContext.Response.WriteAsJsonAsync(OData.ErrorWire.Body(httpContext.Request, envelope), cancellationToken);
         return true;
     }
 }

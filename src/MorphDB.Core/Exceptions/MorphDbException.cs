@@ -262,7 +262,15 @@ public class ValidationException : MorphDbException
     public ValidationException(string field, string message)
         : base("VALIDATION_ERROR", $"Validation error for '{field}': {message}")
     {
+        Field = field;
+        Reason = message;
     }
+
+    /// <summary>The field the failure is about, when it names one.</summary>
+    public string? Field { get; }
+
+    /// <summary>What is wrong with <see cref="Field"/>, without the field prefix of <see cref="Exception.Message"/>.</summary>
+    public string? Reason { get; }
 }
 
 

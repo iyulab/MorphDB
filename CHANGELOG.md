@@ -15,8 +15,19 @@
   comma-packed string is now one condition, not several. The operators are the REST set: `isnull` and
   `isnotnull` work, and the `ne`, `ge` and `le` spellings are gone (`neq`, `gte`, `lte`).
 
+- **OData errors are OData error objects.** Every error under `/odata` — an unknown column or entity
+  set, a key the set does not hold, a refused write, a missing project or refused secret, a failed
+  `$batch` item — answers `{"error": {"code", "message", "details"?}}` with the code of the REST error
+  table. Before, some answered the REST envelope and some `{"error": "<text>"}`, and a batch item's
+  `error` was a string.
+
 ### Fixed
 
+- **An OData delete answers `404` only when the row is not there.** Any failed delete (and any failed
+  `$batch` delete) was reported as «not found», whatever the write pipeline said; another refusal now
+  answers with its own status and code.
+- **A validation failure names its field under `details`** on the REST envelope (and as an OData
+  `details` entry with `target`), not only inside the message.
 - **GraphQL `records` pages follow the order asked for.** A cursor held the row's id and the next page
   was read as «ids greater than it» whatever the order — so the default newest-first list answered its
   second page with rows newer than the first page's last, i.e. the first page again, and any `orderBy`
