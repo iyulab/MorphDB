@@ -126,7 +126,7 @@ public sealed class MorphDbQuery
         {
             query = FilterExpressions.Apply(query, filter);
             query = string.IsNullOrWhiteSpace(orderBy)
-                ? query.OrderByDesc("_created_at")
+                ? query.OrderByDesc(SystemColumns.CreatedAt).OrderByDesc(SystemColumns.Id)
                 : OrderExpressions.Apply(query, orderBy);
         }
         catch (ArgumentException ex)
@@ -137,30 +137,20 @@ public sealed class MorphDbQuery
                 .Build());
         }
 
-        // Get total count
         var totalCount = await query.CountAsync(cancellationToken);
 
-        // Apply pagination
-        var pageSize = first ?? 20;
-        if (pageSize > 100)
-            pageSize = 100;
+        // A cursor is a row's position in this order. Paging by position follows whatever order was
+        // asked for (the query ends it with _id, so it is total); a cursor holding the row's id was
+        // compared against _id whatever the order, and read the newest-first list's next page as the
+        // rows newer than the last one — the first page again.
+        var pageSize = Math.Clamp(first ?? 20, 1, 100);
+        var skip = string.IsNullOrEmpty(after) ? 0 : DecodeCursor(after) + 1;
+        var records = await query.Limit(pageSize).Offset(skip).ToListAsync(cancellationToken);
 
-        if (!string.IsNullOrEmpty(after))
-        {
-            var cursorValue = DecodeCursor(after);
-            query = query.After("_id", cursorValue, pageSize);
-        }
-        else
-        {
-            query = query.Limit(pageSize);
-        }
-
-        var records = await query.ToListAsync(cancellationToken);
-
-        var edges = records.Select(r => new RecordEdge
+        var edges = records.Select((r, i) => new RecordEdge
         {
             Node = CreateRecordNode(r),
-            Cursor = EncodeCursor(SystemColumns.RequireRecordId(r))
+            Cursor = EncodeCursor(skip + i)
         }).ToList();
 
         return new RecordConnection
@@ -168,8 +158,8 @@ public sealed class MorphDbQuery
             Edges = edges,
             PageInfo = new PageInfo
             {
-                HasNextPage = records.Count == pageSize,
-                HasPreviousPage = !string.IsNullOrEmpty(after),
+                HasNextPage = skip + records.Count < totalCount,
+                HasPreviousPage = skip > 0,
                 StartCursor = edges.FirstOrDefault()?.Cursor,
                 EndCursor = edges.LastOrDefault()?.Cursor,
                 TotalCount = (int)totalCount
@@ -294,25 +284,32 @@ public sealed class MorphDbQuery
         };
     }
 
-    private static string EncodeCursor(Guid id) =>
-        Convert.ToBase64String(id.ToByteArray());
+    private const string CursorPrefix = "offset:";
 
-    private static Guid DecodeCursor(string cursor)
+    private static string EncodeCursor(long position) =>
+        Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(CursorPrefix + position.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+
+    private static int DecodeCursor(string cursor)
     {
-        // A cursor this server did not issue is the caller's error. Decoding it to Guid.Empty, as
-        // this once did, silently restarted the page from the beginning — a well-formed answer to a
-        // malformed request, with no signal that the cursor was ignored.
+        // A cursor this server did not issue is the caller's error. Decoding it to the first page, as
+        // this once did, answered a malformed request with a well-formed one and no signal.
         try
         {
-            return new Guid(Convert.FromBase64String(cursor));
+            var text = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(cursor));
+            if (text.StartsWith(CursorPrefix, StringComparison.Ordinal)
+                && int.TryParse(text.AsSpan(CursorPrefix.Length), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var position))
+            {
+                return position;
+            }
         }
-        catch (Exception ex) when (ex is FormatException or ArgumentException)
+        catch (FormatException)
         {
-            throw new GraphQLException(ErrorBuilder.New()
-                .SetMessage($"'{cursor}' is not a cursor this server issued; pass a cursor from a previous page's edges.")
-                .SetCode("INVALID_CURSOR")
-                .Build());
         }
+
+        throw new GraphQLException(ErrorBuilder.New()
+            .SetMessage($"'{cursor}' is not a cursor this server issued; pass a cursor from a previous page's edges.")
+            .SetCode("INVALID_CURSOR")
+            .Build());
     }
 
     private static RecordNode CreateRecordNode(IDictionary<string, object?> r)

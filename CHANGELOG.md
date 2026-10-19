@@ -17,6 +17,16 @@
 
 ### Fixed
 
+- **GraphQL `records` pages follow the order asked for.** A cursor held the row's id and the next page
+  was read as «ids greater than it» whatever the order — so the default newest-first list answered its
+  second page with rows newer than the first page's last, i.e. the first page again, and any `orderBy`
+  paged by id instead. A cursor is now the row's position in the requested order, and `hasNextPage` is
+  false exactly on the last page (it was true on a full last page). Cursors issued before are refused
+  as `INVALID_CURSOR`.
+- **Consecutive pages hold every row once on every read.** A page's order now ends with `_id`, so rows
+  that tie on the requested keys — or every row, when no order is given — keep their place across
+  pages; PostgreSQL could answer ties in a different order page by page. A REST list without
+  `orderBy` reads earliest first.
 - **A GraphQL filter the server cannot read is refused, not changed.** `records` skipped a condition
   that did not parse and read an unknown operator as `eq`; `aggregate` read an unknown filter or
   having operator as `eq`. Each answered a question wider than, or different from, the one asked.

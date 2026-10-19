@@ -209,7 +209,7 @@ GET /api/data/customers?filter=grade:eq:VIP&orderBy=_created_at:desc&page=1&page
 | Parameter | Description | Example |
 |-----------|-------------|---------|
 | `filter` | Field filtering (`column:operator:value`) | `grade:eq:VIP`, `status:neq:inactive` |
-| `orderBy` | Sort order (`column:asc` or `column:desc`) | `name:asc`, `_created_at:desc` |
+| `orderBy` | Sort order (`column:asc` or `column:desc`), comma-separated keys. Without it rows come earliest first (`_id` ascending). A page's order always ends with `_id`, so rows that tie on the keys keep their place and consecutive pages neither repeat nor skip a row | `name:asc`, `_created_at:desc` |
 | `search` | Full-text search across text columns | `john` |
 | `select` | Comma-separated column names. `_id` is always fetched, so each row's envelope `id` is its own | `name,email,grade` |
 | `state` | Row state filter (if enabled) | `valid`, `draft`, `error`, `all` |
@@ -460,9 +460,9 @@ query {
 | Argument | Grammar | Notes |
 |---|---|---|
 | `filter` | a list of `column:operator:value` conditions, one per entry — `filter: ["grade:eq:VIP", "score:gte:10"]` | Read by the REST list's own code: the same operators, the same value reading, every condition applies, and only the first two colons separate (a value may hold commas). A single string is a list of one. A condition that does not parse, or an unknown operator, is refused (`INVALID_FILTER`) rather than skipped |
-| `orderBy` | `column` or `column:asc`/`column:desc`, comma-separated | Defaults to newest first when omitted. Another direction is refused |
+| `orderBy` | `column` or `column:asc`/`column:desc`, comma-separated | Defaults to newest first when omitted. Ends with `_id`, as on REST. Another direction is refused |
 | `first` | page size | Defaults to 20, capped at 100 |
-| `after` | a `cursor` from a previous page | Take it from `pageInfo.endCursor` — the value is opaque |
+| `after` | a `cursor` from a previous page | Take it from `pageInfo.endCursor` — the value is opaque. A cursor is a row's position in the order asked for, so following `endCursor` reads every row once in that order; a page is read against the rows as they stand, and a row written meanwhile can shift later pages by one |
 
 A single row is fetched by id:
 

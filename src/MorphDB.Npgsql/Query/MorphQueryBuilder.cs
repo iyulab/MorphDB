@@ -304,24 +304,6 @@ internal sealed class MorphQuery : IMorphQuery
         return this;
     }
 
-    /// <inheritdoc />
-    public IMorphQuery After(string cursorColumn, object cursorValue, int pageSize)
-    {
-        _whereConditions.Add(new WhereCondition(cursorColumn, FilterOperator.GreaterThan, cursorValue, false, ConditionType.Standard));
-        _orderByClauses.Add((cursorColumn, false));
-        _limit = Math.Min(pageSize, QueryLimits.MaxPageSize);
-        return this;
-    }
-
-    /// <inheritdoc />
-    public IMorphQuery Before(string cursorColumn, object cursorValue, int pageSize)
-    {
-        _whereConditions.Add(new WhereCondition(cursorColumn, FilterOperator.LessThan, cursorValue, false, ConditionType.Standard));
-        _orderByClauses.Add((cursorColumn, true));
-        _limit = Math.Min(pageSize, QueryLimits.MaxPageSize);
-        return this;
-    }
-
     #endregion
 
     #region EXECUTION
@@ -538,7 +520,7 @@ internal sealed class MorphQuery : IMorphQuery
         }
 
         // ORDER BY
-        foreach (var (column, descending) in _orderByClauses)
+        foreach (var (column, descending) in EffectiveOrder())
         {
             if (descending)
             {
@@ -592,6 +574,23 @@ internal sealed class MorphQuery : IMorphQuery
             activeRowsOnly: !_includeDeleted);
 
     /// <summary>
+    /// The order a query is read in. A page of rows (a limit or an offset, no grouping) ends its order
+    /// with <c>_id</c>, so the order is total: rows that tie on the requested keys — or every row, when
+    /// none are requested — fall in the same place on every read, and consecutive pages neither repeat
+    /// nor skip a row. Without it PostgreSQL may answer ties in any order, page by page.
+    /// </summary>
+    private List<(string Column, bool Descending)> EffectiveOrder()
+    {
+        var paged = (_limit.HasValue || _offset.HasValue) && _groupByColumns.Count == 0 && _aggregates.Count == 0;
+        if (!paged || _orderByClauses.Exists(c => string.Equals(c.Column, SystemColumns.Id, StringComparison.Ordinal)))
+        {
+            return _orderByClauses;
+        }
+
+        return [.. _orderByClauses, (SystemColumns.Id, false)];
+    }
+
+    /// <summary>
     /// Builds a SqlKata query with physical names for actual execution — FROM, WHERE, joins,
     /// ORDER BY, GROUP BY, HAVING and paging. The SELECT list is the caller's
     /// (<see cref="CompileQueryAsync"/>, or an aggregate such as <see cref="CountAsync"/>).
@@ -626,7 +625,7 @@ internal sealed class MorphQuery : IMorphQuery
         }
 
         // ORDER BY
-        foreach (var (column, descending) in _orderByClauses)
+        foreach (var (column, descending) in EffectiveOrder())
         {
             if (descending)
             {

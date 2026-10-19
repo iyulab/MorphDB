@@ -198,6 +198,74 @@ public class GraphQlReadContractTests
             "making it required would break every stored query that leaves it out");
     }
 
+    private const string Page =
+        """
+        query($table: String!, $first: Int, $after: String, $orderBy: String) {
+          records(table: $table, first: $first, after: $after, orderBy: $orderBy) {
+            totalCount
+            pageInfo { hasNextPage endCursor }
+            edges { node { id data } }
+          }
+        }
+        """;
+
+    /// <summary>
+    /// Following <c>endCursor</c> from the first page to the last reads every row once, in the order
+    /// asked for — the default (newest first), an ascending and a descending column order, and an
+    /// order with ties — and <c>hasNextPage</c> is false exactly on the last page, also when the rows
+    /// fill it to the brim.
+    /// </summary>
+    [Theory]
+    [InlineData(null, 7, 3)]
+    [InlineData("score:asc", 7, 3)]
+    [InlineData("score:desc", 7, 3)]
+    [InlineData("label:asc", 6, 3)]
+    [InlineData("label:desc,score:asc", 6, 2)]
+    public async Task Following_end_cursors_reads_every_row_once_in_order(string? orderBy, int rows, int pageSize)
+    {
+        var (table, first) = await SeedRowAsync("p0", 0);
+        var inserted = new List<Guid> { first };
+        for (var i = 1; i < rows; i++)
+        {
+            // Labels tie in pairs, so an order by label alone is not total.
+            inserted.Add(await InsertAsync(table, $"p{i / 2}", i * 10 % 7));
+        }
+
+        // GraphQL's default is newest first; the REST list is asked for the same order explicitly.
+        var expected = await RestOrderAsync(table, orderBy ?? "_created_at:desc,_id:desc");
+        var seen = new List<Guid>();
+        string? after = null;
+        for (var page = 0; page < rows + 1; page++)
+        {
+            var records = (await PostGraphQlAsync(Page, new { table, first = pageSize, after, orderBy }))
+                .GetProperty("data").GetProperty("records");
+            records.GetProperty("totalCount").GetInt32().Should().Be(rows);
+            var ids = records.GetProperty("edges").EnumerateArray().Select(e => e.GetProperty("node").GetProperty("id").GetGuid()).ToList();
+            seen.AddRange(ids);
+
+            var info = records.GetProperty("pageInfo");
+            var more = info.GetProperty("hasNextPage").GetBoolean();
+            more.Should().Be(seen.Count < rows, $"page {page} ends at row {seen.Count} of {rows}");
+            if (!more)
+            {
+                break;
+            }
+
+            after = info.GetProperty("endCursor").GetString();
+        }
+
+        seen.Should().Equal(expected, "every row once, in the order the REST list reads them");
+        seen.Should().BeEquivalentTo(inserted);
+    }
+
+    /// <summary>The rows' ids in the order the REST list answers for the same ordering (one page).</summary>
+    private async Task<List<Guid>> RestOrderAsync(string table, string? orderBy)
+    {
+        var url = $"/api/data/{table}?pageSize=100" + (orderBy is null ? "" : $"&orderBy={orderBy}");
+        var page = await _client.GetFromJsonAsync<JsonElement>(url, TestContext.Current.CancellationToken);
+        return [.. page.GetProperty("data").EnumerateArray().Select(r => r.GetProperty("id").GetGuid())];
+    }
+
     private const string FilteredList =
         """
         query($table: String!, $filter: [String!], $orderBy: String) {

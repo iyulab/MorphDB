@@ -153,6 +153,42 @@ public class DataApiTests
         result.Pagination.PageSize.Should().Be(3);
     }
 
+    /// <summary>
+    /// Pages read one after another hold every row once — with no order asked for (rows come
+    /// earliest first) and with an order every row ties on. The order a page is read in ends with
+    /// <c>_id</c>; without it PostgreSQL may answer ties in a different order on each page.
+    /// </summary>
+    [Theory]
+    [InlineData("")]
+    [InlineData("&orderBy=is_active:desc")]
+    public async Task Consecutive_pages_hold_every_row_once(string order)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tableName = await SetupTestTableAsync();
+        var inserted = new List<Guid>();
+        for (var i = 0; i < 10; i++)
+        {
+            var created = await _client.PostAsJsonAsync($"/api/data/{tableName}", new Dictionary<string, object?>
+            {
+                ["name"] = $"User {i}",
+                ["email"] = $"user{i}@example.com",
+                ["age"] = 30,
+                ["is_active"] = true
+            }, ct);
+            inserted.Add((await created.Content.ReadFromJsonAsync<DataRecordResponse>(ct))!.Id);
+        }
+
+        var seen = new List<Guid>();
+        for (var page = 1; page <= 4; page++)
+        {
+            var result = await _client.GetFromJsonAsync<PagedResponse<DataRecordResponse>>(
+                $"/api/data/{tableName}?page={page}&pageSize=3{order}", ct);
+            seen.AddRange(result!.Data.Select(r => r.Id));
+        }
+
+        seen.Should().Equal(inserted, "every row once, earliest first among ties");
+    }
+
     [Fact]
     public async Task Query_WithFilter_ShouldReturnFilteredResults()
     {
