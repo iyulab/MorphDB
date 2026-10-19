@@ -122,12 +122,12 @@ public sealed class XlsxExportOptions
     /// <summary>
     /// Sheet name.
     /// </summary>
-    public string SheetName { get; init; } = "Sheet1";
+    public string SheetName { get; init; } = "Data";
 
     /// <summary>
-    /// Date format for date columns.
+    /// Whether the first row names the columns.
     /// </summary>
-    public string? DateFormat { get; init; }
+    public bool IncludeHeader { get; init; } = true;
 }
 
 /// <summary>
@@ -261,11 +261,6 @@ public sealed class ExportJobStatus
     /// Number of processed rows.
     /// </summary>
     public long ProcessedRows { get; init; }
-
-    /// <summary>
-    /// Download URL when completed.
-    /// </summary>
-    public string? DownloadUrl { get; init; }
 
     /// <summary>
     /// File size in bytes.

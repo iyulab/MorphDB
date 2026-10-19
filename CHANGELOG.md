@@ -28,11 +28,17 @@
   only), `Filter` and `Headers`; `WebhookDelivery.DeliveryId` is now `Id`, and its `WebhookId`, which
   the service never sent, is gone. `WebhookClient.RetryDeliveryAsync` is removed — the service has no
   such route; a failed delivery is retried by replaying its dead letter.
+- **`MorphDB.Client` export options match the service.** `XlsxExportOptions.DateFormat`, which the
+  service does not take, is replaced by `IncludeHeader`, and the sheet is named `Data` by default, as
+  the service names it. `ExportJobStatus.DownloadUrl`, which the service never sent, is removed —
+  `DownloadExportAsync` reads the file.
 
 ### Fixed
 
 - **`MorphDB.Client`'s `AlterColumnAsync` and `DropColumnAsync` work.** They called the name routes
   above, which the service did not have, so neither could succeed.
+- **`MorphDB.Client` exports to xlsx.** Every xlsx export request carried a `dateFormat` member,
+  which the service refuses (`400`), so none could be requested.
 - **`MorphDB.Client` creates and lists webhooks.** Its request named the table `tableName` where the
   service requires `table`, so every create was refused, and `GetByTableAsync` sent a filter the
   service ignores, so it listed every webhook of the project.

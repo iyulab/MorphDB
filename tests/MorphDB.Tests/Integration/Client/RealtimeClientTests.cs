@@ -247,4 +247,43 @@ public sealed class RealtimeClientTests
 
         await act.Should().NotThrowAsync();
     }
+
+    [Fact]
+    public async Task After_unsubscribing_a_change_no_longer_arrives_while_another_subscriber_keeps_hearing()
+    {
+        await using var client = ClientScopedToTheFixtureProject();
+        var tableName = await CreateTableAsync(client);
+        var first = new Queue<ChangeNotification>();
+        var second = new Queue<ChangeNotification>();
+
+        var leaving = await client.Realtime.SubscribeAsync(tableName, change =>
+        {
+            lock (first)
+                first.Enqueue(change);
+        }, TestContext.Current.CancellationToken);
+        await using var staying = await client.Realtime.SubscribeAsync(tableName, change =>
+        {
+            lock (second)
+                second.Enqueue(change);
+        }, TestContext.Current.CancellationToken);
+
+        await client.Data.InsertAsync(tableName, new Dictionary<string, object?> { ["name"] = "both" }, TestContext.Current.CancellationToken);
+        (await NextAsync(first)).Operation.Should().Be(ChangeOperation.Insert);
+        (await NextAsync(second)).Operation.Should().Be(ChangeOperation.Insert);
+
+        await leaving.UnsubscribeAsync(TestContext.Current.CancellationToken);
+        leaving.IsActive.Should().BeFalse();
+
+        await client.Data.InsertAsync(tableName, new Dictionary<string, object?> { ["name"] = "one" }, TestContext.Current.CancellationToken);
+        (await NextAsync(second)).Data!["name"].Should().Be("one", "the table's other subscriber is still subscribed");
+        await Task.Delay(500, TestContext.Current.CancellationToken);
+        lock (first)
+            first.Should().BeEmpty("an unsubscribed callback is not called");
+
+        await staying.UnsubscribeAsync(TestContext.Current.CancellationToken);
+        await client.Data.InsertAsync(tableName, new Dictionary<string, object?> { ["name"] = "none" }, TestContext.Current.CancellationToken);
+        await Task.Delay(1000, TestContext.Current.CancellationToken);
+        lock (second)
+            second.Should().BeEmpty("with its last subscriber gone the table is unsubscribed");
+    }
 }
