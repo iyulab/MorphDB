@@ -1915,7 +1915,7 @@ public sealed record AggregationOrderByApiRequest
     public AggregationOrderBy ToModel() => new()
     {
         Column = Column,
-        Descending = Direction.Equals("desc", StringComparison.OrdinalIgnoreCase)
+        Descending = OrderExpressions.IsDescending(Direction, Column)
     };
 }
 

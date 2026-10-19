@@ -229,8 +229,9 @@ public class ODataApiTests
 
         var jsonDoc = await response.Content.ReadFromJsonAsync<JsonDocument>(TestContext.Current.CancellationToken);
         jsonDoc!.RootElement.TryGetProperty("@odata.context", out _).Should().BeTrue();
-        jsonDoc.RootElement.TryGetProperty("value", out var valueProp).Should().BeTrue();
-        valueProp.GetProperty("name").GetString().Should().Be("John");
+        jsonDoc.RootElement.TryGetProperty("value", out _).Should().BeFalse(
+            "a single entity carries its properties at the top level; `value` is a collection's");
+        jsonDoc.RootElement.GetProperty("name").GetString().Should().Be("John");
     }
 
     [Fact]
@@ -273,8 +274,8 @@ public class ODataApiTests
         response.StatusCode.Should().Be(HttpStatusCode.Created);
 
         var jsonDoc = await response.Content.ReadFromJsonAsync<JsonDocument>(TestContext.Current.CancellationToken);
-        jsonDoc!.RootElement.TryGetProperty("value", out var valueProp).Should().BeTrue();
-        valueProp.GetProperty("name").GetString().Should().Be("New User");
+        jsonDoc!.RootElement.GetProperty("@odata.context").GetString().Should().EndWith("/$entity");
+        jsonDoc.RootElement.GetProperty("name").GetString().Should().Be("New User");
     }
 
     [Fact]
@@ -301,7 +302,7 @@ public class ODataApiTests
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var jsonDoc = await response.Content.ReadFromJsonAsync<JsonDocument>(TestContext.Current.CancellationToken);
-        jsonDoc!.RootElement.GetProperty("value").GetProperty("name").GetString().Should().Be("John Updated");
+        jsonDoc!.RootElement.GetProperty("name").GetString().Should().Be("John Updated");
     }
 
     [Fact]

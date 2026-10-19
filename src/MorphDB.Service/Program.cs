@@ -145,6 +145,7 @@ try
         .AddGraphQLServer()
         .AddMorphDbTypes()
         .AddHttpRequestInterceptor(ProjectExistence.RequireAsync)
+        .AddErrorFilter<MorphDB.Service.GraphQL.CallerErrorFilter>()
         .ModifyRequestOptions(opt => opt.IncludeExceptionDetails = builder.Environment.IsDevelopment());
 
     // Add real-time services (SignalR + PostgreSQL LISTEN/NOTIFY)

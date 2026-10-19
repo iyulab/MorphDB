@@ -444,7 +444,7 @@ of either answer — see [SYSTEM_COLUMNS.md](SYSTEM_COLUMNS.md).
 
 ```graphql
 query {
-  records(table: "customers", first: 10, filter: "grade:eq:VIP", orderBy: "name:asc") {
+  records(table: "customers", first: 10, filter: ["grade:eq:VIP"], orderBy: "name:asc") {
     edges {
       node { id data createdAt updatedAt }
       cursor
@@ -459,8 +459,8 @@ query {
 
 | Argument | Grammar | Notes |
 |---|---|---|
-| `filter` | `column:operator:value`, comma-separated | The operators are [the same set as on REST](#filter-operators); `ne`, `ge` and `le` are accepted here as spellings of `neq`, `gte` and `lte`. The value is read as null, boolean, number, UUID, timestamp or string, in that order |
-| `orderBy` | `column` or `column:asc`/`column:desc`, comma-separated | Defaults to newest first when omitted |
+| `filter` | a list of `column:operator:value` conditions, one per entry — `filter: ["grade:eq:VIP", "score:gte:10"]` | Read by the REST list's own code: the same operators, the same value reading, every condition applies, and only the first two colons separate (a value may hold commas). A single string is a list of one. A condition that does not parse, or an unknown operator, is refused (`INVALID_FILTER`) rather than skipped |
+| `orderBy` | `column` or `column:asc`/`column:desc`, comma-separated | Defaults to newest first when omitted. Another direction is refused |
 | `first` | page size | Defaults to 20, capped at 100 |
 | `after` | a `cursor` from a previous page | Take it from `pageInfo.endCursor` — the value is opaque |
 
@@ -619,6 +619,10 @@ POST /odata/$batch
 ```
 
 **Supported query options**: `$filter`, `$orderby`, `$top`, `$skip`, `$select`, `$count`
+
+A collection travels in `value`; one entity — read by key, or answered by a create or an update — is
+the entity object itself, its properties beside `@odata.context` (`…/$metadata#Customers/$entity`),
+as OData JSON writes it.
 
 `$count` is a query option, not a path segment: `?$count=true` puts `@odata.count` on the
 collection response, and `/odata/Customers/$count` is not a route. Relations are not navigable
@@ -1461,6 +1465,12 @@ never a silent drop. (Row-data bodies are dictionaries — arbitrary members are
 unknown-field policy is the write pipeline's `UNKNOWN_COLUMN`.) A `4xx` means the
 request must change before retrying; a `500 INTERNAL_ERROR` is a service defect (its message is a
 fixed string — internal exception text never reaches the wire) and retrying may succeed.
+
+GraphQL answers with its own error shape (an `errors` entry inside a `200` payload), and the same
+codes travel there as `extensions.code`, with the status the REST door would answer as
+`extensions.status`: an unknown column in `aggregate` is `COLUMN_NOT_FOUND`, an unknown operator
+`INVALID_ARGUMENT`, a malformed `records` filter `INVALID_FILTER`. A service defect stays an
+unexplained execution error there too.
 
 | Status | Code | When |
 |--------|------|------|

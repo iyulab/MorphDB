@@ -111,7 +111,7 @@ public sealed class MorphDbQuery
         string table,
         int? first,
         string? after,
-        string? filter,
+        IReadOnlyList<string>? filter,
         string? orderBy,
         [Service] IMorphDataService dataService,
         [Service] IProjectContextAccessor projectAccessor,
@@ -120,20 +120,21 @@ public sealed class MorphDbQuery
         var projectId = projectAccessor.ProjectId;
         var query = dataService.Query(projectId).From(table).SelectAll();
 
-        // Apply filters
-        if (!string.IsNullOrEmpty(filter))
+        // The REST list's languages, read by the same code: one condition per filter entry, and a
+        // malformed condition or ordering is refused rather than dropped.
+        try
         {
-            query = ApplyFilter(query, filter);
+            query = FilterExpressions.Apply(query, filter);
+            query = string.IsNullOrWhiteSpace(orderBy)
+                ? query.OrderByDesc("_created_at")
+                : OrderExpressions.Apply(query, orderBy);
         }
-
-        // Apply ordering
-        if (!string.IsNullOrEmpty(orderBy))
+        catch (ArgumentException ex)
         {
-            query = ApplyOrdering(query, orderBy);
-        }
-        else
-        {
-            query = query.OrderByDesc("_created_at");
+            throw new GraphQLException(ErrorBuilder.New()
+                .SetMessage(ex.Message)
+                .SetCode("INVALID_FILTER")
+                .Build());
         }
 
         // Get total count
@@ -259,19 +260,19 @@ public sealed class MorphDbQuery
             Filter = filter?.Select(f => new FilterCondition
             {
                 Column = f.Column,
-                Operator = ParseOperator(f.Operator),
+                Operator = ApiModelExtensions.ParseFilterOperator(f.Operator),
                 Value = GraphQlAny.ToRuntimeValue(f.Value)
             }).ToList(),
             Having = having?.Select(h => new HavingCondition
             {
                 Alias = h.Alias,
-                Operator = ParseOperator(h.Operator),
+                Operator = ApiModelExtensions.ParseFilterOperator(h.Operator),
                 Value = GraphQlAny.ToRuntimeValue(h.Value) ?? 0
             }).ToList(),
             OrderBy = orderBy?.Select(o => new AggregationOrderBy
             {
                 Column = o.Column,
-                Descending = o.Direction?.Equals("desc", StringComparison.OrdinalIgnoreCase) ?? false
+                Descending = OrderExpressions.IsDescending(o.Direction, o.Column)
             }).ToList(),
             Limit = limit,
             Offset = offset
@@ -291,75 +292,6 @@ public sealed class MorphDbQuery
                 }
                 : null
         };
-    }
-
-    private static IMorphQuery ApplyFilter(IMorphQuery query, string filter)
-    {
-        var parts = filter.Split(',', StringSplitOptions.RemoveEmptyEntries);
-        foreach (var part in parts)
-        {
-            var segments = part.Split(':', 3);
-            if (segments.Length != 3)
-                continue;
-
-            var column = segments[0];
-            var op = ParseOperator(segments[1]);
-            var value = ParseValue(segments[2]);
-
-            query = query.AndWhere(column, op, value);
-        }
-
-        return query;
-    }
-
-    private static IMorphQuery ApplyOrdering(IMorphQuery query, string orderBy)
-    {
-        var parts = orderBy.Split(',', StringSplitOptions.RemoveEmptyEntries);
-        foreach (var part in parts)
-        {
-            var segments = part.Split(':', 2);
-            var column = segments[0];
-            var direction = segments.Length > 1 ? segments[1].ToLowerInvariant() : "asc";
-
-            query = direction == "desc" ? query.OrderByDesc(column) : query.OrderBy(column);
-        }
-
-        return query;
-    }
-
-    private static FilterOperator ParseOperator(string op) => op.ToLowerInvariant() switch
-    {
-        "eq" => FilterOperator.Equals,
-        "ne" or "neq" => FilterOperator.NotEquals,
-        "gt" => FilterOperator.GreaterThan,
-        "gte" or "ge" => FilterOperator.GreaterThanOrEquals,
-        "lt" => FilterOperator.LessThan,
-        "lte" or "le" => FilterOperator.LessThanOrEquals,
-        "like" => FilterOperator.Like,
-        "ilike" => FilterOperator.ILike,
-        "contains" => FilterOperator.Contains,
-        "startswith" => FilterOperator.StartsWith,
-        "endswith" => FilterOperator.EndsWith,
-        _ => FilterOperator.Equals
-    };
-
-    private static object? ParseValue(string value)
-    {
-        if (value.Equals("null", StringComparison.OrdinalIgnoreCase))
-            return null;
-        if (value.Equals("true", StringComparison.OrdinalIgnoreCase))
-            return true;
-        if (value.Equals("false", StringComparison.OrdinalIgnoreCase))
-            return false;
-        if (int.TryParse(value, out var intValue))
-            return intValue;
-        if (decimal.TryParse(value, out var decValue))
-            return decValue;
-        if (Guid.TryParse(value, out var guidValue))
-            return guidValue;
-        if (DateTimeOffset.TryParse(value, out var dateValue))
-            return dateValue;
-        return value;
     }
 
     private static string EncodeCursor(Guid id) =>

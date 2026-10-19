@@ -14,7 +14,7 @@ type Query {
     table: String!
     first: Int
     after: String
-    filter: String
+    filter: [String!]
     orderBy: String
   ): RecordConnection! @cost(weight: "10")
   "Gets a single record by ID"

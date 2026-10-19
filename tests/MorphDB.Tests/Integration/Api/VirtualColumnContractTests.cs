@@ -170,6 +170,98 @@ public sealed class VirtualColumnContractTests
         JsonDocument.Parse(await max.Content.ReadAsStringAsync(ct)).RootElement.GetProperty("data")[0].GetProperty("m").GetInt64().Should().Be(12);
     }
 
+    [Fact]
+    public async Task Graphql_records_carries_filters_and_orders_by_each_kind_of_derived_column()
+    {
+        var shop = await SetupAsync();
+        const string query =
+            """
+            query($table: String!, $filter: [String!], $orderBy: String) {
+              records(table: $table, filter: $filter, orderBy: $orderBy) { totalCount edges { node { data } } }
+            }
+            """;
+
+        var orders = (await PostGraphQlAsync(query, new { table = shop.Orders, filter = Conditions("customer_grade:eq:A"), orderBy = "doubled:desc" }))
+            .GetProperty("records");
+        orders.GetProperty("totalCount").GetInt32().Should().Be(2);
+        Nodes(orders).Select(n => (n.GetProperty("customer_grade").GetString(), n.GetProperty("doubled").GetInt32()))
+            .Should().Equal(("A", 14), ("A", 10));
+
+        var customers = (await PostGraphQlAsync(query, new { table = shop.Customers, filter = Conditions("order_total:gt:5"), orderBy = "code" }))
+            .GetProperty("records");
+        Nodes(customers).Select(n => n.GetProperty("order_total").GetInt64()).Should().Equal(12L);
+
+        var products = (await PostGraphQlAsync(query, new { table = shop.Products, filter = (string[]?)null, orderBy = "doubled:desc" }))
+            .GetProperty("records");
+        Nodes(products).Select(n => n.GetProperty("doubled").GetInt32()).Should().Equal(
+            [18, 10], "a table whose only derived column is a formula is read like any other");
+    }
+
+    [Fact]
+    public async Task A_single_record_read_by_graphql_or_odata_carries_each_kind_of_derived_column()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var shop = await SetupAsync();
+        const string query =
+            """
+            query($table: String!, $id: UUID!) { record(table: $table, id: $id) { data } }
+            """;
+
+        var order = (await PostGraphQlAsync(query, new { table = shop.Orders, id = shop.O1 })).GetProperty("record").GetProperty("data");
+        order.GetProperty("customer_grade").GetString().Should().Be("A");
+        order.GetProperty("doubled").GetInt32().Should().Be(10);
+        (await PostGraphQlAsync(query, new { table = shop.Customers, id = shop.C1 })).GetProperty("record").GetProperty("data")
+            .GetProperty("order_total").GetInt64().Should().Be(12);
+        (await PostGraphQlAsync(query, new { table = shop.Products, id = shop.P1 })).GetProperty("record").GetProperty("data")
+            .GetProperty("doubled").GetInt32().Should().Be(10);
+
+        var byKey = await _client.GetAsync($"/odata/{EntitySet(shop.Orders)}({shop.O1})", ct);
+        byKey.StatusCode.Should().Be(HttpStatusCode.OK, await byKey.Content.ReadAsStringAsync(ct));
+        var row = JsonDocument.Parse(await byKey.Content.ReadAsStringAsync(ct)).RootElement;
+        row.GetProperty("customer_grade").GetString().Should().Be("A");
+        row.GetProperty("doubled").GetInt32().Should().Be(10);
+
+        var customer = await _client.GetAsync($"/odata/{EntitySet(shop.Customers)}({shop.C1})", ct);
+        customer.StatusCode.Should().Be(HttpStatusCode.OK, await customer.Content.ReadAsStringAsync(ct));
+        JsonDocument.Parse(await customer.Content.ReadAsStringAsync(ct)).RootElement.GetProperty("order_total").GetInt64().Should().Be(12);
+    }
+
+    [Fact]
+    public async Task A_posted_query_selects_and_orders_by_a_derived_column()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var shop = await SetupAsync();
+
+        var posted = await _client.PostAsync($"/api/data/{shop.Orders}/query",
+            Json("""{"select":["doubled","customer_grade"],"orderBy":["customer_grade:desc","doubled:asc"]}"""), ct);
+        posted.StatusCode.Should().Be(HttpStatusCode.OK, await posted.Content.ReadAsStringAsync(ct));
+        JsonDocument.Parse(await posted.Content.ReadAsStringAsync(ct)).RootElement.GetProperty("data").EnumerateArray()
+            .Select(r => r.GetProperty("data"))
+            .Select(d => (d.GetProperty("customer_grade").GetString(), d.GetProperty("doubled").GetInt32()))
+            .Should().Equal(("B", 2), ("A", 10), ("A", 14));
+    }
+
+    [Fact]
+    public async Task Graphql_aggregate_groups_by_and_sums_a_derived_column()
+    {
+        var shop = await SetupAsync();
+
+        var data = (await PostGraphQlAsync(
+            """
+            query($table: String!) {
+              aggregate(table: $table,
+                        aggregations: [{ function: COUNT, alias: "n" }, { function: SUM, column: "doubled", alias: "total" }],
+                        groupBy: ["customer_grade"],
+                        filter: [{ column: "doubled", operator: "gt", value: 1 }],
+                        orderBy: [{ column: "customer_grade", direction: "desc" }]) { data }
+            }
+            """,
+            new { table = shop.Orders })).GetProperty("aggregate").GetProperty("data");
+
+        data.EnumerateArray().Select(g => (g.GetProperty("customer_grade").GetString(), g.GetProperty("n").GetInt64(), g.GetProperty("total").GetInt64()))
+            .Should().Equal(("B", 1L, 2L), ("A", 2L, 24L));
+    }
+
     [Theory]
     [InlineData("{no_such} * 2", "a column the table does not have")]
     [InlineData("{amount} * ", "a formula that does not parse")]
@@ -261,6 +353,22 @@ public sealed class VirtualColumnContractTests
         string.Concat(table.Split('_').Select(p => p.Length > 0 ? char.ToUpperInvariant(p[0]) + p[1..].ToLowerInvariant() : p));
 
     private static StringContent Json(string body) => new(body, Encoding.UTF8, "application/json");
+
+    private static IEnumerable<JsonElement> Nodes(JsonElement connection) =>
+        connection.GetProperty("edges").EnumerateArray().Select(e => e.GetProperty("node").GetProperty("data"));
+
+    private static string[] Conditions(params string[] conditions) => conditions;
+
+    private async Task<JsonElement> PostGraphQlAsync(string query, object variables)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var response = await _client.PostAsJsonAsync("/graphql", new { query, variables }, ct);
+        var payload = await response.Content.ReadAsStringAsync(ct);
+        response.StatusCode.Should().Be(HttpStatusCode.OK, payload);
+        var root = JsonDocument.Parse(payload).RootElement.Clone();
+        root.TryGetProperty("errors", out var errors).Should().BeFalse($"the read must resolve: {errors}");
+        return root.GetProperty("data");
+    }
 
     private static async Task CreatedAsync(Task<HttpResponseMessage> request)
     {

@@ -1,5 +1,35 @@
 # Changelog
 
+## Unreleased
+
+### Breaking
+
+- **An OData single entity is the entity object, not a `value` wrapper.** A read by key, a create
+  and an update answered `{"@odata.context": "…/$entity", "value": {…}}`; they now answer the
+  entity's properties beside `@odata.context`, as OData JSON writes a single entity. `value` remains
+  the property a collection's members travel in. Clients that read `value` from these three answers
+  read the top-level object instead.
+- **GraphQL `records(filter:)` is a list of conditions, read by the REST list's code.** One condition
+  per entry, every condition applies, and only the first two colons separate, so a value may hold a
+  comma (`filter: ["label:eq:a,b"]`). A single string still reads, as a list of one — but a
+  comma-packed string is now one condition, not several. The operators are the REST set: `isnull` and
+  `isnotnull` work, and the `ne`, `ge` and `le` spellings are gone (`neq`, `gte`, `lte`).
+
+### Fixed
+
+- **A GraphQL filter the server cannot read is refused, not changed.** `records` skipped a condition
+  that did not parse and read an unknown operator as `eq`; `aggregate` read an unknown filter or
+  having operator as `eq`. Each answered a question wider than, or different from, the one asked.
+  They are now errors with `extensions.code` `INVALID_FILTER` (`records`) or `INVALID_ARGUMENT`
+  (`aggregate`). Values are read the same on every server — numbers with the invariant culture, an
+  instant as UTC.
+- **An order direction other than `asc` or `desc` is refused** on the REST list, `POST …/query`,
+  `POST …/aggregate` and both GraphQL reads. It was read as ascending.
+- **A caller's mistake in a GraphQL resolver carries the code REST answers with.** An unknown column,
+  table or argument reached the client as an unexplained «Unexpected Execution Error» outside
+  Development; it now carries its message, `extensions.code` (`COLUMN_NOT_FOUND`, `TABLE_NOT_FOUND`,
+  `INVALID_ARGUMENT`, …) and `extensions.status`. A service defect stays unexplained.
+
 ## 0.22.0
 
 A minor, mostly security. Routes that name an object by id — a schema index, relation or batch

@@ -154,11 +154,7 @@ public sealed partial class MorphODataController : ControllerBase
             return NotFound(new { error = $"Entity with key '{key}' not found in '{entitySet}'." });
         }
 
-        var response = new ODataSingleResponse
-        {
-            Context = $"{Request.Scheme}://{Request.Host}/odata/$metadata#{entitySet}/$entity",
-            Value = entity
-        };
+        var response = SingleEntity(entitySet, entity);
 
         return Ok(response);
     }
@@ -197,11 +193,7 @@ public sealed partial class MorphODataController : ControllerBase
             }
 
             var result = writeResult.Data ?? data;
-            var response = new ODataSingleResponse
-            {
-                Context = $"{Request.Scheme}://{Request.Host}/odata/$metadata#{entitySet}/$entity",
-                Value = result
-            };
+            var response = SingleEntity(entitySet, result);
 
             var id = SystemColumns.RequireRecordId(result);
             return Created($"/odata/{entitySet}({id})", response);
@@ -252,11 +244,7 @@ public sealed partial class MorphODataController : ControllerBase
                 return BadRequest(new { error = string.Join("; ", writeResult.Errors.Select(e => e.Message)) });
             }
 
-            var response = new ODataSingleResponse
-            {
-                Context = $"{Request.Scheme}://{Request.Host}/odata/$metadata#{entitySet}/$entity",
-                Value = writeResult.Data ?? data
-            };
+            var response = SingleEntity(entitySet, writeResult.Data ?? data);
 
             return Ok(response);
         }
@@ -264,6 +252,25 @@ public sealed partial class MorphODataController : ControllerBase
         {
             return BadRequest(new { error = ex.Message });
         }
+    }
+
+    /// <summary>
+    /// One entity as OData JSON writes it (OData JSON Format 4.01 §10): the context annotation, then
+    /// the entity's own properties at the top level of the object — not wrapped in <c>value</c>, which
+    /// is the property a collection's members travel in.
+    /// </summary>
+    private Dictionary<string, object?> SingleEntity(string entitySet, IDictionary<string, object?> entity)
+    {
+        var body = new Dictionary<string, object?>(entity.Count + 1, StringComparer.Ordinal)
+        {
+            ["@odata.context"] = $"{Request.Scheme}://{Request.Host}/odata/$metadata#{entitySet}/$entity",
+        };
+        foreach (var (name, value) in entity)
+        {
+            body[name] = value;
+        }
+
+        return body;
     }
 
     /// <summary>
@@ -550,18 +557,6 @@ internal sealed class ODataResponse
 
     [System.Text.Json.Serialization.JsonPropertyName("value")]
     public IReadOnlyList<IDictionary<string, object?>>? Value { get; set; }
-}
-
-/// <summary>
-/// OData single entity response format.
-/// </summary>
-internal sealed class ODataSingleResponse
-{
-    [System.Text.Json.Serialization.JsonPropertyName("@odata.context")]
-    public string? Context { get; set; }
-
-    [System.Text.Json.Serialization.JsonPropertyName("value")]
-    public IDictionary<string, object?>? Value { get; set; }
 }
 
 /// <summary>

@@ -121,7 +121,7 @@ public sealed class DataController : ControllerBase
             // Apply ordering
             if (!string.IsNullOrEmpty(query.OrderBy))
             {
-                morphQuery = ApplyOrdering(morphQuery, query.OrderBy);
+                morphQuery = OrderExpressions.Apply(morphQuery, query.OrderBy);
             }
 
             // Get total count for pagination
@@ -234,7 +234,7 @@ public sealed class DataController : ControllerBase
             // Ordering
             if (request.OrderBy is { Count: > 0 })
             {
-                morphQuery = ApplyOrdering(morphQuery, string.Join(",", request.OrderBy));
+                morphQuery = OrderExpressions.Apply(morphQuery, string.Join(",", request.OrderBy));
             }
 
             var totalCount = await morphQuery.CountAsync(cancellationToken);
@@ -549,30 +549,6 @@ public sealed class DataController : ControllerBase
             System.Text.Json.JsonValueKind.Null => null,
             _ => element.GetRawText()
         };
-    }
-
-    private static IMorphQuery ApplyOrdering(IMorphQuery query, string orderExpression)
-    {
-        // Parse order expression: column:asc,column2:desc
-        var orders = orderExpression.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-        foreach (var order in orders)
-        {
-            var parts = order.Split(':', 2);
-            var column = parts[0].Trim();
-            var direction = parts.Length > 1 ? parts[1].Trim().ToLowerInvariant() : "asc";
-
-            if (direction == "desc")
-            {
-                query = query.OrderByDesc(column);
-            }
-            else
-            {
-                query = query.OrderBy(column);
-            }
-        }
-
-        return query;
     }
 
     /// <summary>

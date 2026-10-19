@@ -198,6 +198,101 @@ public class GraphQlReadContractTests
             "making it required would break every stored query that leaves it out");
     }
 
+    private const string FilteredList =
+        """
+        query($table: String!, $filter: [String!], $orderBy: String) {
+          records(table: $table, first: 10, filter: $filter, orderBy: $orderBy) { totalCount edges { node { data } } }
+        }
+        """;
+
+    /// <summary>
+    /// <c>records</c> reads its filter with the REST list's code: one condition per entry, every
+    /// condition applies, and only the first two colons separate — so a value may hold a comma. It
+    /// used to split one string on commas, which cut such a value in two and dropped the halves.
+    /// </summary>
+    [Fact]
+    public async Task Records_reads_one_condition_per_filter_entry_and_a_value_may_hold_a_comma()
+    {
+        var (table, _) = await SeedRowAsync("a,b", 3);
+        await InsertAsync(table, "a", 3);
+        await InsertAsync(table, "a,b", 8);
+
+        var both = (await PostGraphQlAsync(FilteredList, new { table, filter = Conditions("label:eq:a,b", "score:lt:5") }))
+            .GetProperty("data").GetProperty("records");
+        both.GetProperty("totalCount").GetInt32().Should().Be(1, "both conditions apply, and the comma is part of the value");
+
+        // A single string is a list of one (GraphQL input coercion) — a query written against the old
+        // single-string argument still reads, as one condition.
+        var single = await PostGraphQlAsync(
+            $$"""query { records(table: "{{table}}", filter: "label:eq:a,b") { totalCount } }""", new { });
+        single.GetProperty("data").GetProperty("records").GetProperty("totalCount").GetInt32().Should().Be(2);
+
+        var isnull = (await PostGraphQlAsync(FilteredList, new { table, filter = Conditions("label:isnotnull") }))
+            .GetProperty("data").GetProperty("records");
+        isnull.GetProperty("totalCount").GetInt32().Should().Be(3, "the operators are the REST set, isnull and isnotnull included");
+    }
+
+    /// <summary>
+    /// A condition the server cannot read is refused, not skipped: a skipped condition answers a wider
+    /// question than the one asked. An unknown operator used to read as <c>eq</c> and a malformed
+    /// condition used to vanish; an unknown order direction used to read as ascending.
+    /// </summary>
+    [Theory]
+    [InlineData("""filter: ["label"]""", "Invalid filter format")]
+    [InlineData("""filter: ["label:between:1"]""", "Unknown filter operator")]
+    [InlineData("""filter: ["label:isnull:x"]""", "takes no value")]
+    [InlineData("""orderBy: "score:sideways" """, "the direction is 'asc' or 'desc'")]
+    public async Task Records_refuses_a_condition_or_order_it_cannot_read(string arguments, string message)
+    {
+        var (table, _) = await SeedRowAsync("refused", 1);
+
+        var error = await GraphQlErrorAsync($$"""query { records(table: "{{table}}", {{arguments}}) { totalCount } }""");
+
+        error.GetProperty("extensions").GetProperty("code").GetString().Should().Be("INVALID_FILTER");
+        error.GetProperty("message").GetString().Should().Contain(message);
+    }
+
+    /// <summary>
+    /// The structured filter, having and order of <c>aggregate</c> read operators and directions with the
+    /// REST parser too, and a refusal carries REST's code rather than an unexplained execution error.
+    /// </summary>
+    [Theory]
+    [InlineData("""filter: [{ column: "label", operator: "between", value: 1 }]""", "Unknown filter operator")]
+    [InlineData("""having: [{ alias: "n", operator: "around", value: 1 }]""", "Unknown filter operator")]
+    [InlineData("""orderBy: [{ column: "label", direction: "up" }]""", "the direction is 'asc' or 'desc'")]
+    public async Task Aggregate_refuses_an_operator_or_direction_it_cannot_read(string arguments, string message)
+    {
+        var (table, _) = await SeedRowAsync("refused", 1);
+
+        var error = await GraphQlErrorAsync(
+            $$"""query { aggregate(table: "{{table}}", aggregations: [{ function: COUNT, alias: "n" }], groupBy: ["label"], {{arguments}}) { data } }""");
+
+        error.GetProperty("extensions").GetProperty("code").GetString().Should().Be("INVALID_ARGUMENT");
+        error.GetProperty("message").GetString().Should().Contain(message);
+    }
+
+    [Fact]
+    public async Task A_caller_mistake_inside_a_resolver_carries_the_rest_code()
+    {
+        var (table, _) = await SeedRowAsync("named", 1);
+
+        var error = await GraphQlErrorAsync(
+            $$"""query { aggregate(table: "{{table}}", aggregations: [{ function: SUM, column: "no_such", alias: "s" }]) { data } }""");
+
+        error.GetProperty("extensions").GetProperty("code").GetString().Should().Be("COLUMN_NOT_FOUND");
+    }
+
+    private async Task<JsonElement> GraphQlErrorAsync(string query)
+    {
+        var response = await _client.PostAsJsonAsync("/graphql", new { query }, TestContext.Current.CancellationToken);
+        var payload = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        var root = JsonDocument.Parse(payload).RootElement.Clone();
+        root.TryGetProperty("errors", out var errors).Should().BeTrue($"the request must be refused: {payload}");
+        return errors[0];
+    }
+
+    private static string[] Conditions(params string[] conditions) => conditions;
+
     private async Task<JsonElement> PostGraphQlAsync(string query, object variables)
     {
         var response = await _client.PostAsJsonAsync("/graphql", new { query, variables });

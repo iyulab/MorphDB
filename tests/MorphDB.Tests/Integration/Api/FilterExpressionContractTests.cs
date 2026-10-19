@@ -98,6 +98,30 @@ public class FilterExpressionContractTests
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
+    /// <summary>
+    /// An order direction other than <c>asc</c>/<c>desc</c> used to read as ascending — the list came
+    /// back in an order the caller did not ask for, with a 200.
+    /// </summary>
+    [Theory]
+    [InlineData("GET", "?orderBy=score:descending")]
+    [InlineData("POST query", """{"orderBy":["score:up"]}""")]
+    [InlineData("POST aggregate", """{"aggregations":[{"function":"count","alias":"n"}],"groupBy":["name"],"orderBy":[{"column":"name","direction":"down"}]}""")]
+    public async Task An_order_direction_it_cannot_read_is_refused(string route, string request)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var table = await SeedAsync();
+
+        var response = route switch
+        {
+            "GET" => await _client.GetAsync($"/api/data/{table}{request}", ct),
+            "POST query" => await _client.PostAsync($"/api/data/{table}/query", new StringContent(request, System.Text.Encoding.UTF8, "application/json"), ct),
+            _ => await _client.PostAsync($"/api/data/{table}/aggregate", new StringContent(request, System.Text.Encoding.UTF8, "application/json"), ct),
+        };
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest, await response.Content.ReadAsStringAsync(ct));
+        (await response.Content.ReadAsStringAsync(ct)).Should().Contain("the direction is 'asc' or 'desc'");
+    }
+
     [Fact]
     public async Task Bulk_delete_removes_only_the_rows_every_filter_selects()
     {
