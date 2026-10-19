@@ -811,6 +811,22 @@ public static class DdlBuilder
                 resolved_by UUID
             );
 
+            -- A change a webhook subscribes to, recorded by the data table's trigger in the writing
+            -- transaction itself: it exists exactly when the write committed, whether or not any
+            -- service was listening at that moment. The webhook outbox drainer turns each into
+            -- deliveries and removes it.
+            CREATE TABLE IF NOT EXISTS morphdb._morph_change_outbox (
+                seq BIGSERIAL PRIMARY KEY,
+                project_id UUID NOT NULL,
+                table_id UUID NOT NULL,
+                table_name TEXT NOT NULL,
+                operation VARCHAR(10) NOT NULL,
+                record_id UUID,
+                transaction_id TEXT NOT NULL,
+                occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                attempts INTEGER NOT NULL DEFAULT 0
+            );
+
             CREATE TABLE IF NOT EXISTS morphdb._morph_import_jobs (
                 job_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 project_id UUID NOT NULL,

@@ -41,9 +41,9 @@ public sealed partial class PostgresChangeListener : BackgroundService
     private const int KeepAliveSeconds = 30;
 
     private readonly ILogger<PostgresChangeListener> _logger;
-    private readonly IServiceScopeFactory _scopeFactory;
     private readonly IHubContext<MorphHub, IMorphHubClient> _hubContext;
     private readonly IMorphDataService _dataService;
+    private readonly MorphDB.Service.Services.OutboxSignal _outboxSignal;
     private readonly string _connectionString;
     private readonly Channel<string> _pending = Channel.CreateBounded<string>(new BoundedChannelOptions(PendingNotificationCapacity)
     {
@@ -54,13 +54,13 @@ public sealed partial class PostgresChangeListener : BackgroundService
 
     public PostgresChangeListener(
         ILogger<PostgresChangeListener> logger,
-        IServiceScopeFactory scopeFactory,
         IHubContext<MorphHub, IMorphHubClient> hubContext,
         IMorphDataService dataService,
+        MorphDB.Service.Services.OutboxSignal outboxSignal,
         IConfiguration configuration)
     {
         _logger = logger;
-        _scopeFactory = scopeFactory;
+        _outboxSignal = outboxSignal;
         _hubContext = hubContext;
         _dataService = dataService;
         _connectionString = configuration.GetConnectionString("MorphDB")
@@ -185,6 +185,11 @@ public sealed partial class PostgresChangeListener : BackgroundService
 
         LogChangeReceived(_logger, changeEvent.Operation, changeEvent.Table, changeEvent.RecordId);
 
+        // A webhook's deliveries are not queued from here: the change was recorded in the outbox by
+        // the writing transaction (WebhookOutboxDrainer). This only says to look now rather than at
+        // the drainer's next timed pass.
+        _outboxSignal.Notify();
+
         var groupName = MorphHub.GetTableGroupName(changeEvent.ProjectId, changeEvent.Table);
 
         switch (changeEvent.Operation.ToUpperInvariant())
@@ -193,7 +198,6 @@ public sealed partial class PostgresChangeListener : BackgroundService
                 {
                     var data = await ReadRowAsync(changeEvent, cancellationToken);
                     await BroadcastRecordChangedAsync(groupName, changeEvent, ChangeOperation.Insert, data);
-                    await DeliverWebhooksAsync(changeEvent, data, WebhookEvent.Insert);
                     break;
                 }
 
@@ -201,13 +205,11 @@ public sealed partial class PostgresChangeListener : BackgroundService
                 {
                     var data = await ReadRowAsync(changeEvent, cancellationToken);
                     await BroadcastRecordChangedAsync(groupName, changeEvent, ChangeOperation.Update, data);
-                    await DeliverWebhooksAsync(changeEvent, data, WebhookEvent.Update);
                     break;
                 }
 
             case ChangeOperation.Delete:
                 await BroadcastRecordDeletedAsync(groupName, changeEvent);
-                await DeliverWebhooksAsync(changeEvent, null, WebhookEvent.Delete);
                 break;
         }
     }
@@ -246,53 +248,6 @@ public sealed partial class PostgresChangeListener : BackgroundService
         }
 
         return row;
-    }
-
-    /// <summary>
-    /// The same change event SignalR just broadcast, offered to a second consumer: any webhook
-    /// subscribed to this table and event, narrowed by <see cref="WebhookFilterMatcher"/> to the
-    /// rows its <c>Filter</c> admits.
-    /// </summary>
-    private async Task DeliverWebhooksAsync(
-        DatabaseChangeEvent changeEvent, IDictionary<string, object?>? logicalData, WebhookEvent webhookEvent)
-    {
-        using var scope = _scopeFactory.CreateScope();
-        var webhookManager = scope.ServiceProvider.GetRequiredService<IWebhookManager>();
-
-        var webhooks = await webhookManager.GetSubscribedWebhooksAsync(
-            changeEvent.ProjectId, changeEvent.TableId, webhookEvent);
-
-        if (webhooks.Count == 0)
-        {
-            return;
-        }
-
-        var payload = new WebhookPayload
-        {
-            Event = webhookEvent.ToString().ToLowerInvariant(),
-            Table = changeEvent.Table,
-            RecordId = changeEvent.RecordId,
-            Timestamp = changeEvent.Timestamp,
-            Data = logicalData,
-        };
-
-        var deliveryService = scope.ServiceProvider.GetRequiredService<IWebhookDeliveryService>();
-        foreach (var webhook in webhooks)
-        {
-            if (!WebhookFilterMatcher.Matches(webhook.Filter, logicalData))
-            {
-                continue;
-            }
-
-            try
-            {
-                await deliveryService.QueueDeliveryAsync(webhook, payload, changeEvent.ChangeKey);
-            }
-            catch (Exception ex)
-            {
-                LogWebhookQueueError(_logger, webhook.WebhookId, ex);
-            }
-        }
     }
 
     private async Task BroadcastRecordChangedAsync(
@@ -352,9 +307,6 @@ public sealed partial class PostgresChangeListener : BackgroundService
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Change received: {Operation} on {Table}, record {RecordId}")]
     private static partial void LogChangeReceived(ILogger logger, string operation, string table, Guid? recordId);
-
-    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to queue webhook delivery for webhook {WebhookId}")]
-    private static partial void LogWebhookQueueError(ILogger logger, Guid webhookId, Exception exception);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "{Operation} on {Table}, record {RecordId}: the row could not be read back (deleted since, or hidden by a row-level security policy); broadcasting the change without data")]
     private static partial void LogRowGoneBeforeRead(ILogger logger, string operation, string table, Guid recordId);

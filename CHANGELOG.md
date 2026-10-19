@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **A webhook no longer loses the changes committed while no instance was listening.** Deliveries
+  were queued from the change notification, which PostgreSQL sends only to connections listening at
+  commit time: a change committed while the service was down, restarting, or reconnecting its
+  listener was never delivered. The data table's trigger now records a change some active webhook
+  subscribes to in `morphdb._morph_change_outbox`, inside the writing transaction, and the service
+  queues deliveries from there — on hearing the notification, and on a timer when it did not. A
+  rolled-back write records nothing; a table without webhooks records nothing. One delivery per
+  change per webhook, as before. Upgrading needs no step: the table and the trigger function are
+  created on start.
+
 ## 0.23.0
 
 A minor about saying the same thing on every door, and refusing what cannot be read. A filter, an

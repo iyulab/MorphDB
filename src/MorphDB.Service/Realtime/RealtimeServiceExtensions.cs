@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using MorphDB.Core.Abstractions;
 
 namespace MorphDB.Service.Realtime;
@@ -28,6 +29,9 @@ public static class RealtimeServiceExtensions
         // Add change notification setup (implements ITableNotificationTriggerManager)
         services.AddSingleton<ChangeNotificationSetup>();
         services.AddSingleton<ITableNotificationTriggerManager>(sp => sp.GetRequiredService<ChangeNotificationSetup>());
+
+        // The listener nudges the webhook outbox drainer on every notification it hears.
+        services.TryAddSingleton<MorphDB.Service.Services.OutboxSignal>();
 
         // Add hosted services
         services.AddHostedService<ChangeNotificationInitializer>();

@@ -41,6 +41,15 @@ public sealed partial class ChangeNotificationSetup : ITableNotificationTriggerM
         // or not anyone was listening. The service reads the row back by key when it handles the
         // notification (PostgresChangeListener), which is the shape the NOTIFY documentation
         // recommends: "put it in a database table and send the key of the record".
+        //
+        // A change some active webhook subscribes to is also written to morphdb._morph_change_outbox,
+        // in this same transaction: the notification is lost if no service is listening when the
+        // write commits, the outbox row is not (WebhookOutboxDrainer). Changes no webhook wants are
+        // not written there, so a table without webhooks pays nothing for it.
+        //
+        // SECURITY DEFINER, with a fixed search_path: the function is run by whoever writes a data
+        // row, and reads the control plane and writes the outbox as the role that owns them, so no
+        // writer needs a grant on either. Every name in it is schema-qualified or in pg_catalog.
         var sql = $"""
             CREATE OR REPLACE FUNCTION {FunctionName}() RETURNS trigger AS $$
             DECLARE
@@ -80,9 +89,17 @@ public sealed partial class ChangeNotificationSetup : ITableNotificationTriggerM
                     'transaction_id', pg_current_xact_id()::text
                 )::text);
 
+                IF EXISTS (
+                    SELECT 1 FROM morphdb._morph_webhooks w
+                    WHERE w.table_id = table_id_val AND w.is_active AND lower(TG_OP) = ANY (w.events)
+                ) THEN
+                    INSERT INTO morphdb._morph_change_outbox (project_id, table_id, table_name, operation, record_id, transaction_id)
+                    VALUES (project_id, table_id_val, table_name, TG_OP, record_id, pg_current_xact_id()::text);
+                END IF;
+
                 RETURN COALESCE(NEW, OLD);
             END;
-            $$ LANGUAGE plpgsql;
+            $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp;
             """;
 
         await using var cmd = new NpgsqlCommand(sql, connection);

@@ -790,6 +790,16 @@ on that event.
 
 `events` accepts `insert`, `update`, and `delete`; a webhook subscribes to one or more of them.
 
+**A committed change is delivered; a rolled-back one never is.** The write that makes a change a
+webhook subscribes to records it, in the same transaction, in `morphdb._morph_change_outbox`, and
+the service turns each recorded change into deliveries and removes it. So a change committed while
+no instance of the service was running, or while its change notifications were not being heard, is
+delivered once the service runs again. A change is queued as soon as an instance hears of it, and
+otherwise within a few seconds. Each webhook gets one delivery per change — the transaction, table,
+row and operation name it, so several writes to one row in one transaction are one delivery — however
+many instances run. Deliveries carry no ordering guarantee between changes. A table no active webhook
+subscribes to records nothing.
+
 A delivery's `data` is read the way a change notification's is, without a caller. For a table under
 a [row-level security policy](#row-level-security-policies) that compares with the caller it is
 empty, and a webhook with a `filter` on such a table is therefore not delivered.

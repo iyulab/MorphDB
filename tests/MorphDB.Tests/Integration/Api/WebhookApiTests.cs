@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.Extensions.DependencyInjection;
 using MorphDB.Service.Models.Api;
 using MorphDB.Tests.Fixtures;
 
@@ -495,6 +496,122 @@ public class WebhookApiTests
 
         deliveries.Should().NotBeNullOrEmpty(
             "a filter written in the same logical column names the API itself uses must be able to match a real row");
+    }
+
+    /// <summary>
+    /// The change a webhook subscribes to is recorded by the writing transaction itself: it is in the
+    /// outbox before the commit, and gone with a rollback. A notification is sent only at commit, so
+    /// queuing from it lost every change committed while no service was listening.
+    /// </summary>
+    [Fact]
+    public async Task DataChange_IsRecordedInTheOutboxByTheWritingTransaction_AndOnlyForASubscribedTable()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var watched = await CreateTestTableAsync();
+        var unwatched = await CreateTestTableAsync();
+        (await _client.PostAsJsonAsync("/api/webhooks", new CreateWebhookApiRequest
+        {
+            Name = $"outbox_test_{Guid.NewGuid():N}"[..30],
+            Table = watched,
+            Url = "https://example.invalid/webhook",
+            Events = ["insert"]
+        }, ct)).EnsureSuccessStatusCode();
+
+        var dataSource = _fixture.Api.Services.GetRequiredService<global::Npgsql.NpgsqlDataSource>();
+        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        foreach (var (table, expected) in new[] { (watched, 1L), (unwatched, 0L) })
+        {
+            var (tableId, qualified, nameColumn, idColumn) = await PhysicalAsync(connection, table, ct);
+            await using var transaction = await connection.BeginTransactionAsync(ct);
+            await using (var insert = new global::Npgsql.NpgsqlCommand($"INSERT INTO {qualified} (project_id, \"{idColumn}\", \"{nameColumn}\") VALUES (@project, gen_random_uuid(), 'outbox')", connection, transaction))
+            {
+                insert.Parameters.AddWithValue("project", _projectId);
+                await insert.ExecuteNonQueryAsync(ct);
+            }
+
+            (await OutboxCountAsync(connection, transaction, tableId, ct)).Should().Be(expected,
+                expected == 1 ? "a subscribed change is recorded inside the writing transaction" : "a table no webhook watches writes nothing to the outbox");
+
+            await transaction.RollbackAsync(ct);
+            (await OutboxCountAsync(connection, null, tableId, ct)).Should().Be(0, "a rolled-back write leaves no change behind");
+        }
+    }
+
+    /// <summary>
+    /// A change in the outbox with no notification at all — as when the write committed while no
+    /// instance was listening — is still turned into a delivery: the drainer looks on its own timer.
+    /// </summary>
+    [Fact]
+    public async Task DataChange_RecordedWhileNobodyWasListening_IsStillQueued()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tableName = await CreateTestTableAsync();
+        var created = await (await _client.PostAsJsonAsync("/api/webhooks", new CreateWebhookApiRequest
+        {
+            Name = $"unheard_test_{Guid.NewGuid():N}"[..30],
+            Table = tableName,
+            Url = "https://example.invalid/webhook",
+            Events = ["update"]
+        }, ct)).Content.ReadFromJsonAsync<WebhookApiResponse>(ct);
+        var recordId = Guid.NewGuid();
+        (await _client.PostAsJsonAsync($"/api/data/{tableName}", new Dictionary<string, object?> { ["_id"] = recordId, ["name"] = "unheard" }, ct))
+            .EnsureSuccessStatusCode();
+
+        // An update recorded the way the trigger records one, but with no NOTIFY behind it.
+        var dataSource = _fixture.Api.Services.GetRequiredService<global::Npgsql.NpgsqlDataSource>();
+        await using (var connection = await dataSource.OpenConnectionAsync(ct))
+        {
+            var (tableId, _, _, _) = await PhysicalAsync(connection, tableName, ct);
+            await using var record = new global::Npgsql.NpgsqlCommand(
+                """
+                INSERT INTO morphdb._morph_change_outbox (project_id, table_id, table_name, operation, record_id, transaction_id)
+                VALUES (@project, @table, @name, 'UPDATE', @record, @tx)
+                """, connection);
+            record.Parameters.AddWithValue("project", _projectId);
+            record.Parameters.AddWithValue("table", tableId);
+            record.Parameters.AddWithValue("name", tableName);
+            record.Parameters.AddWithValue("record", recordId);
+            record.Parameters.AddWithValue("tx", $"unheard-{Guid.NewGuid():N}");
+            await record.ExecuteNonQueryAsync(ct);
+        }
+
+        IReadOnlyList<DeliveryApiResponse>? deliveries = null;
+        var timeout = Task.Delay(TimeSpan.FromSeconds(20), ct);
+        while ((deliveries is null || deliveries.Count == 0) && !timeout.IsCompleted)
+        {
+            await Task.Delay(200, ct);
+            var response = await _client.GetAsync($"/api/webhooks/{created!.Id}/deliveries", ct);
+            deliveries = await response.Content.ReadFromJsonAsync<IReadOnlyList<DeliveryApiResponse>>(ct);
+        }
+
+        deliveries.Should().ContainSingle("a recorded change is delivered whether or not its notification was heard")
+            .Which.Event.Should().Be("update");
+    }
+
+    private async Task<(Guid TableId, string Qualified, string NameColumn, string IdColumn)> PhysicalAsync(global::Npgsql.NpgsqlConnection connection, string logicalName, CancellationToken ct)
+    {
+        await using var lookup = new global::Npgsql.NpgsqlCommand(
+            """
+            SELECT t.table_id, format('%I.%I', n.nspname, cl.relname), c.physical_name, i.physical_name
+            FROM morphdb._morph_tables t
+            JOIN pg_class cl ON cl.relname = t.physical_name
+            JOIN pg_namespace n ON n.oid = cl.relnamespace
+            JOIN morphdb._morph_columns c ON c.table_id = t.table_id AND c.logical_name = 'name' AND c.is_active
+            JOIN morphdb._morph_columns i ON i.table_id = t.table_id AND i.logical_name = '_id' AND i.is_active
+            WHERE t.project_id = @project AND t.logical_name = @name AND t.is_active
+            """, connection);
+        lookup.Parameters.AddWithValue("project", _projectId);
+        lookup.Parameters.AddWithValue("name", logicalName);
+        await using var reader = await lookup.ExecuteReaderAsync(ct);
+        (await reader.ReadAsync(ct)).Should().BeTrue();
+        return (reader.GetGuid(0), reader.GetString(1), reader.GetString(2), reader.GetString(3));
+    }
+
+    private static async Task<long> OutboxCountAsync(global::Npgsql.NpgsqlConnection connection, global::Npgsql.NpgsqlTransaction? transaction, Guid tableId, CancellationToken ct)
+    {
+        await using var count = new global::Npgsql.NpgsqlCommand("SELECT count(*) FROM morphdb._morph_change_outbox WHERE table_id = @table", connection, transaction);
+        count.Parameters.AddWithValue("table", tableId);
+        return (long)(await count.ExecuteScalarAsync(ct))!;
     }
 
     [Fact]

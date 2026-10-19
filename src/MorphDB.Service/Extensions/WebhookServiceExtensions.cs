@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using MorphDB.Core.Abstractions;
 using MorphDB.Service.Services;
 
@@ -29,7 +30,9 @@ public static class WebhookServiceExtensions
             client.DefaultRequestHeaders.Add("Accept", "application/json");
         });
 
-        // Register background processor
+        // Changes recorded in the outbox become deliveries; the processor sends them.
+        services.TryAddSingleton<OutboxSignal>();
+        services.AddHostedService<WebhookOutboxDrainer>();
         services.AddHostedService<WebhookProcessorService>();
 
         return services;
