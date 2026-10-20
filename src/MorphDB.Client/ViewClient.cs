@@ -38,7 +38,7 @@ public sealed class ViewClient
         var response = await _httpClient.GetAsync(
             $"/api/views/{Uri.EscapeDataString(viewName)}",
             cancellationToken);
-        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+        if (await ErrorEnvelope.IsAbsentAsync(response, cancellationToken))
             return null;
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.ViewInfo, cancellationToken);

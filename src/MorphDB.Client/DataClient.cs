@@ -46,7 +46,7 @@ public sealed class DataClient
         var response = await _httpClient.GetAsync(
             $"/api/data/{Uri.EscapeDataString(tableName)}/{id}",
             cancellationToken);
-        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+        if (await ErrorEnvelope.IsAbsentAsync(response, cancellationToken))
             return null;
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.DataRecord, cancellationToken);

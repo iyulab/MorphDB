@@ -31,7 +31,7 @@ public sealed class SchemaClient
     public async Task<TableInfo?> GetTableAsync(string tableName, CancellationToken cancellationToken = default)
     {
         var response = await _httpClient.GetAsync($"/api/schema/tables/{Uri.EscapeDataString(tableName)}", cancellationToken);
-        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+        if (await ErrorEnvelope.IsAbsentAsync(response, cancellationToken))
             return null;
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.TableInfo, cancellationToken);

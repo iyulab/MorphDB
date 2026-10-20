@@ -39,6 +39,34 @@ public class ProjectClientTests
         return client;
     }
 
+    /// <summary>
+    /// A client scoped to a project that has since been deleted: its nullable getters must say the
+    /// project is gone, not answer <c>null</c> as if the table were — a caller that read "no table" and
+    /// went on to create one failed with an error that named neither.
+    /// </summary>
+    [Fact]
+    public async Task A_client_scoped_to_a_deleted_project_is_told_the_project_is_gone()
+    {
+        await using var admin = ClientWithoutProject();
+        var id = Guid.NewGuid();
+        await admin.Projects.CreateAsync(new CreateProjectRequest
+        {
+            ProjectId = id,
+            Name = "Deleted scope",
+            Slug = $"gone-{id:N}"[..20],
+        }, TestContext.Current.CancellationToken);
+        await admin.Projects.DeleteAsync(id, TestContext.Current.CancellationToken);
+
+        await using var scoped = ClientWithoutProject();
+        scoped.SetProjectId(id);
+
+        var act = () => scoped.Schema.GetTableAsync("items", TestContext.Current.CancellationToken);
+        (await act.Should().ThrowAsync<MorphDBNotFoundException>()).Which.ErrorCode.Should().Be("PROJECT_NOT_FOUND");
+
+        (await admin.Projects.GetAsync(id, TestContext.Current.CancellationToken)).Should().BeNull(
+            "for the project getter the project is the resource, so absent still reads as null");
+    }
+
     [Fact]
     public async Task A_project_can_be_created_read_updated_and_deleted_without_ever_setting_a_project_id()
     {

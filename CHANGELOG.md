@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **The client no longer reads a deleted project as a missing table.** A request in a project that
+  does not exist answers `404` `PROJECT_NOT_FOUND`, and the client's nullable getters —
+  `Schema.GetTableAsync`, `Data.GetByIdAsync`, `Views.GetAsync`, `Webhooks.GetByIdAsync`,
+  `Webhooks.GetDeadLetterAsync`, `Bulk.GetImportJobStatusAsync`, `Bulk.GetExportJobStatusAsync` —
+  answered it with `null`, as if only the table (row, view, webhook, job) were absent. A caller that
+  then created the table failed with an error naming neither. They now throw
+  `MorphDBNotFoundException` with `ErrorCode` `PROJECT_NOT_FOUND`; a missing table and the rest still
+  read as `null`. `Projects.GetAsync` and `Projects.GetBySlugAsync`, where the project is the thing
+  asked for, still answer `null`.
+
 ## 0.24.0
 
 A minor about not losing what was committed, and saying plainly what is not there. A webhook is

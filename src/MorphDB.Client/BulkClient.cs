@@ -108,7 +108,7 @@ public sealed class BulkClient
         CancellationToken cancellationToken = default)
     {
         var response = await _httpClient.GetAsync($"/api/bulk/import/{jobId}", cancellationToken);
-        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+        if (await ErrorEnvelope.IsAbsentAsync(response, cancellationToken))
             return null;
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.ImportJobStatus, cancellationToken);
@@ -189,7 +189,7 @@ public sealed class BulkClient
         CancellationToken cancellationToken = default)
     {
         var response = await _httpClient.GetAsync($"/api/bulk/export/{jobId}", cancellationToken);
-        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+        if (await ErrorEnvelope.IsAbsentAsync(response, cancellationToken))
             return null;
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.ExportJobStatus, cancellationToken);

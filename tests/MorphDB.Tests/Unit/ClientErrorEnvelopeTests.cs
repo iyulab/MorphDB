@@ -73,6 +73,66 @@ public class ClientErrorEnvelopeTests
         ex.ErrorCode.Should().Be("MISSING_PROJECT");
     }
 
+    private const string ProjectGone =
+        """{"error":"NotFound","message":"Project not found.","code":"PROJECT_NOT_FOUND","details":null}""";
+
+    private const string TableGone =
+        """{"error":"NotFound","message":"Table 'items' not found.","code":"TABLE_NOT_FOUND","details":null}""";
+
+    /// <summary>
+    /// A nullable getter answers <c>null</c> for "no such table" — but a deleted project answers
+    /// <c>404</c> too, and reading that as <c>null</c> told a caller the table was missing when the
+    /// project was. A caller that then creates the table fails with an error that names neither.
+    /// </summary>
+    [Fact]
+    public async Task A_missing_project_is_not_read_as_a_missing_table()
+    {
+        await using var client = ClientReturning(HttpStatusCode.NotFound, ProjectGone);
+
+        var act = () => client.Schema.GetTableAsync("items", TestContext.Current.CancellationToken);
+
+        var ex = (await act.Should().ThrowAsync<MorphDBNotFoundException>()).Which;
+        ex.ErrorCode.Should().Be("PROJECT_NOT_FOUND");
+    }
+
+    [Fact]
+    public async Task A_missing_table_still_reads_as_null()
+    {
+        await using var client = ClientReturning(HttpStatusCode.NotFound, TableGone);
+
+        (await client.Schema.GetTableAsync("items", TestContext.Current.CancellationToken)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Every_nullable_getter_in_a_project_throws_for_a_missing_project()
+    {
+        await using var client = ClientReturning(HttpStatusCode.NotFound, ProjectGone);
+
+        Func<Task>[] getters =
+        [
+            () => client.Data.GetByIdAsync("items", Guid.NewGuid(), TestContext.Current.CancellationToken),
+            () => client.Views.GetAsync("v", TestContext.Current.CancellationToken),
+            () => client.Webhooks.GetByIdAsync(Guid.NewGuid(), TestContext.Current.CancellationToken),
+            () => client.Webhooks.GetDeadLetterAsync(Guid.NewGuid(), TestContext.Current.CancellationToken),
+            () => client.Bulk.GetImportJobStatusAsync(Guid.NewGuid(), TestContext.Current.CancellationToken),
+            () => client.Bulk.GetExportJobStatusAsync(Guid.NewGuid(), TestContext.Current.CancellationToken),
+        ];
+
+        foreach (var getter in getters)
+        {
+            (await getter.Should().ThrowAsync<MorphDBNotFoundException>()).Which.ErrorCode.Should().Be("PROJECT_NOT_FOUND");
+        }
+    }
+
+    /// <summary>The project getter is the one place PROJECT_NOT_FOUND is the resource itself.</summary>
+    [Fact]
+    public async Task The_project_getter_reads_a_missing_project_as_null()
+    {
+        await using var client = ClientReturning(HttpStatusCode.NotFound, ProjectGone);
+
+        (await client.Projects.GetAsync(Guid.NewGuid(), TestContext.Current.CancellationToken)).Should().BeNull();
+    }
+
     [Fact]
     public async Task A_body_that_is_not_an_envelope_falls_back_to_the_legacy_surface()
     {

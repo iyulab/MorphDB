@@ -32,7 +32,7 @@ public sealed class WebhookClient
     public async Task<WebhookInfo?> GetByIdAsync(Guid webhookId, CancellationToken cancellationToken = default)
     {
         var response = await _httpClient.GetAsync($"/api/webhooks/{webhookId}", cancellationToken);
-        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+        if (await ErrorEnvelope.IsAbsentAsync(response, cancellationToken))
             return null;
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.WebhookInfo, cancellationToken);
@@ -138,7 +138,7 @@ public sealed class WebhookClient
     public async Task<WebhookDeadLetter?> GetDeadLetterAsync(Guid dlqId, CancellationToken cancellationToken = default)
     {
         var response = await _httpClient.GetAsync($"/api/webhooks/dlq/{dlqId}", cancellationToken);
-        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+        if (await ErrorEnvelope.IsAbsentAsync(response, cancellationToken))
             return null;
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.WebhookDeadLetter, cancellationToken);

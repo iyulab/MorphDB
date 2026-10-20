@@ -40,6 +40,34 @@ internal static class ErrorEnvelope
         };
     }
 
+    /// <summary>
+    /// Whether a response says the requested resource is absent — the case a nullable getter answers
+    /// with <c>null</c>. A <c>404</c> whose code is <c>PROJECT_NOT_FOUND</c> is not that: the request's
+    /// project is gone, so nothing in it can be read, and answering <c>null</c> would tell the caller
+    /// "no such table" (or row, view, webhook) when the truth is "no such project". That one throws,
+    /// as <see cref="EnsureSuccessAsync"/> would. Any other response returns <c>false</c> and is left
+    /// to <see cref="EnsureSuccessAsync"/>.
+    /// </summary>
+    public static async Task<bool> IsAbsentAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        if (response.StatusCode != HttpStatusCode.NotFound)
+        {
+            return false;
+        }
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        var (message, code) = Parse(body);
+        if (string.Equals(code, ProjectNotFound, StringComparison.Ordinal))
+        {
+            throw new MorphDBNotFoundException(message ?? "Project not found.", body, code);
+        }
+
+        return true;
+    }
+
+    /// <summary>The server's code for a request whose project does not exist.</summary>
+    internal const string ProjectNotFound = "PROJECT_NOT_FOUND";
+
     private static (string? Message, string? Code) Parse(string body)
     {
         if (string.IsNullOrWhiteSpace(body))
