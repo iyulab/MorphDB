@@ -10,6 +10,15 @@
   context: 18 statements for one row. It is now 7. Every definition read (by name, by id, a project's
   table list) reads its parts on the one connection it opened. A real-time change pays a record read once
   per distinct subscriber, so its fan-out costs less per subscriber by the same margin.
+- **A real-time change to one table no longer waits behind another table's changes.** Changes were
+  handled one at a time across every table, and a change is read back once per distinct caller among
+  its table's subscribers — so a change to a table with a hundred callers held every other table's
+  changes for as long as those reads took (a quarter of a second, measured, for a table with one
+  subscriber that is delivered in a few milliseconds on its own). Each table now has its own queue:
+  one table's events still arrive in commit order, different tables' events are handled side by side
+  (at most eight tables at once), and how many changes may wait unhandled is bounded as before. Events
+  of different tables were never promised an order and now have none. A webhook's outbox is signalled
+  as soon as a change arrives rather than when its turn comes.
 
 ## 0.26.0
 

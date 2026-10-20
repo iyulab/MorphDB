@@ -11,15 +11,26 @@ namespace MorphDB.Service.Realtime;
 /// <summary>
 /// Listens for PostgreSQL NOTIFY events and broadcasts changes to connected clients.
 /// <para>
-/// Notifications are handled one at a time, in the order they arrive. PostgreSQL delivers them in
-/// the order the transactions committed, and that order is the only thing a subscriber has to tell
-/// two changes to one row apart — so the LISTEN connection's event handler does nothing but hand
-/// each payload to a bounded channel, and a single consumer loop drains it. Handling a payload
-/// inside the event handler itself (an <c>async void</c>, since Npgsql's handler is a plain
-/// <c>void</c> delegate) let handlers overlap on their awaits and broadcast out of commit order.
-/// The channel is bounded so a burst of writes cannot start an unbounded number of handlers: when
-/// it fills, the LISTEN connection simply stops asking for the next notification until there is
-/// room, and PostgreSQL queues the rest on its side.
+/// Changes to one table are handled one at a time, in the order they arrive. PostgreSQL delivers
+/// notifications in the order the transactions committed, and that order is the only thing a
+/// subscriber has to tell two changes to one row apart — so the LISTEN connection's event handler
+/// does nothing but hand each payload to a bounded channel, and one dispatch loop drains it into a
+/// queue per table. Handling a payload inside the event handler itself (an <c>async void</c>, since
+/// Npgsql's handler is a plain <c>void</c> delegate) let handlers overlap on their awaits and
+/// broadcast out of commit order.
+/// </para>
+/// <para>
+/// Different tables do not wait for each other. A change is read back once per distinct caller among
+/// its table's subscribers, so a table with many callers holds its queue for as long as those reads
+/// take; with one queue for everything, a change to any other table waited behind it. The order a
+/// subscriber is promised is per table, which a queue per table keeps. At most
+/// <see cref="ConcurrentTables"/> tables are handled at once, so a write burst across many tables
+/// does not open that many database connections at once.
+/// </para>
+/// <para>
+/// Changes not yet handled are bounded by <see cref="PendingNotificationCapacity"/> across all
+/// tables: when that many wait, the LISTEN connection simply stops asking for the next notification
+/// until one is done, and PostgreSQL queues the rest on its side.
 /// </para>
 /// </summary>
 public sealed partial class PostgresChangeListener : BackgroundService
@@ -32,6 +43,12 @@ public sealed partial class PostgresChangeListener : BackgroundService
     /// schema lookup) is felt as backpressure rather than as memory.
     /// </summary>
     private const int PendingNotificationCapacity = 1024;
+
+    /// <summary>
+    /// How many tables' changes are handled at the same time. Each handles one change at a time and
+    /// reads its row once per distinct caller, so this bounds the database connections realtime holds.
+    /// </summary>
+    private const int ConcurrentTables = 8;
 
     /// <summary>
     /// Seconds of silence after which Npgsql sends a keepalive on the LISTEN connection. A
@@ -54,6 +71,14 @@ public sealed partial class PostgresChangeListener : BackgroundService
         SingleWriter = true,
         FullMode = BoundedChannelFullMode.Wait,
     });
+
+    /// <summary>A slot per change accepted and not yet handled, across every table.</summary>
+    private readonly SemaphoreSlim _unhandled = new(PendingNotificationCapacity, PendingNotificationCapacity);
+
+    private readonly SemaphoreSlim _tablesAtOnce = new(ConcurrentTables, ConcurrentTables);
+
+    /// <summary>The last change queued for each table with changes still in hand; a table leaves when its queue is empty.</summary>
+    private readonly Dictionary<string, Task> _tableTails = new(StringComparer.Ordinal);
 
     public PostgresChangeListener(
         ILogger<PostgresChangeListener> logger,
@@ -111,6 +136,13 @@ public sealed partial class PostgresChangeListener : BackgroundService
         LogListenerStopped(_logger);
     }
 
+    public override void Dispose()
+    {
+        _unhandled.Dispose();
+        _tablesAtOnce.Dispose();
+        base.Dispose();
+    }
+
     private async Task ListenForChangesAsync(CancellationToken stoppingToken)
     {
         var connectionSettings = new NpgsqlConnectionStringBuilder(_connectionString)
@@ -152,7 +184,8 @@ public sealed partial class PostgresChangeListener : BackgroundService
     }
 
     /// <summary>
-    /// The one place notifications are handled — strictly in the order they were queued.
+    /// Takes notifications in the order they were queued and puts each behind the earlier changes to
+    /// its table — the one place that order is decided.
     /// </summary>
     private async Task ConsumePendingAsync(CancellationToken stoppingToken)
     {
@@ -160,42 +193,118 @@ public sealed partial class PostgresChangeListener : BackgroundService
         {
             await foreach (var payload in _pending.Reader.ReadAllAsync(stoppingToken))
             {
-                try
+                var changeEvent = Parse(payload);
+                if (changeEvent is null)
                 {
-                    await HandleNotificationAsync(payload, stoppingToken);
+                    continue;
                 }
-                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-                {
-                    // Normal shutdown, mid-notification — not an error to report
-                    break;
-                }
-                catch (Exception ex)
-                {
-                    LogNotificationError(_logger, ex);
-                }
+
+                // A webhook's deliveries are not queued from here: the change was recorded in the outbox
+                // by the writing transaction (WebhookOutboxDrainer). This only says to look now rather
+                // than at the drainer's next timed pass — and says it before the change waits its turn
+                // behind its table's earlier ones.
+                _outboxSignal.Notify();
+
+                await _unhandled.WaitAsync(stoppingToken);
+                Enqueue(changeEvent, stoppingToken);
             }
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
             // Normal shutdown
         }
+
+        Task[] inHand;
+        lock (_tableTails)
+        {
+            inHand = [.. _tableTails.Values];
+        }
+
+        await Task.WhenAll(inHand);
     }
 
-    private async Task HandleNotificationAsync(string payload, CancellationToken cancellationToken)
+    private void Enqueue(DatabaseChangeEvent changeEvent, CancellationToken stoppingToken)
+    {
+        // The table's id, not its name: a table renamed between two changes is still one queue.
+        var key = changeEvent.TableId != Guid.Empty
+            ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{changeEvent.ProjectId}:{changeEvent.TableId}")
+            : $"{changeEvent.ProjectId}:{changeEvent.Table}";
+
+        Task tail;
+        lock (_tableTails)
+        {
+            var before = _tableTails.GetValueOrDefault(key) ?? Task.CompletedTask;
+            tail = HandleAfterAsync(before, changeEvent, stoppingToken);
+            _tableTails[key] = tail;
+        }
+
+        _ = tail.ContinueWith(
+            done =>
+            {
+                lock (_tableTails)
+                {
+                    if (_tableTails.TryGetValue(key, out var last) && last == done)
+                    {
+                        _tableTails.Remove(key);
+                    }
+                }
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+    }
+
+    /// <summary>Handles one change once every earlier change to its table is done. Never faults.</summary>
+    private async Task HandleAfterAsync(Task before, DatabaseChangeEvent changeEvent, CancellationToken stoppingToken)
+    {
+        try
+        {
+            await before;
+            await _tablesAtOnce.WaitAsync(stoppingToken);
+            try
+            {
+                await HandleNotificationAsync(changeEvent, stoppingToken);
+            }
+            finally
+            {
+                _tablesAtOnce.Release();
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Normal shutdown, mid-notification — not an error to report
+        }
+        catch (Exception ex)
+        {
+            LogNotificationError(_logger, ex);
+        }
+        finally
+        {
+            _unhandled.Release();
+        }
+    }
+
+    private DatabaseChangeEvent? Parse(string payload)
     {
         if (string.IsNullOrEmpty(payload))
-            return;
+        {
+            return null;
+        }
 
-        var changeEvent = JsonSerializer.Deserialize<DatabaseChangeEvent>(payload, JsonOptions);
-        if (changeEvent == null)
-            return;
+        try
+        {
+            return JsonSerializer.Deserialize<DatabaseChangeEvent>(payload, JsonOptions);
+        }
+        catch (JsonException ex)
+        {
+            LogNotificationError(_logger, ex);
+            return null;
+        }
+    }
 
+    private async Task HandleNotificationAsync(DatabaseChangeEvent changeEvent, CancellationToken cancellationToken)
+    {
         LogChangeReceived(_logger, changeEvent.Operation, changeEvent.Table, changeEvent.RecordId);
-
-        // A webhook's deliveries are not queued from here: the change was recorded in the outbox by
-        // the writing transaction (WebhookOutboxDrainer). This only says to look now rather than at
-        // the drainer's next timed pass.
-        _outboxSignal.Notify();
 
         var groupName = MorphHub.GetTableGroupName(changeEvent.ProjectId, changeEvent.Table);
 
