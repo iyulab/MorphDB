@@ -57,6 +57,22 @@ public sealed class MorphQueryBuilder : IMorphQueryBuilder
             null);
     }
 
+    /// <summary>
+    /// A query over a table whose definition the caller has already read, so the query does not read it
+    /// again — the definition is what the query would load by <paramref name="tableName"/>.
+    /// </summary>
+    internal IMorphQuery From(string tableName, TableMetadata table) =>
+        new MorphQuery(
+            _connections,
+            _metadataRepository,
+            _lookupResolver,
+            _rollupResolver,
+            _formulaResolver,
+            _projectId,
+            tableName,
+            null,
+            table);
+
     /// <inheritdoc />
     public IMorphQuery From(string tableName, string tableAlias)
     {
@@ -132,7 +148,8 @@ internal sealed class MorphQuery : IMorphQuery
         IFormulaResolver? formulaResolver,
         Guid projectId,
         string tableName,
-        string? tableAlias)
+        string? tableAlias,
+        TableMetadata? table = null)
     {
         _connections = connections;
         _metadataRepository = metadataRepository;
@@ -142,6 +159,7 @@ internal sealed class MorphQuery : IMorphQuery
         _projectId = projectId;
         _tableName = tableName;
         _tableAlias = tableAlias;
+        _tableMetadata = table;
         _compiler = new PostgresCompiler();
     }
 

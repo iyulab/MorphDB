@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
@@ -113,6 +114,62 @@ public class DataServiceTests
 
         (await _dataService.GetByIdAsync(projectId, table.LogicalName, id, ct)).Should().BeNull("ending a unit without a commit rolls it back");
     }
+
+    /// <summary>
+    /// A record read costs the table's definition once and the row once. It used to read the definition
+    /// twice — once to find the key column, again inside the query — and each part of it on a connection
+    /// of its own, each open writing the session context: 18 statements for one row, which a realtime
+    /// change pays once per distinct subscriber.
+    /// </summary>
+    [Fact]
+    public async Task Reading_a_record_reads_its_table_definition_once_on_one_connection()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "read_cost_" + Guid.NewGuid().ToString("N")[..8]);
+        var id = Guid.NewGuid();
+        await _dataService.InsertAsync(projectId, table.LogicalName, Row(id), ct);
+
+        var statements = await StatementsOfAsync(() => _dataService.GetByIdAsync(projectId, table.LogicalName, id, ct));
+
+        statements.Count(s => s.Contains("_morph_tables", StringComparison.Ordinal) && !s.Contains("JOIN", StringComparison.Ordinal)).Should().Be(1, string.Join("\n---\n", statements));
+        statements.Count(s => s.Contains("FROM morphdb._morph_columns", StringComparison.Ordinal)).Should().Be(1);
+        statements.Count(s => s.Contains("FROM morphdb._morph_relations", StringComparison.Ordinal)).Should().Be(1);
+        statements.Count(s => s.Contains("FROM morphdb._morph_indexes", StringComparison.Ordinal)).Should().Be(1);
+        statements.Count(s => s.Contains("set_config", StringComparison.Ordinal)).Should().BeLessThanOrEqualTo(2,
+            "one connection for the definition and one for the row");
+    }
+
+    /// <summary>The SQL text of every statement <paramref name="action"/> sends, and nothing another test sends meanwhile.</summary>
+    private static async Task<IReadOnlyList<string>> StatementsOfAsync(Func<Task> action)
+    {
+        using var source = new ActivitySource("MorphDB.Tests.Statements");
+        var statements = new System.Collections.Concurrent.ConcurrentQueue<(ActivityTraceId Trace, string Text)>();
+        using var listener = new ActivityListener
+        {
+            ShouldListenTo = s => s.Name == "Npgsql" || s.Name == source.Name,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllDataAndRecorded,
+            ActivityStopped = activity =>
+            {
+                if (activity.Source.Name == "Npgsql"
+                    && (activity.GetTagItem("db.query.text") ?? activity.GetTagItem("db.statement")) is string text)
+                {
+                    statements.Enqueue((activity.TraceId, text));
+                }
+            },
+        };
+        ActivitySource.AddActivityListener(listener);
+
+        ActivityTraceId trace;
+        using (var root = source.StartActivity("measured"))
+        {
+            trace = root!.TraceId;
+            await action();
+        }
+
+        return [.. statements.Where(s => s.Trace == trace).Select(s => s.Text)];
+    }
+
 
     [Fact]
     public async Task A_committed_unit_of_work_keeps_its_rows()

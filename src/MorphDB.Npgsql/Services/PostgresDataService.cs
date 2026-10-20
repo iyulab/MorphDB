@@ -56,7 +56,9 @@ public sealed class PostgresDataService : IMorphDataService
     }
 
     /// <inheritdoc />
-    public IMorphQueryBuilder Query(Guid projectId)
+    public IMorphQueryBuilder Query(Guid projectId) => QueryBuilder(projectId);
+
+    private MorphQueryBuilder QueryBuilder(Guid projectId)
     {
         return new MorphQueryBuilder(
             _connections,
@@ -80,8 +82,8 @@ public sealed class PostgresDataService : IMorphDataService
         // One record is a query narrowed to its id, not a statement of its own: a separate path is
         // how a single read came to skip row-level security and leave out every lookup, rollup and
         // formula value the same row carries when it is listed.
-        var row = await Query(projectId)
-            .From(tableName)
+        var row = await QueryBuilder(projectId)
+            .From(tableName, table)
             .SelectAll()
             .Where(idColumn.LogicalName, FilterOperator.Equals, id)
             .FirstOrDefaultAsync(cancellationToken);

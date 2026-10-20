@@ -2,6 +2,7 @@ using System.Text.Json;
 using Dapper;
 using MorphDB.Core.Models;
 using MorphDB.Npgsql.Infrastructure;
+using Npgsql;
 
 namespace MorphDB.Npgsql.Repositories;
 
@@ -71,10 +72,7 @@ public sealed class MetadataRepository : IMetadataRepository
 
         if (includeColumns)
         {
-            var columns = await GetColumnsByTableIdAsync(tableId, cancellationToken);
-            var relations = await GetRelationsByTableIdAsync(tableId, cancellationToken);
-            columns = AttachForeignKeyReferences(columns, relations);
-            table = WithDetails(table, columns, relations, await GetIndexesByTableIdAsync(table.TableId, cancellationToken));
+            table = await WithDetailsAsync(connection, table);
         }
 
         return table;
@@ -104,10 +102,7 @@ public sealed class MetadataRepository : IMetadataRepository
 
         if (includeColumns)
         {
-            var columns = await GetColumnsByTableIdAsync(table.TableId, cancellationToken);
-            var relations = await GetRelationsByTableIdAsync(table.TableId, cancellationToken);
-            columns = AttachForeignKeyReferences(columns, relations);
-            table = WithDetails(table, columns, relations, await GetIndexesByTableIdAsync(table.TableId, cancellationToken));
+            table = await WithDetailsAsync(connection, table);
         }
 
         return table;
@@ -135,10 +130,7 @@ public sealed class MetadataRepository : IMetadataRepository
         {
             for (var i = 0; i < tables.Count; i++)
             {
-                var columns = await GetColumnsByTableIdAsync(tables[i].TableId, cancellationToken);
-                var relations = await GetRelationsByTableIdAsync(tables[i].TableId, cancellationToken);
-                columns = AttachForeignKeyReferences(columns, relations);
-                tables[i] = WithDetails(tables[i], columns, relations, await GetIndexesByTableIdAsync(tables[i].TableId, cancellationToken));
+                tables[i] = await WithDetailsAsync(connection, tables[i]);
             }
         }
 
@@ -280,6 +272,12 @@ public sealed class MetadataRepository : IMetadataRepository
         Guid tableId,
         CancellationToken cancellationToken = default)
     {
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
+        return await QueryColumnsByTableIdAsync(connection, tableId);
+    }
+
+    private static async Task<IReadOnlyList<ColumnMetadata>> QueryColumnsByTableIdAsync(NpgsqlConnection connection, Guid tableId)
+    {
         const string sql = """
             SELECT column_id, table_id, logical_name, physical_name, data_type, native_type,
                    is_nullable, is_unique, is_primary_key, is_indexed,
@@ -290,9 +288,7 @@ public sealed class MetadataRepository : IMetadataRepository
             ORDER BY ordinal_position
             """;
 
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var rows = await connection.QueryAsync<ColumnRow>(sql, new { TableId = tableId });
-
         return rows.Select(MapToColumnMetadata).ToList();
     }
 
@@ -438,6 +434,12 @@ public sealed class MetadataRepository : IMetadataRepository
         Guid tableId,
         CancellationToken cancellationToken = default)
     {
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
+        return await QueryIndexesByTableIdAsync(connection, tableId);
+    }
+
+    private static async Task<IReadOnlyList<IndexMetadata>> QueryIndexesByTableIdAsync(NpgsqlConnection connection, Guid tableId)
+    {
         const string sql = """
             SELECT index_id, table_id, logical_name, physical_name, columns, index_type, is_unique, where_clause, descriptor, is_active, created_at
             FROM morphdb._morph_indexes
@@ -445,9 +447,7 @@ public sealed class MetadataRepository : IMetadataRepository
             ORDER BY created_at
             """;
 
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var rows = await connection.QueryAsync<IndexRow>(sql, new { TableId = tableId });
-
         return rows.Select(MapToIndexMetadata).ToList();
     }
 
@@ -525,6 +525,12 @@ public sealed class MetadataRepository : IMetadataRepository
         Guid tableId,
         CancellationToken cancellationToken = default)
     {
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
+        return await QueryRelationsByTableIdAsync(connection, tableId);
+    }
+
+    private static async Task<IReadOnlyList<RelationMetadata>> QueryRelationsByTableIdAsync(NpgsqlConnection connection, Guid tableId)
+    {
         const string sql = """
             SELECT r.relation_id, r.project_id, r.logical_name, r.source_table_id, r.source_column_id, r.target_table_id, r.target_column_id, r.relation_type, r.on_delete, r.on_update, r.descriptor, r.is_active, r.enforce_on_write, r.virtual_cascade, r.created_at,
                    tt.logical_name AS target_table_name, tc.logical_name AS target_column_name
@@ -535,9 +541,7 @@ public sealed class MetadataRepository : IMetadataRepository
             ORDER BY r.created_at
             """;
 
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var rows = await connection.QueryAsync<RelationRow>(sql, new { TableId = tableId });
-
         return rows.Select(MapToRelationMetadata).ToList();
     }
 
@@ -593,6 +597,19 @@ public sealed class MetadataRepository : IMetadataRepository
 
     private static TableMetadata WithColumns(TableMetadata table, IReadOnlyList<ColumnMetadata> columns) =>
         table with { Columns = columns };
+
+    /// <summary>
+    /// The table with its columns, relations and indexes, read on the connection the table row came from:
+    /// one table's definition is one connection, not one per part — each open writes the session context,
+    /// so reading the parts on their own connections cost a round trip apiece on every data call.
+    /// </summary>
+    private static async Task<TableMetadata> WithDetailsAsync(NpgsqlConnection connection, TableMetadata table)
+    {
+        var columns = await QueryColumnsByTableIdAsync(connection, table.TableId);
+        var relations = await QueryRelationsByTableIdAsync(connection, table.TableId);
+        columns = AttachForeignKeyReferences(columns, relations);
+        return WithDetails(table, columns, relations, await QueryIndexesByTableIdAsync(connection, table.TableId));
+    }
 
     private static TableMetadata WithDetails(
         TableMetadata table,

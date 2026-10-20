@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Reading a record reads its table's definition once, on one connection.** A read by id loaded the
+  table definition twice (once to find the key column, again inside the query), and each of its four
+  parts — table, columns, relations, indexes — on a connection of its own, each open writing the session
+  context: 18 statements for one row. It is now 7. Every definition read (by name, by id, a project's
+  table list) reads its parts on the one connection it opened. A real-time change pays a record read once
+  per distinct subscriber, so its fan-out costs less per subscriber by the same margin.
+
 ## 0.26.0
 
 A minor. An OData JSON batch applies an `atomicityGroup` all or none, and a later request may name an
