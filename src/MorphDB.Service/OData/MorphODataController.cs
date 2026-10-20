@@ -364,18 +364,20 @@ public sealed partial class MorphODataController : ControllerBase
 
         var responses = new List<ODataBatchResponseItem>(batchRequest.Requests.Count);
         var dependencies = new ODataBatchGroups.Dependencies(batchRequest.Requests);
+        var references = new ODataBatchGroups.References();
         foreach (var segment in ODataBatchGroups.Segments(batchRequest.Requests))
         {
             if (segment.Group is null)
             {
                 var request = segment.Requests[0];
-                var response = dependencies.Refusal(request) ?? await ExecuteBatchItemAsync(request, cancellationToken);
+                var response = dependencies.Refusal(request) ?? await ExecuteBatchItemAsync(request, references, cancellationToken);
                 dependencies.Record(request.Id, response.Status);
+                references.Record(request, response);
                 responses.Add(response);
                 continue;
             }
 
-            var answers = await ExecuteAtomicityGroupAsync(segment.Group, segment.Requests, dependencies, cancellationToken);
+            var answers = await ExecuteAtomicityGroupAsync(segment.Group, segment.Requests, dependencies, references, cancellationToken);
             dependencies.Record(segment.Group, answers.All(a => a.Status < StatusCodes.Status400BadRequest) ? StatusCodes.Status200OK : StatusCodes.Status424FailedDependency);
             responses.AddRange(answers);
         }
@@ -392,6 +394,7 @@ public sealed partial class MorphODataController : ControllerBase
         string group,
         IReadOnlyList<ODataBatchRequestItem> requests,
         ODataBatchGroups.Dependencies dependencies,
+        ODataBatchGroups.References references,
         CancellationToken cancellationToken)
     {
         var answers = new List<ODataBatchResponseItem>(requests.Count);
@@ -400,8 +403,9 @@ public sealed partial class MorphODataController : ControllerBase
         {
             foreach (var request in requests)
             {
-                var response = dependencies.Refusal(request) ?? await ExecuteBatchItemAsync(request, cancellationToken);
+                var response = dependencies.Refusal(request) ?? await ExecuteBatchItemAsync(request, references, cancellationToken);
                 dependencies.Record(request.Id, response.Status);
+                references.Record(request, response);
                 answers.Add(response);
                 if (response.Status >= StatusCodes.Status400BadRequest)
                 {
@@ -435,11 +439,16 @@ public sealed partial class MorphODataController : ControllerBase
         ];
     }
 
-    private async Task<ODataBatchResponseItem> ExecuteBatchItemAsync(ODataBatchRequestItem request, CancellationToken cancellationToken)
+    private async Task<ODataBatchResponseItem> ExecuteBatchItemAsync(ODataBatchRequestItem request, ODataBatchGroups.References references, CancellationToken cancellationToken)
     {
         try
         {
-            if (!ODataBatchUrl.TryParse(request.Url, out var target, out var problem))
+            if (references.Resolve(request, out var unresolved) is not { } url)
+            {
+                return Item(request.Id, StatusCodes.Status400BadRequest, ODataError.Of("INVALID_ARGUMENT", unresolved!));
+            }
+
+            if (!ODataBatchUrl.TryParse(url, out var target, out var problem))
             {
                 return Item(request.Id, StatusCodes.Status400BadRequest, ODataError.Of("INVALID_ARGUMENT", $"Request '{request.Id}': {problem}"));
             }

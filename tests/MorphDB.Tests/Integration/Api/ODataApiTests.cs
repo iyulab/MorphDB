@@ -569,7 +569,7 @@ public class ODataApiTests
     }
 
     [Fact]
-    public async Task Depending_on_a_request_inside_another_group_is_refused()
+    public async Task Depending_on_a_request_inside_another_group_without_its_group_is_refused()
     {
         var ct = TestContext.Current.CancellationToken;
         var set = ToPascalCase(await SetupTestTableAsync());
@@ -577,7 +577,45 @@ public class ODataApiTests
         var (_, items) = await BatchAsync([Create("1", set, "a", "g"), Create("2", set, "b", dependsOn: DependsOn("1"))], ct);
 
         items[1].GetProperty("status").GetInt32().Should().Be(400);
-        items[1].GetProperty("body").GetRawText().Should().Contain("depend on the group instead");
+        items[1].GetProperty("body").GetRawText().Should().Contain("name the group in dependsOn as well");
+    }
+
+    [Fact]
+    public async Task A_later_request_names_an_entity_an_earlier_one_created_as_dollar_id()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var set = ToPascalCase(await SetupTestTableAsync());
+
+        var (_, items) = await BatchAsync(
+        [
+            Create("h", set, "before", "g"),
+            new { id = "u", method = "PATCH", url = "$h", atomicityGroup = "g", dependsOn = DependsOn("h"), body = new { name = "after" } },
+            new { id = "r", method = "GET", url = "$h?$select=name", dependsOn = DependsOn("g", "h") },
+        ], ct);
+
+        items.Select(i => i.GetProperty("status").GetInt32()).Should().Equal(201, 200, 200);
+        items[2].GetProperty("body").GetProperty("name").GetString().Should().Be("after");
+    }
+
+    [Theory]
+    [InlineData("not a dependency")]
+    [InlineData("followed by a path")]
+    [InlineData("no entity")]
+    public async Task A_dollar_id_the_request_cannot_use_is_that_requests_error(string misuse)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var set = ToPascalCase(await SetupTestTableAsync());
+        object second = misuse switch
+        {
+            "not a dependency" => new { id = "2", method = "DELETE", url = "$1" },
+            "followed by a path" => new { id = "2", method = "GET", url = "$1/name", dependsOn = DependsOn("1") },
+            _ => new { id = "2", method = "GET", url = "$0", dependsOn = DependsOn("0") },
+        };
+        object first = misuse == "no entity" ? new { id = "0", method = "GET", url = set } : Create("1", set, "a");
+
+        var (_, items) = await BatchAsync([first, second], ct);
+
+        items[^1].GetProperty("status").GetInt32().Should().Be(400);
     }
 
     [Theory]

@@ -8,6 +8,8 @@
   group's requests run in one transaction, so a later one sees what an earlier one wrote; when one
   fails, nothing of the group is kept — it keeps its own answer and the group's other requests are
   answered `424`. `dependsOn` may name a group. Until now a group was refused (`400`).
+- **A batch request's `url` may start with `$<id>`** — the entity an earlier request of the batch
+  created or read by key (`$h`, `$h?$select=no`); `<id>` must be among the request's `dependsOn`.
 
 ### Changed
 

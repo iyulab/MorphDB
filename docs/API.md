@@ -672,13 +672,16 @@ another in `requests`, and the group's id must differ from every request id — 
 batch is refused (`400`), as it is when two requests share an id. A group runs in one transaction, so
 a request in it sees what the group's earlier requests wrote; when one of them fails, nothing of the
 group is kept: the failing request keeps its own answer and every other request of the group is
-answered `424`. A later request depends on a group by naming the group in `dependsOn` — naming a
-request inside another group is refused (`400`) — and is not run (`424`) if the group failed:
+answered `424`. A later request depends on a group by naming the group in `dependsOn` — a request
+inside another group may be named only beside its group (`400` otherwise) — and is not run (`424`) if
+the group failed. A request's `url` may start with `$<id>`, the entity an earlier request created or
+read by key — `$h`, `$h?$select=no`; the request `<id>` must be among its `dependsOn`:
 
 ```json
 { "requests": [
     { "id": "h", "atomicityGroup": "order", "method": "POST", "url": "Orders", "body": { "no": "A-1" } },
     { "id": "l", "atomicityGroup": "order", "method": "POST", "url": "OrderLines", "body": { "order_no": "A-1", "qty": 2 } },
+    { "id": "c", "atomicityGroup": "order", "method": "PATCH", "url": "$h", "dependsOn": ["h"], "body": { "lines": 1 } },
     { "id": "n", "method": "POST", "url": "Notes", "body": { "text": "order placed" }, "dependsOn": ["order"] } ] }
 ```
 

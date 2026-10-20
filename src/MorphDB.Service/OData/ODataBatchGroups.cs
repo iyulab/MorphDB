@@ -83,7 +83,7 @@ internal static class ODataBatchGroups
 
     /// <summary>
     /// What earlier requests and groups came to, for the requests that depend on them. A dependency names an
-    /// earlier request or an earlier group; a request of another group is reached only through its group.
+    /// earlier request or an earlier group; a request of another group may be named only beside its group.
     /// </summary>
     public sealed class Dependencies(IReadOnlyList<ODataBatchRequestItem> requests)
     {
@@ -112,10 +112,11 @@ internal static class ODataBatchGroups
                         $"Request '{request.Id}' depends on '{dependency}', which is not an earlier request or atomicity group of this batch.");
                 }
 
-                if (_groupOf.TryGetValue(dependency, out var group) && group is not null && group != request.AtomicityGroup)
+                if (_groupOf.TryGetValue(dependency, out var group) && group is not null && group != request.AtomicityGroup
+                    && !(request.DependsOn ?? []).Contains(group, StringComparer.Ordinal))
                 {
                     return Refuse(request, StatusCodes.Status400BadRequest, "INVALID_ARGUMENT",
-                        $"Request '{request.Id}' depends on '{dependency}', a request of atomicity group '{group}'; depend on the group instead.");
+                        $"Request '{request.Id}' depends on '{dependency}', a request of atomicity group '{group}'; name the group in dependsOn as well.");
                 }
             }
 
@@ -126,5 +127,70 @@ internal static class ODataBatchGroups
 
         private static ODataBatchResponseItem Refuse(ODataBatchRequestItem request, int status, string code, string message) =>
             new() { Id = request.Id, Status = status, Body = ODataError.Of(code, message) };
+    }
+
+    /// <summary>
+    /// The entities earlier requests created or read, by request id, so a later request's URL can name one
+    /// as <c>$&lt;id&gt;</c> — the request that made it must be among its <c>dependsOn</c>.
+    /// </summary>
+    public sealed class References
+    {
+        private readonly Dictionary<string, string> _entityUrls = new(StringComparer.Ordinal);
+
+        /// <summary>Records the entity a request created (its <c>location</c>) or read by key.</summary>
+        public void Record(ODataBatchRequestItem request, ODataBatchResponseItem response)
+        {
+            if (response.Status >= StatusCodes.Status400BadRequest)
+            {
+                return;
+            }
+
+            if (response.Headers is { } headers && headers.TryGetValue("location", out var location))
+            {
+                _entityUrls[request.Id] = location;
+            }
+            else if (string.Equals(request.Method, "GET", StringComparison.OrdinalIgnoreCase)
+                && ODataBatchUrl.TryParse(request.Url, out var target, out _) && target.Key is { } key)
+            {
+                _entityUrls[request.Id] = $"/odata/{target.EntitySet}({key})";
+            }
+        }
+
+        /// <summary>
+        /// The request's URL with a leading <c>$&lt;id&gt;</c> replaced by that request's entity, or the
+        /// reason it cannot be: the id is not a dependency of the request, or its request named no entity.
+        /// </summary>
+        public string? Resolve(ODataBatchRequestItem request, out string? problem)
+        {
+            problem = null;
+            var url = request.Url?.TrimStart('/') ?? "";
+            if (!url.StartsWith('$'))
+            {
+                return request.Url;
+            }
+
+            var end = url.IndexOfAny(['/', '?']);
+            var name = end < 0 ? url[1..] : url[1..end];
+            var rest = end < 0 ? "" : url[end..];
+            if (!(request.DependsOn ?? []).Contains(name, StringComparer.Ordinal))
+            {
+                problem = $"Request '{request.Id}' names '${name}' in its url; a request it refers to must be among its dependsOn.";
+                return null;
+            }
+
+            if (!_entityUrls.TryGetValue(name, out var entity))
+            {
+                problem = $"Request '{request.Id}' names '${name}' in its url, but request '{name}' created or read no single entity.";
+                return null;
+            }
+
+            if (rest.StartsWith('/'))
+            {
+                problem = $"Request '{request.Id}' follows '${name}' with a path; only query options may follow a reference.";
+                return null;
+            }
+
+            return entity + rest;
+        }
     }
 }
