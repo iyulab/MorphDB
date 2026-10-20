@@ -314,7 +314,9 @@ internal sealed class MorphQuery : IMorphQuery
     {
         var (sql, parameters) = await CompileQueryAsync(cancellationToken);
 
-        await using var connection = await _connections.OpenAsync(cancellationToken);
+        await using var lease = await _connections.LeaseAsync(cancellationToken);
+
+        var connection = lease.Connection;
         var results = await connection.QueryAsync<dynamic>(
             new CommandDefinition(sql, parameters, cancellationToken: cancellationToken));
 
@@ -343,7 +345,9 @@ internal sealed class MorphQuery : IMorphQuery
         var countQuery = query.AsCount();
         var compiled = _compiler.Compile(countQuery);
 
-        await using var connection = await _connections.OpenAsync(cancellationToken);
+        await using var lease = await _connections.LeaseAsync(cancellationToken);
+
+        var connection = lease.Connection;
         var result = await connection.ExecuteScalarAsync<long>(
             new CommandDefinition(compiled.Sql, compiled.NamedBindings, cancellationToken: cancellationToken));
 
@@ -359,7 +363,9 @@ internal sealed class MorphQuery : IMorphQuery
         var sumQuery = query.AsSum(physicalColumn);
         var compiled = _compiler.Compile(sumQuery);
 
-        await using var connection = await _connections.OpenAsync(cancellationToken);
+        await using var lease = await _connections.LeaseAsync(cancellationToken);
+
+        var connection = lease.Connection;
         var result = await connection.ExecuteScalarAsync<decimal?>(
             new CommandDefinition(compiled.Sql, compiled.NamedBindings, cancellationToken: cancellationToken));
 
@@ -375,7 +381,9 @@ internal sealed class MorphQuery : IMorphQuery
         var avgQuery = query.AsAverage(physicalColumn);
         var compiled = _compiler.Compile(avgQuery);
 
-        await using var connection = await _connections.OpenAsync(cancellationToken);
+        await using var lease = await _connections.LeaseAsync(cancellationToken);
+
+        var connection = lease.Connection;
         var result = await connection.ExecuteScalarAsync<decimal?>(
             new CommandDefinition(compiled.Sql, compiled.NamedBindings, cancellationToken: cancellationToken));
 
@@ -391,7 +399,9 @@ internal sealed class MorphQuery : IMorphQuery
         var minQuery = query.AsMin(physicalColumn);
         var compiled = _compiler.Compile(minQuery);
 
-        await using var connection = await _connections.OpenAsync(cancellationToken);
+        await using var lease = await _connections.LeaseAsync(cancellationToken);
+
+        var connection = lease.Connection;
         var result = await connection.ExecuteScalarAsync<T?>(
             new CommandDefinition(compiled.Sql, compiled.NamedBindings, cancellationToken: cancellationToken));
 
@@ -407,7 +417,9 @@ internal sealed class MorphQuery : IMorphQuery
         var maxQuery = query.AsMax(physicalColumn);
         var compiled = _compiler.Compile(maxQuery);
 
-        await using var connection = await _connections.OpenAsync(cancellationToken);
+        await using var lease = await _connections.LeaseAsync(cancellationToken);
+
+        var connection = lease.Connection;
         var result = await connection.ExecuteScalarAsync<T?>(
             new CommandDefinition(compiled.Sql, compiled.NamedBindings, cancellationToken: cancellationToken));
 

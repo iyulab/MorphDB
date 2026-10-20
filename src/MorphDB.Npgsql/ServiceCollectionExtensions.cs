@@ -172,6 +172,7 @@ public static partial class ServiceCollectionExtensions
 
         // Register Transaction Service (Phase 28: Cross-Entity Transactions & Row-State)
         services.AddSingleton<ITransactionService, PostgresTransactionService>();
+        services.AddSingleton<IUnitOfWorkFactory, PostgresUnitOfWorkFactory>();
 
         return services;
     }

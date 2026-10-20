@@ -79,7 +79,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             var whereClause = DmlBuilder.BuildIdWhereClause(idColumn.PhysicalName);
             var sql = DmlBuilder.BuildDelete(table.PhysicalName, whereClause);
 
-            await using var conn = await GetScopedConnectionAsync(context.CancellationToken);
+            await using var conn = await _connections.LeaseAsync(context.CancellationToken);
             var affectedRows = await conn.Connection.ExecuteAsync(
                 new CommandDefinition(sql, new { id = context.RecordId.Value }, transaction: conn.Transaction, cancellationToken: context.CancellationToken));
 
@@ -132,7 +132,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
 
             var sql = DmlBuilder.BuildInsert(table.PhysicalName, columns, parameters);
 
-            await using var conn = await GetScopedConnectionAsync(context.CancellationToken);
+            await using var conn = await _connections.LeaseAsync(context.CancellationToken);
             var result = await conn.Connection.QuerySingleAsync<dynamic>(
                 new CommandDefinition(sql, values, transaction: conn.Transaction, cancellationToken: context.CancellationToken));
 
@@ -188,7 +188,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             var whereClause = ActiveRowById(table, idColumn);
             var sql = DmlBuilder.BuildUpdate(table.PhysicalName, setColumns, whereClause);
 
-            await using var conn = await GetScopedConnectionAsync(context.CancellationToken);
+            await using var conn = await _connections.LeaseAsync(context.CancellationToken);
             var result = await conn.Connection.QuerySingleOrDefaultAsync<dynamic>(
                 new CommandDefinition(sql, values, transaction: conn.Transaction, cancellationToken: context.CancellationToken));
 
@@ -273,7 +273,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             var sql = DmlBuilder.BuildUpsert(table.PhysicalName, columns, parameters, conflictColumns,
                 table.SoftDeleteEnabled ? Ddl.DdlBuilder.ActiveRowsPredicate : null);
 
-            await using var conn = await GetScopedConnectionAsync(context.CancellationToken);
+            await using var conn = await _connections.LeaseAsync(context.CancellationToken);
             var result = await conn.Connection.QuerySingleAsync<dynamic>(
                 new CommandDefinition(sql, values, transaction: conn.Transaction, cancellationToken: context.CancellationToken));
 
@@ -339,7 +339,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             var whereClause = ActiveRowById(table, idColumn);
             var sql = DmlBuilder.BuildUpdate(table.PhysicalName, setColumns, whereClause);
 
-            await using var conn = await GetScopedConnectionAsync(context.CancellationToken);
+            await using var conn = await _connections.LeaseAsync(context.CancellationToken);
             var result = await conn.Connection.QuerySingleOrDefaultAsync<dynamic>(
                 new CommandDefinition(sql, values, transaction: conn.Transaction, cancellationToken: context.CancellationToken));
 
@@ -374,22 +374,6 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
     }
 
     #region Private Helpers
-
-    /// <summary>
-    /// Returns a scoped connection wrapper. If a ConnectionScope is active
-    /// (e.g. inside a transaction), uses the shared connection/transaction.
-    /// Otherwise opens a new connection for the caller.
-    /// </summary>
-    private async ValueTask<ScopedConnection> GetScopedConnectionAsync(CancellationToken cancellationToken)
-    {
-        if (ConnectionScope.HasScope)
-        {
-            return new ScopedConnection(ConnectionScope.CurrentConnection!, ConnectionScope.CurrentTransaction, ownsConnection: false);
-        }
-
-        var connection = await _connections.OpenAsync(cancellationToken);
-        return new ScopedConnection(connection, null, ownsConnection: true);
-    }
 
     private ColumnMetadata GetPrimaryKeyColumn(TableMetadata table)
     {

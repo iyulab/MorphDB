@@ -29,6 +29,7 @@ public sealed partial class MorphODataController : ControllerBase
     private readonly IWritePipeline _writePipeline;
     private readonly IMetadataRepository _metadataRepository;
     private readonly IProjectContextAccessor _projectAccessor;
+    private readonly IUnitOfWorkFactory _units;
     private readonly ILogger<MorphODataController> _logger;
 
     public MorphODataController(
@@ -38,6 +39,7 @@ public sealed partial class MorphODataController : ControllerBase
         IWritePipeline writePipeline,
         IMetadataRepository metadataRepository,
         IProjectContextAccessor projectAccessor,
+        IUnitOfWorkFactory units,
         ILogger<MorphODataController> logger)
     {
         _modelProvider = modelProvider;
@@ -46,6 +48,7 @@ public sealed partial class MorphODataController : ControllerBase
         _writePipeline = writePipeline;
         _metadataRepository = metadataRepository;
         _projectAccessor = projectAccessor;
+        _units = units;
         _logger = logger;
     }
 
@@ -344,6 +347,9 @@ public sealed partial class MorphODataController : ControllerBase
     /// Executes a JSON batch (OData JSON Format 4.01 §19): each request names a method and a URL
     /// relative to the service root (<c>Customers</c>, <c>Customers(…)</c>, <c>Customers?$filter=…</c>)
     /// and is answered exactly as the same request on its own would be — the same route does the work.
+    /// Requests that share an <c>atomicityGroup</c> are applied all or none: they run in one unit of work,
+    /// where each sees what the earlier ones wrote, and when one fails nothing of the group is kept — the
+    /// failing request keeps its own answer, the others are answered <c>424</c>.
     /// POST /odata/$batch
     /// </summary>
     [HttpPost("$batch")]
@@ -351,44 +357,82 @@ public sealed partial class MorphODataController : ControllerBase
         [FromBody] ODataBatchRequest batchRequest,
         CancellationToken cancellationToken)
     {
-        if (batchRequest.Requests.FirstOrDefault(r => r.AtomicityGroup is not null) is { } grouped)
+        if (ODataBatchGroups.Problem(batchRequest.Requests) is { } problem)
         {
-            // Saying yes would claim all-or-nothing for requests that each apply on their own.
-            return BadRequest(ODataError.Of("INVALID_ARGUMENT",
-                $"Request '{grouped.Id}' names an atomicity group; this service applies each request of a batch on its own and does not support atomicity groups."));
+            return BadRequest(ODataError.Of("INVALID_ARGUMENT", problem));
         }
 
         var responses = new List<ODataBatchResponseItem>(batchRequest.Requests.Count);
-        var failed = new HashSet<string>(StringComparer.Ordinal);
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var request in batchRequest.Requests)
+        var dependencies = new ODataBatchGroups.Dependencies(batchRequest.Requests);
+        foreach (var segment in ODataBatchGroups.Segments(batchRequest.Requests))
         {
-            ODataBatchResponseItem response;
-            if (request.DependsOn?.FirstOrDefault(d => !seen.Contains(d)) is { } unknown)
+            if (segment.Group is null)
             {
-                response = Item(request.Id, StatusCodes.Status400BadRequest, ODataError.Of("INVALID_ARGUMENT",
-                    $"Request '{request.Id}' depends on '{unknown}', which is not an earlier request of this batch."));
-            }
-            else if (request.DependsOn?.FirstOrDefault(failed.Contains) is { } failedDependency)
-            {
-                response = Item(request.Id, StatusCodes.Status424FailedDependency, ODataError.Of("FAILED_DEPENDENCY",
-                    $"Request '{request.Id}' was not run: '{failedDependency}', which it depends on, failed."));
-            }
-            else
-            {
-                response = await ExecuteBatchItemAsync(request, cancellationToken);
+                var request = segment.Requests[0];
+                var response = dependencies.Refusal(request) ?? await ExecuteBatchItemAsync(request, cancellationToken);
+                dependencies.Record(request.Id, response.Status);
+                responses.Add(response);
+                continue;
             }
 
-            seen.Add(request.Id);
-            if (response.Status >= StatusCodes.Status400BadRequest)
-            {
-                failed.Add(request.Id);
-            }
-
-            responses.Add(response);
+            var answers = await ExecuteAtomicityGroupAsync(segment.Group, segment.Requests, dependencies, cancellationToken);
+            dependencies.Record(segment.Group, answers.All(a => a.Status < StatusCodes.Status400BadRequest) ? StatusCodes.Status200OK : StatusCodes.Status424FailedDependency);
+            responses.AddRange(answers);
         }
 
         return Ok(new ODataBatchResponse { Responses = responses });
+    }
+
+    /// <summary>
+    /// One atomicity group, in one unit of work. The requests run in order until one fails; then the unit
+    /// ends without a commit, the failing request keeps its answer, and every other request of the group —
+    /// run or not — is answered <c>424</c>, since none of it was applied.
+    /// </summary>
+    private async Task<List<ODataBatchResponseItem>> ExecuteAtomicityGroupAsync(
+        string group,
+        IReadOnlyList<ODataBatchRequestItem> requests,
+        ODataBatchGroups.Dependencies dependencies,
+        CancellationToken cancellationToken)
+    {
+        var answers = new List<ODataBatchResponseItem>(requests.Count);
+        string? failedRequest = null;
+        await using (var unit = _units.Begin())
+        {
+            foreach (var request in requests)
+            {
+                var response = dependencies.Refusal(request) ?? await ExecuteBatchItemAsync(request, cancellationToken);
+                dependencies.Record(request.Id, response.Status);
+                answers.Add(response);
+                if (response.Status >= StatusCodes.Status400BadRequest)
+                {
+                    failedRequest = request.Id;
+                    break;
+                }
+            }
+
+            if (failedRequest is null)
+            {
+                try
+                {
+                    await unit.CommitAsync(cancellationToken);
+                    return answers;
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    var (status, envelope) = ErrorHandling.ErrorClassification.Envelope(ex);
+                    LogBatchItemError(_logger, group, ex);
+                    return [.. requests.Select(r => Item(r.Id, status, ODataError.From(envelope)))];
+                }
+            }
+        }
+
+        return
+        [
+            .. requests.Select(r => r.Id == failedRequest
+                ? answers.Single(a => a.Id == r.Id)
+                : Item(r.Id, StatusCodes.Status424FailedDependency, ODataError.Of("FAILED_DEPENDENCY",
+                    $"Request '{r.Id}' was not applied: request '{failedRequest}' of atomicity group '{group}' failed, so none of the group was."))),
+        ];
     }
 
     private async Task<ODataBatchResponseItem> ExecuteBatchItemAsync(ODataBatchRequestItem request, CancellationToken cancellationToken)

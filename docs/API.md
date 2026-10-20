@@ -667,7 +667,22 @@ same route does the work, so a collection read takes its query options, a create
 ```
 
 Requests run in order, each on its own: a request whose `dependsOn` names one that failed is not run
-(`424`). An `atomicityGroup` is refused (`400`) — nothing here would make a group all-or-nothing. Relations are not navigable
+(`424`). Requests that share an `atomicityGroup` are applied **all or none**. They must follow one
+another in `requests`, and the group's id must differ from every request id — otherwise the whole
+batch is refused (`400`), as it is when two requests share an id. A group runs in one transaction, so
+a request in it sees what the group's earlier requests wrote; when one of them fails, nothing of the
+group is kept: the failing request keeps its own answer and every other request of the group is
+answered `424`. A later request depends on a group by naming the group in `dependsOn` — naming a
+request inside another group is refused (`400`) — and is not run (`424`) if the group failed:
+
+```json
+{ "requests": [
+    { "id": "h", "atomicityGroup": "order", "method": "POST", "url": "Orders", "body": { "no": "A-1" } },
+    { "id": "l", "atomicityGroup": "order", "method": "POST", "url": "OrderLines", "body": { "order_no": "A-1", "qty": 2 } },
+    { "id": "n", "method": "POST", "url": "Notes", "body": { "text": "order placed" }, "dependsOn": ["order"] } ] }
+```
+
+Relations are not navigable
 from this surface — the metadata document declares no navigation properties, so there is nothing
 for `$expand` to reach. Read a related table as its own entity set instead.
 

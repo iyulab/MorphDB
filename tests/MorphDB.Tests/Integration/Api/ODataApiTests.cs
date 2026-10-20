@@ -488,20 +488,117 @@ public class ODataApiTests
         all.GetProperty("@odata.count").GetInt64().Should().Be(0, "the dependent create did not run");
     }
 
+    private async Task<(int Status, JsonElement[] Items)> BatchAsync(object[] requests, CancellationToken ct)
+    {
+        var response = await _client.PostAsJsonAsync("/odata/$batch", new { requests }, ct);
+        var text = await response.Content.ReadAsStringAsync(ct);
+        return ((int)response.StatusCode, response.IsSuccessStatusCode
+            ? [.. JsonDocument.Parse(text).RootElement.GetProperty("responses").EnumerateArray()]
+            : []);
+    }
+
+    private async Task<long> CountAsync(string set, CancellationToken ct) =>
+        (await _client.GetFromJsonAsync<JsonElement>($"/odata/{set}?$count=true", ct)).GetProperty("@odata.count").GetInt64();
+
+    private static object Create(string id, string set, string name, string? group = null, string[]? dependsOn = null) =>
+        new { id, method = "POST", url = set, atomicityGroup = group, dependsOn, body = new { name, email = $"{name}@example.com", is_active = true } };
+
     [Fact]
-    public async Task An_atomicity_group_is_refused_rather_than_claimed()
+    public async Task An_atomicity_group_is_applied_whole()
     {
         var ct = TestContext.Current.CancellationToken;
         var set = ToPascalCase(await SetupTestTableAsync());
 
-        var response = await _client.PostAsJsonAsync("/odata/$batch", new
-        {
-            requests = new object[] { new { id = "1", method = "POST", url = set, atomicityGroup = "g", body = new { name = "A", email = "a@example.com", is_active = true } } },
-        }, ct);
+        var (status, items) = await BatchAsync([Create("1", set, "a", "g"), Create("2", set, "b", "g")], ct);
 
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        (await response.Content.ReadAsStringAsync(ct)).Should().Contain("atomicity group");
-        (await _client.GetFromJsonAsync<JsonElement>($"/odata/{set}?$count=true", ct)).GetProperty("@odata.count").GetInt64().Should().Be(0);
+        status.Should().Be(200);
+        items.Select(i => i.GetProperty("status").GetInt32()).Should().Equal(201, 201);
+        (await CountAsync(set, ct)).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task When_a_request_of_an_atomicity_group_fails_nothing_of_the_group_is_kept()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var set = ToPascalCase(await SetupTestTableAsync());
+
+        var (_, items) = await BatchAsync(
+        [
+            Create("1", set, "kept-not", "g"),
+            new { id = "2", method = "POST", url = set, atomicityGroup = "g", body = new { name = "no email" } },
+            Create("3", set, "never-run", "g"),
+            Create("4", set, "outside"),
+        ], ct);
+
+        items.Select(i => i.GetProperty("status").GetInt32()).Should().Equal(424, 400, 424, 201);
+        items[0].GetProperty("body").GetRawText().Should().Contain("atomicity group 'g'");
+        (await _client.GetFromJsonAsync<JsonElement>($"/odata/{set}?$select=name", ct)).GetProperty("value").EnumerateArray()
+            .Select(v => v.GetProperty("name").GetString()).Should().Equal(["outside"], "the group's first create was rolled back with it");
+    }
+
+    [Fact]
+    public async Task A_request_in_an_atomicity_group_sees_what_the_group_wrote_before_it()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var set = ToPascalCase(await SetupTestTableAsync());
+
+        var (_, items) = await BatchAsync(
+        [
+            Create("1", set, "a", "g"),
+            new { id = "2", method = "GET", url = $"{set}?$count=true", atomicityGroup = "g" },
+        ], ct);
+
+        items[1].GetProperty("status").GetInt32().Should().Be(200);
+        items[1].GetProperty("body").GetProperty("@odata.count").GetInt64().Should().Be(1, "the read runs in the group's transaction");
+    }
+
+    [Fact]
+    public async Task A_request_may_depend_on_a_group_and_is_not_run_when_the_group_failed()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var set = ToPascalCase(await SetupTestTableAsync());
+
+        var (_, items) = await BatchAsync(
+        [
+            new { id = "1", method = "POST", url = set, atomicityGroup = "g", body = new { name = "no email" } },
+            Create("2", set, "after", dependsOn: DependsOn("g")),
+        ], ct);
+
+        items.Select(i => i.GetProperty("status").GetInt32()).Should().Equal(400, 424);
+        (await CountAsync(set, ct)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Depending_on_a_request_inside_another_group_is_refused()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var set = ToPascalCase(await SetupTestTableAsync());
+
+        var (_, items) = await BatchAsync([Create("1", set, "a", "g"), Create("2", set, "b", dependsOn: DependsOn("1"))], ct);
+
+        items[1].GetProperty("status").GetInt32().Should().Be(400);
+        items[1].GetProperty("body").GetRawText().Should().Contain("depend on the group instead");
+    }
+
+    [Theory]
+    [InlineData("apart")]
+    [InlineData("named like a request")]
+    [InlineData("duplicate id")]
+    public async Task A_batch_that_breaks_the_format_is_refused_whole(string shape)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var set = ToPascalCase(await SetupTestTableAsync());
+        object[] requests = shape switch
+        {
+            "apart" => [Create("1", set, "a", "g"), Create("2", set, "b"), Create("3", set, "c", "g")],
+            "named like a request" => [Create("1", set, "a", "1")],
+            _ => [Create("1", set, "a"), Create("1", set, "b")],
+        };
+
+        var (status, _) = await BatchAsync(requests, ct);
+
+        status.Should().Be(400);
+        (await CountAsync(set, ct)).Should().Be(0, "nothing of a malformed batch runs");
     }
 
     #endregion

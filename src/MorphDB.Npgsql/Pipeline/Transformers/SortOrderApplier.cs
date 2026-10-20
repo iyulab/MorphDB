@@ -68,9 +68,7 @@ public sealed class SortOrderApplier : ITransformer
         object? parentId,
         CancellationToken cancellationToken)
     {
-        await using var conn = ConnectionScope.HasScope
-            ? new ScopedConnection(ConnectionScope.CurrentConnection!, ConnectionScope.CurrentTransaction, false)
-            : new ScopedConnection(await _connections.OpenAsync(cancellationToken), null, true);
+        await using var conn = await _connections.LeaseAsync(cancellationToken);
 
         string sql;
         object? param;

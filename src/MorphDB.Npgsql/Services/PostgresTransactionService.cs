@@ -18,6 +18,7 @@ namespace MorphDB.Npgsql.Services;
 public sealed class PostgresTransactionService : ITransactionService
 {
     private readonly MorphConnectionFactory _connections;
+    private readonly PostgresUnitOfWorkFactory _units;
     private readonly IMetadataRepository _metadataRepository;
     private readonly IWritePipeline _writePipeline;
     private readonly int _defaultTimeoutMs = 30000;
@@ -28,6 +29,7 @@ public sealed class PostgresTransactionService : ITransactionService
         IWritePipeline writePipeline)
     {
         _connections = connections ?? throw new ArgumentNullException(nameof(connections));
+        _units = new PostgresUnitOfWorkFactory(connections);
         _metadataRepository = metadataRepository ?? throw new ArgumentNullException(nameof(metadataRepository));
         _writePipeline = writePipeline ?? throw new ArgumentNullException(nameof(writePipeline));
     }
@@ -50,18 +52,18 @@ public sealed class PostgresTransactionService : ITransactionService
         var refResolver = new RefResolver();
         var results = new List<TransactionOperationResult>(request.Operations.Count);
 
-        await using var connection = await _connections.OpenAsync(cts.Token);
-        await using var transaction = await connection.BeginTransactionAsync(cts.Token);
-
         try
         {
-            using var scope = ConnectionScope.Begin(connection, transaction);
+            // One unit of work: every operation, and every read the pipeline makes for it, in one
+            // transaction — or in the one the caller is already in. Leaving without a commit rolls back.
+            await using var unit = _units.Begin();
+            await using var lease = await _connections.LeaseAsync(cts.Token);
             for (var i = 0; i < request.Operations.Count; i++)
             {
                 var operation = request.Operations[i];
                 var result = await ExecuteOperationAsync(
-                    connection,
-                    transaction,
+                    lease.Connection,
+                    lease.Transaction!,
                     projectId,
                     operation,
                     refResolver,
@@ -71,7 +73,6 @@ public sealed class PostgresTransactionService : ITransactionService
 
                 if (!result.Success)
                 {
-                    await transaction.RollbackAsync(cts.Token);
                     // The failed operation's result rides along: it carries the ValidationErrors
                     // (field + machine-readable code) the caller branches on — dropping it would
                     // reduce the whole failure to an opaque string.
@@ -88,17 +89,15 @@ public sealed class PostgresTransactionService : ITransactionService
                 results.Add(result);
             }
 
-            await transaction.CommitAsync(cts.Token);
+            await unit.CommitAsync(cts.Token);
             return TransactionResult.Ok(results);
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
-            await transaction.RollbackAsync(CancellationToken.None);
             return TransactionResult.Failed($"Transaction timed out after {timeout}ms");
         }
         catch (Exception ex)
         {
-            await transaction.RollbackAsync(CancellationToken.None);
             return TransactionResult.Failed(ex.Message);
         }
     }
@@ -480,7 +479,9 @@ public sealed class PostgresTransactionService : ITransactionService
 
         var sql = $"SELECT * FROM {table.PhysicalName} WHERE {idColumn.PhysicalName} = @id";
 
-        await using var connection = await _connections.OpenAsync(cancellationToken);
+        await using var lease = await _connections.LeaseAsync(cancellationToken);
+
+        var connection = lease.Connection;
         var result = await connection.QuerySingleOrDefaultAsync<dynamic>(
             new CommandDefinition(sql, new { id = recordId }, cancellationToken: cancellationToken));
 
@@ -566,7 +567,9 @@ public sealed class PostgresTransactionService : ITransactionService
             RETURNING *
             """;
 
-        await using var connection = await _connections.OpenAsync(cancellationToken);
+        await using var lease = await _connections.LeaseAsync(cancellationToken);
+
+        var connection = lease.Connection;
         try
         {
             var result = await connection.QuerySingleOrDefaultAsync<dynamic>(

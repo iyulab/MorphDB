@@ -22,6 +22,7 @@ namespace MorphDB.Npgsql.Services;
 public sealed class PostgresDataService : IMorphDataService
 {
     private readonly MorphConnectionFactory _connections;
+    private readonly PostgresUnitOfWorkFactory _units;
     private readonly IMetadataRepository _metadataRepository;
     private readonly IWritePipeline _writePipeline;
     private readonly ILookupResolver? _lookupResolver;
@@ -44,6 +45,7 @@ public sealed class PostgresDataService : IMorphDataService
         ISecurityContextAccessor? securityContext = null)
     {
         _connections = connections ?? throw new ArgumentNullException(nameof(connections));
+        _units = new PostgresUnitOfWorkFactory(connections);
         _metadataRepository = metadataRepository ?? throw new ArgumentNullException(nameof(metadataRepository));
         _writePipeline = writePipeline ?? throw new ArgumentNullException(nameof(writePipeline));
         _lookupResolver = lookupResolver;
@@ -145,30 +147,18 @@ public sealed class PostgresDataService : IMorphDataService
 
         var table = await GetTableWithColumnsAsync(projectId, tableName, cancellationToken);
 
-        // Row-by-row through the pipeline (this path always inserted row-by-row), atomic via the
-        // ambient connection scope: the executor picks up this transaction instead of opening its own.
+        // Row-by-row through the pipeline (this path always inserted row-by-row), atomic as one unit of
+        // work — or as part of the one the caller is already in.
         var results = new List<IDictionary<string, object?>>(records.Count);
 
-        await using var connection = await _connections.OpenAsync(cancellationToken);
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-        using var scope = ConnectionScope.Begin(connection, transaction);
-
-        try
+        await using var unit = _units.Begin();
+        foreach (var record in records)
         {
-            foreach (var record in records)
-            {
-                var result = await _writePipeline.InsertAsync(projectId, table, record, null, cancellationToken);
-                results.Add(UnwrapOrThrow(result, tableName));
-            }
-
-            await transaction.CommitAsync(cancellationToken);
-        }
-        catch
-        {
-            await transaction.RollbackAsync(cancellationToken);
-            throw;
+            var result = await _writePipeline.InsertAsync(projectId, table, record, null, cancellationToken);
+            results.Add(UnwrapOrThrow(result, tableName));
         }
 
+        await unit.CommitAsync(cancellationToken);
         return results;
     }
 
@@ -210,7 +200,9 @@ public sealed class PostgresDataService : IMorphDataService
 
         var sql = DmlBuilder.BuildBatchUpdate(table.PhysicalName, setColumns, whereSql);
 
-        await using var connection = await _connections.OpenAsync(cancellationToken);
+        await using var lease = await _connections.LeaseAsync(cancellationToken);
+
+        var connection = lease.Connection;
         try
         {
             return await connection.ExecuteAsync(
@@ -264,7 +256,9 @@ public sealed class PostgresDataService : IMorphDataService
             sql = where is null ? $"DELETE FROM {table.PhysicalName}" : $"DELETE FROM {table.PhysicalName} WHERE {where}";
         }
 
-        await using var connection = await _connections.OpenAsync(cancellationToken);
+        await using var lease = await _connections.LeaseAsync(cancellationToken);
+
+        var connection = lease.Connection;
         try
         {
             return await connection.ExecuteAsync(

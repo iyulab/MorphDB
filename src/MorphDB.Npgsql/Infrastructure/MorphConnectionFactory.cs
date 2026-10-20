@@ -120,6 +120,22 @@ public sealed class MorphConnectionFactory
         => OpenWithAsync(_securityContext.ContextOrNull, cancellationToken);
 
     /// <summary>
+    /// A connection for a statement run on a caller's behalf: inside a unit of work
+    /// (<see cref="ConnectionScope"/>) the unit's connection, so the statement sees and joins what the unit
+    /// has done; otherwise a connection opened as <see cref="OpenAsync"/> opens one, closed when the lease ends.
+    /// </summary>
+    internal async ValueTask<ScopedConnection> LeaseAsync(CancellationToken cancellationToken = default)
+    {
+        if (ConnectionScope.Current is { } unit)
+        {
+            var (connection, transaction) = await unit.OpenAsync(cancellationToken).ConfigureAwait(false);
+            return new ScopedConnection(connection, transaction, ownsConnection: false);
+        }
+
+        return new ScopedConnection(await OpenAsync(cancellationToken).ConfigureAwait(false), null, ownsConnection: true);
+    }
+
+    /// <summary>
     /// Opens a connection for MorphDB's own bookkeeping: no caller, as the login role — the role that
     /// owns what it creates. Not for reading or writing a caller's rows: a policy on a table sees
     /// nobody here.

@@ -41,9 +41,7 @@ public sealed class ForeignKeyValidator : IValidator
         if (relations.Count == 0)
             return;
 
-        await using var conn = ConnectionScope.HasScope
-            ? new ScopedConnection(ConnectionScope.CurrentConnection!, ConnectionScope.CurrentTransaction, false)
-            : new ScopedConnection(await _connections.OpenAsync(context.CancellationToken), null, true);
+        await using var conn = await _connections.LeaseAsync(context.CancellationToken);
 
         foreach (var relation in relations)
         {

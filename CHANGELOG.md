@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **OData JSON batches apply an `atomicityGroup` all or none** (OData JSON Format 4.01 §19). The
+  group's requests run in one transaction, so a later one sees what an earlier one wrote; when one
+  fails, nothing of the group is kept — it keeps its own answer and the group's other requests are
+  answered `424`. `dependsOn` may name a group. Until now a group was refused (`400`).
+
+### Changed
+
+- **A JSON batch whose shape breaks the format is refused as a whole (`400`)**: two requests with one
+  id, a group named like a request, or a group whose requests do not follow one another. Two requests
+  sharing an id used to run.
+- Every read and write MorphDB makes for a caller's rows takes its connection from one place, which
+  hands out the transaction a unit of work (`IUnitOfWorkFactory`, new in `MorphDB.Core`) is in, so
+  reads inside a transaction see its writes. The REST transaction endpoint and batch inserts run on it.
+
 ## 0.25.0
 
 A minor. An `arrayAgg` orders by several columns, so rows tied on the first no longer come in the

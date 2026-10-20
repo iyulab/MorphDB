@@ -85,6 +85,77 @@ public class DataServiceTests
         });
     }
 
+    #region Unit of work
+
+    private static Dictionary<string, object?> Row(Guid id) => new()
+    {
+        ["_id"] = id,
+        ["email"] = $"{id:N}@example.com",
+        ["is_active"] = true,
+    };
+
+    [Fact]
+    public async Task A_read_inside_a_unit_of_work_sees_a_row_the_unit_wrote_and_nothing_stays_without_a_commit()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "unit_read_" + Guid.NewGuid().ToString("N")[..8]);
+        var id = Guid.NewGuid();
+        var units = new PostgresUnitOfWorkFactory(_fixture.Connections);
+
+        await using (var unit = units.Begin())
+        {
+            await _dataService.InsertAsync(projectId, table.LogicalName, Row(id), ct);
+
+            (await _dataService.GetByIdAsync(projectId, table.LogicalName, id, ct)).Should().NotBeNull("a read in the unit runs in its transaction");
+            (await _dataService.Query(projectId).From(table.LogicalName).CountAsync(ct)).Should().Be(1);
+        }
+
+        (await _dataService.GetByIdAsync(projectId, table.LogicalName, id, ct)).Should().BeNull("ending a unit without a commit rolls it back");
+    }
+
+    [Fact]
+    public async Task A_committed_unit_of_work_keeps_its_rows()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "unit_commit_" + Guid.NewGuid().ToString("N")[..8]);
+        var id = Guid.NewGuid();
+        var units = new PostgresUnitOfWorkFactory(_fixture.Connections);
+
+        await using (var unit = units.Begin())
+        {
+            await _dataService.InsertAsync(projectId, table.LogicalName, Row(id), ct);
+            await unit.CommitAsync(ct);
+        }
+
+        (await _dataService.GetByIdAsync(projectId, table.LogicalName, id, ct)).Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task A_unit_begun_inside_another_joins_it_and_its_commit_keeps_nothing_on_its_own()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "unit_nested_" + Guid.NewGuid().ToString("N")[..8]);
+        var ids = new[] { Guid.NewGuid(), Guid.NewGuid() };
+        var units = new PostgresUnitOfWorkFactory(_fixture.Connections);
+
+        await using (var outer = units.Begin())
+        {
+            // A batch insert begins its own unit — inside the outer one it joins instead.
+            await _dataService.InsertBatchAsync(projectId, table.LogicalName, [Row(ids[0]), Row(ids[1])], ct);
+            await using (var inner = units.Begin())
+            {
+                await inner.CommitAsync(ct);
+            }
+        }
+
+        (await _dataService.Query(projectId).From(table.LogicalName).CountAsync(ct)).Should().Be(0, "the outer unit was not committed");
+    }
+
+    #endregion
+
     #region InsertAsync Tests
 
     [Fact]

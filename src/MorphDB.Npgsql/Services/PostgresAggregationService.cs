@@ -66,7 +66,9 @@ public sealed class PostgresAggregationService : IAggregationService
         // Compile and execute
         var compiled = _compiler.Compile(query);
 
-        await using var connection = await _connections.OpenAsync(cancellationToken);
+        await using var lease = await _connections.LeaseAsync(cancellationToken);
+
+        var connection = lease.Connection;
         var results = await connection.QueryAsync<dynamic>(
             new CommandDefinition(compiled.Sql, compiled.NamedBindings, cancellationToken: cancellationToken));
 
@@ -401,7 +403,9 @@ public sealed class PostgresAggregationService : IAggregationService
 
         var compiled = _compiler.Compile(countQuery);
 
-        await using var connection = await _connections.OpenAsync(cancellationToken);
+        await using var lease = await _connections.LeaseAsync(cancellationToken);
+
+        var connection = lease.Connection;
         return await connection.ExecuteScalarAsync<long>(
             new CommandDefinition(compiled.Sql, compiled.NamedBindings, cancellationToken: cancellationToken));
     }

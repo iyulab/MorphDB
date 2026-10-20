@@ -39,9 +39,7 @@ public sealed class UniqueValidator : IValidator
         if (uniqueColumns.Count == 0)
             return;
 
-        await using var conn = ConnectionScope.HasScope
-            ? new ScopedConnection(ConnectionScope.CurrentConnection!, ConnectionScope.CurrentTransaction, false)
-            : new ScopedConnection(await _connections.OpenAsync(context.CancellationToken), null, true);
+        await using var conn = await _connections.LeaseAsync(context.CancellationToken);
 
         foreach (var column in uniqueColumns)
         {

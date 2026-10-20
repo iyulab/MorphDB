@@ -35,7 +35,9 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         // Build recursive CTE for ancestors
         var sql = BuildAncestorsCte(Relation(table), StoredColumn(table, request.ParentColumn, "parentColumn"), StoredColumns(table, request.Columns), maxDepth, request.IncludeSelf);
 
-        await using var connection = await _connections.OpenAsync(cancellationToken);
+        await using var lease = await _connections.LeaseAsync(cancellationToken);
+
+        var connection = lease.Connection;
         var results = await connection.QueryAsync<dynamic>(sql, new { recordId = request.RecordId });
 
         var records = MapToHierarchyRecords(results, table.Columns, request.IncludeSelf, request.RecordId);
@@ -59,7 +61,9 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         // Build recursive CTE for descendants
         var sql = BuildDescendantsCte(Relation(table), StoredColumn(table, request.ParentColumn, "parentColumn"), StoredColumns(table, request.Columns), maxDepth, OrderTerms(table, request.OrderBy), request.IncludeSelf);
 
-        await using var connection = await _connections.OpenAsync(cancellationToken);
+        await using var lease = await _connections.LeaseAsync(cancellationToken);
+
+        var connection = lease.Connection;
         var results = await connection.QueryAsync<dynamic>(sql, new { recordId = request.RecordId });
 
         var records = MapToHierarchyRecords(results, table.Columns, request.IncludeSelf, request.RecordId);
@@ -83,7 +87,9 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         // Path to root is ancestors in reverse order (from root to record)
         var sql = BuildPathToRootCte(Relation(table), StoredColumn(table, request.ParentColumn, "parentColumn"), StoredColumns(table, request.Columns), maxDepth);
 
-        await using var connection = await _connections.OpenAsync(cancellationToken);
+        await using var lease = await _connections.LeaseAsync(cancellationToken);
+
+        var connection = lease.Connection;
         var results = await connection.QueryAsync<dynamic>(sql, new { recordId = request.RecordId });
 
         var records = MapToHierarchyRecords(results, table.Columns, includeSelf: true, request.RecordId);
@@ -106,7 +112,9 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         // Get siblings (same parent, exclude self unless requested)
         var sql = BuildSiblingsSql(Relation(table), StoredColumn(table, request.ParentColumn, "parentColumn"), StoredColumns(table, request.Columns), request.IncludeSelf);
 
-        await using var connection = await _connections.OpenAsync(cancellationToken);
+        await using var lease = await _connections.LeaseAsync(cancellationToken);
+
+        var connection = lease.Connection;
         var results = await connection.QueryAsync<dynamic>(sql, new { recordId = request.RecordId });
 
         var records = results.Select(row => new HierarchyRecord
@@ -144,7 +152,9 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         // If so, setting it as parent would create a cycle
         var sql = BuildCycleCheckCte(table.PhysicalName, StoredColumn(table, request.ParentColumn, "parentColumn"));
 
-        await using var connection = await _connections.OpenAsync(cancellationToken);
+        await using var lease = await _connections.LeaseAsync(cancellationToken);
+
+        var connection = lease.Connection;
         var wouldCycle = await connection.ExecuteScalarAsync<bool>(sql, new
         {
             recordId = request.RecordId,
@@ -165,7 +175,9 @@ public sealed class PostgresHierarchyQueryService : IHierarchyQueryService
         // Use PostgreSQL 14+ CYCLE detection feature
         var sql = BuildCycleDetectionCte(table.PhysicalName, StoredColumn(table, parentColumn, "parentColumn"));
 
-        await using var connection = await _connections.OpenAsync(cancellationToken);
+        await using var lease = await _connections.LeaseAsync(cancellationToken);
+
+        var connection = lease.Connection;
         var cyclicIds = await connection.QueryAsync<Guid>(sql);
         var cyclicIdList = cyclicIds.ToList();
 

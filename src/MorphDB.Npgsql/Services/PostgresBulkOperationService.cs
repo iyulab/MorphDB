@@ -1375,7 +1375,9 @@ public sealed class PostgresBulkOperationService : IBulkOperationService, IBulkJ
 
         var sql = $"SELECT COUNT(*) FROM {table.PhysicalName}{ActiveRowsOnly(table)}";
 
-        await using var connection = await _connections.OpenAsync(cancellationToken);
+        await using var lease = await _connections.LeaseAsync(cancellationToken);
+
+        var connection = lease.Connection;
         return await connection.ExecuteScalarAsync<long>(sql);
     }
 
@@ -1403,7 +1405,9 @@ public sealed class PostgresBulkOperationService : IBulkOperationService, IBulkJ
         // An export is the whole table in storage order; a subset is the query API's job.
         var sql = $"SELECT {selectList} FROM {table.PhysicalName}{ActiveRowsOnly(table)}";
 
-        await using var connection = await _connections.OpenAsync(cancellationToken);
+        await using var lease = await _connections.LeaseAsync(cancellationToken);
+
+        var connection = lease.Connection;
         using var reader = await connection.ExecuteReaderAsync(sql);
 
         while (await reader.ReadAsync(cancellationToken))
