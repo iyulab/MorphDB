@@ -608,6 +608,48 @@ public class AggregationServiceTests
         Assert.Equal([15, 20], Values(Row(result, "food")["quantities"]));
     }
 
+    // Ordered by several columns, each with its direction, so rows tied on the first are not left to
+    // the server: electronics' two active rows tie on status and are told apart by amount, descending.
+    [Fact]
+    public async Task AggregateAsync_ArrayAggOrderedBySeveralColumns_ShouldBreakTiesInTheGivenOrder()
+    {
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "agg_array_multi_" + Guid.NewGuid().ToString("N")[..8]);
+        await InsertTestDataAsync(projectId, table.LogicalName);
+
+        var result = await _aggregationService.AggregateAsync(projectId, table.LogicalName, new AggregationRequest
+        {
+            Aggregations =
+            [
+                new AggregationColumn { Function = AggregateFunction.ArrayAgg, Column = "quantity", Alias = "quantities", OrderBy = "status, amount desc" },
+                new AggregationColumn { Function = AggregateFunction.ArrayAgg, Column = "quantity", Alias = "first_two", OrderBy = "status ASC , amount DESC", Limit = 2 },
+            ],
+            GroupBy = ["category"]
+        }, TestContext.Current.CancellationToken);
+
+        // electronics: active 200 (qty 3), active 100 (qty 5), inactive 50 (qty 2).
+        Assert.Equal([3, 5, 2], Values(Row(result, "electronics")["quantities"]));
+        Assert.Equal([3, 5], Values(Row(result, "electronics")["first_two"]));
+        // clothing: active 125 (qty 7), active 75 (qty 10), inactive 30 (qty 4).
+        Assert.Equal([7, 10, 4], Values(Row(result, "clothing")["quantities"]));
+    }
+
+    [Theory]
+    [InlineData("amount sideways")]
+    [InlineData("amount asc desc")]
+    [InlineData("amount,")]
+    public async Task AggregateAsync_ArrayAggOrderThatIsNotAColumnList_ShouldBeRefused(string orderBy)
+    {
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "agg_array_badord_" + Guid.NewGuid().ToString("N")[..8]);
+
+        var refused = await Assert.ThrowsAsync<ArgumentException>(() => _aggregationService.AggregateAsync(projectId, table.LogicalName, new AggregationRequest
+        {
+            Aggregations = [new AggregationColumn { Function = AggregateFunction.ArrayAgg, Column = "quantity", Alias = "x", OrderBy = orderBy }]
+        }, TestContext.Current.CancellationToken));
+        Assert.Contains("column [asc|desc]", refused.Message);
+    }
+
     [Theory]
     [InlineData(AggregateFunction.Count, "quantity", 5, null, false)]
     [InlineData(AggregateFunction.ArrayAgg, null, null, null, false)]

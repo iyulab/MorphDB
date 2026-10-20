@@ -452,12 +452,12 @@ public sealed class AggregationInput
     public bool? Distinct { get; init; }
 
     /// <summary>
-    /// For ARRAY_AGG only: at most this many values per group, the first in ascending order.
+    /// For ARRAY_AGG only: at most this many values per group, the first in the array's order.
     /// </summary>
     public int? Limit { get; init; }
 
     /// <summary>
-    /// For ARRAY_AGG only: the column whose ascending order the array follows; the collected column by default.
+    /// For ARRAY_AGG only: the order the array follows, as comma-separated <c>column [asc|desc]</c> terms; the collected column, ascending, by default.
     /// </summary>
     public string? OrderBy { get; init; }
 }

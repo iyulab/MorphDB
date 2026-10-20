@@ -96,10 +96,11 @@ public sealed record AggregationColumn
     public int? Limit { get; init; }
 
     /// <summary>
-    /// For <see cref="AggregateFunction.ArrayAgg"/> only: the column (logical name) whose ascending order
-    /// the array follows -- the order rows were written in, say, rather than the order of the values
-    /// collected. Null orders by the collected column itself. Not with <see cref="Distinct"/>, which
-    /// can only order by the values it keeps.
+    /// For <see cref="AggregateFunction.ArrayAgg"/> only: the order the array follows, as comma-separated
+    /// <c>column [asc|desc]</c> terms over logical names -- the order rows were written in, say, rather
+    /// than the order of the values collected, with a second column to break its ties
+    /// (<c>received_at, line_no</c>). A bare column is ascending. Null orders by the collected column
+    /// itself. Not with <see cref="Distinct"/>, which can only order by the values it keeps.
     /// </summary>
     public string? OrderBy { get; init; }
 }

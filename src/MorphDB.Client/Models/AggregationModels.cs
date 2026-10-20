@@ -70,13 +70,15 @@ public sealed class AggregationColumn
 
     /// <summary>
     /// For <see cref="AggregateFunction.ArrayAgg"/> only: at most this many values per group, the first
-    /// in ascending order. Null keeps every value.
+    /// in the array's order. Null keeps every value.
     /// </summary>
     public int? Limit { get; init; }
 
     /// <summary>
-    /// For <see cref="AggregateFunction.ArrayAgg"/> only: the column whose ascending order the array
-    /// follows. Null orders by the collected column itself.
+    /// For <see cref="AggregateFunction.ArrayAgg"/> only: the order the array follows, as comma-separated
+    /// <c>column [asc|desc]</c> terms (<c>received_at, line_no</c>); a bare column is ascending. Name
+    /// enough columns to break every tie, or which tied values come first — and which a limit keeps — is
+    /// the server's choice. Null orders by the collected column itself.
     /// </summary>
     public string? OrderBy { get; init; }
 
@@ -155,8 +157,9 @@ public sealed class AggregationColumn
     };
 
     /// <summary>
-    /// Creates an ARRAY_AGG aggregation: the group's values of <paramref name="column"/> in ascending
-    /// order of <paramref name="orderBy"/> (the column itself by default), at most
+    /// Creates an ARRAY_AGG aggregation: the group's values of <paramref name="column"/> in the order
+    /// <paramref name="orderBy"/> gives as <c>column [asc|desc]</c> terms (the column itself, ascending,
+    /// by default), at most
     /// <paramref name="limit"/> of them when given. Beside a COUNT in the same request,
     /// the count says how many there are and the array which ones.
     /// </summary>

@@ -195,29 +195,52 @@ public sealed class PostgresAggregationService : IAggregationService
             AggregateFunction.Avg => $"AVG({columnExpr})",
             AggregateFunction.Min => $"MIN({columnExpr})",
             AggregateFunction.Max => $"MAX({columnExpr})",
-            AggregateFunction.ArrayAgg => BuildArrayAggSql(columnExpr, OrderColumn(source, agg), agg.Limit),
+            AggregateFunction.ArrayAgg => BuildArrayAggSql(columnExpr, OrderTerms(source, agg), agg.Limit),
             _ => throw new ArgumentException($"Unsupported aggregate function: {agg.Function}")
         };
     }
 
     /// <summary>
-    /// The group's values in ascending order of the order column (the collected column itself unless one
-    /// is named), so the same group yields the same array — and the same first values under a limit,
-    /// which is a slice of the ordered array. <c>DISTINCT</c> rides in front
-    /// of the column expression already, and PostgreSQL accepts it there because the ordering is by
-    /// that same expression.
+    /// The group's values in the declared order (ascending by the collected column itself unless an
+    /// order is named), so the same group yields the same array — and the same first values under a
+    /// limit, which is a slice of the ordered array. An order names as many columns as it takes to
+    /// leave no tie the caller cares about to the server. <c>DISTINCT</c> rides in front of the column
+    /// expression already, and PostgreSQL accepts it there because the ordering is by that same
+    /// expression.
     /// </summary>
-    private static string BuildArrayAggSql(string columnExpr, string? orderColumn, int? limit)
+    private static string BuildArrayAggSql(string columnExpr, string? orderTerms, int? limit)
     {
-        var orderBy = orderColumn
+        var orderBy = orderTerms
             ?? (columnExpr.StartsWith("DISTINCT ", StringComparison.Ordinal) ? columnExpr["DISTINCT ".Length..] : columnExpr);
         var aggregate = $"ARRAY_AGG({columnExpr} ORDER BY {orderBy})";
         // The slice's brackets are escaped: SqlKata reads [..] in a raw expression as a quoted identifier.
         return limit is { } n ? $@"({aggregate})\[1:{n.ToString(System.Globalization.CultureInfo.InvariantCulture)}\]" : aggregate;
     }
 
-    private string? OrderColumn(TableSource source, AggregationColumn agg) =>
-        agg.OrderBy is null ? null : source.Quoted(_compiler, agg.OrderBy);
+    /// <summary>
+    /// An arrayAgg's order as <c>ORDER BY</c> terms: comma-separated <c>column [asc|desc]</c>, the
+    /// grammar every declared order takes (<see cref="DeclaredOrder"/>), each column resolved through
+    /// the read's source so a computed column orders as it reads. Parsed, never pasted.
+    /// </summary>
+    private string? OrderTerms(TableSource source, AggregationColumn agg)
+    {
+        if (agg.OrderBy is null)
+        {
+            return null;
+        }
+
+        if (DeclaredOrder.SyntaxErrors(agg.OrderBy).FirstOrDefault() is { } error)
+        {
+            throw new ArgumentException($"Aggregation '{agg.Alias}': {error}");
+        }
+
+        return string.Join(", ", agg.OrderBy.Split(',').Select(term =>
+        {
+            var parts = term.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var descending = parts.Length == 2 && parts[1].Equals("desc", StringComparison.OrdinalIgnoreCase);
+            return $"{source.Quoted(_compiler, parts[0])}{(descending ? " DESC" : " ASC")}";
+        }));
+    }
 
     private void ApplyFilterConditions(SqlKataQuery query, TableSource source, IReadOnlyList<FilterCondition> filters)
     {

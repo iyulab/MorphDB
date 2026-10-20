@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+
+- **`arrayAgg` orders by several columns.** Its `orderBy` takes the grammar every declared order
+  takes — comma-separated `column [asc|desc]` terms (`received_at, line_no`) — so rows tied on the
+  first column are no longer left in the server's order, nor is which of them a `limit` keeps. A single
+  column name reads as before (ascending). A term that is not `column [asc|desc]` is refused (`400`).
+  Same on REST, GraphQL and the .NET client (`AggregationColumn.ArrayAgg(…, orderBy: "a, b desc")`).
+
 ### Changed
 
 - **`TableMetadata` is a record** (`MorphDB.Core`). A copy that changes one part is now
