@@ -9,7 +9,10 @@
   parts — table, columns, relations, indexes — on a connection of its own, each open writing the session
   context: 18 statements for one row. It is now 7. Every definition read (by name, by id, a project's
   table list) reads its parts on the one connection it opened. A real-time change pays a record read once
-  per distinct subscriber, so its fan-out costs less per subscriber by the same margin.
+  per distinct subscriber, so its fan-out costs less per subscriber by the same margin — and it now reads
+  the table's definition once per change rather than once per subscriber, since the definition is the
+  same for every caller: each further distinct subscriber costs 2 statements (the session context and
+  the row), not 7. The definition is read with the change, so nothing is kept that could go stale.
 - **A real-time change to one table no longer waits behind another table's changes.** Changes were
   handled one at a time across every table, and a change is read back once per distinct caller among
   its table's subscribers — so a change to a table with a hundred callers held every other table's

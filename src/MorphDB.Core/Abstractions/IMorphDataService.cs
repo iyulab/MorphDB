@@ -20,6 +20,17 @@ public interface IMorphDataService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Reads a table's definition once, to read several of its records by id against — the same row as
+    /// several callers, say, each read under its own security context. Every read sees the definition as
+    /// it stood when the table was opened, so hold the result for one unit of work, not across requests.
+    /// </summary>
+    /// <exception cref="Exceptions.TableNotFoundException">The table does not exist.</exception>
+    Task<ITableRecordReader> OpenTableAsync(
+        Guid projectId,
+        string tableName,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Inserts a new record.
     /// </summary>
     Task<IDictionary<string, object?>> InsertAsync(
@@ -84,4 +95,20 @@ public interface IMorphDataService
         IDictionary<string, object?> data,
         string[] keyColumns,
         CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// One table, its definition read once, for reading records by id — what
+/// <see cref="IMorphDataService.GetByIdAsync"/> serves, without reading the definition again.
+/// </summary>
+public interface ITableRecordReader
+{
+    /// <summary>The table's logical name.</summary>
+    string TableName { get; }
+
+    /// <summary>
+    /// Gets a single record by ID, as the current caller — exactly as
+    /// <see cref="IMorphDataService.GetByIdAsync"/> would.
+    /// </summary>
+    Task<IDictionary<string, object?>?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
 }

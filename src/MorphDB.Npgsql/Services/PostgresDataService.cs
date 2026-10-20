@@ -76,22 +76,33 @@ public sealed class PostgresDataService : IMorphDataService
         Guid id,
         CancellationToken cancellationToken = default)
     {
+        var table = await OpenTableAsync(projectId, tableName, cancellationToken);
+        return await table.GetByIdAsync(id, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<ITableRecordReader> OpenTableAsync(
+        Guid projectId,
+        string tableName,
+        CancellationToken cancellationToken = default)
+    {
         var table = await GetTableWithColumnsAsync(projectId, tableName, cancellationToken);
-        var idColumn = GetPrimaryKeyColumn(table);
+        return new TableRecordReader(this, projectId, tableName, table, GetPrimaryKeyColumn(table));
+    }
+
+    private sealed class TableRecordReader(PostgresDataService service, Guid projectId, string tableName, TableMetadata table, ColumnMetadata idColumn) : ITableRecordReader
+    {
+        public string TableName => tableName;
 
         // One record is a query narrowed to its id, not a statement of its own: a separate path is
         // how a single read came to skip row-level security and leave out every lookup, rollup and
         // formula value the same row carries when it is listed.
-        var row = await QueryBuilder(projectId)
-            .From(tableName, table)
-            .SelectAll()
-            .Where(idColumn.LogicalName, FilterOperator.Equals, id)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (row is null)
-            return null;
-
-        return row;
+        public Task<IDictionary<string, object?>?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
+            service.QueryBuilder(projectId)
+                .From(tableName, table)
+                .SelectAll()
+                .Where(idColumn.LogicalName, FilterOperator.Equals, id)
+                .FirstOrDefaultAsync(cancellationToken);
     }
 
     /// <inheritdoc />

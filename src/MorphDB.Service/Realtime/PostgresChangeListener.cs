@@ -344,10 +344,14 @@ public sealed partial class PostgresChangeListener : BackgroundService
             return;
         }
 
+        // The table's definition is read once for the change, not once per caller: it is the same for
+        // every caller, and it is read now, with the change, so nothing is kept that could go stale.
+        ITableRecordReader? table = null;
         foreach (var group in _subscriptions.Subscribers(changeEvent.ProjectId, changeEvent.Table).GroupBy(s => CallerKey(s.Caller), StringComparer.Ordinal))
         {
             var callers = group.ToList();
-            var row = await ReadRowAsAsync(callers[0].Caller, changeEvent.ProjectId, changeEvent.Table, recordId, cancellationToken);
+            table ??= await OpenTableAsAsync(callers[0].Caller, changeEvent.ProjectId, changeEvent.Table, cancellationToken);
+            var row = await ReadRowAsAsync(callers[0].Caller, table, recordId, cancellationToken);
             if (row is null)
             {
                 LogRowNotVisible(_logger, operation, changeEvent.Table, recordId, callers.Count);
@@ -374,11 +378,18 @@ public sealed partial class PostgresChangeListener : BackgroundService
         }
     }
 
-    /// <summary>Reads the row as <paramref name="caller"/>; the caller stays set only in this read's flow.</summary>
-    private async Task<IDictionary<string, object?>?> ReadRowAsAsync(SecurityContext caller, Guid projectId, string table, Guid recordId, CancellationToken cancellationToken)
+    /// <summary>Opens the table as <paramref name="caller"/>; the caller stays set only in this read's flow.</summary>
+    private async Task<ITableRecordReader> OpenTableAsAsync(SecurityContext caller, Guid projectId, string table, CancellationToken cancellationToken)
     {
         _securityContext.SetContext(caller);
-        return await _dataService.GetByIdAsync(projectId, table, recordId, cancellationToken);
+        return await _dataService.OpenTableAsync(projectId, table, cancellationToken);
+    }
+
+    /// <summary>Reads the row as <paramref name="caller"/>; the caller stays set only in this read's flow.</summary>
+    private async Task<IDictionary<string, object?>?> ReadRowAsAsync(SecurityContext caller, ITableRecordReader table, Guid recordId, CancellationToken cancellationToken)
+    {
+        _securityContext.SetContext(caller);
+        return await table.GetByIdAsync(recordId, cancellationToken);
     }
 
     /// <summary>

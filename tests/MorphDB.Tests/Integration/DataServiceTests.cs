@@ -140,6 +140,35 @@ public class DataServiceTests
             "one connection for the definition and one for the row");
     }
 
+    /// <summary>
+    /// An opened table reads its definition once, however many of its records are read against it — what
+    /// a realtime change needs, which reads one row once per distinct subscriber.
+    /// </summary>
+    [Fact]
+    public async Task An_opened_table_reads_its_definition_once_for_every_record_read_against_it()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "open_cost_" + Guid.NewGuid().ToString("N")[..8]);
+        var id = Guid.NewGuid();
+        await _dataService.InsertAsync(projectId, table.LogicalName, Row(id), ct);
+
+        IDictionary<string, object?>? last = null;
+        var statements = await StatementsOfAsync(async () =>
+        {
+            var opened = await _dataService.OpenTableAsync(projectId, table.LogicalName, ct);
+            for (var i = 0; i < 3; i++)
+            {
+                last = await opened.GetByIdAsync(id, ct);
+            }
+        });
+
+        last.Should().NotBeNull();
+        last!["email"].Should().Be($"{id:N}@example.com", "the same row a read by id serves");
+        statements.Count(s => s.Contains("FROM morphdb._morph_columns", StringComparison.Ordinal)).Should().Be(1, string.Join("\n---\n", statements));
+        statements.Count(s => s.Contains("FROM morphdb._morph_indexes", StringComparison.Ordinal)).Should().Be(1);
+    }
+
     /// <summary>The SQL text of every statement <paramref name="action"/> sends, and nothing another test sends meanwhile.</summary>
     private static async Task<IReadOnlyList<string>> StatementsOfAsync(Func<Task> action)
     {
