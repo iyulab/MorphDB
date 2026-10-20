@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.26.0
+
+A minor. An OData JSON batch applies an `atomicityGroup` all or none, and a later request may name an
+entity an earlier one created as `$<id>`. A real-time change reaches only the subscribers that may
+read the row under the table's row-level security policies — with the row — instead of every
+subscriber with an empty `data`. Underneath, every read and write for a caller's rows leases its
+connection from one place, so a read inside a transaction sees its writes. The .NET client is
+unchanged: a `0.25.x` client works against this server.
 
 ### Added
 
