@@ -3,6 +3,7 @@ using System.Threading.Channels;
 using Microsoft.AspNetCore.SignalR;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Models;
+using MorphDB.Core.Security;
 using Npgsql;
 
 namespace MorphDB.Service.Realtime;
@@ -43,6 +44,8 @@ public sealed partial class PostgresChangeListener : BackgroundService
     private readonly ILogger<PostgresChangeListener> _logger;
     private readonly IHubContext<MorphHub, IMorphHubClient> _hubContext;
     private readonly IMorphDataService _dataService;
+    private readonly SubscriptionManager _subscriptions;
+    private readonly ISecurityContextAccessor _securityContext;
     private readonly MorphDB.Service.Services.OutboxSignal _outboxSignal;
     private readonly string _connectionString;
     private readonly Channel<string> _pending = Channel.CreateBounded<string>(new BoundedChannelOptions(PendingNotificationCapacity)
@@ -56,6 +59,8 @@ public sealed partial class PostgresChangeListener : BackgroundService
         ILogger<PostgresChangeListener> logger,
         IHubContext<MorphHub, IMorphHubClient> hubContext,
         IMorphDataService dataService,
+        SubscriptionManager subscriptions,
+        ISecurityContextAccessor securityContext,
         MorphDB.Service.Services.OutboxSignal outboxSignal,
         IConfiguration configuration)
     {
@@ -63,6 +68,8 @@ public sealed partial class PostgresChangeListener : BackgroundService
         _outboxSignal = outboxSignal;
         _hubContext = hubContext;
         _dataService = dataService;
+        _subscriptions = subscriptions;
+        _securityContext = securityContext;
         _connectionString = configuration.GetConnectionString("MorphDB")
             ?? throw new InvalidOperationException("Connection string 'MorphDB' not found.");
     }
@@ -195,18 +202,12 @@ public sealed partial class PostgresChangeListener : BackgroundService
         switch (changeEvent.Operation.ToUpperInvariant())
         {
             case ChangeOperation.Insert:
-                {
-                    var data = await ReadRowAsync(changeEvent, cancellationToken);
-                    await BroadcastRecordChangedAsync(groupName, changeEvent, ChangeOperation.Insert, data);
-                    break;
-                }
+                await SendToThoseWhoCanReadAsync(changeEvent, ChangeOperation.Insert, cancellationToken);
+                break;
 
             case ChangeOperation.Update:
-                {
-                    var data = await ReadRowAsync(changeEvent, cancellationToken);
-                    await BroadcastRecordChangedAsync(groupName, changeEvent, ChangeOperation.Update, data);
-                    break;
-                }
+                await SendToThoseWhoCanReadAsync(changeEvent, ChangeOperation.Update, cancellationToken);
+                break;
 
             case ChangeOperation.Delete:
                 await BroadcastRecordDeletedAsync(groupName, changeEvent);
@@ -215,62 +216,69 @@ public sealed partial class PostgresChangeListener : BackgroundService
     }
 
     /// <summary>
-    /// The row a notification names, read back through the same door REST serves it through — so
-    /// the broadcast and the webhook payload carry logical column names, decrypted values and the
-    /// system columns exactly as a <c>GET /api/data/{table}/{id}</c> would, with no second
-    /// translation to keep in step. The trigger deliberately sends only the key (see
-    /// <c>ChangeNotificationSetup</c>).
+    /// A created or changed row goes to each subscriber that may read it, and to no other. The row is
+    /// read back through the same door REST serves it through — logical column names, decrypted values,
+    /// system columns exactly as a <c>GET /api/data/{table}/{id}</c> — once per distinct caller among the
+    /// table's subscribers, as that caller: a row-level security policy decides who hears of it, and
+    /// subscribers who are the same caller cost one read between them. A subscriber that cannot read the
+    /// row is told nothing — not that something changed, which would say a row it may not see exists.
     /// <para>
-    /// This is the row as it stands when it is read, not the image the notifying statement wrote:
-    /// a row changed again before the service got to its first notification arrives carrying the
-    /// later state on both, and a row already deleted arrives with no data at all. Both are the
-    /// documented contract of the real-time surface (<c>docs/API.md</c>).
-    /// </para>
-    /// <para>
-    /// The read has no caller. PostgreSQL therefore answers it with no row for a table under a
-    /// row-level security policy that compares with the caller, and the change is broadcast
-    /// without data — a subscriber is told that a record changed, never the contents of a row
-    /// nobody has shown it may read.
+    /// This is the row as it stands when it is read, not the image the notifying statement wrote: a row
+    /// changed again before the service got to its first notification arrives carrying the later state
+    /// on both, and a row already deleted is read by nobody — its deletion is what subscribers hear.
     /// </para>
     /// </summary>
-    private async Task<IDictionary<string, object?>> ReadRowAsync(DatabaseChangeEvent changeEvent, CancellationToken cancellationToken)
+    private async Task SendToThoseWhoCanReadAsync(DatabaseChangeEvent changeEvent, string operation, CancellationToken cancellationToken)
     {
         if (changeEvent.RecordId is not { } recordId)
         {
-            return new Dictionary<string, object?>();
+            return;
         }
 
-        var row = await _dataService.GetByIdAsync(changeEvent.ProjectId, changeEvent.Table, recordId, cancellationToken);
-        if (row is null)
+        foreach (var group in _subscriptions.Subscribers(changeEvent.ProjectId, changeEvent.Table).GroupBy(s => CallerKey(s.Caller), StringComparer.Ordinal))
         {
-            LogRowGoneBeforeRead(_logger, changeEvent.Operation, changeEvent.Table, recordId);
-            return new Dictionary<string, object?>();
-        }
+            var callers = group.ToList();
+            var row = await ReadRowAsAsync(callers[0].Caller, changeEvent.ProjectId, changeEvent.Table, recordId, cancellationToken);
+            if (row is null)
+            {
+                LogRowNotVisible(_logger, operation, changeEvent.Table, recordId, callers.Count);
+                continue;
+            }
 
-        return row;
+            var message = new RecordChangedMessage
+            {
+                Table = changeEvent.Table,
+                RecordId = recordId,
+                Operation = operation,
+                Data = row,
+                Timestamp = changeEvent.Timestamp
+            };
+            List<string> recipients = [.. callers.Select(c => c.ConnectionId)];
+            if (operation == ChangeOperation.Insert)
+            {
+                await _hubContext.Clients.Clients(recipients).RecordCreated(message);
+            }
+            else
+            {
+                await _hubContext.Clients.Clients(recipients).RecordUpdated(message);
+            }
+        }
     }
 
-    private async Task BroadcastRecordChangedAsync(
-        string groupName, DatabaseChangeEvent changeEvent, string operation, IDictionary<string, object?> data)
+    /// <summary>Reads the row as <paramref name="caller"/>; the caller stays set only in this read's flow.</summary>
+    private async Task<IDictionary<string, object?>?> ReadRowAsAsync(SecurityContext caller, Guid projectId, string table, Guid recordId, CancellationToken cancellationToken)
     {
-        var message = new RecordChangedMessage
-        {
-            Table = changeEvent.Table,
-            RecordId = changeEvent.RecordId,
-            Operation = operation,
-            Data = data,
-            Timestamp = changeEvent.Timestamp
-        };
-
-        if (operation == ChangeOperation.Insert)
-        {
-            await _hubContext.Clients.Group(groupName).RecordCreated(message);
-        }
-        else
-        {
-            await _hubContext.Clients.Group(groupName).RecordUpdated(message);
-        }
+        _securityContext.SetContext(caller);
+        return await _dataService.GetByIdAsync(projectId, table, recordId, cancellationToken);
     }
+
+    /// <summary>
+    /// Everything about a caller a policy can read (what the connection factory writes to the session):
+    /// two subscribers with the same key see the same rows.
+    /// </summary>
+    private static string CallerKey(SecurityContext caller) => string.Join('\u001f',
+        caller.ProjectId, caller.UserId, caller.Role, caller.Email, caller.IsAuthenticated, caller.BypassRls,
+        string.Join('\u001e', caller.Claims.OrderBy(c => c.Key, StringComparer.Ordinal).Select(c => $"{c.Key}={c.Value}")));
 
     private async Task BroadcastRecordDeletedAsync(string groupName, DatabaseChangeEvent changeEvent)
     {
@@ -308,8 +316,8 @@ public sealed partial class PostgresChangeListener : BackgroundService
     [LoggerMessage(Level = LogLevel.Debug, Message = "Change received: {Operation} on {Table}, record {RecordId}")]
     private static partial void LogChangeReceived(ILogger logger, string operation, string table, Guid? recordId);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "{Operation} on {Table}, record {RecordId}: the row could not be read back (deleted since, or hidden by a row-level security policy); broadcasting the change without data")]
-    private static partial void LogRowGoneBeforeRead(ILogger logger, string operation, string table, Guid recordId);
+    [LoggerMessage(Level = LogLevel.Debug, Message = "{Operation} on {Table}, record {RecordId}: {Subscribers} subscriber(s) cannot read the row (deleted since, or hidden by a row-level security policy); not sent to them")]
+    private static partial void LogRowNotVisible(ILogger logger, string operation, string table, Guid recordId, int subscribers);
 }
 
 /// <summary>

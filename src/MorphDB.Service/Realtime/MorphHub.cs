@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using Microsoft.AspNetCore.SignalR;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Exceptions;
+using MorphDB.Core.Security;
 using MorphDB.Service.Services;
 
 namespace MorphDB.Service.Realtime;
@@ -15,12 +16,14 @@ public sealed partial class MorphHub : Hub<IMorphHubClient>
     private readonly ILogger<MorphHub> _logger;
     private readonly SubscriptionManager _subscriptionManager;
     private readonly IProjectRepository _projectRepository;
+    private readonly ISecurityContextAccessor _securityContext;
 
-    public MorphHub(ILogger<MorphHub> logger, SubscriptionManager subscriptionManager, IProjectRepository projectRepository)
+    public MorphHub(ILogger<MorphHub> logger, SubscriptionManager subscriptionManager, IProjectRepository projectRepository, ISecurityContextAccessor securityContext)
     {
         _logger = logger;
         _subscriptionManager = subscriptionManager;
         _projectRepository = projectRepository;
+        _securityContext = securityContext;
     }
 
     /// <summary>
@@ -38,6 +41,10 @@ public sealed partial class MorphHub : Hub<IMorphHubClient>
         }
 
         LogClientConnected(_logger, Context.ConnectionId, projectId);
+
+        // Who is subscribing: the caller the connecting request was authenticated as. A change is
+        // read back as this caller, so a row-level security policy decides what this connection hears.
+        _subscriptionManager.Connect(Context.ConnectionId, projectId, _securityContext.ContextOrNull ?? SecurityContext.Anonymous(projectId));
 
         await Groups.AddToGroupAsync(Context.ConnectionId, $"project:{projectId}");
         await base.OnConnectedAsync();
@@ -235,11 +242,25 @@ public sealed class SubscriptionManager
 {
     private readonly ConcurrentDictionary<string, ConnectionSubscriptions> _connections = new();
 
+    /// <summary>Records a connection and the caller it was made as.</summary>
+    public void Connect(string connectionId, Guid projectId, SecurityContext caller)
+    {
+        _connections[connectionId] = new ConnectionSubscriptions(projectId, caller);
+    }
+
     public void AddSubscription(string connectionId, Guid projectId, string tableName)
     {
-        var subscriptions = _connections.GetOrAdd(connectionId, _ => new ConnectionSubscriptions(projectId));
+        var subscriptions = _connections.GetOrAdd(connectionId, _ => new ConnectionSubscriptions(projectId, SecurityContext.Anonymous(projectId)));
         subscriptions.Tables[tableName] = 0;
     }
+
+    /// <summary>The connections subscribed to a table of a project, each with the caller it was made as.</summary>
+    public IReadOnlyList<(string ConnectionId, SecurityContext Caller)> Subscribers(Guid projectId, string tableName) =>
+    [
+        .. _connections
+            .Where(c => c.Value.ProjectId == projectId && c.Value.Tables.ContainsKey(tableName))
+            .Select(c => (c.Key, c.Value.Caller)),
+    ];
 
     public void RemoveSubscription(string connectionId, string tableName)
     {
@@ -263,16 +284,13 @@ public sealed class SubscriptionManager
         return [];
     }
 
-    private sealed class ConnectionSubscriptions
+    private sealed class ConnectionSubscriptions(Guid projectId, SecurityContext caller)
     {
-        public Guid ProjectId { get; }
+        public Guid ProjectId { get; } = projectId;
+
+        public SecurityContext Caller { get; } = caller;
 
         /// <summary>The tables this connection is subscribed to; the value carries nothing.</summary>
         public ConcurrentDictionary<string, byte> Tables { get; } = new();
-
-        public ConnectionSubscriptions(Guid projectId)
-        {
-            ProjectId = projectId;
-        }
     }
 }

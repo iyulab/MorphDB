@@ -13,6 +13,12 @@
 
 ### Changed
 
+- **A real-time change reaches only the subscribers that may read the row — with the row.** A
+  `RecordCreated`/`RecordUpdated` is read back as each subscriber (the caller its connection was made
+  as), once per distinct caller, and sent with `data` to those the table's row-level security
+  policies let read it; the others hear nothing of it. Until now the read had no caller, so under a
+  policy every subscriber got the event with an empty `data`. A row deleted before it was read is no
+  longer sent with an empty `data` — its `RecordDeleted` follows as before, to every subscriber, id only.
 - **A JSON batch whose shape breaks the format is refused as a whole (`400`)**: two requests with one
   id, a group named like a request, or a group whose requests do not follow one another. Two requests
   sharing an id used to run.

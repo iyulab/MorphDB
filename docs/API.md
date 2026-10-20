@@ -764,12 +764,15 @@ project is refused at connect. Nothing arrives out of band.
 `operation` is `INSERT`, `UPDATE` or `DELETE`, upper case. A deletion carries the id of the row that is gone and no
 `data`. There is no before-image on any event. `data` is the row as `GET /api/data/{table}/{id}` would
 serve it — the same logical column names, the same system columns, decrypted the same way — read
-back by key once the change has been notified. It is the row as it stands at that read, not the
-image the notifying statement wrote: a row changed twice in quick succession can arrive carrying
-the later state on both events, and a row deleted before the service read it arrives with an
-empty `data` (its `RecordDeleted` follows). The read-back has no caller, so a row of a table under a
-[row-level security policy](#row-level-security-policies) that compares with the caller also
-arrives with an empty `data`: subscribers learn that the record changed, not what it holds.
+back by key once the change has been notified, **as the subscriber**: the caller the connection was
+made as (its `X-Project-Id`, and the secret it presented where secrets are enforced). A
+`RecordCreated` or `RecordUpdated` goes only to subscribers that may read the row under the table's
+[row-level security policies](#row-level-security-policies), with the row; a subscriber that may not
+read it hears nothing of the change. Subscribers that are the same caller share one read. A
+`RecordDeleted` has no row left to check, so every subscriber of the table gets it — the id alone.
+`data` is the row as it stands at that read, not the image the notifying statement wrote: a row
+changed twice in quick succession can arrive carrying the later state on both events, and a row
+deleted before the service read it is not sent at all (its `RecordDeleted` follows).
 
 #### Delivery
 
@@ -836,7 +839,7 @@ row and operation name it, so several writes to one row in one transaction are o
 many instances run. Deliveries carry no ordering guarantee between changes. A table no active webhook
 subscribes to records nothing.
 
-A delivery's `data` is read the way a change notification's is, without a caller. For a table under
+A delivery's `data` is read back by key without a caller — a webhook is nobody's connection. For a table under
 a [row-level security policy](#row-level-security-policies) that compares with the caller it is
 empty, and a webhook with a `filter` on such a table is therefore not delivered.
 
