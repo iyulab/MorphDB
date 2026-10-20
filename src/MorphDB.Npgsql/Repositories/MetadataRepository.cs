@@ -591,59 +591,15 @@ public sealed class MetadataRepository : IMetadataRepository
 
     #region Mapping Helpers
 
-    private static TableMetadata WithColumns(TableMetadata table, IReadOnlyList<ColumnMetadata> columns) => new()
-    {
-        TableId = table.TableId,
-        ProjectId = table.ProjectId,
-        LogicalName = table.LogicalName,
-        PhysicalName = table.PhysicalName,
-        SchemaVersion = table.SchemaVersion,
-        Descriptor = table.Descriptor,
-        Metadata = table.Metadata,
-        IsActive = table.IsActive,
-        CreatedAt = table.CreatedAt,
-        UpdatedAt = table.UpdatedAt,
-        Columns = columns,
-        Relations = table.Relations,
-        Indexes = table.Indexes,
-        TimestampsEnabled = table.TimestampsEnabled,
-        VersioningEnabled = table.VersioningEnabled,
-        AuditFieldsEnabled = table.AuditFieldsEnabled,
-        SoftDeleteEnabled = table.SoftDeleteEnabled,
-        OwnershipEnabled = table.OwnershipEnabled,
-        HierarchyEnabled = table.HierarchyEnabled,
-        SourceTrackingEnabled = table.SourceTrackingEnabled,
-        RowStateEnabled = table.RowStateEnabled
-    };
+    private static TableMetadata WithColumns(TableMetadata table, IReadOnlyList<ColumnMetadata> columns) =>
+        table with { Columns = columns };
 
     private static TableMetadata WithDetails(
         TableMetadata table,
         IReadOnlyList<ColumnMetadata> columns,
         IReadOnlyList<RelationMetadata> relations,
-        IReadOnlyList<IndexMetadata> indexes) => new()
-        {
-            TableId = table.TableId,
-            ProjectId = table.ProjectId,
-            LogicalName = table.LogicalName,
-            PhysicalName = table.PhysicalName,
-            SchemaVersion = table.SchemaVersion,
-            Descriptor = table.Descriptor,
-            Metadata = table.Metadata,
-            IsActive = table.IsActive,
-            CreatedAt = table.CreatedAt,
-            UpdatedAt = table.UpdatedAt,
-            Columns = columns,
-            Relations = relations,
-            Indexes = indexes,
-            TimestampsEnabled = table.TimestampsEnabled,
-            VersioningEnabled = table.VersioningEnabled,
-            AuditFieldsEnabled = table.AuditFieldsEnabled,
-            SoftDeleteEnabled = table.SoftDeleteEnabled,
-            OwnershipEnabled = table.OwnershipEnabled,
-            HierarchyEnabled = table.HierarchyEnabled,
-            SourceTrackingEnabled = table.SourceTrackingEnabled,
-            RowStateEnabled = table.RowStateEnabled
-        };
+        IReadOnlyList<IndexMetadata> indexes) =>
+        table with { Columns = columns, Relations = relations, Indexes = indexes };
 
     /// <summary>
     /// Attaches FK reference metadata to columns that participate as source columns in relations.

@@ -5,7 +5,11 @@ namespace MorphDB.Core.Models;
 /// <summary>
 /// Represents metadata for a dynamic table.
 /// </summary>
-public sealed class TableMetadata
+/// <remarks>
+/// A record, so a copy that changes one part is written <c>table with { Columns = … }</c>: a copy that
+/// names every property by hand drops whichever property is added next, silently.
+/// </remarks>
+public sealed record TableMetadata
 {
     public Guid TableId { get; init; }
     public Guid ProjectId { get; init; }

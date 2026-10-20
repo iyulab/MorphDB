@@ -342,29 +342,9 @@ public sealed class PostgresSchemaManager : ISchemaManager
             }
         }, cancellationToken);
 
-        return new TableMetadata
-        {
-            TableId = insertedTable.TableId,
-            ProjectId = insertedTable.ProjectId,
-            LogicalName = insertedTable.LogicalName,
-            PhysicalName = insertedTable.PhysicalName,
-            SchemaVersion = insertedTable.SchemaVersion,
-            Descriptor = insertedTable.Descriptor,
-            Metadata = insertedTable.Metadata,
-            CreatedAt = insertedTable.CreatedAt,
-            UpdatedAt = insertedTable.UpdatedAt,
-            IsActive = insertedTable.IsActive,
-            Columns = columns,
-            // System column options
-            TimestampsEnabled = true,
-            VersioningEnabled = sysOpts.VersioningEnabled,
-            AuditFieldsEnabled = sysOpts.AuditFieldsEnabled,
-            SoftDeleteEnabled = sysOpts.SoftDeleteEnabled,
-            OwnershipEnabled = sysOpts.OwnershipEnabled,
-            HierarchyEnabled = sysOpts.HierarchyEnabled,
-            SourceTrackingEnabled = sysOpts.SourceTrackingEnabled,
-            RowStateEnabled = sysOpts.RowStateEnabled
-        };
+        // The inserted row read back carries everything the table was created with (its system
+        // column options are restored from the descriptor); only the columns are inserted separately.
+        return insertedTable with { Columns = columns };
     }
 
     public async Task<TableMetadata?> GetTableAsync(
@@ -621,14 +601,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         if (isVirtualColumn)
         {
             // Checked by planning the read that would compute it, with the column in place.
-            var declared = new TableMetadata
-            {
-                TableId = table.TableId,
-                ProjectId = table.ProjectId,
-                LogicalName = table.LogicalName,
-                PhysicalName = table.PhysicalName,
-                Columns = [.. table.Columns, column]
-            };
+            var declared = table with { Columns = [.. table.Columns, column] };
             await using var connection = await _connections.OpenSystemAsync(cancellationToken);
             await Query.TableSource.VerifyAsync(
                 connection, null, declared, _lookupResolver, _rollupResolver, _formulaResolver, cancellationToken);

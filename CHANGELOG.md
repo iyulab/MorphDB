@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **`TableMetadata` is a record** (`MorphDB.Core`). A copy that changes one part is now
+  `table with { Columns = … }`; the server's own copies used to name every property by hand and
+  dropped whichever one was added last. Code that only reads it, or builds it with an object
+  initializer, is unchanged. Equality is now by value, as for any record.
+
+### Fixed
+
+- **A new computed column on a soft-delete table is verified with the read it will really get.**
+  Before adding a lookup, rollup or formula column the server plans a read that computes it, to refuse
+  one that cannot run. That plan was made on a copy of the table holding only its names and columns,
+  so on a soft-delete table it left out the filter on deleted rows that every real read applies.
+
 ## 0.24.1
 
 A patch. The .NET client no longer reads a deleted project as a missing table: its nullable getters
