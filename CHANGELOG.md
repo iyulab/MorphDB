@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.25.0
+
+A minor. An `arrayAgg` orders by several columns, so rows tied on the first no longer come in the
+server's order, nor is which of them a `limit` keeps the server's choice. `TableMetadata` becomes a
+record, and the one copy of it that dropped a table's system options is fixed with it. A `0.24.x`
+client works against this server unchanged.
 
 ### Added
 
