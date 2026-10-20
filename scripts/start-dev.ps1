@@ -6,12 +6,11 @@
     Starts all development services with hot reload:
     - Docker containers (PostgreSQL, Redis)
     - MorphDB.Service (.NET with hot reload)
-    - MorphDB Desk (Electron with hot reload)
 
     With -Headless it starts only what a script needs to drive the service -- PostgreSQL in a
     compose project of its own and the service as a background process on a port of its own --
     and records the process id, project and ports in .dev-state.json so that stop-dev.ps1 can
-    stop exactly that and nothing else. No terminal tabs, no Desk, no file watcher; the service
+    stop exactly that and nothing else. No terminal tabs, no file watcher; the service
     runs the Release build. Two headless runs can coexist by taking different -Project/-PgPort/
     -Port values, and neither collides with the interactive setup on 5432/5400.
 
@@ -29,13 +28,12 @@
     Host port for the headless run's service (default: 5400).
 
 .NOTES
-    Requires: Docker Desktop, .NET 10 SDK; Node.js 20+ and Windows Terminal for the interactive mode
+    Requires: Docker Desktop, .NET 10 SDK; Windows Terminal for the interactive mode
 #>
 
 param(
     [switch]$SkipDocker,
     [switch]$SkipApi,
-    [switch]$SkipDesk,
     [switch]$Headless,
     [string]$Project = "morphdb-dev",
     [int]$PgPort = 55432,
@@ -48,7 +46,6 @@ $ErrorActionPreference = "Stop"
 # Configuration
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 $ServicePath = Join-Path $ProjectRoot "src\MorphDB.Service"
-$DeskPath = Join-Path $ProjectRoot "desk"
 
 # Colors for output
 function Write-Header { param($Message) Write-Host "`n=== $Message ===" -ForegroundColor Cyan }
@@ -68,7 +65,6 @@ Usage: .\start-dev.ps1 [options]
 Options:
   -SkipDocker    Skip starting Docker containers
   -SkipApi       Skip starting MorphDB.Service
-  -SkipDesk      Skip starting MorphDB Desk (Electron)
   -Headless      PostgreSQL + service in the background, recorded in .dev-state.json
   -Project NAME  Compose project for the headless run (default: morphdb-dev)
   -PgPort N      PostgreSQL host port for the headless run (default: 55432)
@@ -77,7 +73,6 @@ Options:
 
 Examples:
   .\start-dev.ps1                    # Start everything
-  .\start-dev.ps1 -SkipDesk          # Start only backend services
   .\start-dev.ps1 -SkipDocker        # Skip Docker (use existing containers)
   .\start-dev.ps1 -Headless          # Background run for scripts; stop with .\stop-dev.ps1
 
@@ -240,23 +235,6 @@ if ($Headless) {
     exit 0
 }
 
-# Check Node.js
-if (-not $SkipDesk) {
-    $node = Get-Command node -ErrorAction SilentlyContinue
-    if (-not $node) {
-        Write-Err "Node.js is not installed"
-        exit 1
-    }
-    Write-Step "Node.js $(node --version)"
-
-    if (-not (Test-Path (Join-Path $DeskPath "node_modules"))) {
-        Write-Warn "Installing npm dependencies..."
-        Push-Location $DeskPath
-        npm install
-        Pop-Location
-    }
-}
-
 # Check Windows Terminal
 $wt = Get-Command wt -ErrorAction SilentlyContinue
 if (-not $wt) {
@@ -344,17 +322,6 @@ Write-Host ''
 dotnet watch run --no-hot-reload
 "@ | Out-File -FilePath $apiScript -Encoding UTF8
 
-# Script for Desk tab
-$deskScript = Join-Path $tempDir "desk.ps1"
-@"
-`$Host.UI.RawUI.WindowTitle = 'MorphDB Desk'
-Set-Location '$DeskPath'
-Write-Host ''
-Write-Host '  MorphDB Desk - Hot Reload' -ForegroundColor Cyan
-Write-Host ''
-npm run dev
-"@ | Out-File -FilePath $deskScript -Encoding UTF8
-
 # Script for Docker logs tab
 $dockerScript = Join-Path $tempDir "docker.ps1"
 @"
@@ -371,10 +338,6 @@ $tabs = @()
 
 if (-not $SkipApi) {
     $tabs += "new-tab --title `"API`" --tabColor `"#512BD4`" pwsh -NoExit -File `"$apiScript`""
-}
-
-if (-not $SkipDesk) {
-    $tabs += "new-tab --title `"Desk`" --tabColor `"#61DAFB`" pwsh -NoExit -File `"$deskScript`""
 }
 
 if (-not $SkipDocker) {
@@ -445,9 +408,6 @@ if (-not $SkipDocker) {
 if (-not $SkipApi) {
     Write-Host "    MorphDB API : " -NoNewline; Write-Host "http://localhost:5400" -ForegroundColor Yellow
     Write-Host "    Swagger     : " -NoNewline; Write-Host "http://localhost:5400/swagger" -ForegroundColor Yellow
-}
-if (-not $SkipDesk) {
-    Write-Host "    Desk App    : " -NoNewline; Write-Host "Electron (Hot Reload)" -ForegroundColor Yellow
 }
 Write-Host ""
 Write-Host "  Press Ctrl+C in each terminal tab to stop services." -ForegroundColor Gray

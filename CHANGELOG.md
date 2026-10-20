@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Removed
+
+- **The desktop client (`desk/`).** It was never released — no installer was ever published — and had
+  been parked without upkeep, on an Electron line that is out of support. MorphDB is a service and a
+  client library; a database GUI is better served by the general-purpose tools that already speak
+  PostgreSQL. Its workflows and the `-SkipDesk` switch of `scripts/start-dev.ps1` go with it. The
+  source stays in the repository's history.
+
 ### Fixed
 
 - **The client no longer reads a deleted project as a missing table.** A request in a project that

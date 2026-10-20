@@ -13,7 +13,6 @@ compatible pair. This is a 0.x line — a minor release may break you, so pin a 
 | **.NET client** (`MorphDB.Client`) | NuGet, versioned with the repo | Released |
 | **TypeScript SDK** (`sdk/typescript`) | **Not published.** Archived | Archived |
 | **Python SDK** (`sdk/python`) | **Not published.** Archived | Archived |
-| **Desk** (`desk/`) | Not published; built from source | Development |
 
 The TypeScript and Python SDKs are **archived**: the source stays in the repository as a record of
 how the API was called from those ecosystems, frozen at the `0.11.x` contract, but it is not

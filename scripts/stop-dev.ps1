@@ -59,7 +59,7 @@ if (Test-Path $StateFile) {
     Push-Location $ProjectRoot
     docker compose -p $Project down 2>$null
     Pop-Location
-    Write-Host "     Service and Desk tabs started by start-dev.ps1 are stopped with Ctrl+C in each tab." -ForegroundColor Gray
+    Write-Host "     Service tabs started by start-dev.ps1 are stopped with Ctrl+C in each tab." -ForegroundColor Gray
 }
 
 Write-Host ""

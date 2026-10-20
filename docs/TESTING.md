@@ -74,86 +74,6 @@ unnoticed.
 
 ---
 
-## Desk Tests (TypeScript/Vitest)
-
-### Commands
-
-```bash
-cd desk
-npm run test                            # Run all tests (watch mode)
-npm run test -- --run                   # Run all tests once
-npm run test -- --run src/renderer/lib/__tests__/api.test.ts  # Single file
-```
-
-### Test Organization
-
-| File/Directory | Description |
-|----------------|-------------|
-| `desk/src/renderer/lib/__tests__/api.test.ts` | MorphDBClient unit tests |
-| `desk/src/renderer/lib/__tests__/api-scenarios.test.ts` | Cross-component API scenarios |
-| `desk/src/renderer/lib/__tests__/usage-scenarios.test.ts` | Real-world usage pattern simulations |
-| `desk/e2e/` | Playwright E2E tests |
-| `desk/e2e/integration/` | Server integration tests (requires running server) |
-
-### Test Patterns
-
-#### Mock Fetch Setup
-
-```typescript
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { MorphDBClient } from '../api'
-
-const mockFetch = vi.fn()
-global.fetch = mockFetch
-
-function createMockResponse<T>(data: T, ok = true, status = 200): Response {
-  return {
-    ok,
-    status,
-    json: async () => data,
-    headers: new Headers(),
-    // ... other Response properties
-  } as Response
-}
-```
-
-#### Response Converters
-
-API responses are transformed via `toColumnApiResponse`, `toTableApiResponse`:
-
-| Raw API Field | Converted Field |
-|---------------|-----------------|
-| `unique` | `isUnique` |
-| `indexed` | `isIndexed` |
-| `default` | `defaultValue` |
-
-#### Derived Columns
-
-Lookup/rollup/formula details are **not** included in `ColumnApiResponse`. Only check the `isDerived` flag:
-
-```typescript
-// ✅ Correct
-expect(column.isDerived).toBe(true)
-
-// ❌ Wrong - these fields don't exist in ColumnApiResponse
-expect(column.lookup?.targetTable).toBe('categories')
-```
-
-#### Bulk Operations
-
-Use `bulkInsert`, `bulkUpdate`, `bulkDelete` methods (not `batch`):
-
-```typescript
-// ✅ Correct
-const result = await client.bulkInsert('orders', records)
-const updated = await client.bulkUpdate('products', { stock: 0 }, "status eq 'discontinued'")
-
-// ❌ Wrong
-const result = await client.batch('orders', operations)
-```
-
----
-
 ## SDK Tests
 
 The Python and TypeScript clients under `sdk/` are archived (see `docs/COMPATIBILITY.md`). Their
@@ -172,9 +92,6 @@ docker compose -f docker-compose.test.yml up -d
 
 # 2. Run server integration tests
 dotnet test --filter-namespace MorphDB.Tests.Integration
-
-# 3. Run Desk E2E tests
-cd desk && npx playwright test e2e/integration
 ```
 
 ---
@@ -186,7 +103,6 @@ cd desk && npx playwright test e2e/integration
 | Server | ✅ | ✅ | - |
 | Python SDK (archived) | frozen, not run | frozen, not run | - |
 | TypeScript SDK (archived) | frozen, not run | frozen, not run | - |
-| Desk | ✅ | ✅ | ✅ |
 
 The archived SDKs keep their test suites under `sdk/`, but nothing runs them and nothing will: a
 change to the server contract is not reflected on the SDK side. `MorphDB.Client` is the only client

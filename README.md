@@ -317,7 +317,6 @@ MorphDB/
 ├── sdk/                    # archived Python/TypeScript clients -- frozen, not published, not maintained
 │   ├── typescript/         # TypeScript
 │   └── python/             # Python
-├── desk/                   # Electron desktop app -- parked, see desk/README.md
 └── tests/
 ```
 
