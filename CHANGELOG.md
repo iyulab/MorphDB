@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.24.1
+
+A patch. The .NET client no longer reads a deleted project as a missing table: its nullable getters
+throw `MorphDBNotFoundException` with `PROJECT_NOT_FOUND` where they answered `null`. The server is
+unchanged, and an 0.24.0 client works against it as before. The desktop client, never released, leaves
+the repository.
 
 ### Removed
 
