@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.26.1
+
+A patch. A record read and a real-time change cost fewer statements, and a real-time change to one
+table no longer waits behind another table's. The .NET client is unchanged; a `0.25.x` or `0.26.0`
+client works against this server.
 
 ### Fixed
 
