@@ -14,6 +14,10 @@
 
 ### Fixed
 
+- **The request log records the status the client received.** It sat inside the exception handler, so
+  every error answered with a 4xx (a validation failure, a missing table, a refused secret) was logged as
+  `responded 500` at Error level with its stack — client mistakes counted as server failures. A 4xx is now
+  logged with its status at Information level; the exception handler still logs every 5xx.
 - **The .NET client's real-time connection uses the project set by `SetProjectId`.** It sent the project
   the options held when the client was built, so a client scoped after construction subscribed under no
   project (or the old one) while its REST calls went to the new one. A connection already open keeps the

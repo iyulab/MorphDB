@@ -268,6 +268,17 @@ public sealed class ApiTestFixture : IAsyncLifetime
     }
 
     /// <summary>
+    /// Returns a factory identical to this one plus <paramref name="configure"/>'s service changes, for a
+    /// test that has to observe something only a service registration exposes (a log sink, say).
+    /// <para>
+    /// Not cached, unlike <see cref="WithMasterSecret"/>: the caller owns it and disposes it, which stops
+    /// the host it boots — and that host's change listener — when the test ends.
+    /// </para>
+    /// </summary>
+    public WebApplicationFactory<Program> Derive(Action<IServiceCollection> configure)
+        => _factory!.WithWebHostBuilder(builder => builder.ConfigureTestServices(configure));
+
+    /// <summary>
     /// Gets the service provider of the configured (unenforced) server.
     /// </summary>
     public IServiceProvider Services => _factory!.Services;

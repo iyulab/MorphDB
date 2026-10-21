@@ -255,8 +255,12 @@ try
     await app.Services.EnsureMorphDbSchemaAsync();
 
     // Configure the HTTP request pipeline
-    app.UseExceptionHandler();
+    // The request log sits outside the exception handler, so it records the status the client
+    // received. Inside it, every error the handler turns into a 4xx passed it as an exception and was
+    // logged as a 500 at Error level, stack and all — counting client mistakes as server failures and
+    // hiding the real ones among them.
     app.UseSerilogRequestLogging();
+    app.UseExceptionHandler();
     app.UseRequestTracking(); // Graceful shutdown request tracking (Phase 24)
 
     // The OpenAPI document is the service's machine-readable contract; a deployed image serves it
