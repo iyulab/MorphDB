@@ -297,3 +297,20 @@ public sealed class ExportJobStatus
     /// </summary>
     public double PercentComplete => TotalRows > 0 ? (double)ProcessedRows / TotalRows * 100 : 0;
 }
+
+/// <summary>
+/// How far an import or export job has got.
+/// </summary>
+public sealed class JobProgress
+{
+    public Guid JobId { get; init; }
+
+    /// <summary>The job's state, in lower case (<c>pending</c>, <c>processing</c>, <c>completed</c>, …).</summary>
+    public required string Status { get; init; }
+    public long TotalRows { get; init; }
+    public long ProcessedRows { get; init; }
+    public long SuccessCount { get; init; }
+    public long ErrorCount { get; init; }
+    public double PercentComplete { get; init; }
+    public TimeSpan? EstimatedTimeRemaining { get; init; }
+}

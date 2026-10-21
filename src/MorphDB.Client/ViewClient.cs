@@ -137,4 +137,26 @@ public sealed class ViewClient
         return "?" + string.Join("&", parts);
     }
 
+    /// <summary>
+    /// Changes a view. Members of <paramref name="request"/> left null keep the view's current definition.
+    /// </summary>
+    public async Task<ViewInfo> UpdateAsync(string viewName, UpdateViewRequest request, CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.PatchAsJsonAsync($"/api/views/{Uri.EscapeDataString(viewName)}", request, MorphDBJsonContext.Default.UpdateViewRequest, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.ViewInfo, cancellationToken)
+            ?? throw new MorphDBException("Failed to deserialize view response");
+    }
+
+    /// <summary>
+    /// Whether a materialized view's rows are behind its base tables. A view that is not materialized
+    /// answers <see cref="MorphDBValidationException"/>.
+    /// </summary>
+    public async Task<ViewStaleness> GetStalenessAsync(string viewName, CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.GetAsync($"/api/views/{Uri.EscapeDataString(viewName)}/stale", cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.ViewStaleness, cancellationToken)
+            ?? throw new MorphDBException("Failed to deserialize staleness response");
+    }
 }

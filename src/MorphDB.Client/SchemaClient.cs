@@ -183,4 +183,16 @@ public sealed class SchemaClient
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.ListSchemaChange, cancellationToken) ?? [];
     }
+
+    /// <summary>
+    /// Renames a table. <see cref="UpdateTableRequest.Version"/> is the schema version last read; a table
+    /// changed since answers <see cref="MorphDBConflictException"/>.
+    /// </summary>
+    public async Task<TableInfo> UpdateTableAsync(string tableName, UpdateTableRequest request, CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.PatchAsJsonAsync($"/api/schema/tables/{Uri.EscapeDataString(tableName)}", request, MorphDBJsonContext.Default.UpdateTableRequest, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.TableInfo, cancellationToken)
+            ?? throw new MorphDBException("Failed to deserialize table response");
+    }
 }

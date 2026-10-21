@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Http.Json;
 using MorphDB.Client.Models;
 
@@ -218,4 +219,41 @@ public sealed class BulkClient
 
     #endregion
 
+    /// <summary>
+    /// The project's import jobs, newest first.
+    /// </summary>
+    public Task<IReadOnlyList<ImportJobStatus>> ListImportJobsAsync(int? limit = null, int? offset = null, CancellationToken cancellationToken = default)
+        => ListAsync("/api/bulk/import", limit, offset, MorphDBJsonContext.Default.ListImportJobStatus, cancellationToken);
+
+    /// <summary>
+    /// The project's export jobs, newest first.
+    /// </summary>
+    public Task<IReadOnlyList<ExportJobStatus>> ListExportJobsAsync(int? limit = null, int? offset = null, CancellationToken cancellationToken = default)
+        => ListAsync("/api/bulk/export", limit, offset, MorphDBJsonContext.Default.ListExportJobStatus, cancellationToken);
+
+    /// <summary>
+    /// How far an import or export job has got, or null when the project has no such job.
+    /// </summary>
+    public async Task<JobProgress?> GetJobProgressAsync(Guid jobId, CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.GetAsync($"/api/bulk/jobs/{jobId}/progress", cancellationToken);
+        if (await ErrorEnvelope.IsAbsentAsync(response, cancellationToken))
+            return null;
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.JobProgress, cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<T>> ListAsync<T>(
+        string path, int? limit, int? offset, System.Text.Json.Serialization.Metadata.JsonTypeInfo<List<T>> typeInfo, CancellationToken cancellationToken)
+    {
+        var parts = new List<string>();
+        if (limit is { } l)
+            parts.Add(string.Create(CultureInfo.InvariantCulture, $"limit={l}"));
+        if (offset is { } o)
+            parts.Add(string.Create(CultureInfo.InvariantCulture, $"offset={o}"));
+        var query = parts.Count == 0 ? string.Empty : "?" + string.Join("&", parts);
+        var response = await _httpClient.GetAsync(path + query, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync(typeInfo, cancellationToken) ?? [];
+    }
 }

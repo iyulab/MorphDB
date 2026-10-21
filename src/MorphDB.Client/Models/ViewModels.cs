@@ -167,3 +167,35 @@ public sealed class ViewRows
     /// <summary>Whether rows remain past this page.</summary>
     public bool HasMore { get; init; }
 }
+
+/// <summary>
+/// Changes to a view (mirrors the server's <c>UpdateViewApiRequest</c>). Members left null keep the
+/// view's current definition.
+/// </summary>
+public sealed class UpdateViewRequest
+{
+    public string? Name { get; init; }
+    public IReadOnlyList<ViewColumn>? Columns { get; init; }
+    public IReadOnlyList<ViewJoin>? Joins { get; init; }
+    public IReadOnlyList<ViewFilter>? Filters { get; init; }
+    public IReadOnlyList<string>? GroupBy { get; init; }
+    public IReadOnlyList<ViewOrder>? OrderBy { get; init; }
+    public int? Limit { get; init; }
+    public bool? Distinct { get; init; }
+
+    /// <summary>For a materialized view: <c>OnDemand</c>, <c>Scheduled</c> or <c>Incremental</c>.</summary>
+    public string? RefreshPolicy { get; init; }
+
+    /// <summary>For a <c>Scheduled</c> refresh policy, its cron expression.</summary>
+    public string? RefreshSchedule { get; init; }
+    public string? Description { get; init; }
+}
+
+/// <summary>
+/// Whether a materialized view is behind its base tables.
+/// </summary>
+public sealed class ViewStaleness
+{
+    public bool IsStale { get; init; }
+    public DateTimeOffset? LastRefreshedAt { get; init; }
+}

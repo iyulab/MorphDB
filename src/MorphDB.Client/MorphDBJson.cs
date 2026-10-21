@@ -56,6 +56,9 @@ internal static class MorphDBJson
 // Bulk import and export.
 [JsonSerializable(typeof(ImportJobStatus))]
 [JsonSerializable(typeof(ExportJobStatus))]
+[JsonSerializable(typeof(List<ImportJobStatus>))]
+[JsonSerializable(typeof(List<ExportJobStatus>))]
+[JsonSerializable(typeof(JobProgress))]
 [JsonSerializable(typeof(CsvExportOptions))]
 [JsonSerializable(typeof(JsonExportOptions))]
 [JsonSerializable(typeof(XlsxExportOptions))]
@@ -76,11 +79,14 @@ internal static class MorphDBJson
 [JsonSerializable(typeof(CreateRelationRequest))]
 [JsonSerializable(typeof(RelationInfo))]
 [JsonSerializable(typeof(CreateIndexRequest))]
+[JsonSerializable(typeof(UpdateTableRequest))]
 [JsonSerializable(typeof(IndexInfo))]
 // Views.
 [JsonSerializable(typeof(IReadOnlyList<ViewInfo>))]
 [JsonSerializable(typeof(ViewInfo))]
 [JsonSerializable(typeof(CreateViewRequest))]
+[JsonSerializable(typeof(UpdateViewRequest))]
+[JsonSerializable(typeof(ViewStaleness))]
 [JsonSerializable(typeof(ViewRows))]
 // Webhooks.
 [JsonSerializable(typeof(List<WebhookInfo>))]

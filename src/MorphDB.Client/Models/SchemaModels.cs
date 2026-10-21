@@ -605,3 +605,15 @@ public sealed class FormulaConfig
     /// <summary>Optional presentation hint stored with the column.</summary>
     public string? OutputFormat { get; init; }
 }
+
+/// <summary>
+/// Request to rename a table (mirrors the server's <c>UpdateTableApiRequest</c>).
+/// </summary>
+public sealed class UpdateTableRequest
+{
+    /// <summary>The new name, or null to keep it.</summary>
+    public string? Name { get; init; }
+
+    /// <summary>The schema version last read. A table changed since is a conflict.</summary>
+    public required int Version { get; init; }
+}

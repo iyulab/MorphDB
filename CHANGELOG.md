@@ -17,6 +17,9 @@
 - **The .NET client reads the audit log and schema history**: `client.Audit` — `QueryLogsAsync` (every
   filter the route takes), `GetLogAsync`, `GetStatsAsync` — and `Schema.GetTableHistoryAsync`,
   `Schema.GetChangelogAsync`.
+- **The .NET client renames tables, changes views and reads bulk jobs**: `Schema.UpdateTableAsync`,
+  `Views.UpdateAsync`, `Views.GetStalenessAsync`, `Bulk.ListImportJobsAsync`, `Bulk.ListExportJobsAsync`
+  and `Bulk.GetJobProgressAsync`. Every documented route but schema batch DDL is now reachable from the client.
 - **The audit log filter takes `category` and `minSeverity` by name** (`?category=data`), the names every
   entry carries; it took only their numbers, so a filter written from what an entry says was a `400`. The
   numbers are still read. The audit routes are now in the API reference.
