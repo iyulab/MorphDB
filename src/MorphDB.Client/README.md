@@ -71,6 +71,7 @@ await client.Realtime.SubscribeAsync("users", change =>
 - **Projects**: Create, read, update and delete projects, and read their storage and health reports
 - **Schema Management**: Create, alter, and drop tables dynamically
 - **Relations**: Declare links between tables, enforced on write or declared only
+- **Indexes**: Create composite indexes over named columns; read them back with the table
 - **Data Operations**: CRUD operations with filtering, pagination, and ordering
 - **Real-time Subscriptions**: WebSocket-based change notifications
 - **Bulk Operations**: Import/export data in CSV, JSON, and XLSX formats

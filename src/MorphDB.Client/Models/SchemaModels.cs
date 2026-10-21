@@ -253,6 +253,11 @@ public sealed class TableInfo
     public IReadOnlyList<ColumnInfo> Columns { get; init; } = [];
 
     /// <summary>
+    /// The table's indexes, as the server reports them.
+    /// </summary>
+    public IReadOnlyList<IndexInfo> Indexes { get; init; } = [];
+
+    /// <summary>
     /// Creation timestamp.
     /// </summary>
     public DateTimeOffset CreatedAt { get; init; }
@@ -398,6 +403,70 @@ public sealed class CreateRelationRequest
     /// Whether cascade behaviour is handled by the application layer. Default: true.
     /// </summary>
     public bool VirtualCascade { get; init; } = true;
+}
+
+/// <summary>
+/// Request to create an index on a table (mirrors the server's <c>CreateIndexApiRequest</c>).
+/// </summary>
+public sealed class CreateIndexRequest
+{
+    /// <summary>
+    /// Index name, unique within the table. The server derives the physical name, so two tables may
+    /// each have an index of the same name.
+    /// </summary>
+    public required string Name { get; init; }
+
+    /// <summary>
+    /// Logical names of the columns the index covers, in index order — the leading column first.
+    /// </summary>
+    public required IReadOnlyList<string> Columns { get; init; }
+
+    /// <summary>
+    /// Index method: <c>btree</c>, <c>hash</c>, <c>gin</c>, <c>gist</c> or <c>brin</c>. Default: <c>btree</c>.
+    /// </summary>
+    public string Type { get; init; } = "btree";
+
+    /// <summary>
+    /// Whether the index refuses two rows with the same values. Default: false.
+    /// </summary>
+    public bool Unique { get; init; }
+
+    /// <summary>
+    /// A predicate that makes the index partial — only rows it holds for are indexed. Null, the
+    /// default, indexes every row.
+    /// </summary>
+    public string? Where { get; init; }
+}
+
+/// <summary>
+/// An index as the server reports it (mirrors the server's <c>IndexApiResponse</c>).
+/// </summary>
+public sealed class IndexInfo
+{
+    /// <summary>
+    /// Index identifier — what <c>DeleteIndexAsync</c> takes.
+    /// </summary>
+    public Guid Id { get; init; }
+
+    /// <summary>
+    /// Index name.
+    /// </summary>
+    public required string Name { get; init; }
+
+    /// <summary>
+    /// Logical names of the covered columns, in index order.
+    /// </summary>
+    public IReadOnlyList<string> Columns { get; init; } = [];
+
+    /// <summary>
+    /// Index method.
+    /// </summary>
+    public required string Type { get; init; }
+
+    /// <summary>
+    /// Whether the index is unique.
+    /// </summary>
+    public bool Unique { get; init; }
 }
 
 /// <summary>

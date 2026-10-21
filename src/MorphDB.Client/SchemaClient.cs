@@ -118,6 +118,34 @@ public sealed class SchemaClient
     }
 
     /// <summary>
+    /// Creates an index on a table.
+    /// </summary>
+    /// <remarks>
+    /// Columns are named logically, as for relations; the server resolves them and refuses one the table
+    /// does not have. An index is dropped with its table.
+    /// </remarks>
+    public async Task<IndexInfo> CreateIndexAsync(
+        string tableName,
+        CreateIndexRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.PostAsJsonAsync(
+            $"/api/schema/tables/{Uri.EscapeDataString(tableName)}/indexes", request, MorphDBJsonContext.Default.CreateIndexRequest, cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.IndexInfo, cancellationToken)
+            ?? throw new MorphDBException("Failed to deserialize index response");
+    }
+
+    /// <summary>
+    /// Deletes an index.
+    /// </summary>
+    public async Task DeleteIndexAsync(Guid indexId, CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.DeleteAsync($"/api/schema/indexes/{indexId}", cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
+    }
+
+    /// <summary>
     /// Deletes a relation.
     /// </summary>
     public async Task DeleteRelationAsync(Guid relationId, CancellationToken cancellationToken = default)

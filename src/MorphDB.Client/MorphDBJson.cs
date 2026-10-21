@@ -70,6 +70,8 @@ internal static class MorphDBJson
 [JsonSerializable(typeof(ColumnInfo))]
 [JsonSerializable(typeof(CreateRelationRequest))]
 [JsonSerializable(typeof(RelationInfo))]
+[JsonSerializable(typeof(CreateIndexRequest))]
+[JsonSerializable(typeof(IndexInfo))]
 // Views.
 [JsonSerializable(typeof(IReadOnlyList<ViewInfo>))]
 [JsonSerializable(typeof(ViewInfo))]

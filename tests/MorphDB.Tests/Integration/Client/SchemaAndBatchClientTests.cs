@@ -98,6 +98,35 @@ public class SchemaAndBatchClientTests(ApiIntegrationFixture fixture)
     }
 
     [Fact]
+    public async Task An_index_is_created_over_named_columns_reported_with_its_table_and_deleted()
+    {
+        await using var client = NewClient();
+        var table = await client.Schema.CreateTableAsync(new CreateTableRequest
+        {
+            Name = Name("idx"),
+            Columns =
+            [
+                new CreateColumnRequest { Name = "kind", Type = "text" },
+                new CreateColumnRequest { Name = "at", Type = "bigint" },
+            ],
+        }, Ct);
+
+        var index = await client.Schema.CreateIndexAsync(table.Name, new CreateIndexRequest { Name = "by_kind_at", Columns = ["kind", "at"] }, Ct);
+
+        Assert.Equal(["kind", "at"], index.Columns);
+        Assert.Equal("btree", index.Type);
+        var reported = Assert.Single((await client.Schema.GetTableAsync(table.Name, Ct))!.Indexes, i => i.Name == "by_kind_at");
+        Assert.Equal(index.Id, reported.Id);
+        Assert.Equal(["kind", "at"], reported.Columns);
+
+        await Assert.ThrowsAnyAsync<MorphDBApiException>(() =>
+            client.Schema.CreateIndexAsync(table.Name, new CreateIndexRequest { Name = "by_missing", Columns = ["missing"] }, Ct));
+
+        await client.Schema.DeleteIndexAsync(index.Id, Ct);
+        Assert.DoesNotContain((await client.Schema.GetTableAsync(table.Name, Ct))!.Indexes, i => i.Name == "by_kind_at");
+    }
+
+    [Fact]
     public async Task A_batch_runs_its_operations_in_order_and_reports_each()
     {
         await using var client = NewClient();

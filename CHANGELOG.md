@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Added
+
+- **The .NET client creates and deletes indexes: `Schema.CreateIndexAsync(table, CreateIndexRequest)`
+  and `Schema.DeleteIndexAsync(id)`**, and `TableInfo.Indexes` reports a table's indexes. Columns are
+  named logically, as for relations; the server refuses one the table does not have. The routes were
+  already served; the client had no way to reach them.
+
 ### Fixed
 
 - **A query-body filter node without `$type`, or with a kind the server does not know, is refused with
