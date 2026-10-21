@@ -77,7 +77,8 @@ public partial class DocsRouteParityTests
             !right[i].StartsWith('{') && !segment.Equals(right[i], StringComparison.OrdinalIgnoreCase)).Any();
     }
 
-    private static IReadOnlyList<string> ServedRoutes()
+    /// <summary>Every <c>VERB /path</c> a controller serves, constraints dropped — shared with <c>ClientRouteCoverageTests</c>.</summary>
+    internal static IReadOnlyList<string> ServedRoutes()
     {
         // Any public type in the service assembly would do -- this one is only a handle on the
         // assembly, not a thing the test is about.
