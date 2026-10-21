@@ -317,6 +317,34 @@ public class ClientRequestBodyContractTests
             """));
     }
 
+    private static readonly string[] TwoLots = ["L-1", "L-2"];
+
+    [Fact]
+    public async Task A_query_with_a_filter_tree_is_sent_as_the_body_the_query_route_reads()
+    {
+        var handler = new CapturingHandler("""{"data":[],"pagination":{}}""");
+        var request = new QueryRequest
+        {
+            Filters = [new Filter("kind", FilterOperator.Equal, "commit")],
+            Where = FilterGroup.Or(
+                new Filter("qty", FilterOperator.GreaterThan, 3),
+                FilterGroup.And(new Filter("lot", FilterOperator.In, TwoLots), new Filter("held", FilterOperator.Equal, true))),
+            OrderBy = [new OrderBy("qty", ascending: false)],
+            PageSize = 10,
+        };
+
+        await ClientOver(handler).Data.QueryAsync("t", request, TestContext.Current.CancellationToken);
+
+        handler.Body.Should().Be(Joined(
+            """
+            {"filter":{"$type":"group","logic":"and","filters":[{"$type":"condition","column":"kind","operator":"eq","value":"commit"},
+            {"$type":"group","logic":"or","filters":[{"$type":"condition","column":"qty","operator":"gt","value":3},
+            {"$type":"group","logic":"and","filters":[{"$type":"condition","column":"lot","operator":"in","value":["L-1","L-2"]},
+            {"$type":"condition","column":"held","operator":"eq","value":true}]}]}]},
+            "select":null,"orderBy":["qty:desc"],"page":1,"pageSize":10,"offset":null,"includeDeleted":false,"count":false}
+            """));
+    }
+
     [Fact]
     public async Task The_bulk_writes_send_the_bodies_the_service_reads()
     {

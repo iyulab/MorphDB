@@ -116,6 +116,9 @@ internal sealed class MorphQuery : IMorphQuery
     private readonly List<string> _selectedColumns = [];
     private readonly List<(AggregateFunction Function, string Column, string? Alias)> _aggregates = [];
     private readonly List<WhereCondition> _whereConditions = [];
+
+    // Where conditions go: the query's own list, or a group's while its builder runs.
+    private List<WhereCondition> _conditionTarget;
     private readonly List<(string Table, string SourceColumn, string TargetColumn, bool IsLeft)> _joins = [];
     private readonly List<(string Column, bool Descending)> _orderByClauses = [];
     private readonly List<string> _groupByColumns = [];
@@ -129,7 +132,8 @@ internal sealed class MorphQuery : IMorphQuery
         FilterOperator Operator,
         object? Value,
         bool IsOr,
-        ConditionType Type);
+        ConditionType Type,
+        IReadOnlyList<WhereCondition>? Children = null);
 
     private enum ConditionType
     {
@@ -137,7 +141,8 @@ internal sealed class MorphQuery : IMorphQuery
         In,
         NotIn,
         Null,
-        NotNull
+        NotNull,
+        Group
     }
 
     internal MorphQuery(
@@ -161,6 +166,7 @@ internal sealed class MorphQuery : IMorphQuery
         _tableAlias = tableAlias;
         _tableMetadata = table;
         _compiler = new PostgresCompiler();
+        _conditionTarget = _whereConditions;
     }
 
     #region SELECT
@@ -204,49 +210,76 @@ internal sealed class MorphQuery : IMorphQuery
     /// <inheritdoc />
     public IMorphQuery Where(string column, FilterOperator op, object? value)
     {
-        _whereConditions.Add(new WhereCondition(column, op, value, false, ConditionType.Standard));
+        _conditionTarget.Add(new WhereCondition(column, op, value, false, ConditionType.Standard));
         return this;
     }
 
     /// <inheritdoc />
     public IMorphQuery AndWhere(string column, FilterOperator op, object? value)
     {
-        _whereConditions.Add(new WhereCondition(column, op, value, false, ConditionType.Standard));
+        _conditionTarget.Add(new WhereCondition(column, op, value, false, ConditionType.Standard));
         return this;
     }
 
     /// <inheritdoc />
     public IMorphQuery OrWhere(string column, FilterOperator op, object? value)
     {
-        _whereConditions.Add(new WhereCondition(column, op, value, true, ConditionType.Standard));
+        _conditionTarget.Add(new WhereCondition(column, op, value, true, ConditionType.Standard));
         return this;
     }
 
     /// <inheritdoc />
+    public IMorphQuery WhereGroup(Func<IMorphQuery, IMorphQuery> group) => AddGroup(group, isOr: false);
+
+    public IMorphQuery OrWhereGroup(Func<IMorphQuery, IMorphQuery> group) => AddGroup(group, isOr: true);
+
+    private MorphQuery AddGroup(Func<IMorphQuery, IMorphQuery> group, bool isOr)
+    {
+        ArgumentNullException.ThrowIfNull(group);
+        var children = new List<WhereCondition>();
+        var outer = _conditionTarget;
+        _conditionTarget = children;
+        try
+        {
+            group(this);
+        }
+        finally
+        {
+            _conditionTarget = outer;
+        }
+
+        if (children.Count > 0)
+        {
+            _conditionTarget.Add(new WhereCondition(string.Empty, FilterOperator.Equals, null, isOr, ConditionType.Group, children));
+        }
+
+        return this;
+    }
+
     public IMorphQuery WhereIn(string column, IEnumerable<object> values)
     {
-        _whereConditions.Add(new WhereCondition(column, FilterOperator.Equals, values.ToArray(), false, ConditionType.In));
+        _conditionTarget.Add(new WhereCondition(column, FilterOperator.Equals, values.ToArray(), false, ConditionType.In));
         return this;
     }
 
     /// <inheritdoc />
     public IMorphQuery WhereNotIn(string column, IEnumerable<object> values)
     {
-        _whereConditions.Add(new WhereCondition(column, FilterOperator.Equals, values.ToArray(), false, ConditionType.NotIn));
+        _conditionTarget.Add(new WhereCondition(column, FilterOperator.Equals, values.ToArray(), false, ConditionType.NotIn));
         return this;
     }
 
     /// <inheritdoc />
     public IMorphQuery WhereNull(string column)
     {
-        _whereConditions.Add(new WhereCondition(column, FilterOperator.Equals, null, false, ConditionType.Null));
+        _conditionTarget.Add(new WhereCondition(column, FilterOperator.Equals, null, false, ConditionType.Null));
         return this;
     }
 
     /// <inheritdoc />
     public IMorphQuery WhereNotNull(string column)
     {
-        _whereConditions.Add(new WhereCondition(column, FilterOperator.Equals, null, false, ConditionType.NotNull));
+        _conditionTarget.Add(new WhereCondition(column, FilterOperator.Equals, null, false, ConditionType.NotNull));
         return this;
     }
 
@@ -634,7 +667,7 @@ internal sealed class MorphQuery : IMorphQuery
         // WHERE - a derived column filters like a stored one
         foreach (var condition in _whereConditions)
         {
-            ApplyWhereCondition(query, source.Column(condition.Column), condition);
+            ApplyWhereCondition(query, source.Column, condition);
         }
 
         // JOIN - resolve physical table and column names
@@ -734,7 +767,7 @@ internal sealed class MorphQuery : IMorphQuery
     {
         foreach (var condition in conditions)
         {
-            ApplyWhereCondition(query, condition.Column, condition);
+            ApplyWhereCondition(query, static column => column, condition);
         }
     }
 
@@ -747,21 +780,50 @@ internal sealed class MorphQuery : IMorphQuery
         List<WhereCondition> conditions,
         TableMetadata table)
     {
+        string Physical(string column) =>
+            table.Columns.FirstOrDefault(c => c.LogicalName == column) is { IsDerived: true }
+                ? throw new ValidationException(
+                    column,
+                    "a derived column (lookup, rollup or formula) is computed by reads and cannot narrow a write.")
+                : GetPhysicalColumnName(column, table);
+
         foreach (var condition in conditions)
         {
-            if (table.Columns.FirstOrDefault(c => c.LogicalName == condition.Column) is { IsDerived: true })
-            {
-                throw new ValidationException(
-                    condition.Column,
-                    "a derived column (lookup, rollup or formula) is computed by reads and cannot narrow a write.");
-            }
-
-            ApplyWhereCondition(query, GetPhysicalColumnName(condition.Column, table), condition);
+            ApplyWhereCondition(query, Physical, condition);
         }
     }
 
-    private static void ApplyWhereCondition(SqlKataQuery query, string column, WhereCondition condition)
+    /// <summary>
+    /// One condition, its column named through <paramref name="columnOf"/> — a group's conditions inside
+    /// parentheses, joined to what precedes it by its own AND or OR.
+    /// </summary>
+    private static void ApplyWhereCondition(SqlKataQuery query, Func<string, string> columnOf, WhereCondition condition)
     {
+        if (condition.Type == ConditionType.Group)
+        {
+            SqlKataQuery Nested(SqlKataQuery inner)
+            {
+                foreach (var child in condition.Children!)
+                {
+                    ApplyWhereCondition(inner, columnOf, child);
+                }
+
+                return inner;
+            }
+
+            if (condition.IsOr)
+            {
+                query.OrWhere(Nested);
+            }
+            else
+            {
+                query.Where(Nested);
+            }
+
+            return;
+        }
+
+        var column = columnOf(condition.Column);
         switch (condition.Type)
         {
             case ConditionType.In:

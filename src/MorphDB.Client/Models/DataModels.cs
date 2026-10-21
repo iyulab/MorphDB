@@ -13,9 +13,16 @@ public sealed class QueryRequest
     public IReadOnlyList<string> Select { get; init; } = [];
 
     /// <summary>
-    /// Filter conditions.
+    /// Filter conditions, all of which apply.
     /// </summary>
     public IReadOnlyList<Filter> Filters { get; init; } = [];
+
+    /// <summary>
+    /// A filter tree — conditions combined in <c>and</c> / <c>or</c> groups, nested as deep as needed — applied
+    /// together with <see cref="Filters"/>. When it is set the query is sent as a body
+    /// (<c>POST /api/data/{table}/query</c>), since a query string can only say «all of these».
+    /// </summary>
+    public FilterNode? Where { get; init; }
 
     /// <summary>
     /// Ordering specifications.
@@ -386,4 +393,70 @@ public sealed class SeedError
 
     /// <summary>Why it was not written.</summary>
     public string? Message { get; init; }
+}
+
+/// <summary>
+/// A node of a filter tree: one <see cref="Filter"/> (<see cref="FilterCondition"/>) or a group of nodes that
+/// all, or any, must hold (<see cref="FilterGroup"/>). A <see cref="Filter"/> converts to a node, so a tree is
+/// written <c>FilterGroup.Or(new Filter { … }, FilterGroup.And(…))</c>.
+/// </summary>
+public abstract class FilterNode
+{
+    private protected FilterNode()
+    {
+    }
+
+    /// <summary>The condition as a node of a tree.</summary>
+    public static implicit operator FilterNode(Filter filter) => new FilterCondition(filter);
+}
+
+/// <summary>
+/// One condition in a filter tree.
+/// </summary>
+public sealed class FilterCondition(Filter filter) : FilterNode
+{
+    /// <summary>The condition.</summary>
+    public Filter Filter { get; } = filter ?? throw new ArgumentNullException(nameof(filter));
+}
+
+/// <summary>
+/// Nodes combined by <see cref="FilterLogic.And"/> (all hold) or <see cref="FilterLogic.Or"/> (any holds).
+/// </summary>
+public sealed class FilterGroup : FilterNode
+{
+    /// <summary>A group of the nodes, combined by <paramref name="logic"/>.</summary>
+    /// <exception cref="ArgumentException">The group has no node.</exception>
+    public FilterGroup(FilterLogic logic, IReadOnlyList<FilterNode> filters)
+    {
+        ArgumentNullException.ThrowIfNull(filters);
+        if (filters.Count == 0)
+        {
+            throw new ArgumentException("A filter group combines at least one node.", nameof(filters));
+        }
+
+        Logic = logic;
+        Filters = filters;
+    }
+
+    /// <summary>How the nodes combine.</summary>
+    public FilterLogic Logic { get; }
+
+    /// <summary>The combined nodes, in order.</summary>
+    public IReadOnlyList<FilterNode> Filters { get; }
+
+    /// <summary>All of <paramref name="filters"/> hold.</summary>
+    public static FilterGroup And(params FilterNode[] filters) => new(FilterLogic.And, filters);
+
+    /// <summary>Any of <paramref name="filters"/> holds.</summary>
+    public static FilterGroup Or(params FilterNode[] filters) => new(FilterLogic.Or, filters);
+}
+
+/// <summary>How a <see cref="FilterGroup"/> combines its nodes.</summary>
+public enum FilterLogic
+{
+    /// <summary>Every node holds.</summary>
+    And,
+
+    /// <summary>At least one node holds.</summary>
+    Or,
 }

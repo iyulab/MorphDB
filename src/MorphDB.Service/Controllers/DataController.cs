@@ -224,7 +224,7 @@ public sealed class DataController : ControllerBase
             // Apply complex filter
             if (request.Filter is not null)
             {
-                morphQuery = ApplyFilterNode(morphQuery, request.Filter, isFirst: true);
+                morphQuery = ApplyFilterNode(morphQuery, request.Filter, or: false);
             }
 
             // Ordering
@@ -470,68 +470,36 @@ public sealed class DataController : ControllerBase
 
     #region Helper Methods
 
-    private static IMorphQuery ApplyFilterNode(IMorphQuery query, FilterNode node, bool isFirst)
+    /// <summary>
+    /// A node of the filter tree onto the query, joined to what precedes it by AND, or by OR when
+    /// <paramref name="or"/>: a condition as one condition, a group as one parenthesized condition whose
+    /// own nodes are joined by its logic — so <c>a AND (b OR c)</c> stays that, at any depth.
+    /// </summary>
+    private static IMorphQuery ApplyFilterNode(IMorphQuery query, FilterNode node, bool or) => node switch
     {
-        return node switch
+        QueryFilterCondition condition => or
+            ? query.OrWhere(condition.Column, ApiModelExtensions.ParseFilterOperator(condition.Operator), ValueOf(condition))
+            : query.AndWhere(condition.Column, ApiModelExtensions.ParseFilterOperator(condition.Operator), ValueOf(condition)),
+        QueryFilterGroup { Filters.Count: 0 } => query,
+        QueryFilterGroup group => or
+            ? query.OrWhereGroup(inner => ApplyGroupNodes(inner, group))
+            : query.WhereGroup(inner => ApplyGroupNodes(inner, group)),
+        _ => query,
+    };
+
+    private static IMorphQuery ApplyGroupNodes(IMorphQuery query, QueryFilterGroup group)
+    {
+        var or = group.Logic.Equals("or", StringComparison.OrdinalIgnoreCase);
+        for (var i = 0; i < group.Filters.Count; i++)
         {
-            QueryFilterCondition condition => ApplyCondition(query, condition, isFirst),
-            QueryFilterGroup group => ApplyGroup(query, group),
-            _ => query
-        };
-    }
-
-    private static IMorphQuery ApplyCondition(IMorphQuery query, QueryFilterCondition condition, bool isFirst)
-    {
-        var op = ApiModelExtensions.ParseFilterOperator(condition.Operator);
-        var value = condition.Value is System.Text.Json.JsonElement je
-            ? ParseJsonFilterValue(je)
-            : condition.Value;
-
-        return isFirst
-            ? query.Where(condition.Column, op, value)
-            : query.AndWhere(condition.Column, op, value);
-    }
-
-    private static IMorphQuery ApplyGroup(IMorphQuery query, QueryFilterGroup group)
-    {
-        if (group.Filters.Count == 0)
-            return query;
-
-        var isOr = group.Logic.Equals("or", StringComparison.OrdinalIgnoreCase);
-        var isFirst = true;
-
-        foreach (var child in group.Filters)
-        {
-            if (child is QueryFilterCondition condition)
-            {
-                var op = ApiModelExtensions.ParseFilterOperator(condition.Operator);
-                var value = condition.Value is System.Text.Json.JsonElement je
-                    ? ParseJsonFilterValue(je)
-                    : condition.Value;
-
-                if (isFirst)
-                {
-                    query = query.Where(condition.Column, op, value);
-                    isFirst = false;
-                }
-                else if (isOr)
-                {
-                    query = query.OrWhere(condition.Column, op, value);
-                }
-                else
-                {
-                    query = query.AndWhere(condition.Column, op, value);
-                }
-            }
-            else if (child is QueryFilterGroup nestedGroup)
-            {
-                // Recursively apply nested groups
-                query = ApplyGroup(query, nestedGroup);
-            }
+            query = ApplyFilterNode(query, group.Filters[i], or: or && i > 0);
         }
 
         return query;
     }
+
+    private static object? ValueOf(QueryFilterCondition condition) =>
+        condition.Value is System.Text.Json.JsonElement je ? ParseJsonFilterValue(je) : condition.Value;
 
     private static object? ParseJsonFilterValue(System.Text.Json.JsonElement element)
     {

@@ -128,6 +128,42 @@ public class ComplexQueryApiTests
     }
 
     /// <summary>
+    /// A group nested in another is one parenthesized condition. Written flat, <c>amount &lt; 85 AND
+    /// (grade = basic OR amount &gt;= 50)</c> became <c>amount &lt; 85 AND grade = basic OR amount &gt;= 50</c>, which
+    /// SQL reads as <c>(… AND …) OR amount &gt;= 50</c> — and answered Initech, whose 90 fails the outer bound.
+    /// </summary>
+    [Fact]
+    public async Task A_nested_group_keeps_its_parentheses()
+    {
+        var tableName = await SetupAsync();
+
+        var result = await QueryAsync(tableName,
+            """
+            {
+              "filter": {
+                "$type": "group",
+                "logic": "and",
+                "filters": [
+                  { "$type": "condition", "column": "amount", "operator": "lt", "value": 85 },
+                  {
+                    "$type": "group",
+                    "logic": "or",
+                    "filters": [
+                      { "$type": "condition", "column": "grade", "operator": "eq", "value": "basic" },
+                      { "$type": "condition", "column": "amount", "operator": "gte", "value": 50 }
+                    ]
+                  }
+                ]
+              },
+              "pageSize": 10
+            }
+            """);
+
+        result.GetProperty("data").EnumerateArray().Select(r => r.GetProperty("data").GetProperty("name").GetString())
+            .Should().Equal("Acme");
+    }
+
+    /// <summary>
     /// A filter node names its kind with <c>$type</c>. One that names none, or one the server does not know,
     /// is a malformed body — it used to fail as a 500, the serializer being unable to make the abstract node.
     /// </summary>

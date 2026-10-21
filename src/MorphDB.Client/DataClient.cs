@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using MorphDB.Client.Models;
 
 namespace MorphDB.Client;
@@ -26,10 +27,15 @@ public sealed class DataClient
         QueryRequest? request = null,
         CancellationToken cancellationToken = default)
     {
-        var queryString = BuildQueryString(request);
-        var response = await _httpClient.GetAsync(
-            $"/api/data/{Uri.EscapeDataString(tableName)}{queryString}",
-            cancellationToken);
+        var response = request?.Where is null
+            ? await _httpClient.GetAsync(
+                $"/api/data/{Uri.EscapeDataString(tableName)}{BuildQueryString(request)}",
+                cancellationToken)
+            : await _httpClient.PostAsJsonAsync(
+                $"/api/data/{Uri.EscapeDataString(tableName)}/query",
+                QueryBody(request),
+                MorphDBJsonContext.Default.QueryWireRequest,
+                cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.PagedResponseDataRecord, cancellationToken)
             ?? new PagedResponse<DataRecord> { Data = [], Pagination = new PaginationInfo() };
@@ -178,6 +184,31 @@ public sealed class DataClient
         _ => throw new ArgumentOutOfRangeException(nameof(function), function, "Unsupported aggregate function.")
     };
 
+    /// <summary>The query as a body: <see cref="QueryRequest.Filters"/> and the tree under one <c>and</c>.</summary>
+    private static QueryWireRequest QueryBody(QueryRequest request)
+    {
+        var tree = Wire(request.Where!);
+        var filter = request.Filters.Count == 0
+            ? tree
+            : new QueryWireGroup("and", [.. request.Filters.Select(f => Wire(f)), tree]);
+        return new QueryWireRequest(
+            filter,
+            request.Select.Count > 0 ? request.Select : null,
+            request.OrderBy.Count > 0 ? [.. request.OrderBy.Select(o => $"{o.Column}:{(o.Ascending ? "asc" : "desc")}")] : null,
+            request.Page,
+            request.PageSize,
+            request.Offset,
+            request.IncludeDeleted,
+            request.Count);
+    }
+
+    private static QueryWireNode Wire(FilterNode node) => node switch
+    {
+        FilterCondition condition => new QueryWireCondition(condition.Filter.Column, GetOperatorString(condition.Filter.Operator), condition.Filter.Value),
+        FilterGroup group => new QueryWireGroup(group.Logic == FilterLogic.Or ? "or" : "and", [.. group.Filters.Select(Wire)]),
+        _ => throw new ArgumentException($"A filter node of type {node.GetType().Name} cannot be sent.", nameof(node)),
+    };
+
     private static string BuildQueryString(QueryRequest? request)
     {
         if (request == null)
@@ -298,3 +329,26 @@ public sealed class DataClient
 
 /// <summary>The body of <c>PUT /api/batch/data/{table}</c>.</summary>
 internal sealed record UpsertWireRequest(IDictionary<string, object?> Data, IReadOnlyList<string> KeyColumns);
+
+/// <summary>The body of <c>POST /api/data/{table}/query</c>.</summary>
+internal sealed record QueryWireRequest(
+    QueryWireNode? Filter,
+    IReadOnlyList<string>? Select,
+    IReadOnlyList<string>? OrderBy,
+    int Page,
+    int PageSize,
+    int? Offset,
+    bool IncludeDeleted,
+    bool Count);
+
+/// <summary>A filter tree node as the service reads it, named by <c>$type</c>.</summary>
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
+[JsonDerivedType(typeof(QueryWireCondition), "condition")]
+[JsonDerivedType(typeof(QueryWireGroup), "group")]
+internal abstract record QueryWireNode;
+
+/// <summary>One condition, the operator named as the service spells it.</summary>
+internal sealed record QueryWireCondition(string Column, string Operator, object? Value) : QueryWireNode;
+
+/// <summary>A group, <c>and</c> or <c>or</c>.</summary>
+internal sealed record QueryWireGroup(string Logic, IReadOnlyList<QueryWireNode> Filters) : QueryWireNode;

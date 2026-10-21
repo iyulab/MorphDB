@@ -33,7 +33,6 @@ public partial class ClientRouteCoverageTests
     /// <summary>Served and meant for consumers, but not yet reachable through the client.</summary>
     private static readonly string[] NotYetInClient =
     [
-        "POST /api/data/{table}/query",
         "GET /api/bulk/export",
         "GET /api/bulk/import",
         "GET /api/bulk/jobs/{jobId}/progress",

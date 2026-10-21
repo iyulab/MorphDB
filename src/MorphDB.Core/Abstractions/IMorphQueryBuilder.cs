@@ -68,6 +68,18 @@ public interface IMorphQuery
     IMorphQuery OrWhere(string column, FilterOperator op, object? value);
 
     /// <summary>
+    /// Adds the conditions <paramref name="group"/> adds as one parenthesized condition, joined with AND —
+    /// <c>a AND (b OR c)</c>. Inside, the first condition opens the group and each <see cref="OrWhere"/> or
+    /// <see cref="AndWhere"/> joins the next; groups nest. <paramref name="group"/> adds conditions only.
+    /// </summary>
+    IMorphQuery WhereGroup(Func<IMorphQuery, IMorphQuery> group);
+
+    /// <summary>
+    /// <see cref="WhereGroup"/> joined with OR — <c>a OR (b AND c)</c>.
+    /// </summary>
+    IMorphQuery OrWhereGroup(Func<IMorphQuery, IMorphQuery> group);
+
+    /// <summary>
     /// Adds a WHERE IN condition.
     /// </summary>
     IMorphQuery WhereIn(string column, IEnumerable<object> values);

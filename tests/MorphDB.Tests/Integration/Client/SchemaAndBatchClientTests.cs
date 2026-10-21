@@ -167,6 +167,40 @@ public class SchemaAndBatchClientTests(ApiIntegrationFixture fixture)
         Assert.Equal(new Dictionary<string, long> { ["b"] = 20, ["c"] = 10, ["d"] = 4, ["e"] = 50 }, rows);
     }
 
+    private static readonly string[] LotsOneAndTwo = ["L-1", "L-2"];
+
+    [Fact]
+    public async Task A_filter_tree_selects_the_rows_any_of_its_groups_admit()
+    {
+        await using var client = NewClient();
+        var table = await client.Schema.CreateTableAsync(new CreateTableRequest
+        {
+            Name = Name("tree"),
+            Columns =
+            [
+                new CreateColumnRequest { Name = "sku", Type = "text" },
+                new CreateColumnRequest { Name = "qty", Type = "integer" },
+                new CreateColumnRequest { Name = "lot", Type = "text" },
+            ],
+        }, Ct);
+        await client.Batch.InsertManyAsync(table.Name,
+        [
+            new Dictionary<string, object?> { ["sku"] = "a", ["qty"] = 1, ["lot"] = "L-1" },
+            new Dictionary<string, object?> { ["sku"] = "b", ["qty"] = 5, ["lot"] = "L-9" },
+            new Dictionary<string, object?> { ["sku"] = "c", ["qty"] = 2, ["lot"] = "L-9" },
+            new Dictionary<string, object?> { ["sku"] = "d", ["qty"] = 7, ["lot"] = "L-2" },
+        ], Ct);
+
+        var page = await client.Data.QueryAsync(table.Name, new QueryRequest
+        {
+            Filters = [new Filter("qty", FilterOperator.LessThan, 7)],
+            Where = FilterGroup.Or(new Filter("qty", FilterOperator.GreaterThanOrEqual, 5), new Filter("lot", FilterOperator.In, LotsOneAndTwo)),
+            OrderBy = [new OrderBy("sku")],
+        }, Ct);
+
+        Assert.Equal(["a", "b"], page.Data.Select(r => r.Data["sku"]!.ToString()));
+    }
+
     [Fact]
     public async Task A_batch_runs_its_operations_in_order_and_reports_each()
     {

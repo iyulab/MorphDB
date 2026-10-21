@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- **A group nested in a query body's filter keeps its parentheses.** `POST /api/data/{table}/query` wrote a
+  nested group's conditions flat, so `a AND (b OR c)` ran as `a AND b OR c` and matched rows the outer
+  condition excludes. Groups now nest at any depth.
 - **A seed reports what it did.** `POST /api/batch/data/{table}/seed` counted every record as inserted;
   `updated` is now the records that matched an existing row by their key columns.
 - **The .NET client's `Data.UpsertAsync` reaches the upsert route.** It sent `PUT /api/data/{table}`,
@@ -38,6 +41,12 @@
   logically, as for relations); `Batch.UpdateManyAsync` and `Batch.DeleteManyAsync` over filters (a delete
   names at least one, as the service requires); and `Batch.SeedAsync` with `SeedResult`. The routes were
   already served; the client had no method for them.
+- **The .NET client sends filter trees: `QueryRequest.Where`** takes conditions combined by
+  `FilterGroup.And(…)` and `FilterGroup.Or(…)`, nested as needed (a `Filter` converts to a node). A query
+  with one is sent as a body to `POST /api/data/{table}/query`, together with `Filters`; one without is
+  sent as before.
+- **`IMorphQuery.WhereGroup` and `OrWhereGroup`** — the conditions a builder adds, as one parenthesized
+  condition joined by AND or OR.
 - **`in` and `notin` filters, with their values as a JSON array** — `status:in:["open","held"]` on
   `GET /api/data/{table}` and the bulk update and delete; `"operator": "in"` with an array `value` in the
   query body (inside an `or` group too) and the aggregate filter. JSON quoting lets a value hold a comma;
