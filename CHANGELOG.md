@@ -1,9 +1,24 @@
 # Changelog
 
-## Unreleased
+## 0.27.0
+
+A minor, with breaking changes to rate limiting. Out of the box the service no longer answers `429`:
+rate limiting is off unless configured, and a per-project limit set in configuration now takes
+effect. A `429` is the documented error envelope. Table definitions are kept in memory, so a request
+no longer reads its table's definition from the database first. The .NET client is unchanged; a
+`0.26.x` client works against this server. `MorphDB.Core` (for embedders) changes `RateLimitConfig`.
 
 ### Changed
 
+- **A table's definition is kept in memory.** Every request that reads or writes a table read the
+  table's definition first — four statements, planned anew each time — and on a one-row read that was
+  most of the request's cost: under load, a one-row read now takes less than half as long. A trigger on
+  each definition table notifies every change on the `morphdb_metadata` channel, whoever makes it; an
+  instance forgets the definitions of that change's project, and the instance that made the change
+  does so as soon as it commits, so the next request reads the new definition. Another instance on the
+  same database follows as soon as the notification reaches it. While an instance is not listening —
+  starting, or after losing that connection — it keeps nothing and reads every definition from the
+  database, as before. A definition that is read is read in one round trip.
 - **Rate limiting is off unless configured** (`RateLimiting__Enabled=true` turns it on). It was on by
   default at 1,000 requests a minute — and it is a quota per project, shared by every caller of that
   project, so out of the box a whole deployment's traffic to one project was capped at about 17
