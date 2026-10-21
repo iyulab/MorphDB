@@ -1,4 +1,5 @@
 using System.Dynamic;
+using System.Globalization;
 using Dapper;
 using Microsoft.Extensions.Options;
 using MorphDB.Core.Diagnostics;
@@ -157,6 +158,9 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
         }
     }
 
+    // PostgreSQL's limit on the parameters of one statement.
+    private const int MaxParametersPerStatement = 65_535;
+
     public async Task<IReadOnlyList<WriteResult>> ExecuteInsertBatchAsync(IReadOnlyList<IWriteContext> contexts)
     {
         if (contexts.Count == 0)
@@ -176,39 +180,62 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
         {
             await using var conn = await _connections.LeaseAsync(cancellationToken);
 
-            // The same statement a single insert sends, once per row — row-level security, triggers and
-            // RETURNING act per statement as before; only the round trips are shared.
+            // Neighbouring rows that write the same columns go into one INSERT … VALUES (…), (…) RETURNING *;
+            // all the statements go in one round trip. Row-level security checks and row triggers act on
+            // every row as they do on a single insert.
+            var rows = contexts.Select(c => InsertValues(EnsureProjectId(c.Data, c.ProjectId), table.Columns)).ToList();
+            var statementRows = new List<int>();
             await using var batch = new NpgsqlBatch(conn.Connection, conn.Transaction);
-            foreach (var context in contexts)
+            for (var start = 0; start < rows.Count;)
             {
-                var dataWithProject = EnsureProjectId(context.Data, context.ProjectId);
-                var (columns, parameters, values) = PrepareInsertParameters(dataWithProject, table.Columns);
-                var command = new NpgsqlBatchCommand(DmlBuilder.BuildInsert(table.PhysicalName, columns, parameters));
-                foreach (var (name, value) in (IDictionary<string, object?>)values)
+                var shape = rows[start];
+                var rowsPerStatement = Math.Max(1, MaxParametersPerStatement / shape.Count);
+                var end = start + 1;
+                while (end < rows.Count && end - start < rowsPerStatement && SameColumns(rows[end], shape))
                 {
-                    command.Parameters.AddWithValue(name, value ?? DBNull.Value);
+                    end++;
                 }
 
-                batch.BatchCommands.Add(command);
+                batch.BatchCommands.Add(InsertRowsCommand(table, rows, start, end));
+                statementRows.Add(end - start);
+                start = end;
             }
 
             var results = new List<WriteResult>(contexts.Count);
             await using (var reader = await batch.ExecuteReaderAsync(cancellationToken))
             {
-                do
+                foreach (var expected in statementRows)
                 {
-                    if (!await reader.ReadAsync(cancellationToken))
-                        throw new InvalidOperationException("An INSERT … RETURNING statement returned no row.");
-
-                    var row = new Dictionary<string, object?>(reader.FieldCount);
-                    for (var i = 0; i < reader.FieldCount; i++)
+                    for (var i = 0; i < expected; i++)
                     {
-                        row[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                        if (!await reader.ReadAsync(cancellationToken))
+                            throw new InvalidOperationException("An INSERT … RETURNING statement returned fewer rows than it inserted.");
+
+                        var row = new Dictionary<string, object?>(reader.FieldCount);
+                        for (var f = 0; f < reader.FieldCount; f++)
+                        {
+                            row[reader.GetName(f)] = reader.IsDBNull(f) ? null : reader.GetValue(f);
+                        }
+
+                        var mapped = Infrastructure.RowMapper.MapToLogicalDictionary(row, table.Columns);
+
+                        // PostgreSQL returns the rows of INSERT … VALUES in the order of the list, which the
+                        // results rely on; the id each row was given says so, or the batch stops here.
+                        var sent = rows[results.Count].FirstOrDefault(v => v.Column.LogicalName == SystemColumns.Id).Value;
+                        if (sent is not null && mapped.TryGetValue(SystemColumns.Id, out var returned)
+                            && !string.Equals(
+                                Convert.ToString(sent, CultureInfo.InvariantCulture),
+                                Convert.ToString(returned, CultureInfo.InvariantCulture),
+                                StringComparison.OrdinalIgnoreCase))
+                        {
+                            throw new InvalidOperationException("An INSERT … RETURNING statement returned its rows out of order.");
+                        }
+
+                        results.Add(WriteResult.Ok(mapped));
                     }
 
-                    results.Add(WriteResult.Ok(Infrastructure.RowMapper.MapToLogicalDictionary(row, table.Columns)));
+                    await reader.NextResultAsync(cancellationToken);
                 }
-                while (await reader.NextResultAsync(cancellationToken));
             }
 
             scope.SetRowCount(results.Count);
@@ -227,6 +254,36 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             scope.SetError(ex.Message);
             throw;
         }
+    }
+
+    private static bool SameColumns(
+        List<(ColumnMetadata Column, object? Value)> row,
+        List<(ColumnMetadata Column, object? Value)> shape) =>
+        row.Count == shape.Count && row.Select(v => v.Column).SequenceEqual(shape.Select(v => v.Column));
+
+    private static NpgsqlBatchCommand InsertRowsCommand(
+        TableMetadata table,
+        List<List<(ColumnMetadata Column, object? Value)>> rows,
+        int start,
+        int end)
+    {
+        var command = new NpgsqlBatchCommand();
+        var placeholders = new List<IReadOnlyList<string>>(end - start);
+        for (var r = start; r < end; r++)
+        {
+            var row = new List<string>(rows[r].Count);
+            foreach (var (column, value) in rows[r])
+            {
+                command.Parameters.Add(new NpgsqlParameter { Value = value ?? DBNull.Value });
+                row.Add(Placeholder($"${command.Parameters.Count}", column));
+            }
+
+            placeholders.Add(row);
+        }
+
+        command.CommandText = DmlBuilder.BuildInsertRows(
+            table.PhysicalName, [.. rows[start].Select(v => v.Column.PhysicalName)], placeholders);
+        return command;
     }
 
     private async Task<WriteResult> ExecuteUpdateAsync(IWriteContext context)
@@ -485,48 +542,49 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
         IDictionary<string, object?> data,
         IReadOnlyList<ColumnMetadata> columns)
     {
-        var columnMap = columns.ToDictionary(c => c.LogicalName, c => c);
         var physicalColumns = new List<string>();
         var parameterNames = new List<string>();
         dynamic values = new ExpandoObject();
         var valuesDict = (IDictionary<string, object?>)values;
 
-        int paramIndex = 0;
-        foreach (var (logicalName, value) in data)
+        var paramIndex = 0;
+        foreach (var (column, dbValue) in InsertValues(data, columns))
         {
-            // Skip special marker values
-            if (value is VersionIncrement)
-            {
-                // For insert, version starts at 1
-                if (!columnMap.TryGetValue(logicalName, out var versionColumn))
-                    continue;
-
-                physicalColumns.Add(versionColumn.PhysicalName);
-                var paramName = $"@p{paramIndex}";
-                parameterNames.Add(paramName);
-                valuesDict[$"p{paramIndex}"] = 1;
-                paramIndex++;
-                continue;
-            }
-
-            if (!columnMap.TryGetValue(logicalName, out var column))
-            {
-                // Skip unknown columns for resilience
-                continue;
-            }
-
             physicalColumns.Add(column.PhysicalName);
-            var pName = $"@p{paramIndex}";
-            parameterNames.Add(TypeMapper.IsJsonbType(column.DataType) ? $"{pName}::jsonb" : pName);
-
-            var dbValue = TypeMapper.ToDbValue(value, column.DataType);
+            parameterNames.Add(Placeholder($"@p{paramIndex}", column));
             valuesDict[$"p{paramIndex}"] = dbValue;
-
             paramIndex++;
         }
 
         return (physicalColumns, parameterNames, values);
     }
+
+    /// <summary>
+    /// The columns an insert writes and the database value of each, in the data's order — what every
+    /// insert statement, one row or many, is built from.
+    /// </summary>
+    private static List<(ColumnMetadata Column, object? Value)> InsertValues(
+        IDictionary<string, object?> data,
+        IReadOnlyList<ColumnMetadata> columns)
+    {
+        var columnMap = columns.ToDictionary(c => c.LogicalName, c => c);
+        var values = new List<(ColumnMetadata, object?)>(data.Count);
+
+        foreach (var (logicalName, value) in data)
+        {
+            // Skip unknown columns for resilience
+            if (!columnMap.TryGetValue(logicalName, out var column))
+                continue;
+
+            // For insert, version starts at 1
+            values.Add((column, value is VersionIncrement ? 1 : TypeMapper.ToDbValue(value, column.DataType)));
+        }
+
+        return values;
+    }
+
+    private static string Placeholder(string parameter, ColumnMetadata column) =>
+        TypeMapper.IsJsonbType(column.DataType) ? $"{parameter}::jsonb" : parameter;
 
     private static (List<(string ColumnName, string ParameterName)> SetColumns, dynamic Values) PrepareUpdateParameters(
         IDictionary<string, object?> data,

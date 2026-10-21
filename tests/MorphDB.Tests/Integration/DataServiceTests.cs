@@ -623,6 +623,49 @@ public class DataServiceTests
     }
 
     /// <summary>
+    /// Rows of one batch need not write the same columns: neighbours that do share a statement, and a
+    /// row that differs starts the next — every row comes back as stored, in input order.
+    /// </summary>
+    [Fact]
+    public async Task A_batch_of_rows_writing_different_columns_stores_each_as_given()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var projectId = Guid.NewGuid();
+        var table = await _schemaManager.CreateTableAsync(new CreateTableRequest
+        {
+            ProjectId = projectId,
+            LogicalName = "batch_shapes_" + Guid.NewGuid().ToString("N")[..8],
+            Columns =
+            [
+                new CreateColumnRequest { LogicalName = "note", DataType = MorphDataType.Text },
+                new CreateColumnRequest { LogicalName = "tags", DataType = MorphDataType.Json },
+                new CreateColumnRequest { LogicalName = "n", DataType = MorphDataType.Integer },
+            ]
+        }, ct);
+        var json = System.Text.Json.JsonDocument.Parse("""{"k":[1,2]}""").RootElement;
+        var ids = Enumerable.Range(0, 6).Select(_ => Guid.NewGuid()).ToList();
+        // Ids as the REST path delivers them.
+        object Id(int i) => System.Text.Json.JsonDocument.Parse($"\"{ids[i]}\"").RootElement.Clone();
+        IDictionary<string, object?>[] rows =
+        [
+            new Dictionary<string, object?> { ["_id"] = Id(0), ["note"] = "a", ["n"] = 1 },
+            new Dictionary<string, object?> { ["_id"] = Id(1), ["note"] = "b", ["n"] = 2 },
+            new Dictionary<string, object?> { ["_id"] = Id(2), ["tags"] = json.Clone() },
+            new Dictionary<string, object?> { ["_id"] = Id(3), ["note"] = null, ["n"] = 4 },
+            new Dictionary<string, object?> { ["_id"] = Id(4), ["note"] = "e", ["n"] = 5, ["tags"] = json.Clone() },
+            new Dictionary<string, object?> { ["_id"] = Id(5), ["note"] = "f", ["n"] = 6 },
+        ];
+
+        var results = await _dataService.InsertBatchAsync(projectId, table.LogicalName, rows, ct);
+
+        results.Select(r => r["_id"]).Should().Equal(ids.Cast<object?>());
+        results.Select(r => r["note"]).Should().Equal("a", "b", null, null, "e", "f");
+        results.Select(r => r["n"]).Should().Equal(1, 2, null, 4, 5, 6);
+        System.Text.Json.JsonSerializer.Serialize(results[2]["tags"]).Should().Be(System.Text.Json.JsonSerializer.Serialize(results[4]["tags"]));
+        results[0]["tags"].Should().BeNull();
+    }
+
+    /// <summary>
     /// A step that reads stored rows sees every earlier row of the batch — numbering in a hierarchy
     /// continues within the batch instead of handing every row the same next number.
     /// </summary>

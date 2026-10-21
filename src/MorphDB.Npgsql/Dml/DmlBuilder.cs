@@ -38,32 +38,43 @@ public static class DmlBuilder
     }
 
     /// <summary>
-    /// Builds a bulk INSERT statement using UNNEST for optimal performance.
+    /// Builds one INSERT of several rows with RETURNING clause: <c>VALUES (…), (…)</c>, one
+    /// parenthesized placeholder list per row, all over the same columns.
     /// </summary>
     /// <param name="tableName">Physical table name.</param>
     /// <param name="columnNames">Physical column names.</param>
-    /// <param name="arrayParameterNames">Array parameter names (e.g., @arr0, @arr1).</param>
-    /// <returns>Bulk INSERT SQL with RETURNING *.</returns>
-    public static string BuildBulkInsert(string tableName, IEnumerable<string> columnNames, IEnumerable<string> arrayParameterNames)
+    /// <param name="rowParameterNames">Each row's placeholders (e.g., $1, $2::jsonb), one per column.</param>
+    /// <returns>INSERT SQL with RETURNING *.</returns>
+    public static string BuildInsertRows(
+        string tableName,
+        IReadOnlyList<string> columnNames,
+        IReadOnlyList<IReadOnlyList<string>> rowParameterNames)
     {
-        var columns = columnNames.ToList();
-        var arrayParams = arrayParameterNames.ToList();
-
-        if (columns.Count == 0)
+        if (columnNames.Count == 0)
             throw new ArgumentException("At least one column is required", nameof(columnNames));
 
-        if (columns.Count != arrayParams.Count)
-            throw new ArgumentException("Column count must match array parameter count", nameof(arrayParameterNames));
+        if (rowParameterNames.Count == 0)
+            throw new ArgumentException("At least one row is required", nameof(rowParameterNames));
+
+        if (rowParameterNames.Any(row => row.Count != columnNames.Count))
+            throw new ArgumentException("Every row must have one parameter per column", nameof(rowParameterNames));
 
         var sb = new StringBuilder();
         sb.Append("INSERT INTO ");
         sb.Append(QuoteIdentifier(tableName));
         sb.Append(" (");
-        sb.Append(string.Join(", ", columns.Select(QuoteIdentifier)));
-        sb.AppendLine(")");
-        sb.Append("SELECT * FROM UNNEST(");
-        sb.Append(string.Join(", ", arrayParams));
-        sb.Append(") RETURNING *");
+        sb.Append(string.Join(", ", columnNames.Select(QuoteIdentifier)));
+        sb.Append(") VALUES ");
+        for (var i = 0; i < rowParameterNames.Count; i++)
+        {
+            if (i > 0)
+                sb.Append(", ");
+            sb.Append('(');
+            sb.Append(string.Join(", ", rowParameterNames[i]));
+            sb.Append(')');
+        }
+
+        sb.Append(" RETURNING *");
 
         return sb.ToString();
     }

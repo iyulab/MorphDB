@@ -52,23 +52,22 @@ public class DmlBuilderTests
 
     #endregion
 
-    #region BuildBulkInsert Tests
+    #region BuildInsertRows Tests
 
     [Fact]
-    public void BuildBulkInsert_ShouldGenerateValidSql()
+    public void BuildInsertRows_ShouldGenerateOneValuesListPerRow()
     {
-        // Arrange
-        var columns = new[] { "id", "email" };
-        var arrayParams = new[] { "@arr0", "@arr1" };
+        var sql = DmlBuilder.BuildInsertRows("t_users", ["id", "tags"], [["$1", "$2::jsonb"], ["$3", "$4::jsonb"]]);
 
-        // Act
-        var sql = DmlBuilder.BuildBulkInsert("t_users", columns, arrayParams);
+        sql.Should().Be("INSERT INTO \"t_users\" (\"id\", \"tags\") VALUES ($1, $2::jsonb), ($3, $4::jsonb) RETURNING *");
+    }
 
-        // Assert
-        sql.Should().Contain("INSERT INTO \"t_users\"");
-        sql.Should().Contain("\"id\", \"email\"");
-        sql.Should().Contain("SELECT * FROM UNNEST(@arr0, @arr1)");
-        sql.Should().Contain("RETURNING *");
+    [Fact]
+    public void BuildInsertRows_WithARowShortOfAColumn_ShouldThrow()
+    {
+        var act = () => DmlBuilder.BuildInsertRows("t_users", ["id", "tags"], [["$1", "$2"], ["$3"]]);
+
+        act.Should().Throw<ArgumentException>();
     }
 
     #endregion
