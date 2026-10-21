@@ -12,10 +12,23 @@ namespace MorphDB.Npgsql.Repositories;
 public sealed class MetadataRepository : IMetadataRepository
 {
     private readonly MorphConnectionFactory _connections;
+    private readonly MetadataCache _cache;
 
+    /// <summary>A repository with no cache of its own — every definition is read from the database.</summary>
     public MetadataRepository(MorphConnectionFactory connections)
+        : this(connections, new MetadataCache())
+    {
+    }
+
+    /// <param name="connections">Where connections come from.</param>
+    /// <param name="cache">
+    /// Definitions kept in memory, served while it is started (<see cref="MetadataCache.Start"/>). This
+    /// repository empties it after every write it makes.
+    /// </param>
+    public MetadataRepository(MorphConnectionFactory connections, MetadataCache cache)
     {
         _connections = connections;
+        _cache = cache;
     }
 
     #region Table Operations
@@ -47,6 +60,7 @@ public sealed class MetadataRepository : IMetadataRepository
                 Descriptor = table.Descriptor?.RootElement.GetRawText()
             }));
 
+        _cache.Invalidate();
         return MapToTableMetadata(result);
     }
 
@@ -55,27 +69,12 @@ public sealed class MetadataRepository : IMetadataRepository
         bool includeColumns = false,
         CancellationToken cancellationToken = default)
     {
-        const string sql = """
-            SELECT table_id, project_id, logical_name, physical_name, schema_version,
-                   descriptor, is_active, created_at, updated_at
-            FROM morphdb._morph_tables
-            WHERE table_id = @TableId AND is_active = true
-            """;
+        if (includeColumns && Cacheable && _cache.TryGet(tableId, out var cached))
+            return cached;
 
+        var generation = _cache.Generation;
         await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-        var row = await connection.QuerySingleOrDefaultAsync<TableRow>(sql, new { TableId = tableId });
-
-        if (row is null)
-            return null;
-
-        var table = MapToTableMetadata(row);
-
-        if (includeColumns)
-        {
-            table = await WithDetailsAsync(connection, table);
-        }
-
-        return table;
+        return Kept(await ReadTableAsync(connection, "@TableId", new { TableId = tableId }, includeColumns), includeColumns, generation);
     }
 
     public async Task<TableMetadata?> GetTableByNameAsync(
@@ -84,28 +83,69 @@ public sealed class MetadataRepository : IMetadataRepository
         bool includeColumns = false,
         CancellationToken cancellationToken = default)
     {
-        const string sql = """
+        // At most one row: (project_id, logical_name) is unique.
+        const string tableId = "(SELECT table_id FROM morphdb._morph_tables WHERE project_id = @ProjectId AND logical_name = @LogicalName AND is_active = true)";
+
+        if (includeColumns && Cacheable && _cache.TryGet(projectId, logicalName, out var cached))
+            return cached;
+
+        var generation = _cache.Generation;
+        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
+        return Kept(await ReadTableAsync(connection, tableId, new { ProjectId = projectId, LogicalName = logicalName }, includeColumns), includeColumns, generation);
+    }
+
+    /// <summary>
+    /// Whether a definition may come from the cache: not inside a unit of work, which may have changed the
+    /// definition itself and not yet committed — what it reads must be what it wrote.
+    /// </summary>
+    private static bool Cacheable => !ConnectionScope.HasScope;
+
+    private TableMetadata? Kept(TableMetadata? table, bool includeColumns, long generation)
+    {
+        if (table is not null && includeColumns && Cacheable)
+            _cache.Keep(table, generation);
+
+        return table;
+    }
+
+    /// <summary>
+    /// A table's definition — the table row, and with <paramref name="includeColumns"/> its columns,
+    /// relations and indexes — in one round trip: every part is selected by <paramref name="tableIdSql"/>,
+    /// an expression naming the table's id, so no part waits for another's answer. A definition is read
+    /// on every request that touches a table, so its parts are sent together rather than one after another.
+    /// </summary>
+    private static async Task<TableMetadata?> ReadTableAsync(NpgsqlConnection connection, string tableIdSql, object parameters, bool includeColumns)
+    {
+        var sql = $"""
             SELECT table_id, project_id, logical_name, physical_name, schema_version,
                    descriptor, is_active, created_at, updated_at
             FROM morphdb._morph_tables
-            WHERE project_id = @ProjectId AND logical_name = @LogicalName AND is_active = true
+            WHERE table_id = {tableIdSql} AND is_active = true;
+            """;
+        if (!includeColumns)
+        {
+            var only = await connection.QuerySingleOrDefaultAsync<TableRow>(sql, parameters);
+            return only is null ? null : MapToTableMetadata(only);
+        }
+
+        sql += $"""
+
+            {ColumnsSelect} WHERE table_id = {tableIdSql} AND is_active = true ORDER BY ordinal_position;
+            {RelationsSelect} WHERE (r.source_table_id = {tableIdSql} OR r.target_table_id = {tableIdSql}) AND r.is_active = true ORDER BY r.created_at;
+            {IndexesSelect} WHERE table_id = {tableIdSql} AND is_active = true ORDER BY created_at;
             """;
 
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-        var row = await connection.QuerySingleOrDefaultAsync<TableRow>(
-            sql, new { ProjectId = projectId, LogicalName = logicalName });
-
+        await using var reader = await connection.QueryMultipleAsync(sql, parameters);
+        var row = await reader.ReadSingleOrDefaultAsync<TableRow>();
+        var columnRows = await reader.ReadAsync<ColumnRow>();
+        var relationRows = await reader.ReadAsync<RelationRow>();
+        var indexRows = await reader.ReadAsync<IndexRow>();
         if (row is null)
             return null;
 
-        var table = MapToTableMetadata(row);
-
-        if (includeColumns)
-        {
-            table = await WithDetailsAsync(connection, table);
-        }
-
-        return table;
+        var relations = relationRows.Select(MapToRelationMetadata).ToList();
+        var columns = AttachForeignKeyReferences(columnRows.Select(MapToColumnMetadata).ToList(), relations);
+        return WithDetails(MapToTableMetadata(row), columns, relations, indexRows.Select(MapToIndexMetadata).ToList());
     }
 
     public async Task<IReadOnlyList<TableMetadata>> ListTablesAsync(
@@ -153,6 +193,7 @@ public sealed class MetadataRepository : IMetadataRepository
 
         await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new { TableId = tableId, LogicalName = logicalName, NewVersion = newVersion });
+        _cache.Invalidate();
     }
 
     /// <summary>
@@ -193,6 +234,7 @@ public sealed class MetadataRepository : IMetadataRepository
 
         await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new { TableId = tableId });
+        _cache.Invalidate();
     }
 
     #endregion
@@ -246,6 +288,7 @@ public sealed class MetadataRepository : IMetadataRepository
                 ComputedConfig = SerializeConfig(column.ComputedConfig)
             }));
 
+        _cache.Invalidate();
         return MapToColumnMetadata(result);
     }
 
@@ -278,17 +321,8 @@ public sealed class MetadataRepository : IMetadataRepository
 
     private static async Task<IReadOnlyList<ColumnMetadata>> QueryColumnsByTableIdAsync(NpgsqlConnection connection, Guid tableId)
     {
-        const string sql = """
-            SELECT column_id, table_id, logical_name, physical_name, data_type, native_type,
-                   is_nullable, is_unique, is_primary_key, is_indexed,
-                   default_value, check_expr, ordinal_position, descriptor,
-                   lookup_config, rollup_config, formula_config, computed_config, is_active
-            FROM morphdb._morph_columns
-            WHERE table_id = @TableId AND is_active = true
-            ORDER BY ordinal_position
-            """;
-
-        var rows = await connection.QueryAsync<ColumnRow>(sql, new { TableId = tableId });
+        var rows = await connection.QueryAsync<ColumnRow>(
+            $"{ColumnsSelect} WHERE table_id = @TableId AND is_active = true ORDER BY ordinal_position", new { TableId = tableId });
         return rows.Select(MapToColumnMetadata).ToList();
     }
 
@@ -321,6 +355,7 @@ public sealed class MetadataRepository : IMetadataRepository
 
         await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new { ColumnId = columnId, LogicalName = logicalName, DefaultValue = defaultValue });
+        _cache.Invalidate();
     }
 
     public async Task UpdateColumnMetadataAsync(
@@ -353,6 +388,7 @@ public sealed class MetadataRepository : IMetadataRepository
             CheckExpression = checkExpression,
             CheckExpressionProvided = checkExpression is not null || dataType is not null
         });
+        _cache.Invalidate();
     }
 
     public async Task SoftDeleteColumnAsync(
@@ -367,6 +403,7 @@ public sealed class MetadataRepository : IMetadataRepository
 
         await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new { ColumnId = columnId });
+        _cache.Invalidate();
     }
 
     #endregion
@@ -411,6 +448,7 @@ public sealed class MetadataRepository : IMetadataRepository
                 Descriptor = index.Descriptor?.RootElement.GetRawText()
             }));
 
+        _cache.Invalidate();
         return MapToIndexMetadata(result);
     }
 
@@ -440,14 +478,8 @@ public sealed class MetadataRepository : IMetadataRepository
 
     private static async Task<IReadOnlyList<IndexMetadata>> QueryIndexesByTableIdAsync(NpgsqlConnection connection, Guid tableId)
     {
-        const string sql = """
-            SELECT index_id, table_id, logical_name, physical_name, columns, index_type, is_unique, where_clause, descriptor, is_active, created_at
-            FROM morphdb._morph_indexes
-            WHERE table_id = @TableId AND is_active = true
-            ORDER BY created_at
-            """;
-
-        var rows = await connection.QueryAsync<IndexRow>(sql, new { TableId = tableId });
+        var rows = await connection.QueryAsync<IndexRow>(
+            $"{IndexesSelect} WHERE table_id = @TableId AND is_active = true ORDER BY created_at", new { TableId = tableId });
         return rows.Select(MapToIndexMetadata).ToList();
     }
 
@@ -463,6 +495,7 @@ public sealed class MetadataRepository : IMetadataRepository
 
         await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new { IndexId = indexId });
+        _cache.Invalidate();
     }
 
     #endregion
@@ -499,6 +532,7 @@ public sealed class MetadataRepository : IMetadataRepository
             relation.VirtualCascade
         });
 
+        _cache.Invalidate();
         return MapToRelationMetadata(result);
     }
 
@@ -531,17 +565,8 @@ public sealed class MetadataRepository : IMetadataRepository
 
     private static async Task<IReadOnlyList<RelationMetadata>> QueryRelationsByTableIdAsync(NpgsqlConnection connection, Guid tableId)
     {
-        const string sql = """
-            SELECT r.relation_id, r.project_id, r.logical_name, r.source_table_id, r.source_column_id, r.target_table_id, r.target_column_id, r.relation_type, r.on_delete, r.on_update, r.descriptor, r.is_active, r.enforce_on_write, r.virtual_cascade, r.created_at,
-                   tt.logical_name AS target_table_name, tc.logical_name AS target_column_name
-            FROM morphdb._morph_relations r
-            LEFT JOIN morphdb._morph_tables tt ON tt.table_id = r.target_table_id
-            LEFT JOIN morphdb._morph_columns tc ON tc.column_id = r.target_column_id
-            WHERE (r.source_table_id = @TableId OR r.target_table_id = @TableId) AND r.is_active = true
-            ORDER BY r.created_at
-            """;
-
-        var rows = await connection.QueryAsync<RelationRow>(sql, new { TableId = tableId });
+        var rows = await connection.QueryAsync<RelationRow>(
+            $"{RelationsSelect} WHERE (r.source_table_id = @TableId OR r.target_table_id = @TableId) AND r.is_active = true ORDER BY r.created_at", new { TableId = tableId });
         return rows.Select(MapToRelationMetadata).ToList();
     }
 
@@ -557,6 +582,7 @@ public sealed class MetadataRepository : IMetadataRepository
 
         await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new { RelationId = relationId });
+        _cache.Invalidate();
     }
 
     #endregion
@@ -589,6 +615,7 @@ public sealed class MetadataRepository : IMetadataRepository
 
         await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         await connection.ExecuteAsync(sql, new { TableId = tableId });
+        _cache.Invalidate();
     }
 
     #endregion
@@ -603,6 +630,27 @@ public sealed class MetadataRepository : IMetadataRepository
     /// one table's definition is one connection, not one per part — each open writes the session context,
     /// so reading the parts on their own connections cost a round trip apiece on every data call.
     /// </summary>
+    private const string ColumnsSelect = """
+        SELECT column_id, table_id, logical_name, physical_name, data_type, native_type,
+               is_nullable, is_unique, is_primary_key, is_indexed,
+               default_value, check_expr, ordinal_position, descriptor,
+               lookup_config, rollup_config, formula_config, computed_config, is_active
+        FROM morphdb._morph_columns
+        """;
+
+    private const string RelationsSelect = """
+        SELECT r.relation_id, r.project_id, r.logical_name, r.source_table_id, r.source_column_id, r.target_table_id, r.target_column_id, r.relation_type, r.on_delete, r.on_update, r.descriptor, r.is_active, r.enforce_on_write, r.virtual_cascade, r.created_at,
+               tt.logical_name AS target_table_name, tc.logical_name AS target_column_name
+        FROM morphdb._morph_relations r
+        LEFT JOIN morphdb._morph_tables tt ON tt.table_id = r.target_table_id
+        LEFT JOIN morphdb._morph_columns tc ON tc.column_id = r.target_column_id
+        """;
+
+    private const string IndexesSelect = """
+        SELECT index_id, table_id, logical_name, physical_name, columns, index_type, is_unique, where_clause, descriptor, is_active, created_at
+        FROM morphdb._morph_indexes
+        """;
+
     private static async Task<TableMetadata> WithDetailsAsync(NpgsqlConnection connection, TableMetadata table)
     {
         var columns = await QueryColumnsByTableIdAsync(connection, table.TableId);

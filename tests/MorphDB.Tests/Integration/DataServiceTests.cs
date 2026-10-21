@@ -122,7 +122,7 @@ public class DataServiceTests
     /// change pays once per distinct subscriber.
     /// </summary>
     [Fact]
-    public async Task Reading_a_record_reads_its_table_definition_once_on_one_connection()
+    public async Task Reading_a_record_reads_its_table_definition_once_in_one_round_trip()
     {
         var ct = TestContext.Current.CancellationToken;
         var projectId = Guid.NewGuid();
@@ -132,10 +132,10 @@ public class DataServiceTests
 
         var statements = await StatementsOfAsync(() => _dataService.GetByIdAsync(projectId, table.LogicalName, id, ct));
 
-        statements.Count(s => s.Contains("_morph_tables", StringComparison.Ordinal) && !s.Contains("JOIN", StringComparison.Ordinal)).Should().Be(1, string.Join("\n---\n", statements));
-        statements.Count(s => s.Contains("FROM morphdb._morph_columns", StringComparison.Ordinal)).Should().Be(1);
-        statements.Count(s => s.Contains("FROM morphdb._morph_relations", StringComparison.Ordinal)).Should().Be(1);
-        statements.Count(s => s.Contains("FROM morphdb._morph_indexes", StringComparison.Ordinal)).Should().Be(1);
+        // The table row, its columns, relations and indexes are sent together: one command.
+        var definition = statements.Where(s => s.Contains("FROM morphdb._morph_columns", StringComparison.Ordinal)).Should().ContainSingle(string.Join("\n---\n", statements)).Subject;
+        definition.Should().Contain("FROM morphdb._morph_relations").And.Contain("FROM morphdb._morph_indexes").And.Contain("FROM morphdb._morph_tables");
+        statements.Count(s => s.Contains("FROM morphdb._morph_tables", StringComparison.Ordinal)).Should().Be(1, "the definition is read once");
         statements.Count(s => s.Contains("set_config", StringComparison.Ordinal)).Should().BeLessThanOrEqualTo(2,
             "one connection for the definition and one for the row");
     }

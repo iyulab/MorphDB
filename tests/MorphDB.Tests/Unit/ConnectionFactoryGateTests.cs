@@ -31,6 +31,10 @@ public partial class ConnectionFactoryGateTests
 
         // Holds a single dedicated LISTEN connection for the life of the process; no row is read on it.
         "MorphDB.Service/Realtime/PostgresChangeListener.cs",
+
+        // Likewise for the metadata channel, which keeps cached table definitions current; it installs the
+        // notifying trigger on the definition tables and reads no row.
+        "MorphDB.Service/Services/MetadataChangeListener.cs",
     ];
 
     [Fact]

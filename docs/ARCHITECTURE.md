@@ -167,6 +167,14 @@ ten seconds, so it follows within that. Deleting
 a project drops its two per-project schemas and marks it deleted; its tables in the shared schema
 stay, unreachable through the API.
 
+A table's definition — its columns, relations and indexes — is kept in memory, since every request that
+reads or writes a table needs it. The database notifies every change to the definition tables, whoever
+makes it, on the `morphdb_metadata` channel, and each instance forgets the definitions of the project
+the change belongs to. The instance that made a change reads the new definition on the very next
+request; another instance on the same database follows as soon as the notification reaches it. While an
+instance is not listening — starting up, or after losing that connection — it keeps nothing and reads
+every definition from the database.
+
 ## Request Scoping
 
 ```

@@ -190,6 +190,7 @@ try
     builder.Configuration.GetSection("AuditRetention").Bind(auditRetentionOptions);
     builder.Services.AddSingleton(auditRetentionOptions);
     builder.Services.AddHostedService<AuditRetentionService>();
+    builder.Services.AddHostedService<MetadataChangeListener>(); // keeps cached table definitions current
 
     // Add graceful shutdown with request draining (Phase 24: Production Hardening)
     builder.Services.Configure<GracefulShutdownOptions>(builder.Configuration.GetSection("GracefulShutdown"));

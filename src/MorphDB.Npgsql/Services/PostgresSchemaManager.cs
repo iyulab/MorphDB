@@ -28,6 +28,8 @@ public sealed class PostgresSchemaManager : ISchemaManager
     private readonly IRollupResolver _rollupResolver;
     private readonly IFormulaResolver _formulaResolver;
 
+    private readonly MetadataCache? _metadataCache;
+
     public PostgresSchemaManager(
         MorphConnectionFactory connections,
         IMetadataRepository repository,
@@ -35,8 +37,10 @@ public sealed class PostgresSchemaManager : ISchemaManager
         INameHasher nameHasher,
         IChangeLogger changeLogger,
         IProjectRepository projectRepository,
-        SchemaManagerOptions? options = null)
+        SchemaManagerOptions? options = null,
+        MetadataCache? metadataCache = null)
     {
+        _metadataCache = metadataCache;
         // The resolvers a read computes derived columns with — a declaration is checked by the same.
         _lookupResolver = new PostgresLookupResolver(repository);
         _rollupResolver = new PostgresRollupResolver(repository);
@@ -912,6 +916,10 @@ public sealed class PostgresSchemaManager : ISchemaManager
             connection, transaction, table, column.LogicalName, newLogicalName, cancellationToken);
 
         await transaction.CommitAsync(cancellationToken);
+
+        // Written on a connection of its own, not through the repository: the cached definitions are
+        // emptied here, once the rename is committed.
+        _metadataCache?.Invalidate(table.ProjectId);
     }
 
     public async Task DeleteColumnAsync(

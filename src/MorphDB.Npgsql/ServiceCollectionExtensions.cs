@@ -73,7 +73,10 @@ public static partial class ServiceCollectionExtensions
         services.AddSingleton(options.AdvisoryLockOptions);
         services.AddSingleton<IAdvisoryLockManager, PostgresAdvisoryLockManager>();
 
-        // Register repositories
+        // Register repositories. Definitions are cached only once something keeps the cache current
+        // (MetadataCache.Start) — the service's metadata listener; an embedder that runs none reads every
+        // definition from the database.
+        services.AddSingleton<MetadataCache>();
         services.AddSingleton<IMetadataRepository, MetadataRepository>();
         services.AddSingleton<IViewMetadataRepository, ViewMetadataRepository>();
 
