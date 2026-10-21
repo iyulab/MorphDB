@@ -384,7 +384,7 @@ public class NativeWritePolicyTests
     [Fact]
     public async Task An_upsert_answers_to_the_insert_policy_for_the_row_it_proposes_and_to_the_update_policy_for_the_row_it_lands_on()
     {
-        Task<IDictionary<string, object?>> UpsertAsync(Scene scene, Guid id, string owner) => As(scene.A, () =>
+        Task<UpsertResult> UpsertAsync(Scene scene, Guid id, string owner) => As(scene.A, () =>
             _rls.Data.UpsertAsync(
                 scene.ProjectId,
                 scene.Name,

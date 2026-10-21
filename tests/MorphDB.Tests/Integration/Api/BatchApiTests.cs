@@ -331,7 +331,7 @@ public class BatchApiTests
         var response = await _client.PutAsJsonAsync($"/api/batch/data/{tableName}", request, TestContext.Current.CancellationToken);
 
         // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.StatusCode.Should().Be(HttpStatusCode.Created, "the upsert created the row");
 
         var result = await response.Content.ReadFromJsonAsync<DataRecordResponse>(TestContext.Current.CancellationToken);
         result!.Data["name"]?.ToString().Should().Be("Upsert User");

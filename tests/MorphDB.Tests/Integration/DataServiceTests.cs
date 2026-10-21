@@ -553,10 +553,12 @@ public class DataServiceTests
         };
 
         // Act
-        var result = await _dataService.UpsertAsync(projectId, table.LogicalName, data, ["_id"], TestContext.Current.CancellationToken);
+        var (result, inserted) = await _dataService.UpsertAsync(projectId, table.LogicalName, data, ["_id"], TestContext.Current.CancellationToken);
 
         // Assert
+        inserted.Should().BeTrue();
         result.Should().NotBeNull();
+        result.Should().NotContainKey(MorphDB.Npgsql.Dml.DmlBuilder.UpsertInsertedColumn);
         result["_id"].Should().Be(id);
         result["email"].Should().Be("upsert@example.com");
     }
@@ -588,9 +590,10 @@ public class DataServiceTests
         };
 
         // Act
-        var result = await _dataService.UpsertAsync(projectId, table.LogicalName, data, ["_id"], TestContext.Current.CancellationToken);
+        var (result, inserted) = await _dataService.UpsertAsync(projectId, table.LogicalName, data, ["_id"], TestContext.Current.CancellationToken);
 
         // Assert
+        inserted.Should().BeFalse();
         result.Should().NotBeNull();
         result["_id"].Should().Be(id);
         result["email"].Should().Be("new@example.com");

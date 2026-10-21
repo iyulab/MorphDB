@@ -277,9 +277,12 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             var result = await conn.Connection.QuerySingleAsync<dynamic>(
                 new CommandDefinition(sql, values, transaction: conn.Transaction, cancellationToken: context.CancellationToken));
 
-            var mapped = Infrastructure.RowMapper.MapToLogicalDictionary(result, table.Columns);
+            var row = (IDictionary<string, object?>)result;
+            var inserted = row[DmlBuilder.UpsertInsertedColumn] is true;
+            row.Remove(DmlBuilder.UpsertInsertedColumn);
+            Dictionary<string, object?> mapped = Infrastructure.RowMapper.MapToLogicalDictionary(row, table.Columns);
             scope.SetRowCount(1);
-            return WriteResult.Ok(mapped);
+            return WriteResult.Ok(mapped) with { Inserted = inserted };
         }
         catch (PostgresException pg) when (pg.SqlState == PostgresErrorCodes.InvalidColumnReference)
         {

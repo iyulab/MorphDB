@@ -40,6 +40,10 @@ internal static class MorphDBJson
 [JsonSerializable(typeof(PagedResponse<DataRecord>))]
 [JsonSerializable(typeof(DataRecord))]
 [JsonSerializable(typeof(AggregateWireRequest))]
+[JsonSerializable(typeof(BulkUpdateWireRequest))]
+[JsonSerializable(typeof(UpsertWireRequest))]
+[JsonSerializable(typeof(SeedWireRequest))]
+[JsonSerializable(typeof(SeedResult))]
 [JsonSerializable(typeof(AggregationResponse))]
 // Batch and transactions.
 [JsonSerializable(typeof(BatchRequest))]

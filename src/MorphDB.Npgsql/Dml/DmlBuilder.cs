@@ -218,10 +218,16 @@ public static class DmlBuilder
             sb.Append(keyCol);
         }
 
-        sb.Append(" RETURNING *");
+        // A row the statement inserted has no deleting transaction yet; one it updated has this one.
+        // PostgreSQL's way to tell the two branches of ON CONFLICT apart in RETURNING.
+        sb.Append(" RETURNING *, (xmax = 0) AS ");
+        sb.Append(UpsertInsertedColumn);
 
         return sb.ToString();
     }
+
+    /// <summary>The column an upsert's RETURNING adds: true when the row was inserted, false when updated.</summary>
+    public const string UpsertInsertedColumn = "morph_upsert_inserted";
 
     /// <summary>
     /// Builds a WHERE clause for a single ID column.

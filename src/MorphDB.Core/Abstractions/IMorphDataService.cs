@@ -1,3 +1,5 @@
+using MorphDB.Core.Models;
+
 namespace MorphDB.Core.Abstractions;
 
 /// <summary>
@@ -87,9 +89,9 @@ public interface IMorphDataService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Upserts a record (insert or update based on key).
+    /// Upserts a record (insert or update based on key), answering which of the two it was.
     /// </summary>
-    Task<IDictionary<string, object?>> UpsertAsync(
+    Task<UpsertResult> UpsertAsync(
         Guid projectId,
         string tableName,
         IDictionary<string, object?> data,

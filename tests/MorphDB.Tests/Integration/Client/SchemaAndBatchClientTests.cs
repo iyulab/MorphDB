@@ -127,6 +127,47 @@ public class SchemaAndBatchClientTests(ApiIntegrationFixture fixture)
     }
 
     [Fact]
+    public async Task Rows_are_updated_and_deleted_by_filter_and_upserted_and_seeded_by_key()
+    {
+        await using var client = NewClient();
+        var table = await client.Schema.CreateTableAsync(new CreateTableRequest
+        {
+            Name = Name("bulk"),
+            Columns =
+            [
+                new CreateColumnRequest { Name = "sku", Type = "text", Nullable = false, Unique = true },
+                new CreateColumnRequest { Name = "qty", Type = "integer" },
+            ],
+        }, Ct);
+        await client.Batch.InsertManyAsync(table.Name,
+        [
+            new Dictionary<string, object?> { ["sku"] = "a", ["qty"] = 1 },
+            new Dictionary<string, object?> { ["sku"] = "b", ["qty"] = 2 },
+            new Dictionary<string, object?> { ["sku"] = "c", ["qty"] = 3 },
+        ], Ct);
+
+        var updated = await client.Batch.UpdateManyAsync(table.Name, [new Filter("qty", FilterOperator.GreaterThanOrEqual, 2)], new Dictionary<string, object?> { ["qty"] = 10 }, Ct);
+        Assert.Equal(2, updated.Results.Single().AffectedRows);
+
+        var deleted = await client.Batch.DeleteManyAsync(table.Name, [new Filter("sku", FilterOperator.Equal, "a")], Ct);
+        Assert.Equal(1, deleted.Results.Single().AffectedRows);
+
+        await client.Data.UpsertAsync(table.Name, new Dictionary<string, object?> { ["sku"] = "b", ["qty"] = 20 }, ["sku"], Ct);
+        await client.Data.UpsertAsync(table.Name, new Dictionary<string, object?> { ["sku"] = "d", ["qty"] = 4 }, ["sku"], Ct);
+
+        var seed = new List<IDictionary<string, object?>> { new Dictionary<string, object?> { ["sku"] = "e", ["qty"] = 5 } };
+        var first = await client.Batch.SeedAsync(table.Name, seed, ["sku"], Ct);
+        seed[0]["qty"] = 50;
+        var again = await client.Batch.SeedAsync(table.Name, seed, ["sku"], Ct);
+        Assert.Equal((1, 0), (first.Inserted, first.Updated));
+        Assert.Equal((0, 1), (again.Inserted, again.Updated));
+
+        var rows = (await client.Data.QueryAsync(table.Name, new QueryRequest(), Ct)).Data
+            .ToDictionary(r => r.Data["sku"]!.ToString()!, r => Convert.ToInt64(r.Data["qty"]!.ToString(), System.Globalization.CultureInfo.InvariantCulture));
+        Assert.Equal(new Dictionary<string, long> { ["b"] = 20, ["c"] = 10, ["d"] = 4, ["e"] = 50 }, rows);
+    }
+
+    [Fact]
     public async Task A_batch_runs_its_operations_in_order_and_reports_each()
     {
         await using var client = NewClient();

@@ -357,3 +357,33 @@ public sealed class BatchOperationResult
     /// </summary>
     public int? AffectedRows { get; init; }
 }
+
+/// <summary>
+/// What seeding did (mirrors the server's <c>SeedResponse</c>).
+/// </summary>
+public sealed class SeedResult
+{
+    /// <summary>How many records were sent.</summary>
+    public int TotalRecords { get; init; }
+
+    /// <summary>How many were inserted as new rows.</summary>
+    public int Inserted { get; init; }
+
+    /// <summary>How many updated a row whose key columns matched.</summary>
+    public int Updated { get; init; }
+
+    /// <summary>The records that could not be written, by their position in the request.</summary>
+    public IReadOnlyList<SeedError> Errors { get; init; } = [];
+}
+
+/// <summary>
+/// A record seeding could not write (mirrors the server's <c>SeedError</c>).
+/// </summary>
+public sealed class SeedError
+{
+    /// <summary>The record's position in the request.</summary>
+    public int Index { get; init; }
+
+    /// <summary>Why it was not written.</summary>
+    public string? Message { get; init; }
+}

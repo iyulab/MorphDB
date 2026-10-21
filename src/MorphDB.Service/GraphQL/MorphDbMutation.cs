@@ -238,7 +238,7 @@ public sealed class MorphDbMutation
             return new MutationResult<RecordNode>
             {
                 Success = true,
-                Data = CreateRecordNode(result)
+                Data = CreateRecordNode(result.Record)
             };
         }
         catch (Exception ex) when (IsCallersMistake(ex))

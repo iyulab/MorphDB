@@ -274,17 +274,18 @@ public sealed class BatchController : ControllerBase
         var result = await _dataService.UpsertAsync(
             projectId, table, request.Data, request.KeyColumns.ToArray(), cancellationToken);
 
-        var id = SystemColumns.RequireRecordId(result);
+        var id = SystemColumns.RequireRecordId(result.Record);
 
         var response = new DataRecordResponse
         {
             Id = id,
-            Data = result
+            Data = result.Record
         };
 
-        // Check if this was an insert or update based on whether the record existed
-        // For simplicity, we return OK for all upserts
-        return Ok(response);
+        // 201 when the upsert created the row, 200 when it updated the one its key matched.
+        return result.Inserted
+            ? Created($"/api/data/{Uri.EscapeDataString(table)}/{id}", response)
+            : Ok(response);
     }
 
     /// <summary>
@@ -334,11 +335,16 @@ public sealed class BatchController : ControllerBase
                     record["_id"] = Guid.CreateVersion7();
                 }
 
-                await _dataService.UpsertAsync(
+                var result = await _dataService.UpsertAsync(
                     projectId, table, record, request.KeyColumns.ToArray(), cancellationToken);
-
-                // Simple heuristic: count as insert (exact tracking requires DB-level info)
-                inserted++;
+                if (result.Inserted)
+                {
+                    inserted++;
+                }
+                else
+                {
+                    updated++;
+                }
             }
             catch (Exception ex)
             {
@@ -353,7 +359,7 @@ public sealed class BatchController : ControllerBase
         return Ok(new SeedResponse
         {
             TotalRecords = request.Records.Count,
-            Inserted = inserted - updated,
+            Inserted = inserted,
             Updated = updated,
             Errors = errors
         });
@@ -528,7 +534,7 @@ public sealed class BatchController : ControllerBase
 
         var result = await _dataService.UpsertAsync(
             projectId, operation.Table, operation.Data, operation.KeyColumns.ToArray(), cancellationToken);
-        var id = SystemColumns.RequireRecordId(result);
+        var id = SystemColumns.RequireRecordId(result.Record);
 
         return new BatchOperationResult
         {

@@ -348,12 +348,24 @@ public sealed record WriteResult
     /// </summary>
     public int? NewVersion { get; init; }
 
+    /// <summary>
+    /// For an upsert, whether it inserted a new row (true) or updated the row its key matched (false);
+    /// null for every other write.
+    /// </summary>
+    public bool? Inserted { get; init; }
+
     public static WriteResult Ok(IDictionary<string, object?> data, int? newVersion = null) =>
         new() { Success = true, Data = data, NewVersion = newVersion };
 
     public static WriteResult Failed(params ValidationError[] errors) =>
         new() { Success = false, Errors = errors };
 }
+
+/// <summary>
+/// An upserted record and whether the upsert inserted it — false when it updated the row its key
+/// columns matched.
+/// </summary>
+public sealed record UpsertResult(IDictionary<string, object?> Record, bool Inserted);
 
 /// <summary>
 /// Represents a validation error.

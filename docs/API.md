@@ -329,8 +329,8 @@ POST   /api/batch/data                         # Mixed operations, in order, acr
 POST   /api/batch/data/{table}/insert          # Insert many into one table
 PATCH  /api/batch/data/{table}                 # Update many, selected by filter
 DELETE /api/batch/data/{table}?filter=...      # Delete many, selected by filter
-PUT    /api/batch/data/{table}                 # Upsert many, matched on key columns
-POST   /api/batch/data/{table}/seed            # Seed rows (upsert, ignoring conflicts)
+PUT    /api/batch/data/{table}                 # Upsert one record, matched on key columns (201 inserted, 200 updated)
+POST   /api/batch/data/{table}/seed            # Seed rows: upsert each, report inserted and updated
 POST   /api/batch/transaction                  # Atomic cross-entity operations
 ```
 

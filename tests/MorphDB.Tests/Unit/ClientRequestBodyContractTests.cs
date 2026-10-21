@@ -172,8 +172,8 @@ public class ClientRequestBodyContractTests
         update.Body.Should().Be(expected);
 
         var upsert = new CapturingHandler(RecordJson);
-        await ClientOver(upsert).Data.UpsertAsync("t", values, cancellationToken);
-        upsert.Body.Should().Be(expected);
+        await ClientOver(upsert).Data.UpsertAsync("t", values, ["_id"], cancellationToken);
+        upsert.Body.Should().Be($$"""{"data":{{expected}},"keyColumns":["_id"]}""");
 
         var batch = new CapturingHandler("""{"results":[],"successCount":0,"failureCount":0}""");
         await ClientOver(batch).Batch.InsertManyAsync("t", [values, values], cancellationToken);
@@ -315,6 +315,31 @@ public class ClientRequestBodyContractTests
             "orderBy":[{"column":"category","direction":"desc"},{"column":"lot","direction":"asc"}],
             "limit":10,"offset":5}
             """));
+    }
+
+    [Fact]
+    public async Task The_bulk_writes_send_the_bodies_the_service_reads()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        Filter[] filters = [new Filter("status", FilterOperator.Equal, "open"), new Filter("qty", FilterOperator.GreaterThan, 3)];
+
+        var update = new CapturingHandler("""{"results":[],"successCount":1,"failureCount":0}""");
+        await ClientOver(update).Batch.UpdateManyAsync("t", filters, new Dictionary<string, object?> { ["status"] = "closed" }, cancellationToken);
+        update.Body.Should().Be("""{"data":{"status":"closed"},"filter":["status:eq:open","qty:gt:3"]}""");
+
+        var upsert = new CapturingHandler(RecordJson);
+        await ClientOver(upsert).Data.UpsertAsync("t", new Dictionary<string, object?> { ["sku"] = "a", ["qty"] = 1 }, ["sku"], cancellationToken);
+        upsert.Body.Should().Be("""{"data":{"sku":"a","qty":1},"keyColumns":["sku"]}""");
+
+        var seed = new CapturingHandler("""{"totalRecords":1,"inserted":1,"updated":0,"errors":[]}""");
+        var result = await ClientOver(seed).Batch.SeedAsync("t", [new Dictionary<string, object?> { ["sku"] = "a" }], ["sku"], cancellationToken);
+        seed.Body.Should().Be("""{"records":[{"sku":"a"}],"keyColumns":["sku"]}""");
+        result.Inserted.Should().Be(1);
+
+        var delete = () => ClientOver(new CapturingHandler("{}")).Batch.DeleteManyAsync("t", [], cancellationToken);
+        await delete.Should().ThrowAsync<ArgumentException>("a bulk delete without a filter would empty the table");
+        var noValues = () => ClientOver(new CapturingHandler("{}")).Batch.UpdateManyAsync("t", filters, new Dictionary<string, object?>(), cancellationToken);
+        await noValues.Should().ThrowAsync<ArgumentException>();
     }
 
     [Fact]

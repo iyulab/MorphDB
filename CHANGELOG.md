@@ -2,20 +2,23 @@
 
 ## Unreleased
 
-### Added
-
-- **The .NET client creates and deletes indexes: `Schema.CreateIndexAsync(table, CreateIndexRequest)`
-  and `Schema.DeleteIndexAsync(id)`**, and `TableInfo.Indexes` reports a table's indexes. Columns are
-  named logically, as for relations; the server refuses one the table does not have. The routes were
-  already served; the client had no way to reach them.
-
 ### Fixed
+
+- **A seed reports what it did.** `POST /api/batch/data/{table}/seed` counted every record as inserted;
+  `updated` is now the records that matched an existing row by their key columns.
+- **The .NET client's `Data.UpsertAsync` reaches the upsert route.** It sent `PUT /api/data/{table}`,
+  which no route answers, so every call failed. It now takes the key columns to match on and sends
+  `PUT /api/batch/data/{table}`: `Data.UpsertAsync(table, data, keyColumns)`.
 
 - **A query-body filter node without `$type`, or with a kind the server does not know, is refused with
   `400`** naming what to write (`"condition"` or `"group"`). It used to fail as a `500`: the serializer
   could not make the abstract node it was asked for.
 
 ### Changed
+
+- **An upsert that creates its row answers `201 Created`** (with the record's location); one that updates
+  the row its key matched answers `200`, as before. `IMorphDataService.UpsertAsync` returns an
+  `UpsertResult` — the record and whether it was inserted — for embedders of `MorphDB.Core`.
 
 - Dependencies: OpenTelemetry 1.20.1 (Prometheus exporter 1.20.1-beta.1), HotChocolate 16.6.9, StackExchange.Redis 3.4.5, Swashbuckle.AspNetCore 10.3.1.
 - **The service keeps each connection's most used statements prepared** (`Max Auto Prepare=20`), so a
@@ -30,6 +33,11 @@
 
 ### Added
 
+- **The .NET client reaches more of the service**: `Schema.CreateIndexAsync(table, CreateIndexRequest)` and
+  `Schema.DeleteIndexAsync(id)`, with `TableInfo.Indexes` reporting a table's indexes (columns named
+  logically, as for relations); `Batch.UpdateManyAsync` and `Batch.DeleteManyAsync` over filters (a delete
+  names at least one, as the service requires); and `Batch.SeedAsync` with `SeedResult`. The routes were
+  already served; the client had no method for them.
 - **`in` and `notin` filters, with their values as a JSON array** — `status:in:["open","held"]` on
   `GET /api/data/{table}` and the bulk update and delete; `"operator": "in"` with an array `value` in the
   query body (inside an `or` group too) and the aggregate filter. JSON quoting lets a value hold a comma;

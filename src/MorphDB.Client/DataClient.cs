@@ -104,17 +104,21 @@ public sealed class DataClient
     }
 
     /// <summary>
-    /// Upserts a record (insert or update based on ID).
+    /// Inserts a record, or updates the one whose key columns hold the same values — columns a unique
+    /// constraint covers together. A record without an <c>_id</c> is assigned one when it is inserted.
     /// </summary>
     public async Task<DataRecord> UpsertAsync(
         string tableName,
         IDictionary<string, object?> data,
+        IReadOnlyList<string> keyColumns,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(data);
+        ArgumentNullException.ThrowIfNull(keyColumns);
         var response = await _httpClient.PutAsJsonAsync(
-            $"/api/data/{Uri.EscapeDataString(tableName)}",
-            data,
-            MorphDBJsonContext.Default.IDictionaryStringObject,
+            $"/api/batch/data/{Uri.EscapeDataString(tableName)}",
+            new UpsertWireRequest(data, keyColumns),
+            MorphDBJsonContext.Default.UpsertWireRequest,
             cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.DataRecord, cancellationToken)
@@ -188,9 +192,7 @@ public sealed class DataClient
         {
             foreach (var filter in request.Filters)
             {
-                var op = GetOperatorString(filter.Operator);
-                var value = FormatFilterValue(filter.Value);
-                parts.Add($"filter={Uri.EscapeDataString($"{filter.Column}:{op}:{value}")}");
+                parts.Add($"filter={Uri.EscapeDataString(FilterText(filter))}");
             }
         }
 
@@ -217,6 +219,10 @@ public sealed class DataClient
 
         return parts.Count > 0 ? "?" + string.Join("&", parts) : string.Empty;
     }
+
+    /// <summary>One condition as the service reads it in a query string or a filter list: <c>column:operator:value</c>.</summary>
+    internal static string FilterText(Filter filter) =>
+        $"{filter.Column}:{GetOperatorString(filter.Operator)}:{FormatFilterValue(filter.Value)}";
 
     /// <summary>
     /// A filter value as the server reads it back: numbers and instants in the invariant culture (an
@@ -289,3 +295,6 @@ public sealed class DataClient
     };
 
 }
+
+/// <summary>The body of <c>PUT /api/batch/data/{table}</c>.</summary>
+internal sealed record UpsertWireRequest(IDictionary<string, object?> Data, IReadOnlyList<string> KeyColumns);

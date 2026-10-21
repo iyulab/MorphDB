@@ -316,7 +316,7 @@ public sealed class PostgresDataService : IMorphDataService
     }
 
     /// <inheritdoc />
-    public async Task<IDictionary<string, object?>> UpsertAsync(
+    public async Task<UpsertResult> UpsertAsync(
         Guid projectId,
         string tableName,
         IDictionary<string, object?> data,
@@ -325,7 +325,7 @@ public sealed class PostgresDataService : IMorphDataService
     {
         var table = await GetTableWithColumnsAsync(projectId, tableName, cancellationToken);
         var result = await _writePipeline.UpsertAsync(projectId, table, data, keyColumns, null, cancellationToken);
-        return UnwrapOrThrow(result, tableName);
+        return new UpsertResult(UnwrapOrThrow(result, tableName), result.Inserted ?? false);
     }
 
     #region Private Helper Methods
