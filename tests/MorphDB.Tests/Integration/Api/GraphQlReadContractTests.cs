@@ -198,6 +198,32 @@ public class GraphQlReadContractTests
             "making it required would break every stored query that leaves it out");
     }
 
+    /// <summary>
+    /// <c>totalCount</c> is counted only when selected, and the connection's and <c>pageInfo</c>'s are the
+    /// same count; a page that selects neither still knows whether more rows follow.
+    /// </summary>
+    [Fact]
+    public async Task Total_count_is_the_same_on_the_connection_and_its_page_info_and_paging_works_without_it()
+    {
+        var (table, _) = await SeedRowAsync("c0", 0);
+        await InsertAsync(table, "c1", 1);
+        await InsertAsync(table, "c2", 2);
+
+        var counted = (await PostGraphQlAsync(
+                "query($table: String!) { records(table: $table, first: 2) { totalCount pageInfo { totalCount hasNextPage } } }",
+                new { table }))
+            .GetProperty("data").GetProperty("records");
+        var plain = (await PostGraphQlAsync(
+                "query($table: String!) { records(table: $table, first: 2) { pageInfo { hasNextPage } edges { node { id } } } }",
+                new { table }))
+            .GetProperty("data").GetProperty("records");
+
+        counted.GetProperty("totalCount").GetInt32().Should().Be(3);
+        counted.GetProperty("pageInfo").GetProperty("totalCount").GetInt32().Should().Be(3);
+        plain.GetProperty("pageInfo").GetProperty("hasNextPage").GetBoolean().Should().BeTrue();
+        plain.GetProperty("edges").GetArrayLength().Should().Be(2);
+    }
+
     private const string Page =
         """
         query($table: String!, $first: Int, $after: String, $orderBy: String) {

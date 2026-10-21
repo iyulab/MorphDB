@@ -11,6 +11,9 @@
   is answered either way — the page is read one row past its size. PostgREST and OData count only when
   asked too. `pagination.offset` is now absent when the request gave none, as documented (it was
   written as `null`).
+- **GraphQL `records` counts only when `totalCount` is selected** — on the connection, on `pageInfo`,
+  or both, and then once; `hasNextPage` no longer needs the count. The schema marks both `totalCount`
+  fields `@cost(weight: "10")`, the weight HotChocolate gives a field that runs its own resolver.
 - **.NET client** — `QueryRequest.Count` asks for the count; `PaginationInfo.TotalCount` and
   `TotalPages` are null when it was not asked. `PaginationInfo.HasNextPage` and `HasPreviousPage` are
   renamed `HasNext` and `HasPrevious`, the names the server writes — under the old names they were

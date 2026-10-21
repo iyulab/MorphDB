@@ -477,6 +477,10 @@ query {
 }
 ```
 
+`totalCount` — on the connection, on `pageInfo`, or both — is counted only when a query selects it,
+and then once: like the REST list's `count=true`, it is a second statement over every matching row.
+`hasNextPage` is answered without it (the page is read one row past `first`).
+
 `filter` and `orderBy` are compact strings here, not input objects:
 
 | Argument | Grammar | Notes |

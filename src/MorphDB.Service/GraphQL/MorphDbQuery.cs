@@ -118,16 +118,22 @@ public sealed class MorphDbQuery
         CancellationToken cancellationToken)
     {
         var projectId = projectAccessor.ProjectId;
-        var query = dataService.Query(projectId).From(table).SelectAll();
 
         // The REST list's languages, read by the same code: one condition per filter entry, and a
-        // malformed condition or ordering is refused rather than dropped.
-        try
+        // malformed condition or ordering is refused rather than dropped. A builder is consumed by what
+        // it runs, so the rows and the count each get their own.
+        IMorphQuery Build()
         {
-            query = FilterExpressions.Apply(query, filter);
-            query = string.IsNullOrWhiteSpace(orderBy)
+            var query = FilterExpressions.Apply(dataService.Query(projectId).From(table).SelectAll(), filter);
+            return string.IsNullOrWhiteSpace(orderBy)
                 ? query.OrderByDesc(SystemColumns.CreatedAt).OrderByDesc(SystemColumns.Id)
                 : OrderExpressions.Apply(query, orderBy);
+        }
+
+        IMorphQuery rows;
+        try
+        {
+            rows = Build();
         }
         catch (ArgumentException ex)
         {
@@ -137,15 +143,14 @@ public sealed class MorphDbQuery
                 .Build());
         }
 
-        var totalCount = await query.CountAsync(cancellationToken);
-
         // A cursor is a row's position in this order. Paging by position follows whatever order was
         // asked for (the query ends it with _id, so it is total); a cursor holding the row's id was
         // compared against _id whatever the order, and read the newest-first list's next page as the
-        // rows newer than the last one — the first page again.
+        // rows newer than the last one — the first page again. The page is read one row past its size,
+        // so whether more follow is known without counting.
         var pageSize = Math.Clamp(first ?? 20, 1, 100);
         var skip = string.IsNullOrEmpty(after) ? 0 : DecodeCursor(after) + 1;
-        var records = await query.Limit(pageSize).Offset(skip).ToListAsync(cancellationToken);
+        var (records, more) = PaginationInfo.Probe(await rows.Limit(pageSize + 1).Offset(skip).ToListAsync(cancellationToken), pageSize);
 
         var edges = records.Select((r, i) => new RecordEdge
         {
@@ -153,18 +158,19 @@ public sealed class MorphDbQuery
             Cursor = EncodeCursor(skip + i)
         }).ToList();
 
-        return new RecordConnection
+        // Counted only when a selection reads totalCount — on the connection, its pageInfo, or both (once).
+        var count = new Lazy<Task<int>>(async () => (int)await Build().CountAsync(cancellationToken));
+
+        return new RecordConnection(count)
         {
             Edges = edges,
-            PageInfo = new PageInfo
+            PageInfo = new PageInfo(count)
             {
-                HasNextPage = skip + records.Count < totalCount,
+                HasNextPage = more,
                 HasPreviousPage = skip > 0,
                 StartCursor = edges.FirstOrDefault()?.Cursor,
                 EndCursor = edges.LastOrDefault()?.Cursor,
-                TotalCount = (int)totalCount
             },
-            TotalCount = (int)totalCount
         };
     }
 
@@ -380,11 +386,13 @@ public sealed class RelationGraphType
 /// <summary>
 /// A connection to a list of records (for pagination).
 /// </summary>
-public sealed class RecordConnection
+public sealed class RecordConnection(Lazy<Task<int>> count)
 {
     public IReadOnlyList<RecordEdge> Edges { get; init; } = [];
     public required PageInfo PageInfo { get; init; }
-    public int TotalCount { get; init; }
+
+    /// <summary>The rows the query matches, counted only when this field is selected.</summary>
+    public Task<int> TotalCount => count.Value;
 }
 
 /// <summary>
@@ -413,13 +421,15 @@ public sealed class RecordNode
 /// <summary>
 /// Page information for pagination.
 /// </summary>
-public sealed class PageInfo
+public sealed class PageInfo(Lazy<Task<int>> count)
 {
     public bool HasNextPage { get; init; }
     public bool HasPreviousPage { get; init; }
     public string? StartCursor { get; init; }
     public string? EndCursor { get; init; }
-    public int TotalCount { get; init; }
+
+    /// <summary>The rows the query matches, counted only when this field is selected.</summary>
+    public Task<int> TotalCount => count.Value;
 }
 
 #endregion

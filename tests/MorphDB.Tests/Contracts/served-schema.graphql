@@ -89,13 +89,13 @@ type PageInfo {
   hasPreviousPage: Boolean!
   startCursor: String
   endCursor: String
-  totalCount: Int!
+  totalCount: Int! @cost(weight: "10")
 }
 
 type RecordConnection {
   edges: [RecordEdge!]!
   pageInfo: PageInfo!
-  totalCount: Int!
+  totalCount: Int! @cost(weight: "10")
 }
 
 type RecordEdge {
