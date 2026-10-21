@@ -11,6 +11,9 @@
 - **The .NET client manages security policies and secrets**: `client.Security` — `GetPoliciesAsync`,
   `CreatePolicyAsync`, `UpdatePolicyAsync`, `DeletePolicyAsync`, and (with the master secret)
   `IssueSecretAsync`, `GetSecretsAsync`, `RevokeSecretAsync`.
+- **The .NET client walks hierarchies**: `client.Hierarchy` — `GetAncestorsAsync`, `GetDescendantsAsync`,
+  `GetSubtreeAsync`, `GetPathAsync`, `GetSiblingsAsync` (with `parentColumn`, `maxDepth`, `includeSelf` and
+  `orderBy` where the route takes them), `WouldCreateCycleAsync` and `DetectCyclesAsync`.
 
 ### Fixed
 

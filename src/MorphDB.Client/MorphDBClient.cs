@@ -40,6 +40,7 @@ public sealed class MorphDBClient : IAsyncDisposable
         Transactions = new TransactionClient(_httpClient);
         Views = new ViewClient(_httpClient);
         Security = new SecurityClient(_httpClient);
+        Hierarchy = new HierarchyClient(_httpClient);
         Realtime = new RealtimeClient(_baseUrl, _options, () => _projectId);
     }
 
@@ -66,6 +67,7 @@ public sealed class MorphDBClient : IAsyncDisposable
         Transactions = new TransactionClient(_httpClient);
         Views = new ViewClient(_httpClient);
         Security = new SecurityClient(_httpClient);
+        Hierarchy = new HierarchyClient(_httpClient);
         Realtime = new RealtimeClient(_baseUrl, _options, () => _projectId);
     }
 
@@ -113,6 +115,11 @@ public sealed class MorphDBClient : IAsyncDisposable
     /// View operations (create, query, refresh).
     /// </summary>
     public ViewClient Views { get; }
+
+    /// <summary>
+    /// Walks over tables whose rows point at a parent row.
+    /// </summary>
+    public HierarchyClient Hierarchy { get; }
 
     /// <summary>
     /// Row-level security policies and issued secrets.

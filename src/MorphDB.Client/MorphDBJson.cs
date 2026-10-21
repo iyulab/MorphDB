@@ -95,6 +95,11 @@ internal static class MorphDBJson
 [JsonSerializable(typeof(WebhookDeadLetterStatistics))]
 [JsonSerializable(typeof(ResolveDeadLetterRequest))]
 [JsonSerializable(typeof(ArchivedDeadLetters))]
+// Hierarchy walks.
+[JsonSerializable(typeof(HierarchyResult))]
+[JsonSerializable(typeof(CycleCheckRequest))]
+[JsonSerializable(typeof(CycleCheckResult))]
+[JsonSerializable(typeof(CycleDetectionResult))]
 // Security policies and secrets.
 [JsonSerializable(typeof(List<SecurityPolicyInfo>))]
 [JsonSerializable(typeof(SecurityPolicyInfo))]

@@ -460,6 +460,11 @@ public class ClientRequestBodyContractTests
             ("issueSecret", new IssueSecretRequest { Name = "n", Role = "reader", ProjectId = Guid.Parse("11111111-1111-1111-1111-111111111111") },
                 """{"secretId":"11111111-1111-1111-1111-111111111111","name":"n","role":"reader","secret":"s"}""",
                 (c, m) => c.Security.IssueSecretAsync((IssueSecretRequest)m, cancellationToken)),
+            ("checkCycle", new CycleCheckRequest
+            {
+                RecordId = Guid.Parse("11111111-1111-1111-1111-111111111111"), NewParentId = Guid.Parse("22222222-2222-2222-2222-222222222222"), ParentColumn = "p",
+            }, """{"wouldCreateCycle":false}""",
+                (c, m) => c.Hierarchy.WouldCreateCycleAsync("t", (CycleCheckRequest)m, cancellationToken)),
             ("exportCsv", new CsvExportOptions { Columns = ["a"], Delimiter = ';' },
                 """{"jobId":"11111111-1111-1111-1111-111111111111","tableName":"t","format":"csv","status":"pending"}""",
                 (c, m) => c.Bulk.ExportCsvAsync("t", (CsvExportOptions)m, cancellationToken)),

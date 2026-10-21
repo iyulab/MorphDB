@@ -73,6 +73,7 @@ await client.Realtime.SubscribeAsync("users", change =>
 - **Relations**: Declare links between tables, enforced on write or declared only
 - **Indexes**: Create composite indexes over named columns; read them back with the table
 - **Data Operations**: CRUD operations with filtering, pagination, and ordering
+- **Hierarchy**: Walk a table whose rows point at a parent — ancestors, descendants, subtree, path, siblings — and check for cycles
 - **Real-time Subscriptions**: WebSocket-based change notifications
 - **Bulk Operations**: Import/export data in CSV, JSON, and XLSX formats
 - **Webhooks**: Manage webhook subscriptions for event notifications
