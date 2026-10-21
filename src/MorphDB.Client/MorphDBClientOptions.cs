@@ -17,14 +17,12 @@ public sealed class MorphDBClientOptions
     public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(30);
 
     /// <summary>
-    /// Number of retry attempts for failed requests. Default is 3.
+    /// The secret every request presents, as <c>Authorization: Bearer &lt;secret&gt;</c> — the REST calls
+    /// and the real-time connection alike. Null sends none, which only a service started without a
+    /// master secret accepts. Managing secrets (<see cref="MorphDBClient.Security"/>) needs the master
+    /// secret itself.
     /// </summary>
-    public int RetryCount { get; set; } = 3;
-
-    /// <summary>
-    /// Delay between retry attempts. Default is 1 second.
-    /// </summary>
-    public TimeSpan RetryDelay { get; set; } = TimeSpan.FromSeconds(1);
+    public string? Secret { get; set; }
 
     /// <summary>
     /// Custom HTTP message handler for testing or proxy scenarios.

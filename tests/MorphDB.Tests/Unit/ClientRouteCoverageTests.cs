@@ -50,13 +50,6 @@ public partial class ClientRouteCoverageTests
         "GET /api/schema/changelog",
         "GET /api/schema/tables/{name}/history",
         "POST /api/schema/batch",
-        "GET /api/security/policies/{tableName}",
-        "POST /api/security/policies",
-        "PATCH /api/security/policies/{policyId}",
-        "DELETE /api/security/policies/{policyId}",
-        "GET /api/security/secrets",
-        "POST /api/security/secrets",
-        "DELETE /api/security/secrets/{secretId}",
         "PATCH /api/views/{name}",
         "GET /api/views/{name}/stale",
     ];

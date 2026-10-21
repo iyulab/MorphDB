@@ -240,17 +240,22 @@ curl -sS -X POST http://localhost:8080/api/data/customers \
   -d '{"email":"ada@example.com"}'
 ```
 
-The .NET client takes the same id once, at construction:
+The .NET client takes the same id once, at construction — and, when the service enforces secrets, the
+secret it presents on every call and on the real-time connection:
 
 ```csharp
-var client = new MorphDBClient("http://localhost:8080", new MorphDBClientOptions { ProjectId = projectId });
+var client = new MorphDBClient("http://localhost:8080", new MorphDBClientOptions
+{
+    ProjectId = projectId,
+    Secret = secret, // omit when no master secret is injected
+});
 ```
 
 > **A project's settings are replaced, not merged.** `PATCH /api/projects/{id}` with a `settings`
 > object writes that object whole — anything you leave out goes back to its default rather than
 > keeping its stored value. Read the project first and send the settings you want it to end up with.
-> The client has no project surface, so these calls are made over HTTP either way; the trap is the
-> same one described in [the API reference](docs/API.md#audit-retention).
+> The client's `Projects.UpdateAsync` sends the same `PATCH`, so the trap is the same there — it is
+> described in [the API reference](docs/API.md#audit-retention).
 
 ### From Source
 

@@ -19,15 +19,18 @@ public sealed class RealtimeClient : IAsyncDisposable
 {
     private readonly string _baseUrl;
     private readonly MorphDBClientOptions _options;
+    private readonly Func<Guid> _projectId;
+    private Guid _connectedProjectId;
     private HubConnection? _connection;
     private readonly Dictionary<string, List<Subscription>> _subscriptions = new();
     private readonly object _subscriptionsGate = new();
     private readonly SemaphoreSlim _connectionLock = new(1, 1);
 
-    internal RealtimeClient(string baseUrl, MorphDBClientOptions options)
+    internal RealtimeClient(string baseUrl, MorphDBClientOptions options, Func<Guid> projectId)
     {
         _baseUrl = baseUrl.TrimEnd('/');
         _options = options;
+        _projectId = projectId;
     }
 
     /// <summary>
@@ -47,11 +50,14 @@ public sealed class RealtimeClient : IAsyncDisposable
                 return;
 
             var hubUrl = $"{_baseUrl}/hubs/morph";
+            var projectId = _projectId();
 
             var builder = new HubConnectionBuilder()
                 .WithUrl(hubUrl, options =>
                 {
-                    options.Headers["X-Project-Id"] = _options.ProjectId.ToString();
+                    options.Headers["X-Project-Id"] = projectId.ToString();
+                    if (_options.Secret is { } secret)
+                        options.Headers["Authorization"] = $"Bearer {secret}";
 
                     // The same handler the REST calls go through — a proxy, or a test server. The
                     // connection disposes whatever the factory hands it together with its own
@@ -86,6 +92,7 @@ public sealed class RealtimeClient : IAsyncDisposable
             };
 
             _connection = connection;
+            _connectedProjectId = projectId;
             await connection.StartAsync(cancellationToken);
         }
         finally
@@ -257,7 +264,7 @@ public sealed class RealtimeClient : IAsyncDisposable
         Operation = operation,
         RecordId = message.RecordId,
         Data = message.Data,
-        ProjectId = _options.ProjectId,
+        ProjectId = _connectedProjectId,
         Timestamp = message.Timestamp,
     };
 
@@ -267,7 +274,7 @@ public sealed class RealtimeClient : IAsyncDisposable
         Operation = ChangeOperation.Delete,
         RecordId = message.RecordId,
         Data = null,
-        ProjectId = _options.ProjectId,
+        ProjectId = _connectedProjectId,
         Timestamp = message.Timestamp,
     };
 

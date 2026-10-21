@@ -9,6 +9,7 @@ public sealed class MorphDBClient : IAsyncDisposable
     private readonly bool _disposeHttpClient;
     private readonly MorphDBClientOptions _options;
     private readonly string _baseUrl;
+    private Guid _projectId;
 
     /// <summary>
     /// Creates a new MorphDB client.
@@ -38,7 +39,8 @@ public sealed class MorphDBClient : IAsyncDisposable
         Bulk = new BulkClient(_httpClient);
         Transactions = new TransactionClient(_httpClient);
         Views = new ViewClient(_httpClient);
-        Realtime = new RealtimeClient(_baseUrl, _options);
+        Security = new SecurityClient(_httpClient);
+        Realtime = new RealtimeClient(_baseUrl, _options, () => _projectId);
     }
 
     /// <summary>
@@ -63,7 +65,8 @@ public sealed class MorphDBClient : IAsyncDisposable
         Bulk = new BulkClient(_httpClient);
         Transactions = new TransactionClient(_httpClient);
         Views = new ViewClient(_httpClient);
-        Realtime = new RealtimeClient(_baseUrl, _options);
+        Security = new SecurityClient(_httpClient);
+        Realtime = new RealtimeClient(_baseUrl, _options, () => _projectId);
     }
 
     /// <summary>
@@ -112,24 +115,37 @@ public sealed class MorphDBClient : IAsyncDisposable
     public ViewClient Views { get; }
 
     /// <summary>
+    /// Row-level security policies and issued secrets.
+    /// </summary>
+    public SecurityClient Security { get; }
+
+    /// <summary>
     /// Real-time subscription operations.
     /// </summary>
     public RealtimeClient Realtime { get; }
 
     /// <summary>
-    /// Sets the project ID for all requests.
+    /// Sets the project every request is scoped to from now on. The real-time connection sends it
+    /// when it connects, so a connection already open keeps the project it opened with.
     /// </summary>
     public void SetProjectId(Guid projectId)
     {
+        _projectId = projectId;
         _httpClient.DefaultRequestHeaders.Remove("X-Project-Id");
         _httpClient.DefaultRequestHeaders.Add("X-Project-Id", projectId.ToString());
     }
 
     private void ConfigureDefaultHeaders()
     {
+        _projectId = _options.ProjectId;
         if (_options.ProjectId != Guid.Empty)
         {
             _httpClient.DefaultRequestHeaders.Add("X-Project-Id", _options.ProjectId.ToString());
+        }
+
+        if (_options.Secret is { } secret)
+        {
+            _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", secret);
         }
 
         _httpClient.DefaultRequestHeaders.Add("Accept", "application/json");

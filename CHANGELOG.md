@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **The .NET client presents a secret.** `MorphDBClientOptions.Secret` is sent as
+  `Authorization: Bearer <secret>` on every call and on the real-time connection. The client had no way
+  to send one, so against a service started with a master secret every call from a client built on a base
+  URL was refused, and the real-time connection could not be opened through it at all.
+- **The .NET client manages security policies and secrets**: `client.Security` — `GetPoliciesAsync`,
+  `CreatePolicyAsync`, `UpdatePolicyAsync`, `DeletePolicyAsync`, and (with the master secret)
+  `IssueSecretAsync`, `GetSecretsAsync`, `RevokeSecretAsync`.
+
+### Fixed
+
+- **The .NET client's real-time connection uses the project set by `SetProjectId`.** It sent the project
+  the options held when the client was built, so a client scoped after construction subscribed under no
+  project (or the old one) while its REST calls went to the new one. A connection already open keeps the
+  project it opened with.
+
+### Removed
+
+- **`MorphDBClientOptions.RetryCount` and `RetryDelay`** (breaking). Nothing read them — the client never
+  retried. Delete them from your options; to retry, pass an `HttpClient` with a retry handler to
+  `new MorphDBClient(httpClient, options)`.
+
 ## 0.29.0
 
 A minor that fixes three wrong answers and fills gaps in the .NET client. A query body's nested filter

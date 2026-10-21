@@ -95,6 +95,14 @@ internal static class MorphDBJson
 [JsonSerializable(typeof(WebhookDeadLetterStatistics))]
 [JsonSerializable(typeof(ResolveDeadLetterRequest))]
 [JsonSerializable(typeof(ArchivedDeadLetters))]
+// Security policies and secrets.
+[JsonSerializable(typeof(List<SecurityPolicyInfo>))]
+[JsonSerializable(typeof(SecurityPolicyInfo))]
+[JsonSerializable(typeof(CreateSecurityPolicyRequest))]
+[JsonSerializable(typeof(UpdateSecurityPolicyRequest))]
+[JsonSerializable(typeof(IssueSecretRequest))]
+[JsonSerializable(typeof(IssuedSecret))]
+[JsonSerializable(typeof(List<SecretInfo>))]
 // The real-time hub: the payloads it pushes, and the table name the client sends to subscribe.
 [JsonSerializable(typeof(RealtimeClient.RecordChangedMessage))]
 [JsonSerializable(typeof(RealtimeClient.RecordDeletedMessage))]

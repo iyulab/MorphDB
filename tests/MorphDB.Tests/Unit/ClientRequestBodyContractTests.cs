@@ -449,6 +449,17 @@ public class ClientRequestBodyContractTests
                 Name = "w", Table = "t", Url = "https://example.test/hook", Headers = new Dictionary<string, string> { ["x"] = "y" },
             }, """{"id":"11111111-1111-1111-1111-111111111111","name":"w","table":"t","url":"https://example.test/hook"}""",
                 (c, m) => c.Webhooks.CreateAsync((CreateWebhookRequest)m, cancellationToken)),
+            ("createPolicy", new CreateSecurityPolicyRequest
+            {
+                Name = "p", TableName = "t", PolicyType = PolicyType.Update, Expression = "owner = {{user_id}}",
+            }, """{"id":"11111111-1111-1111-1111-111111111111","name":"p","policyType":"Update","expression":"owner = {{user_id}}"}""",
+                (c, m) => c.Security.CreatePolicyAsync((CreateSecurityPolicyRequest)m, cancellationToken)),
+            ("updatePolicy", new UpdateSecurityPolicyRequest { IsActive = false },
+                """{"id":"11111111-1111-1111-1111-111111111111","name":"p","policyType":"Update","expression":"x"}""",
+                (c, m) => c.Security.UpdatePolicyAsync(Guid.Empty, (UpdateSecurityPolicyRequest)m, cancellationToken)),
+            ("issueSecret", new IssueSecretRequest { Name = "n", Role = "reader", ProjectId = Guid.Parse("11111111-1111-1111-1111-111111111111") },
+                """{"secretId":"11111111-1111-1111-1111-111111111111","name":"n","role":"reader","secret":"s"}""",
+                (c, m) => c.Security.IssueSecretAsync((IssueSecretRequest)m, cancellationToken)),
             ("exportCsv", new CsvExportOptions { Columns = ["a"], Delimiter = ';' },
                 """{"jobId":"11111111-1111-1111-1111-111111111111","tableName":"t","format":"csv","status":"pending"}""",
                 (c, m) => c.Bulk.ExportCsvAsync("t", (CsvExportOptions)m, cancellationToken)),

@@ -76,6 +76,7 @@ await client.Realtime.SubscribeAsync("users", change =>
 - **Real-time Subscriptions**: WebSocket-based change notifications
 - **Bulk Operations**: Import/export data in CSV, JSON, and XLSX formats
 - **Webhooks**: Manage webhook subscriptions for event notifications
+- **Security**: Row-level security policies on a table, and issuing, listing and revoking secrets (with the master secret)
 - **Type-safe API**: Strongly-typed request/response models
 
 ## Configuration
@@ -84,11 +85,18 @@ await client.Realtime.SubscribeAsync("users", change =>
 var options = new MorphDBClientOptions
 {
     ProjectId = projectId,
-    Timeout = TimeSpan.FromSeconds(30),
-    RetryCount = 3,
-    RetryDelay = TimeSpan.FromSeconds(1)
+    Secret = Environment.GetEnvironmentVariable("MORPHDB_SECRET"), // sent as Authorization: Bearer
+    Timeout = TimeSpan.FromSeconds(30)
 };
 ```
+
+`Secret` is presented on every REST call and on the real-time connection. A service started with a
+master secret refuses requests without one (`MorphDBAuthenticationException`); managing secrets
+(`client.Security.IssueSecretAsync` and the rest) needs the master secret itself.
+
+The client does not retry. To retry, build the `HttpClient` yourself — with a resilience handler, for
+instance — and pass it to `new MorphDBClient(httpClient, options)`; `ProjectId` and `Secret` are
+applied to it as well.
 
 ## License
 
