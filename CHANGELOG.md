@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.28.0
+
+A minor, with breaking changes to list pagination. A list no longer counts its rows unless asked:
+`count=true` brings `totalCount` and `totalPages` back, and `hasNext` is answered either way. Under
+load a one-row read through the list route serves about half again as many requests. The .NET client
+changes with it — `QueryRequest.Count`, nullable `TotalCount` — and its next/previous-page flags, which
+were always `false`, now read the server's.
 
 ### Changed
 
