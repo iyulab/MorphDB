@@ -256,13 +256,20 @@ GET /api/data/customers?filter=grade:eq:VIP&orderBy=_created_at:desc&page=1&page
 | `endswith` | String ends with | `file:endswith:.pdf` |
 | `isnull` | Column has no value — takes none | `closedAt:isnull` |
 | `isnotnull` | Column has a value — takes none | `closedAt:isnotnull` |
+| `in` | Value is one of a list — a JSON array | `status:in:["open","held"]` |
+| `notin` | Value is none of a list — a JSON array | `id:notin:[3,7]` |
 
 One `filter` parameter is one condition; repeat the parameter for more, and every condition applies:
 `?filter=score:gte:20&filter=score:lt:40`. Only the first two colons separate, so a value may contain
 colons and commas. `contains`, `startswith` and `endswith` ignore case and match the value literally —
 `label:contains:50%` finds the text "50%", and `_` is an underscore, not a wildcard (`like`/`ilike` are
 the operators that take a pattern). `isnull` and `isnotnull` take no value — `closedAt:isnull` (or
-`closedAt:isnull:`); a value after them is refused with `400`. Numbers and instants are read the same on every server (invariant
+`closedAt:isnull:`); a value after them is refused with `400`. `in` and `notin` take their values as a
+JSON array, whose quoting is what lets a value hold a comma (`label:in:["a,b","c"]`); an empty array
+matches nothing for `in` and everything for `notin`. A list written any other way, a single value, or a
+`null` in the list is refused with `400` (`isnull` is the condition that matches an empty column). The
+query body (`POST /api/data/{table}/query`) and the aggregate filter take the same two operators with a
+JSON array as `value`. Numbers and instants are read the same on every server (invariant
 culture; an instant keeps its offset). A malformed condition is refused with `400` rather than skipped,
 since a dropped condition widens the result — and, for a bulk update or delete, the rows written.
 
@@ -271,8 +278,7 @@ required) and for `PATCH /api/batch/data/{table}`, whose body carries them as a 
 `{ "data": { "grade": "VIP" }, "filter": ["score:gte:90", "status:eq:active"] }`.
 
 An operator outside this list is answered with `400` listing the supported set — it is never
-silently coerced. (`in`/`isnull` were documented here once but no server ever accepted them — on
-this parameter or anywhere else; the operator vocabulary above is the whole set, on every surface.)
+silently coerced; the operator vocabulary above is the whole set, on every surface.
 
 ### Complex query — `POST /api/data/{table}/query`
 

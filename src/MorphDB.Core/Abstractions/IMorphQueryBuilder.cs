@@ -51,9 +51,9 @@ public interface IMorphQuery
 
     /// <summary>
     /// Adds a WHERE condition. <see cref="FilterOperator.IsNull"/> and <see cref="FilterOperator.IsNotNull"/>
-    /// ignore <paramref name="value"/>. <see cref="FilterOperator.In"/>, <see cref="FilterOperator.NotIn"/> and
-    /// <see cref="FilterOperator.Between"/> are refused with <see cref="NotSupportedException"/> — use
-    /// <see cref="WhereIn"/> or <see cref="WhereNotIn"/>.
+    /// ignore <paramref name="value"/>. <see cref="FilterOperator.In"/> and <see cref="FilterOperator.NotIn"/>
+    /// take a list of values (a single value is refused with <see cref="ArgumentException"/>);
+    /// <see cref="FilterOperator.Between"/> is refused with <see cref="NotSupportedException"/>.
     /// </summary>
     IMorphQuery Where(string column, FilterOperator op, object? value);
 

@@ -542,6 +542,7 @@ public sealed class DataController : ControllerBase
             System.Text.Json.JsonValueKind.True => true,
             System.Text.Json.JsonValueKind.False => false,
             System.Text.Json.JsonValueKind.Null => null,
+            System.Text.Json.JsonValueKind.Array => element.EnumerateArray().Select(FilterExpressions.ListElement).ToArray(),
             _ => element.GetRawText()
         };
     }

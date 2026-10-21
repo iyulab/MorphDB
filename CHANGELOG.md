@@ -16,6 +16,12 @@
 
 ### Added
 
+- **`in` and `notin` filters, with their values as a JSON array** — `status:in:["open","held"]` on
+  `GET /api/data/{table}` and the bulk update and delete; `"operator": "in"` with an array `value` in the
+  query body (inside an `or` group too) and the aggregate filter. JSON quoting lets a value hold a comma;
+  a list written any other way, a single value or a `null` is refused with `400`. The .NET client writes a
+  list filter value as that array (it used to write the list's type name), and `IMorphQuery.Where` takes
+  `In`/`NotIn` with a list instead of refusing them.
 - **`ConnectionPoolOptions.MaxAutoPrepare`** — how many statements each connection keeps prepared; 0
   (the default) prepares none. Turn it on only where something keeps the definition cache current, as
   the service's metadata listener does.

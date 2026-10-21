@@ -888,14 +888,36 @@ internal sealed class MorphQuery : IMorphQuery
                 else
                     query.WhereNotNull(column);
                 break;
+            case FilterOperator.In:
+                if (isOr)
+                    query.OrWhereIn(column, ListOf(op, value));
+                else
+                    query.WhereIn(column, ListOf(op, value));
+                break;
+            case FilterOperator.NotIn:
+                if (isOr)
+                    query.OrWhereNotIn(column, ListOf(op, value));
+                else
+                    query.WhereNotIn(column, ListOf(op, value));
+                break;
             default:
                 // A condition this switch does not apply used to be dropped without a word, so the query
-                // came back wider than asked. In, NotIn and Between carry a list or a range and have their
-                // own methods (WhereIn, WhereNotIn); through Where they are refused.
-                throw new NotSupportedException(
-                    $"Where does not take the operator {op}; use the method for it (WhereIn, WhereNotIn) instead.");
+                // came back wider than asked. Between carries a range and is refused here.
+                throw new NotSupportedException($"Where does not take the operator {op}.");
         }
     }
+
+    /// <summary>
+    /// The values an <c>in</c> or <c>not in</c> condition lists. A single value is refused rather than read as
+    /// a list of one: a caller who meant a list and sent text would otherwise get an answer to another question.
+    /// </summary>
+    private static object[] ListOf(FilterOperator op, object? value) => value switch
+    {
+        string or null => throw new ArgumentException(
+            $"The operator {op} takes a list of values, and was given {(value is null ? "none" : "one")}."),
+        System.Collections.IEnumerable list => list.Cast<object>().ToArray(),
+        _ => throw new ArgumentException($"The operator {op} takes a list of values, and was given one."),
+    };
 
     private static string BuildAggregateExpression(AggregateFunction function, string column)
     {

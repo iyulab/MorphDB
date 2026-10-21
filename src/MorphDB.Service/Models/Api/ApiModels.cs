@@ -2342,11 +2342,13 @@ public static class ApiModelExtensions
             "endswith" => FilterOperator.EndsWith,
             "isnull" => FilterOperator.IsNull,
             "isnotnull" => FilterOperator.IsNotNull,
+            "in" => FilterOperator.In,
+            "notin" or "not-in" => FilterOperator.NotIn,
             // An unknown operator used to fall back to Equals silently — the caller's typo became a
             // different query with no signal. Failing loudly is the contract boundary doing its job.
             _ => throw new ArgumentException(
                 $"Unknown filter operator '{op}'. Supported operators: eq, neq, gt, gte, lt, lte, " +
-                "like, ilike, contains, startswith, endswith, isnull, isnotnull.")
+                "like, ilike, contains, startswith, endswith, isnull, isnotnull, in, notin.")
         };
     }
 }

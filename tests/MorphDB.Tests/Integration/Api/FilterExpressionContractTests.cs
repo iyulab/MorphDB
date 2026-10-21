@@ -88,6 +88,62 @@ public class FilterExpressionContractTests
         Int64(result!.Data[0]["n"]).Should().Be(1, "only 'a_b' contains the literal text; 'axb' would match an unescaped wildcard");
     }
 
+    /// <summary>
+    /// <c>in</c> and <c>notin</c> read their values as a JSON array, so a value may hold a comma; a list
+    /// written any other way is refused rather than read as one value.
+    /// </summary>
+    [Theory]
+    [InlineData("name:in:[\"a\",\"c\",\"zz\"]", new[] { "a", "c" })]
+    [InlineData("score:in:[10,40]", new[] { "a", "d" })]
+    [InlineData("label:in:[\"x,y:z\"]", new[] { "e" })]
+    [InlineData("name:in:[]", new string[0])]
+    public async Task In_selects_the_rows_whose_value_is_listed(string filter, string[] expected)
+    {
+        var table = await SeedAsync();
+
+        var names = await QueryNamesAsync(table, filter);
+
+        names.Should().BeEquivalentTo(expected);
+    }
+
+    [Fact]
+    public async Task Notin_combines_with_other_filters()
+    {
+        var table = await SeedAsync();
+
+        var names = await QueryNamesAsync(table, "label:notin:[\"even\",\"odd\"]", "score:isnull");
+
+        names.Should().BeEquivalentTo(["e", "f", "g", "h"]);
+    }
+
+    [Theory]
+    [InlineData("name:in:a,c")]
+    [InlineData("name:in:\"a\"")]
+    [InlineData("name:in:[null]")]
+    [InlineData("name:in:[[\"a\"]]")]
+    public async Task A_list_not_written_as_a_json_array_of_values_is_refused(string filter)
+    {
+        var table = await SeedAsync();
+
+        var response = await _client.GetAsync($"/api/data/{table}?filter={Uri.EscapeDataString(filter)}", TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest, await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task A_query_body_takes_in_with_a_list_inside_an_or_group()
+    {
+        var table = await SeedAsync();
+
+        var response = await _client.PostAsync($"/api/data/{table}/query", new StringContent(
+            """{"filter":{"$type":"group","logic":"or","filters":[{"$type":"condition","column":"name","operator":"in","value":["a","b"]},{"$type":"condition","column":"label","operator":"eq","value":"a_b"}]},"pageSize":100}""",
+            System.Text.Encoding.UTF8, "application/json"), TestContext.Current.CancellationToken);
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+
+        var page = await response.Content.ReadFromJsonAsync<PagedResponse<DataRecordResponse>>(TestContext.Current.CancellationToken);
+        page!.Data.Select(r => r.Data["name"]?.ToString()).Should().BeEquivalentTo(["a", "b", "g"]);
+    }
+
     [Fact]
     public async Task A_malformed_filter_is_refused_not_skipped()
     {

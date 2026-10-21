@@ -159,18 +159,33 @@ public class QueryBuilderTests
     }
 
     [Fact]
-    public async Task Query_WhereIn_through_Where_is_refused_not_dropped()
+    public async Task Query_WhereIn_through_Where_takes_a_list_and_refuses_one_value()
     {
         var (projectId, table) = await SetupTestTableWithDataAsync();
 
-        var act = () => _dataService.Query(projectId)
+        var listed = await _dataService.Query(projectId)
             .From(table.LogicalName)
             .SelectAll()
-            .Where("name", FilterOperator.In, new object[] { "Alice" })
+            .Where("name", FilterOperator.In, new object[] { "Alice", "Charlie" })
+            .ToListAsync(TestContext.Current.CancellationToken);
+        listed.Select(r => r["name"]).Should().BeEquivalentTo(new object[] { "Alice", "Charlie" });
+
+        var orListed = await _dataService.Query(projectId)
+            .From(table.LogicalName)
+            .SelectAll()
+            .Where("name", FilterOperator.Equals, "Bob")
+            .OrWhere("name", FilterOperator.In, new object[] { "Alice" })
+            .ToListAsync(TestContext.Current.CancellationToken);
+        orListed.Select(r => r["name"]).Should().BeEquivalentTo(new object[] { "Alice", "Bob" });
+
+        var single = () => _dataService.Query(projectId)
+            .From(table.LogicalName)
+            .SelectAll()
+            .Where("name", FilterOperator.In, "Alice")
             .ToListAsync(TestContext.Current.CancellationToken);
 
-        // Dropped, the condition would return every row — a wider answer than asked, without a word.
-        await act.Should().ThrowAsync<NotSupportedException>();
+        // Read as a list of one, text meant as a list would answer another question without a word.
+        await single.Should().ThrowAsync<ArgumentException>();
     }
 
     [Fact]

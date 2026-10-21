@@ -9,9 +9,9 @@ namespace MorphDB.Service.Models.Api;
 /// <para>
 /// One expression is one condition, and a request states several by repeating the parameter
 /// (<c>?filter=a:gte:2&amp;filter=a:lt:4</c>) — the form the .NET client has always sent. Each condition
-/// applies. Only the first two colons separate, so a value may contain colons, commas or anything else;
-/// a list packed into one expression is not read, because a comma inside a value could not be told
-/// apart from one between conditions.
+/// applies. Only the first two colons separate, so a value may contain colons, commas or anything else.
+/// <c>in</c> and <c>notin</c> take their values as a JSON array (<c>status:in:["open","held"]</c>) — JSON
+/// quoting is what lets a value hold a comma; a list written any other way is refused.
 /// </para>
 /// <para>
 /// A malformed expression is refused rather than skipped: a condition the server drops makes the answer
@@ -58,7 +58,9 @@ internal static class FilterExpressions
 
             if (parts.Length == 3)
             {
-                return (parts[0].Trim(), op, ParseValue(parts[2].Trim()));
+                return op is FilterOperator.In or FilterOperator.NotIn
+                    ? (parts[0].Trim(), op, ParseList(expression, parts[2].Trim()))
+                    : (parts[0].Trim(), op, ParseValue(parts[2].Trim()));
             }
         }
 
@@ -66,6 +68,48 @@ internal static class FilterExpressions
             $"Invalid filter format: '{expression}'. Expected 'column:operator:value' ('column:isnull' and " +
             "'column:isnotnull' take no value) — one condition per filter parameter; repeat the parameter " +
             "for more. For OData syntax, use the /odata endpoint with $filter instead.");
+    }
+
+    private static object[] ParseList(string expression, string text)
+    {
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(text);
+            if (document.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                return [.. document.RootElement.EnumerateArray().Select(ListElement)];
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+        }
+
+        throw new ArgumentException(
+            $"Invalid filter format: '{expression}'. The values of in and notin are a JSON array — " +
+            "write 'status:in:[\"open\",\"held\"]' or 'id:in:[1,2]'.");
+    }
+
+    /// <summary>
+    /// One value of an <c>in</c> list, as JSON writes it: a number is a number and a boolean a boolean; a
+    /// string is read as a single value's text is (<see cref="ParseValue"/>) only where JSON has no form of
+    /// its own — an instant or an id — and stays a string otherwise. <c>null</c> is refused: <c>in</c>
+    /// never matches an empty column, and <c>isnull</c> is the condition that does.
+    /// </summary>
+    public static object ListElement(System.Text.Json.JsonElement element) => element.ValueKind switch
+    {
+        System.Text.Json.JsonValueKind.Number => element.TryGetInt64(out var integral) ? integral : element.GetDecimal(),
+        System.Text.Json.JsonValueKind.True => true,
+        System.Text.Json.JsonValueKind.False => false,
+        System.Text.Json.JsonValueKind.String => ListText(element.GetString()!),
+        _ => throw new ArgumentException(
+            $"A list of values holds numbers, strings and booleans, and this one holds a JSON {element.ValueKind.ToString().ToLowerInvariant()}; " +
+            "an empty column is matched with isnull."),
+    };
+
+    private static object ListText(string text)
+    {
+        var typed = ParseValue(text);
+        return typed is Guid or DateTimeOffset ? typed : text;
     }
 
     /// <summary>

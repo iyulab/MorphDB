@@ -221,17 +221,54 @@ public sealed class DataClient
     /// <summary>
     /// A filter value as the server reads it back: numbers and instants in the invariant culture (an
     /// instant round-trips with its offset), so the query means the same whatever culture the caller
-    /// runs in.
+    /// runs in. A list — the values of <see cref="FilterOperator.In"/> or <see cref="FilterOperator.NotIn"/> —
+    /// is written as a JSON array, the form the server reads a list in.
     /// </summary>
     internal static string FormatFilterValue(object? value) => value switch
     {
         null => string.Empty,
+        System.Collections.IEnumerable list and not string => FormatFilterList(list),
         DateTimeOffset instant => instant.ToString("O", CultureInfo.InvariantCulture),
         DateTime dateTime => dateTime.ToString("O", CultureInfo.InvariantCulture),
         bool flag => flag ? "true" : "false",
         IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture),
         _ => value.ToString() ?? string.Empty,
     };
+
+    private static string FormatFilterList(System.Collections.IEnumerable list)
+    {
+        var buffer = new System.Buffers.ArrayBufferWriter<byte>();
+        // Escaped for a URL by the caller, not for HTML: the relaxed encoder keeps a value readable.
+        using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }))
+        {
+            writer.WriteStartArray();
+            foreach (var item in list)
+            {
+                switch (item)
+                {
+                    case null:
+                        writer.WriteNullValue();
+                        break;
+                    case bool flag:
+                        writer.WriteBooleanValue(flag);
+                        break;
+                    case byte or sbyte or short or ushort or int or uint or long or ulong:
+                        writer.WriteNumberValue(Convert.ToInt64(item, CultureInfo.InvariantCulture));
+                        break;
+                    case float or double or decimal:
+                        writer.WriteNumberValue(Convert.ToDecimal(item, CultureInfo.InvariantCulture));
+                        break;
+                    default:
+                        writer.WriteStringValue(FormatFilterValue(item));
+                        break;
+                }
+            }
+
+            writer.WriteEndArray();
+        }
+
+        return Encoding.UTF8.GetString(buffer.WrittenSpan);
+    }
 
     internal static string GetOperatorString(FilterOperator op) => op switch
     {
