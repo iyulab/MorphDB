@@ -10,6 +10,7 @@
 
 ### Changed
 
+- Dependencies: OpenTelemetry 1.20.1 (Prometheus exporter 1.20.1-beta.1), HotChocolate 16.6.9, StackExchange.Redis 3.4.5, Swashbuckle.AspNetCore 10.3.1.
 - **The service keeps each connection's most used statements prepared** (`Max Auto Prepare=20`), so a
   read run again is not planned again. The pool's reset on return keeps prepared statements, and the
   security context is still written on every open. Under load, beside PostgREST on the same machine, a
