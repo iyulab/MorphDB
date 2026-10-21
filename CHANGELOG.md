@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.29.0
+
+A minor that fixes three wrong answers and fills gaps in the .NET client. A query body's nested filter
+group kept no parentheses, so `a AND (b OR c)` matched rows `a` excludes; a seed counted every record as
+inserted; and the client's `Data.UpsertAsync` sent a request no route answers. An upsert that creates its
+row now answers `201`. `in` and `notin` filters arrive, and the client gains indexes, bulk update, delete
+and seed, and filter trees. Embedders of `MorphDB.Core` read `UpsertAsync` as an `UpsertResult`.
 
 ### Fixed
 
