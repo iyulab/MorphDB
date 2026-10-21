@@ -13,6 +13,16 @@
   "RATE_LIMIT_EXCEEDED"}`, in OData's error shape on OData routes — and `RATE_LIMIT_EXCEEDED` is in the
   error table. The body's `retryAfter` member is gone; the `Retry-After` header carries the seconds.
 
+### Fixed
+
+- A per-project limit set in configuration (`RateLimiting__ProjectLimits__<project id>`) is applied. The
+  setting was keyed by `Guid`, which configuration does not bind, so it was silently empty. It is now
+  keyed by the id as written (`Dictionary<string, int>` — a code-side caller writes the id as a string), and a key that is not a project id stops the service at start.
+
+### Removed
+
+- `RateLimitConfig.EndpointMultipliers` — nothing read it.
+
 ## 0.26.1
 
 A patch. A record read and a real-time change cost fewer statements, and a real-time change to one

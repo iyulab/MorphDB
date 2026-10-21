@@ -29,6 +29,7 @@ public sealed class MemoryRateLimiter : IRateLimiter, IDisposable
 {
     private readonly ConcurrentDictionary<string, TokenBucket> _buckets = new();
     private readonly RateLimitConfig _config;
+    private readonly Dictionary<Guid, int> _projectLimits;
     private readonly ILogger<MemoryRateLimiter> _logger;
     private readonly Timer _cleanupTimer;
 
@@ -40,6 +41,7 @@ public sealed class MemoryRateLimiter : IRateLimiter, IDisposable
     {
         _config = config.Value;
         _logger = logger;
+        _projectLimits = ProjectLimitsById(_config.ProjectLimits);
         _cleanupTimer = new Timer(CleanupExpiredBuckets, null, CleanupInterval, CleanupInterval);
     }
 
@@ -112,7 +114,7 @@ public sealed class MemoryRateLimiter : IRateLimiter, IDisposable
             var projectIdStr = key["project:".Length..];
             if (Guid.TryParse(projectIdStr.Split(':')[0], out var projectId))
             {
-                if (_config.ProjectLimits.TryGetValue(projectId, out var projectLimit))
+                if (_projectLimits.TryGetValue(projectId, out var projectLimit))
                 {
                     limit = projectLimit;
                 }
@@ -120,6 +122,28 @@ public sealed class MemoryRateLimiter : IRateLimiter, IDisposable
         }
 
         return new TokenBucket(limit, _config.DefaultWindow);
+    }
+
+    /// <summary>
+    /// The configured per-project limits by parsed id, so a key written in any GUID form matches the
+    /// project a request names. A key that is not an id is a configuration mistake that would
+    /// otherwise limit nothing, so it stops the start.
+    /// </summary>
+    private static Dictionary<Guid, int> ProjectLimitsById(Dictionary<string, int> configured)
+    {
+        var byId = new Dictionary<Guid, int>();
+        foreach (var (key, limit) in configured)
+        {
+            if (!Guid.TryParse(key, out var id))
+            {
+                throw new InvalidOperationException(
+                    $"RateLimiting:ProjectLimits has a key that is not a project id: '{key}'.");
+            }
+
+            byId[id] = limit;
+        }
+
+        return byId;
     }
 
     private void CleanupExpiredBuckets(object? state)

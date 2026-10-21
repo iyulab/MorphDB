@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using MorphDB.Core.Abstractions;
@@ -33,6 +34,45 @@ public sealed class RateLimitMiddlewareTests
         }
 
         return (last.Response.StatusCode, last.Response.Headers, reached);
+    }
+
+    [Fact]
+    public void Settings_bind_from_configuration_including_a_limit_per_project()
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["RateLimiting:Enabled"] = "true",
+            ["RateLimiting:DefaultLimit"] = "50",
+            ["RateLimiting:DefaultWindow"] = "00:00:10",
+            [$"RateLimiting:ProjectLimits:{Project}"] = "5",
+        }).Build();
+
+        var config = new RateLimitConfig();
+        configuration.GetSection("RateLimiting").Bind(config);
+
+        Assert.True(config.Enabled);
+        Assert.Equal(50, config.DefaultLimit);
+        Assert.Equal(TimeSpan.FromSeconds(10), config.DefaultWindow);
+        Assert.Equal(5, config.ProjectLimits[Project.ToString()]);
+    }
+
+    [Fact]
+    public async Task A_limit_set_for_one_project_replaces_the_default_for_it()
+    {
+        var config = new RateLimitConfig { Enabled = true, DefaultLimit = 100, ProjectLimits = { [Project.ToString("B").ToUpperInvariant()] = 1 } };
+
+        var (status, _, reached) = await SendAsync(config, 2, Project);
+
+        Assert.Equal(StatusCodes.Status429TooManyRequests, status);
+        Assert.Equal(1, reached);
+    }
+
+    [Fact]
+    public void A_project_limit_keyed_by_something_other_than_an_id_stops_the_start()
+    {
+        var config = new RateLimitConfig { Enabled = true, ProjectLimits = { ["my-app"] = 5 } };
+
+        Assert.Throws<InvalidOperationException>(() => new MemoryRateLimiter(Options.Create(config), NullLogger<MemoryRateLimiter>.Instance));
     }
 
     [Fact]

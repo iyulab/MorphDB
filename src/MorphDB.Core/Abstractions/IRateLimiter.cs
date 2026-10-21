@@ -143,16 +143,12 @@ public sealed class RateLimitConfig
     public TimeSpan DefaultWindow { get; set; } = TimeSpan.FromMinutes(1);
 
     /// <summary>
-    /// Per-project rate limit overrides.
-    /// Key: project ID, Value: requests per window.
+    /// Per-project rate limit overrides. Key: the project id as written (any form a GUID parses from,
+    /// so <c>RateLimiting__ProjectLimits__&lt;id&gt;</c> configures one); value: requests per window. Keyed
+    /// by string because configuration binds no other dictionary key — a <see cref="Guid"/>-keyed one
+    /// was silently left empty. A key that is not a project id is refused when the limiter starts.
     /// </summary>
-    public Dictionary<Guid, int> ProjectLimits { get; set; } = new();
-
-    /// <summary>
-    /// Per-endpoint rate limit multipliers.
-    /// Key: endpoint pattern, Value: multiplier (e.g., 0.5 for half rate).
-    /// </summary>
-    public Dictionary<string, double> EndpointMultipliers { get; set; } = new();
+    public Dictionary<string, int> ProjectLimits { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Whether to include rate limit headers in responses.

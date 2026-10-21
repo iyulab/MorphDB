@@ -1341,6 +1341,7 @@ every counted response carries `X-RateLimit-Limit`, `X-RateLimit-Remaining` and 
 | `RateLimiting__Enabled` | `false` | Turns the quota on |
 | `RateLimiting__DefaultLimit` | `1000` | Requests per window, per project |
 | `RateLimiting__DefaultWindow` | `00:01:00` | The window |
+| `RateLimiting__ProjectLimits__<project id>` | — | Another limit for one project. A key that is not a project id stops the service at start |
 | `RateLimiting__IncludeHeaders` | `true` | The `X-RateLimit-*` headers |
 
 It is not a defence against a client flooding the service: callers of one project share a bucket, so
