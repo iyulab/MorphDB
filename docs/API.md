@@ -1498,6 +1498,29 @@ answering.
 
 ---
 
+## Audit log
+
+Every request the service answers for a project is recorded in that project's audit log (health and
+metrics probes excepted).
+
+```yaml
+GET    /api/projects/{projectId}/audit/logs          # A page of entries, newest first
+GET    /api/projects/{projectId}/audit/logs/{logId}  # One entry
+GET    /api/projects/{projectId}/audit/stats         # Counts by category, severity, actor and action
+```
+
+| Query parameter (`logs`) | Meaning |
+|---|---|
+| `category` | `auth` · `data` · `schema` · `admin` · `security` · `system` — the names entries carry (the numbers 0–5 are read too) |
+| `minSeverity` | `debug` · `info` · `warning` · `error` · `critical` — this one and the ones above it (or 0–4) |
+| `actorId` · `resourceType` · `resourceId` · `action` | Exact match |
+| `from` · `to` | ISO 8601 instants |
+| `searchText` | Text to look for in the entry |
+| `page` · `pageSize` | From 1 · 1 to 100 (default 1 · 50) |
+| `orderBy` · `descending` | Default `timestamp` · `true` |
+
+`stats` takes `from` and `to`. A secret confined to one project reads only that project's log.
+
 ## Audit retention
 
 A project decides how much of its own audit history it keeps, through its settings:

@@ -77,6 +77,7 @@ await client.Realtime.SubscribeAsync("users", change =>
 - **Real-time Subscriptions**: WebSocket-based change notifications
 - **Bulk Operations**: Import/export data in CSV, JSON, and XLSX formats
 - **Webhooks**: Manage webhook subscriptions for event notifications
+- **Audit and history**: Read a project's audit log and statistics, and a table's schema change history
 - **Security**: Row-level security policies on a table, and issuing, listing and revoking secrets (with the master secret)
 - **Type-safe API**: Strongly-typed request/response models
 

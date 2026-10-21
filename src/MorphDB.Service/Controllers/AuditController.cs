@@ -64,12 +64,8 @@ public sealed class AuditController : ControllerBase
 
         var query = new AuditLogQuery
         {
-            Category = parameters.Category.HasValue
-                ? (AuditCategory)parameters.Category.Value
-                : null,
-            MinSeverity = parameters.MinSeverity.HasValue
-                ? (AuditSeverity)parameters.MinSeverity.Value
-                : null,
+            Category = parameters.Category,
+            MinSeverity = parameters.MinSeverity,
             ActorId = parameters.ActorId,
             ResourceType = parameters.ResourceType,
             ResourceId = parameters.ResourceId,
@@ -153,14 +149,14 @@ public sealed class AuditController : ControllerBase
 public sealed class AuditLogQueryParameters
 {
     /// <summary>
-    /// Filter by category (0=Auth, 1=Data, 2=Schema, 3=Admin, 4=Security, 5=System).
+    /// Filter by category, by name as entries carry it (`data`) or by number (0=Auth, 1=Data, 2=Schema, 3=Admin, 4=Security, 5=System).
     /// </summary>
-    public int? Category { get; set; }
+    public AuditCategory? Category { get; set; }
 
     /// <summary>
-    /// Filter by minimum severity (0=Debug, 1=Info, 2=Warning, 3=Error, 4=Critical).
+    /// Filter by minimum severity, by name (`warning`) or by number (0=Debug, 1=Info, 2=Warning, 3=Error, 4=Critical).
     /// </summary>
-    public int? MinSeverity { get; set; }
+    public AuditSeverity? MinSeverity { get; set; }
 
     /// <summary>
     /// Filter by actor ID.

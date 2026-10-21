@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Http.Json;
 using MorphDB.Client.Models;
 
@@ -152,5 +153,34 @@ public sealed class SchemaClient
     {
         var response = await _httpClient.DeleteAsync($"/api/schema/relations/{relationId}", cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
+    }
+
+    /// <summary>
+    /// The recorded changes to a table's schema, newest first — up to <paramref name="limit"/> (1 to 500;
+    /// the service's default is 50).
+    /// </summary>
+    public async Task<IReadOnlyList<SchemaChange>> GetTableHistoryAsync(string tableName, int? limit = null, CancellationToken cancellationToken = default)
+    {
+        var query = limit is { } l ? string.Create(CultureInfo.InvariantCulture, $"?limit={l}") : string.Empty;
+        var response = await _httpClient.GetAsync($"/api/schema/tables/{Uri.EscapeDataString(tableName)}/history{query}", cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.ListSchemaChange, cancellationToken) ?? [];
+    }
+
+    /// <summary>
+    /// The recorded schema changes across the project's tables, newest first — a page of
+    /// <paramref name="limit"/> (1 to 500; the service's default is 50) after <paramref name="offset"/>.
+    /// </summary>
+    public async Task<IReadOnlyList<SchemaChange>> GetChangelogAsync(int? limit = null, int? offset = null, CancellationToken cancellationToken = default)
+    {
+        var parts = new List<string>();
+        if (limit is { } l)
+            parts.Add(string.Create(CultureInfo.InvariantCulture, $"limit={l}"));
+        if (offset is { } o)
+            parts.Add(string.Create(CultureInfo.InvariantCulture, $"offset={o}"));
+        var query = parts.Count == 0 ? string.Empty : "?" + string.Join("&", parts);
+        var response = await _httpClient.GetAsync($"/api/schema/changelog{query}", cancellationToken);
+        await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.ListSchemaChange, cancellationToken) ?? [];
     }
 }
