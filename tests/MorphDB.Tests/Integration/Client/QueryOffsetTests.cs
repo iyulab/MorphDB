@@ -47,6 +47,7 @@ public class QueryOffsetTests(ApiIntegrationFixture fixture)
             OrderBy = [new OrderBy { Column = "v" }],
             PageSize = 2,
             Offset = 1,
+            Count = true,
         }, ct);
 
         Assert.Equal([2, 3], page.Data.Select(r => Convert.ToInt32(r.Data["v"], CultureInfo.InvariantCulture)));

@@ -41,12 +41,32 @@ public sealed record PaginationInfo
     public int PageSize { get; init; }
 
     /// <summary>The rows skipped, when the request asked by offset rather than by page; absent otherwise.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? Offset { get; init; }
 
-    public long TotalCount { get; init; }
-    public int TotalPages => PageSize > 0 ? (int)Math.Ceiling((double)TotalCount / PageSize) : 0;
-    public bool HasNext => Offset is { } skipped ? skipped + PageSize < TotalCount : Page < TotalPages;
+    /// <summary>
+    /// The rows the list matches, when the request asked for it (<c>count</c>); absent otherwise.
+    /// Counting is a second statement over every matching row, so a list counts only when asked — as
+    /// PostgREST (<c>Prefer: count=exact</c>) and OData (<c>$count=true</c>) do.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public long? TotalCount { get; init; }
+
+    /// <summary>The pages <see cref="TotalCount"/> fills; absent when the list was not counted.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? TotalPages => TotalCount is { } total && PageSize > 0 ? (int)Math.Ceiling((double)total / PageSize) : null;
+
+    /// <summary>Whether rows follow this page — known without a count, from reading one row past it (<see cref="Probe"/>).</summary>
+    public bool HasNext { get; init; }
+
     public bool HasPrevious => Offset is { } skipped ? skipped > 0 : Page > 1;
+
+    /// <summary>
+    /// A page read one row past its size: the page, and whether that extra row was there. A list asks
+    /// for <c>pageSize + 1</c> rows so it knows <see cref="HasNext"/> without counting.
+    /// </summary>
+    public static (List<T> Rows, bool More) Probe<T>(IReadOnlyList<T> rows, int pageSize)
+        => rows.Count > pageSize ? ([.. rows.Take(pageSize)], true) : ([.. rows], false);
 
     /// <summary>
     /// The rows to skip for a request: its offset when it gives one, else the start of its page. An
@@ -1040,6 +1060,13 @@ public sealed record DataQueryParameters
     /// (<c>_deleted_at</c> set). Default <c>false</c>: a list shows the rows that exist.
     /// </summary>
     public bool IncludeDeleted { get; init; }
+
+    /// <summary>
+    /// Count the rows the list matches and return the number as <c>pagination.totalCount</c> (and
+    /// <c>totalPages</c>). Default <c>false</c>: the list does not count — a second statement over every
+    /// matching row — and <c>hasNext</c> still says whether more rows follow.
+    /// </summary>
+    public bool Count { get; init; }
 }
 
 /// <summary>
@@ -1740,6 +1767,9 @@ public sealed record ProjectQueryParameters
     /// Page size (default: 50, max: 100).
     /// </summary>
     public int PageSize { get; init; } = 50;
+
+    /// <summary>Count the projects the list matches, as on the data routes. Default <c>false</c>.</summary>
+    public bool Count { get; init; }
 }
 
 #endregion
@@ -2042,6 +2072,9 @@ public sealed record ComplexQueryApiRequest
     /// On a table created with soft delete, also return the rows a delete has marked. Default <c>false</c>.
     /// </summary>
     public bool IncludeDeleted { get; init; }
+
+    /// <summary>Count the rows the query matches, as on the <c>GET</c> route. Default <c>false</c>.</summary>
+    public bool Count { get; init; }
 }
 
 /// <summary>

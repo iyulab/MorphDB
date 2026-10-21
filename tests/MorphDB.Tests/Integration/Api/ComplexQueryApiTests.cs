@@ -93,7 +93,8 @@ public class ComplexQueryApiTests
               "select": ["name", "amount"],
               "orderBy": ["amount:desc"],
               "page": 1,
-              "pageSize": 10
+              "pageSize": 10,
+              "count": true
             }
             """);
 

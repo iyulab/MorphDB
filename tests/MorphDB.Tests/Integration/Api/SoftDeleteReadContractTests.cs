@@ -61,10 +61,10 @@ public class SoftDeleteReadContractTests
 
     private async Task<(IReadOnlyList<Guid> Ids, long Total)> ListAsync(string url, CancellationToken ct)
     {
-        var response = await _client.GetAsync(url, ct);
+        var response = await _client.GetAsync(url + (url.Contains('?', StringComparison.Ordinal) ? "&" : "?") + "count=true", ct);
         response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(ct));
         var page = (await response.Content.ReadFromJsonAsync<PagedResponse<DataRecordResponse>>(ct))!;
-        return ([.. page.Data.Select(r => r.Id)], page.Pagination.TotalCount);
+        return ([.. page.Data.Select(r => r.Id)], page.Pagination.TotalCount!.Value);
     }
 
     [Fact]
@@ -120,7 +120,7 @@ public class SoftDeleteReadContractTests
         var ct = TestContext.Current.CancellationToken;
         var r = await CreateRowsAsync(ct);
 
-        var response = await _client.GetAsync($"/api/data/{r.Table}?includeDeleted=true", ct);
+        var response = await _client.GetAsync($"/api/data/{r.Table}?includeDeleted=true&count=true", ct);
         response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync(ct));
         using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
         var marks = body.RootElement.GetProperty("data").EnumerateArray()

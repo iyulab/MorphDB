@@ -113,7 +113,7 @@ public class DataApiTests
         }
 
         // Act
-        var response = await _client.GetAsync($"/api/data/{tableName}", TestContext.Current.CancellationToken);
+        var response = await _client.GetAsync($"/api/data/{tableName}?count=true", TestContext.Current.CancellationToken);
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);

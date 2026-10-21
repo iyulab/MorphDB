@@ -344,7 +344,7 @@ public class SecretEnforcementTests
         await CreateProjectAsync(master);
         var confined = EnforcedClient(await IssueAsync(master, "confined-list", "reader", _fixture.Api.ProjectId));
 
-        var page = await confined.GetFromJsonAsync<PagedResponse<ProjectApiResponse>>("/api/projects", TestContext.Current.CancellationToken);
+        var page = await confined.GetFromJsonAsync<PagedResponse<ProjectApiResponse>>("/api/projects?count=true", TestContext.Current.CancellationToken);
 
         page!.Data.Select(p => p.Id).Should().Equal(_fixture.Api.ProjectId);
         page.Pagination.TotalCount.Should().Be(1);

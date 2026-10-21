@@ -124,14 +124,9 @@ public sealed class DataController : ControllerBase
                 morphQuery = OrderExpressions.Apply(morphQuery, query.OrderBy);
             }
 
-            // Get total count for pagination
-            var totalCount = await morphQuery.CountAsync(cancellationToken);
-
-            // Apply pagination
-            morphQuery = morphQuery.Limit(pageSize).Offset(skip);
-
-            // Execute query
-            var results = await morphQuery.ToListAsync(cancellationToken);
+            // Count only when asked; the page is read one row past its size to know whether more follow
+            long? totalCount = query.Count ? await morphQuery.CountAsync(cancellationToken) : null;
+            var (results, more) = PaginationInfo.Probe(await morphQuery.Limit(pageSize + 1).Offset(skip).ToListAsync(cancellationToken), pageSize);
 
             var records = results.Select(r => new DataRecordResponse
             {
@@ -147,7 +142,8 @@ public sealed class DataController : ControllerBase
                     Page = query.Offset is null ? page : PaginationInfo.PageOf(skip, pageSize),
                     PageSize = pageSize,
                     Offset = query.Offset,
-                    TotalCount = totalCount
+                    TotalCount = totalCount,
+                    HasNext = more
                 }
             };
 
@@ -237,10 +233,8 @@ public sealed class DataController : ControllerBase
                 morphQuery = OrderExpressions.Apply(morphQuery, string.Join(",", request.OrderBy));
             }
 
-            var totalCount = await morphQuery.CountAsync(cancellationToken);
-            morphQuery = morphQuery.Limit(pageSize).Offset(skip);
-
-            var results = await morphQuery.ToListAsync(cancellationToken);
+            long? totalCount = request.Count ? await morphQuery.CountAsync(cancellationToken) : null;
+            var (results, more) = PaginationInfo.Probe(await morphQuery.Limit(pageSize + 1).Offset(skip).ToListAsync(cancellationToken), pageSize);
             var records = results.Select(r => new DataRecordResponse
             {
                 Id = SystemColumns.RequireRecordId(r),
@@ -255,7 +249,8 @@ public sealed class DataController : ControllerBase
                     Page = request.Offset is null ? page : PaginationInfo.PageOf(skip, pageSize),
                     PageSize = pageSize,
                     Offset = request.Offset,
-                    TotalCount = totalCount
+                    TotalCount = totalCount,
+                    HasNext = more
                 }
             });
         }

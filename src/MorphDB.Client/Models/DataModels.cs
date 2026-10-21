@@ -44,6 +44,14 @@ public sealed class QueryRequest
     /// (the release after 0.20.0); an earlier one ignores it.
     /// </summary>
     public bool IncludeDeleted { get; init; }
+
+    /// <summary>
+    /// Count the rows the query matches (<see cref="PaginationInfo.TotalCount"/>). Default <c>false</c>:
+    /// the server does not count — a second statement over every matching row — and
+    /// <see cref="PaginationInfo.HasNext"/> still says whether more rows follow. Needs a 0.28.0 server;
+    /// an earlier one always counts.
+    /// </summary>
+    public bool Count { get; init; }
 }
 
 /// <summary>
@@ -197,24 +205,24 @@ public sealed class PaginationInfo
     public int? Offset { get; init; }
 
     /// <summary>
-    /// Total number of items.
+    /// The rows the query matches, when it asked for the count (<see cref="QueryRequest.Count"/>); null otherwise.
     /// </summary>
-    public long TotalCount { get; init; }
+    public long? TotalCount { get; init; }
 
     /// <summary>
-    /// Total number of pages.
+    /// The pages <see cref="TotalCount"/> fills; null when the query was not counted.
     /// </summary>
-    public int TotalPages { get; init; }
+    public int? TotalPages { get; init; }
 
     /// <summary>
-    /// Whether there is a next page.
+    /// Whether rows follow this page — answered with or without a count.
     /// </summary>
-    public bool HasNextPage { get; init; }
+    public bool HasNext { get; init; }
 
     /// <summary>
-    /// Whether there is a previous page.
+    /// Whether rows precede this page.
     /// </summary>
-    public bool HasPreviousPage { get; init; }
+    public bool HasPrevious { get; init; }
 }
 
 /// <summary>

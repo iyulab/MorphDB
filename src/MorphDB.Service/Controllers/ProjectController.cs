@@ -152,8 +152,8 @@ public sealed class ProjectController : ControllerBase
         ProjectControllerLogs.ListingProjects(_logger, parameters.Status);
 
         var pageSize = Math.Clamp(parameters.PageSize, 1, 100);
-        var page = Math.Max(1, parameters.Page);
-        var offset = (page - 1) * pageSize;
+        var pageNumber = Math.Max(1, parameters.Page);
+        var offset = (pageNumber - 1) * pageSize;
 
         ProjectStatus? status = null;
         if (!string.IsNullOrEmpty(parameters.Status) &&
@@ -163,35 +163,44 @@ public sealed class ProjectController : ControllerBase
         }
 
         IReadOnlyList<Project> projects;
-        int totalCount;
+        long? totalCount = null;
         if (_access.ConfinedTo is { } confinedTo)
         {
             // A confined secret sees the one project it is confined to — listing is not addressing
             // another project, so it narrows rather than refuses.
             var own = await _projectService.GetProjectAsync(confinedTo, cancellationToken);
             var visible = own is not null && (status is null || own.Status == status) ? new[] { own } : [];
-            projects = visible.Skip(offset).Take(pageSize).ToList();
-            totalCount = visible.Length;
+            projects = visible.Skip(offset).Take(pageSize + 1).ToList();
+            if (parameters.Count)
+            {
+                totalCount = visible.Length;
+            }
         }
         else
         {
             projects = await _projectService.ListProjectsAsync(
                 status,
                 offset,
-                pageSize,
+                pageSize + 1,
                 cancellationToken);
 
-            totalCount = await _projectService.CountProjectsAsync(status, cancellationToken);
+            if (parameters.Count)
+            {
+                totalCount = await _projectService.CountProjectsAsync(status, cancellationToken);
+            }
         }
+
+        var (page, more) = PaginationInfo.Probe(projects, pageSize);
 
         var response = new PagedResponse<ProjectApiResponse>
         {
-            Data = projects.Select(ProjectApiResponse.FromModel).ToList(),
+            Data = page.Select(ProjectApiResponse.FromModel).ToList(),
             Pagination = new PaginationInfo
             {
-                Page = page,
+                Page = pageNumber,
                 PageSize = pageSize,
                 TotalCount = totalCount,
+                HasNext = more,
             }
         };
 

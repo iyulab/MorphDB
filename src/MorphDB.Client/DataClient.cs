@@ -212,6 +212,9 @@ public sealed class DataClient
         if (request.IncludeDeleted)
             parts.Add("includeDeleted=true");
 
+        if (request.Count)
+            parts.Add("count=true");
+
         return parts.Count > 0 ? "?" + string.Join("&", parts) : string.Empty;
     }
 

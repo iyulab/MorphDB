@@ -237,6 +237,7 @@ GET /api/data/customers?filter=grade:eq:VIP&orderBy=_created_at:desc&page=1&page
 | `page` | Page number | `1` |
 | `pageSize` | Records per page (max 1000) | `20` |
 | `offset` | Rows to skip, instead of `page` — a slice that need not start on a page boundary. Refused (`400`) below zero or beside a `page` other than 1; the response's `pagination` then carries `offset` | `5` |
+| `count` | Also count the rows the list matches: the response's `pagination` then carries `totalCount` and `totalPages`. Without it the list does not count — counting is a second statement over every matching row — and `hasNext` still says whether more rows follow (the page is read one row past its size), as PostgREST (`Prefer: count=exact`) and OData (`$count=true`) count only when asked | `true` |
 
 #### Filter Operators
 
@@ -308,9 +309,10 @@ X-Project-Id: <project id>
 - `page` / `pageSize` — 1-based; `pageSize` is clamped to the server maximum.
 - `offset` — rows to skip instead of `page`, as on the `GET` route.
 - `includeDeleted` — `true` to also return soft-deleted rows, as on the `GET` route.
+- `count` — `true` to also count the matching rows, as on the `GET` route.
 
 The response is the same paged envelope as `GET /api/data/{table}`:
-`{ "data": [...], "pagination": { "page", "pageSize", "offset", "totalCount", "totalPages", "hasNext", "hasPrevious" } }` — `offset` only when the request gave one.
+`{ "data": [...], "pagination": { "page", "pageSize", "offset", "totalCount", "totalPages", "hasNext", "hasPrevious" } }` — `offset` only when the request gave one, `totalCount` and `totalPages` only when it gave `"count": true`.
 These examples run verbatim in the contract suite (`ComplexQueryApiTests`) — if the wire shape
 drifts, the suite fails before the docs lie.
 

@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **A list counts its rows only when asked.** `GET /api/data/{table}`, `POST /api/data/{table}/query`
+  and `GET /api/projects` ran a second statement on every request to count every matching row, and
+  most reads never look at the number. Ask with `count=true` (`"count": true` in the query body) and
+  `pagination` carries `totalCount` and `totalPages` as before; without it both are absent. `hasNext`
+  is answered either way — the page is read one row past its size. PostgREST and OData count only when
+  asked too. `pagination.offset` is now absent when the request gave none, as documented (it was
+  written as `null`).
+- **.NET client** — `QueryRequest.Count` asks for the count; `PaginationInfo.TotalCount` and
+  `TotalPages` are null when it was not asked. `PaginationInfo.HasNextPage` and `HasPreviousPage` are
+  renamed `HasNext` and `HasPrevious`, the names the server writes — under the old names they were
+  never read and were always `false`.
+
 ## 0.27.0
 
 A minor, with breaking changes to rate limiting. Out of the box the service no longer answers `429`:

@@ -100,7 +100,7 @@ public class BulkJobCancellationContractTests
 
     private async Task<long> RowCountAsync(string table)
     {
-        var response = await _client.GetAsync($"/api/data/{table}?pageSize=1", Ct);
+        var response = await _client.GetAsync($"/api/data/{table}?pageSize=1&count=true", Ct);
         return JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct)).RootElement.GetProperty("pagination").GetProperty("totalCount").GetInt64();
     }
 

@@ -40,7 +40,7 @@ public class ProjectApiTests
 
         try
         {
-            var listResponse = await _client.GetAsync("/api/projects?page=1&pageSize=1", TestContext.Current.CancellationToken);
+            var listResponse = await _client.GetAsync("/api/projects?page=1&pageSize=1&count=true", TestContext.Current.CancellationToken);
             listResponse.EnsureSuccessStatusCode();
 
             var page = await listResponse.Content.ReadFromJsonAsync<PagedResponse<ProjectApiResponse>>(TestContext.Current.CancellationToken);
