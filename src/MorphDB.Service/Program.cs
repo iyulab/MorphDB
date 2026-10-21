@@ -54,6 +54,9 @@ try
     builder.Services.AddMorphDbNpgsql(connectionString, options =>
     {
         options.RedisConnectionString = builder.Configuration.GetConnectionString("Redis");
+        // The metadata listener keeps the definition cache current, which is what lets a connection keep
+        // its statements prepared: a read is then not planned again on every request.
+        options.ConnectionPoolOptions.MaxAutoPrepare = 20;
     });
 
     // Add CORS for development (allows Electron dev server and other local clients)

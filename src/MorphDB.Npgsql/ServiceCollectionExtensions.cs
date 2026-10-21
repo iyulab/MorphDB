@@ -52,7 +52,8 @@ public static partial class ServiceCollectionExtensions
             ConnectionPruningInterval = (int)options.ConnectionPoolOptions.ConnectionPruningInterval.TotalSeconds,
             Timeout = (int)options.ConnectionPoolOptions.ConnectionTimeout.TotalSeconds,
             CommandTimeout = (int)options.ConnectionPoolOptions.CommandTimeout.TotalSeconds,
-            Pooling = options.ConnectionPoolOptions.Enabled
+            Pooling = options.ConnectionPoolOptions.Enabled,
+            MaxAutoPrepare = options.ConnectionPoolOptions.MaxAutoPrepare,
         };
 
         // Register NpgsqlDataSource with optimized settings
@@ -76,7 +77,18 @@ public static partial class ServiceCollectionExtensions
         // Register repositories. Definitions are cached only once something keeps the cache current
         // (MetadataCache.Start) — the service's metadata listener; an embedder that runs none reads every
         // definition from the database.
-        services.AddSingleton<MetadataCache>();
+        // A prepared statement is planned against a table's columns as they were; when a definition changes,
+        // the pool forgets its statements with the cache, or each connection holding one fails it once.
+        services.AddSingleton(_ =>
+        {
+            var cache = new MetadataCache();
+            if (options.ConnectionPoolOptions.MaxAutoPrepare > 0)
+            {
+                cache.Cleared += dataSource.Clear;
+            }
+
+            return cache;
+        });
         services.AddSingleton<IMetadataRepository, MetadataRepository>();
         services.AddSingleton<IViewMetadataRepository, ViewMetadataRepository>();
 
@@ -351,6 +363,16 @@ public sealed class ConnectionPoolOptions
     /// Maximum number of connections in the pool.
     /// </summary>
     public int MaxPoolSize { get; set; } = 100;
+
+    /// <summary>
+    /// How many of its most used statements each connection keeps prepared (Npgsql's <c>Max Auto
+    /// Prepare</c>), so a statement run again is not planned again; 0 prepares none. A prepared statement
+    /// is planned against a table's columns as they were, so it is forgotten whenever the definition cache
+    /// is (<see cref="Infrastructure.MetadataCache.Cleared"/>) — turn this on only where something keeps that
+    /// cache current, as the service's metadata listener does; elsewhere a change to a table fails each
+    /// connection's statement over it once.
+    /// </summary>
+    public int MaxAutoPrepare { get; set; }
 
     /// <summary>
     /// Time a connection can remain idle before being closed.

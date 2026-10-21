@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **The service keeps each connection's most used statements prepared** (`Max Auto Prepare=20`), so a
+  read run again is not planned again. The pool's reset on return keeps prepared statements, and the
+  security context is still written on every open. Under load, beside PostgREST on the same machine, a
+  one-row read serves about a tenth more requests and a short list about a fifth more.
+- **A prepared statement is forgotten when a table definition changes.** It is planned against the
+  table's columns as they were, and PostgreSQL refuses to run one whose result changed shape; the pool
+  now forgets its statements whenever the definition cache is cleared — a schema change made here, a
+  notification of one made elsewhere, the listener starting or stopping — so the next read is prepared
+  against the table as it is. `MetadataCache.Cleared` is the event.
+
+### Added
+
+- **`ConnectionPoolOptions.MaxAutoPrepare`** — how many statements each connection keeps prepared; 0
+  (the default) prepares none. Turn it on only where something keeps the definition cache current, as
+  the service's metadata listener does.
+
 ## 0.28.0
 
 A minor, with breaking changes to list pagination. A list no longer counts its rows unless asked:

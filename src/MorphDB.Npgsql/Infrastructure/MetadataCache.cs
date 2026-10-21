@@ -33,6 +33,13 @@ public sealed class MetadataCache
     /// <summary>Whether definitions are served from memory — between <see cref="Start"/> and <see cref="Stop"/>.</summary>
     public bool IsLive => _live;
 
+    /// <summary>
+    /// Raised whenever the cache forgets what it held — an invalidation, a start, a stop — after it has. What
+    /// else is derived from definitions is forgotten here too: a statement the connection pool prepared over
+    /// a table whose columns changed would otherwise fail once on every connection that holds it.
+    /// </summary>
+    public event Action? Cleared;
+
     /// <summary>Changes on every invalidation; a read records it before going to the database.</summary>
     public long Generation => Interlocked.Read(ref _generation);
 
@@ -44,6 +51,8 @@ public sealed class MetadataCache
             ClearLocked();
             _live = true;
         }
+
+        Cleared?.Invoke();
     }
 
     /// <summary>Stops serving and forgets everything — nothing now says when a definition changes.</summary>
@@ -54,6 +63,8 @@ public sealed class MetadataCache
             _live = false;
             ClearLocked();
         }
+
+        Cleared?.Invoke();
     }
 
     /// <summary>
@@ -61,6 +72,12 @@ public sealed class MetadataCache
     /// a change whose project is not known, or one that may reach across projects.
     /// </summary>
     public void Invalidate(Guid? projectId = null)
+    {
+        Forget(projectId);
+        Cleared?.Invoke();
+    }
+
+    private void Forget(Guid? projectId)
     {
         lock (_gate)
         {
