@@ -2078,11 +2078,81 @@ public sealed record ComplexQueryApiRequest
 }
 
 /// <summary>
-/// A filter node that can be a condition or a logical group (AND/OR).
+/// A filter node that can be a condition or a logical group (AND/OR), named by its <c>$type</c>.
 /// </summary>
-[JsonDerivedType(typeof(QueryFilterCondition), "condition")]
-[JsonDerivedType(typeof(QueryFilterGroup), "group")]
+[JsonConverter(typeof(FilterNodeJsonConverter))]
 public abstract record FilterNode;
+
+/// <summary>
+/// Reads a <see cref="FilterNode"/> by its <c>$type</c>, and refuses a node that names no kind or one it does
+/// not know as a malformed body (400). The serializer's own polymorphism answered a node without <c>$type</c>
+/// with a <see cref="NotSupportedException"/> — an abstract type cannot be made — which surfaced as a 500.
+/// </summary>
+internal sealed class FilterNodeJsonConverter : JsonConverter<FilterNode>
+{
+    private const string Discriminator = "$type";
+
+    public override FilterNode? Read(ref System.Text.Json.Utf8JsonReader reader, Type typeToConvert, System.Text.Json.JsonSerializerOptions options)
+    {
+        using var document = System.Text.Json.JsonDocument.ParseValue(ref reader);
+        var node = document.RootElement;
+        if (node.ValueKind != System.Text.Json.JsonValueKind.Object)
+        {
+            throw new System.Text.Json.JsonException($"A filter node is a JSON object, and this one is a JSON {node.ValueKind.ToString().ToLowerInvariant()}.");
+        }
+
+        var kind = node.TryGetProperty(Discriminator, out var named) && named.ValueKind == System.Text.Json.JsonValueKind.String
+            ? named.GetString()
+            : null;
+        var type = kind switch
+        {
+            "condition" => typeof(QueryFilterCondition),
+            "group" => typeof(QueryFilterGroup),
+            null => throw new System.Text.Json.JsonException(
+                "A filter node names its kind with \"$type\": \"condition\" (column, operator, value) or \"group\" (logic, filters)."),
+            _ => throw new System.Text.Json.JsonException(
+                $"A filter node's \"$type\" is \"condition\" or \"group\", not \"{kind}\"."),
+        };
+
+        // The node without its discriminator, so the concrete type's own reading — unknown members refused —
+        // applies to the rest.
+        var buffer = new System.Buffers.ArrayBufferWriter<byte>();
+        using (var writer = new System.Text.Json.Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            foreach (var member in node.EnumerateObject())
+            {
+                if (member.Name != Discriminator)
+                {
+                    member.WriteTo(writer);
+                }
+            }
+
+            writer.WriteEndObject();
+        }
+
+        return (FilterNode?)System.Text.Json.JsonSerializer.Deserialize(buffer.WrittenSpan, options.GetTypeInfo(type));
+    }
+
+    public override void Write(System.Text.Json.Utf8JsonWriter writer, FilterNode value, System.Text.Json.JsonSerializerOptions options)
+    {
+        var kind = value switch
+        {
+            QueryFilterCondition => "condition",
+            QueryFilterGroup => "group",
+            _ => throw new System.Text.Json.JsonException($"A filter node of type {value.GetType().Name} has no kind."),
+        };
+        using var members = System.Text.Json.JsonSerializer.SerializeToDocument(value, options.GetTypeInfo(value.GetType()));
+        writer.WriteStartObject();
+        writer.WriteString(Discriminator, kind);
+        foreach (var member in members.RootElement.EnumerateObject())
+        {
+            member.WriteTo(writer);
+        }
+
+        writer.WriteEndObject();
+    }
+}
 
 /// <summary>
 /// A single filter condition: column operator value.

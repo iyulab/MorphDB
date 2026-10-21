@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Fixed
+
+- **A query-body filter node without `$type`, or with a kind the server does not know, is refused with
+  `400`** naming what to write (`"condition"` or `"group"`). It used to fail as a `500`: the serializer
+  could not make the abstract node it was asked for.
+
 ### Changed
 
 - **The service keeps each connection's most used statements prepared** (`Max Auto Prepare=20`), so a

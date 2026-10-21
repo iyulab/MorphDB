@@ -127,6 +127,28 @@ public class ComplexQueryApiTests
         result.GetProperty("data").GetArrayLength().Should().Be(2);
     }
 
+    /// <summary>
+    /// A filter node names its kind with <c>$type</c>. One that names none, or one the server does not know,
+    /// is a malformed body — it used to fail as a 500, the serializer being unable to make the abstract node.
+    /// </summary>
+    [Theory]
+    [InlineData("""{"filter":{"column":"grade","operator":"eq","value":"vip"},"pageSize":10}""", "$type")]
+    [InlineData("""{"filter":{"logic":"or","filters":[{"$type":"condition","column":"grade","operator":"eq","value":"vip"}]},"pageSize":10}""", "$type")]
+    [InlineData("""{"filter":{"$type":"group","logic":"or","filters":[{"column":"grade","operator":"eq","value":"vip"}]},"pageSize":10}""", "$type")]
+    [InlineData("""{"filter":{"$type":"clause","column":"grade","operator":"eq","value":"vip"},"pageSize":10}""", "clause")]
+    [InlineData("""{"filter":["grade"],"pageSize":10}""", "JSON object")]
+    public async Task A_filter_node_without_a_kind_it_names_is_refused_as_a_malformed_body(string body, string named)
+    {
+        var tableName = await SetupAsync();
+
+        var response = await _client.PostAsync($"/api/data/{tableName}/query",
+            new StringContent(body, System.Text.Encoding.UTF8, "application/json"), TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
+        error!.Message.Should().Contain(named);
+    }
+
     [Fact]
     public async Task An_unknown_operator_is_refused_with_the_supported_set()
     {
