@@ -194,6 +194,32 @@ public class BatchApiTests
         error!.Error.Should().Be("NotFound");
     }
 
+    /// <summary>
+    /// A row that fails validation is named by its position in the request, the way ASP.NET Core names
+    /// a collection item's field — and nothing of the batch is written.
+    /// </summary>
+    [Fact]
+    public async Task BulkInsert_names_the_row_that_fails_by_its_position()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tableName = await SetupTestTableAsync();
+        var records = new List<Dictionary<string, object?>>
+        {
+            new() { ["name"] = "A", ["email"] = "a@example.com" },
+            new() { ["name"] = "B", ["email"] = "b@example.com" },
+            new() { ["name"] = "C" },
+        };
+
+        var response = await _client.PostAsJsonAsync($"/api/batch/data/{tableName}/insert", records, ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>(ct);
+        error!.Details.Should().ContainKey("[2].email");
+        error.Message.Should().Contain("[2].email");
+        var list = await _client.GetFromJsonAsync<System.Text.Json.JsonElement>($"/api/data/{tableName}", ct);
+        list.GetProperty("data").GetArrayLength().Should().Be(0, "the batch is all or none");
+    }
+
     [Fact]
     public async Task BulkInsert_WithEmptyRecords_ShouldReturnBadRequest()
     {

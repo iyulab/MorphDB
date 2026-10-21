@@ -58,7 +58,7 @@ public sealed class WritePipeline : IWritePipeline
         {
             if (queued.Count == 0)
                 return;
-            results.AddRange(await _writeExecutor.ExecuteInsertBatchAsync(queued));
+            results.AddRange(await _writeExecutor.ExecuteInsertBatchAsync(queued, results.Count));
             queued.Clear();
         }
 
@@ -282,6 +282,8 @@ public interface IWriteExecutor
 
     /// <summary>
     /// Inserts prepared rows of one table in a single round trip, results in input order.
+    /// <paramref name="firstIndex"/> is the position of the first of them in the caller's batch, by which
+    /// a refused row is named.
     /// </summary>
-    Task<IReadOnlyList<WriteResult>> ExecuteInsertBatchAsync(IReadOnlyList<IWriteContext> contexts);
+    Task<IReadOnlyList<WriteResult>> ExecuteInsertBatchAsync(IReadOnlyList<IWriteContext> contexts, int firstIndex = 0);
 }

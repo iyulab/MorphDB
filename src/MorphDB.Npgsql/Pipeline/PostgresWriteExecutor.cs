@@ -161,7 +161,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
     // PostgreSQL's limit on the parameters of one statement.
     private const int MaxParametersPerStatement = 65_535;
 
-    public async Task<IReadOnlyList<WriteResult>> ExecuteInsertBatchAsync(IReadOnlyList<IWriteContext> contexts)
+    public async Task<IReadOnlyList<WriteResult>> ExecuteInsertBatchAsync(IReadOnlyList<IWriteContext> contexts, int firstIndex = 0)
     {
         if (contexts.Count == 0)
             return [];
@@ -176,6 +176,8 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             QueryOperationType.Insert,
             "WritePipeline");
 
+        var statementRows = new List<int>();
+        var reading = 0;
         try
         {
             await using var conn = await _connections.LeaseAsync(cancellationToken);
@@ -184,7 +186,6 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             // all the statements go in one round trip. Row-level security checks and row triggers act on
             // every row as they do on a single insert.
             var rows = contexts.Select(c => InsertValues(EnsureProjectId(c.Data, c.ProjectId), table.Columns)).ToList();
-            var statementRows = new List<int>();
             await using var batch = new NpgsqlBatch(conn.Connection, conn.Transaction);
             for (var start = 0; start < rows.Count;)
             {
@@ -204,6 +205,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             var results = new List<WriteResult>(contexts.Count);
             await using (var reader = await batch.ExecuteReaderAsync(cancellationToken))
             {
+                // A refused statement surfaces when the reader reaches its result: `reading` is that statement.
                 foreach (var expected in statementRows)
                 {
                     for (var i = 0; i < expected; i++)
@@ -234,6 +236,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
                         results.Add(WriteResult.Ok(mapped));
                     }
 
+                    reading++;
                     await reader.NextResultAsync(cancellationToken);
                 }
             }
@@ -243,9 +246,9 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
         }
         catch (PostgresException pg) when (PostgresWriteRefusal.IsCallersMistake(pg))
         {
-            // As on a single insert. The refused statement is the one Npgsql names; its row is the
-            // first of this batch the database did not accept.
-            var translated = PostgresWriteRefusal.Translate(pg, table);
+            // As on a single insert, and named by the rows the refused statement carried — one row, or the
+            // range of a multi-row statement, whose refusal PostgreSQL does not pin to a row.
+            var translated = PostgresWriteRefusal.Translate(pg, table, RowsOf(reading, statementRows, firstIndex));
             scope.SetError(translated.Message);
             throw translated;
         }
@@ -254,6 +257,16 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             scope.SetError(ex.Message);
             throw;
         }
+    }
+
+    private static string? RowsOf(int statement, List<int> statementRows, int firstIndex)
+    {
+        if (statement >= statementRows.Count)
+            return null;
+
+        var first = firstIndex + statementRows.Take(statement).Sum();
+        var last = first + statementRows[statement] - 1;
+        return first == last ? $"[{first}]" : $"[{first}]–[{last}]";
     }
 
     private static bool SameColumns(

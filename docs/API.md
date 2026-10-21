@@ -374,7 +374,9 @@ POST /api/batch/data/customers/insert
 
 It inserts all the rows or none, and sends them to the database together rather than one round trip
 per row — the form to load many rows with. Each row is still validated and written as a single insert
-would be, and a row may reference an earlier row of the same request.
+would be, and a row may reference an earlier row of the same request. A refused row is named by its
+position — `"details": { "[2].email": ["a value is required and cannot be null"] }` — or, when the database
+refused it together with its neighbours in one statement, by that range (`[0]–[499]`).
 
 ---
 

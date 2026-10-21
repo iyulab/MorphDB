@@ -30,6 +30,20 @@ internal static class PostgresWriteRefusal
     /// names are not contract (hidden-layer principle).
     /// </summary>
     public static MorphDB.Core.Exceptions.MorphDbException Translate(
+        PostgresException pg, TableMetadata table, string? rows = null)
+    {
+        var translated = Translate(pg, table);
+
+        // A batch names the rows of the refused statement in front of the reason. A refusal by a
+        // policy says nothing about which row it is, on purpose, and stays as it is.
+        return rows is not null && translated is MorphDB.Core.Exceptions.ValidationException validation
+            ? new MorphDB.Core.Exceptions.ValidationException(
+                validation.Field is { } field ? $"{rows}.{field}" : rows,
+                validation.Reason ?? validation.Message)
+            : translated;
+    }
+
+    private static MorphDB.Core.Exceptions.MorphDbException Translate(
         PostgresException pg, TableMetadata table)
     {
         if (pg.SqlState == PostgresErrorCodes.InsufficientPrivilege)

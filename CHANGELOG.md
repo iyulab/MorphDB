@@ -34,8 +34,14 @@
   server; of eight columns over HTTP, another quarter less. A step that reads stored rows (a uniqueness or
   reference check, a hierarchy's next sort order) first sends the rows queued before it, so a row may
   still reference, or collide with, an earlier row of the same batch exactly as it would one by one.
+- **A batch insert names the row it refuses.** A row that fails validation is reported by its position in
+  the request, as ASP.NET Core names a collection item's field — `[2].email` in the message and as the key
+  under `details` — where the error used to say only which table. A row the database refuses is named the
+  same way; when it was sent in one statement with its neighbours, the error names that range
+  (`[0]–[499]`), since PostgreSQL refuses the statement as a whole. A refusal by a security policy names no
+  row, as before.
 - **For embedders** (breaking for implementations of these interfaces): `IWritePipeline.InsertBatchAsync`
-  and `IWriteExecutor.ExecuteInsertBatchAsync` are new members. A custom `IValidator` or `ITransformer`
+  and `IWriteExecutor.ExecuteInsertBatchAsync(contexts, firstIndex)` are new members. A custom `IValidator` or `ITransformer`
   keeps working unchanged; it may implement `ReadsStoredRows` returning `false` when it reads nothing from
   the database, which lets a batch keep queueing past it (the default, `true`, is always correct).
 

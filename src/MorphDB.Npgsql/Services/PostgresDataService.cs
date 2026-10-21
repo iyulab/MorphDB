@@ -164,7 +164,12 @@ public sealed class PostgresDataService : IMorphDataService
         // caller is already in. The first failed row ends it, and the unit undoes the rows before it.
         await using var unit = _units.Begin();
         var results = await _writePipeline.InsertBatchAsync(projectId, table, records, null, cancellationToken);
-        var rows = results.Select(result => UnwrapOrThrow(result, tableName)).ToList();
+        if (results.Count > 0 && !results[^1].Success)
+        {
+            throw RecordRefused(results.Count - 1, results[^1].Errors);
+        }
+
+        var rows = results.Select(result => result.Data ?? new Dictionary<string, object?>()).ToList();
 
         await unit.CommitAsync(cancellationToken);
         return rows;
@@ -330,6 +335,15 @@ public sealed class PostgresDataService : IMorphDataService
     /// translates: pipeline validation errors become the ValidationException callers of this
     /// service have always received.
     /// </summary>
+    /// <summary>
+    /// A batch row that failed validation, named by its position in the request the way ASP.NET Core
+    /// names a collection item's field: <c>[3].email</c>, or <c>[3]</c> when the failure names no one field.
+    /// </summary>
+    private static ValidationException RecordRefused(int index, IReadOnlyList<ValidationError> errors) =>
+        errors.Count == 1 && !string.IsNullOrEmpty(errors[0].Field)
+            ? new ValidationException($"[{index}].{errors[0].Field}", errors[0].Message)
+            : new ValidationException($"[{index}]", string.Join("; ", errors.Select(e => e.Message)));
+
     private static IDictionary<string, object?> UnwrapOrThrow(WriteResult result, string tableName)
     {
         if (result.Success)

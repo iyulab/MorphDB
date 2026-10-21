@@ -582,7 +582,17 @@ public class DataServiceTests
 
         var act = () => _dataService.InsertBatchAsync(projectId, table.LogicalName, [Row(Guid.NewGuid()), Row(id), Row(Guid.NewGuid()), Row(id)], ct);
 
-        (await act.Should().ThrowAsync<ValidationException>()).Which.Message.Should().Contain("unique constraint");
+        // The four rows write the same columns and go in one statement, which PostgreSQL refuses as a
+        // whole: the error names the rows that statement carried.
+        var refused = (await act.Should().ThrowAsync<ValidationException>()).Which;
+        refused.Message.Should().Contain("unique constraint");
+        refused.Field.Should().Be("[0]–[3]");
+
+        // Rows that write different columns go in separate statements; the refused one is named exactly.
+        var other = Guid.NewGuid();
+        var second = () => _dataService.InsertBatchAsync(projectId, table.LogicalName,
+            [Row(other), new Dictionary<string, object?>(Row(other)) { ["name"] = "second shape" }], ct);
+        (await second.Should().ThrowAsync<ValidationException>()).Which.Field.Should().Be("[1]");
         (await _dataService.Query(projectId).From(table.LogicalName).CountAsync(ct)).Should().Be(0);
     }
 
@@ -736,7 +746,9 @@ public class DataServiceTests
             new Dictionary<string, object?> { ["code"] = "C" },
             new Dictionary<string, object?> { ["code"] = "C" },
         ], ct);
-        (await duplicate.Should().ThrowAsync<ValidationException>()).Which.Message.Should().Contain("already exists");
+        var refused = (await duplicate.Should().ThrowAsync<ValidationException>()).Which;
+        refused.Message.Should().Contain("already exists");
+        refused.Field.Should().Be("[1].code", "the second row of the request is the one refused");
         (await _dataService.Query(projectId).From(table.LogicalName).CountAsync(ct)).Should().Be(2, "the failed batch left nothing");
     }
 
