@@ -19,7 +19,7 @@
   `Schema.GetChangelogAsync`.
 - **The .NET client renames tables, changes views and reads bulk jobs**: `Schema.UpdateTableAsync`,
   `Views.UpdateAsync`, `Views.GetStalenessAsync`, `Bulk.ListImportJobsAsync`, `Bulk.ListExportJobsAsync`
-  and `Bulk.GetJobProgressAsync`. Every documented route but schema batch DDL is now reachable from the client.
+  and `Bulk.GetJobProgressAsync`. Every documented route is now reachable from the client.
 - **The audit log filter takes `category` and `minSeverity` by name** (`?category=data`), the names every
   entry carries; it took only their numbers, so a filter written from what an entry says was a `400`. The
   numbers are still read. The audit routes are now in the API reference.
@@ -37,6 +37,13 @@
 
 ### Removed
 
+- **`POST /api/schema/batch` is removed** (breaking), with `ISchemaManager.ExecuteBatchDdlAsync` and its models for
+  embedders. It never did what it said: its operations ran one after another, each committing on its own,
+  so a failure left the earlier ones applied — while the reference said the batch is not applied — and an
+  added column always failed its version check (`409`, "Expected 0"). Its operations named columns,
+  indexes and relations by id where every other schema route takes names. Send each change to its own
+  route: `POST /api/schema/tables/{name}/columns`, `PATCH`/`DELETE …/columns/{column}`,
+  `POST …/indexes`, `DELETE /api/schema/indexes/{id}`, `POST`/`DELETE /api/schema/relations`.
 - **`MorphDBClientOptions.RetryCount` and `RetryDelay`** (breaking). Nothing read them — the client never
   retried. Delete them from your options; to retry, pass an `HttpClient` with a retry handler to
   `new MorphDBClient(httpClient, options)`.

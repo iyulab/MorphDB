@@ -38,7 +38,7 @@ public class DocsErrorCodeParityTests
         // the controllers answer with ex.ErrorCode rather than flattening it, so these reach the
         // wire whether the handler or an action's catch answers
         "INVALID_NAME", "RESERVED_NAME", "SYSTEM_COLUMN", "UNSAFE_TYPE_CAST", "INVALID_OPERATION",
-        "DDL_EXECUTION_FAILED", "BATCH_DDL_FAILED", "INDEX_NOT_FOUND", "RELATION_NOT_FOUND",
+        "DDL_EXECUTION_FAILED", "INDEX_NOT_FOUND", "RELATION_NOT_FOUND",
         // Write pipeline funnel (WriteFailure.CodeFor)
         "UNKNOWN_COLUMN",
         // Controllers' inline envelopes

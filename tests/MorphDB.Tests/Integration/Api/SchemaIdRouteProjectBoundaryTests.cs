@@ -103,52 +103,23 @@ public class SchemaIdRouteProjectBoundaryTests(ApiIntegrationFixture fixture)
         await AssertUnchangedAsync(e);
     }
 
+    /// <summary>
+    /// The schema batch route was removed rather than bounded: its operations ran one by one, each
+    /// committing on its own, and an added column always failed its version check. Nothing answers it.
+    /// </summary>
     [Fact]
-    public async Task A_schema_batch_cannot_name_another_projects_table()
+    public async Task There_is_no_schema_batch_route_to_reach_another_projects_objects_through()
     {
         var e = await ArrangeElsewhereAsync();
 
-        var response = await fixture.Api.Client.PostAsJsonAsync("/api/schema/batch", new BatchDdlApiRequest
+        var response = await fixture.Api.Client.PostAsJsonAsync("/api/schema/batch", new
         {
-            TableId = e.Child.Id,
-            Version = e.Child.Version,
-            Operations = [new BatchDdlOperationApiRequest { Type = "deleteColumn", DeleteColumnId = e.Column }],
+            tableId = e.Child.Id,
+            version = e.Child.Version,
+            operations = new[] { new { type = "deleteColumn", deleteColumnId = e.Column } },
         }, Ct);
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
-        await AssertUnchangedAsync(e);
-    }
-
-    [Fact]
-    public async Task A_schema_batch_on_the_callers_table_cannot_reach_another_projects_objects()
-    {
-        var e = await ArrangeElsewhereAsync();
-        var caller = fixture.Api.Client;
-        var mine = $"m_{Guid.NewGuid():N}"[..24];
-        (await caller.PostAsJsonAsync("/api/schema/tables", new CreateTableApiRequest
-        {
-            Name = mine,
-            Columns = [new CreateColumnApiRequest { Name = "x", Type = "text", Nullable = true }],
-        }, Ct)).EnsureSuccessStatusCode();
-        var table = await ReadAsync(caller, mine);
-
-        foreach (var op in new[]
-        {
-            new BatchDdlOperationApiRequest { Type = "deleteColumn", DeleteColumnId = e.Column },
-            new BatchDdlOperationApiRequest { Type = "deleteIndex", DeleteIndexId = e.Index },
-            new BatchDdlOperationApiRequest { Type = "deleteRelation", DeleteRelationId = e.Relation },
-        })
-        {
-            var response = await caller.PostAsJsonAsync("/api/schema/batch", new BatchDdlApiRequest
-            {
-                TableId = table.Id,
-                Version = table.Version,
-                Operations = [op],
-            }, Ct);
-            Assert.True(response.StatusCode == HttpStatusCode.NotFound,
-                $"{op.Type}: {(int)response.StatusCode} {await response.Content.ReadAsStringAsync(Ct)}");
-        }
-
         await AssertUnchangedAsync(e);
     }
 }

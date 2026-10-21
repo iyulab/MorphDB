@@ -301,22 +301,6 @@ public sealed class CachingSchemaManagerDecorator : ISchemaManager
         }
     }
 
-    public async Task<BatchDdlResult> ExecuteBatchDdlAsync(
-        BatchDdlRequest request,
-        CancellationToken cancellationToken = default)
-    {
-        var result = await _inner.ExecuteBatchDdlAsync(request, cancellationToken);
-
-        // Invalidate cache for the affected table
-        await _cache.InvalidateTableAsync(request.TableId, cancellationToken);
-        var table = await _inner.GetTableByIdAsync(request.TableId, cancellationToken);
-        if (table is not null)
-        {
-            await _cache.InvalidateTableAsync(table.ProjectId, table.LogicalName, cancellationToken);
-        }
-
-        return result;
-    }
 
     #region Cache Invalidation Helpers
 

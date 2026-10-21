@@ -93,7 +93,6 @@ POST   /api/schema/relations                   # Create relation
 DELETE /api/schema/relations/{id}              # Delete relation
 POST   /api/schema/tables/{name}/indexes       # Create index
 DELETE /api/schema/indexes/{id}                # Delete index
-POST   /api/schema/batch                       # Batch DDL operations
 ```
 
 **A table can carry its creator's notes.** `metadata` on `POST /api/schema/tables` is a map of
@@ -1649,7 +1648,6 @@ both.
 | 400 | `UNSAFE_TYPE_CAST` | A column type change whose existing values cannot be converted — export, reload, and change the declaration instead |
 | 400 | `INVALID_OPERATION` | A schema operation that is well-formed but cannot apply to this target — creating, refreshing or reading a materialized view over a table that has a row-level security policy that narrows reads (`Select` or `All`), or giving such a policy to a table a materialized view reads |
 | 400 | `DDL_EXECUTION_FAILED` | The database refused the schema statement — the message carries what it said |
-| 400 | `BATCH_DDL_FAILED` | One operation in a batch DDL request failed; the batch is not applied |
 | 404 | `TABLE_NOT_FOUND` | The table (or the project the request scoped it to) does not exist |
 | 404 | `INDEX_NOT_FOUND` | The index id does not exist |
 | 404 | `RELATION_NOT_FOUND` | The relation id does not exist |

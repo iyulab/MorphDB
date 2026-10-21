@@ -33,10 +33,6 @@ public partial class ClientRouteCoverageTests
     /// <summary>Served and meant for consumers, but not yet reachable through the client.</summary>
     private static readonly string[] NotYetInClient =
     [
-        // Its operations name tables, columns and indexes by id where every other schema route takes
-        // names, and one of them takes the core's own column request. The client waits for that
-        // contract to be settled rather than freezing it into a .NET surface.
-        "POST /api/schema/batch",
     ];
 
     [Fact]

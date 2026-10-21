@@ -2182,38 +2182,6 @@ public sealed record QueryFilterGroup : FilterNode
 
 #endregion
 
-#region Batch DDL API Models
-
-/// <summary>
-/// Request for atomic batch DDL operations.
-/// </summary>
-public sealed record BatchDdlApiRequest
-{
-    public Guid TableId { get; init; }
-
-    /// <summary>
-    /// The schema version the caller last read. Required — see <see cref="UpdateTableApiRequest.Version"/>.
-    /// </summary>
-    public required int Version { get; init; }
-    public required IReadOnlyList<BatchDdlOperationApiRequest> Operations { get; init; }
-}
-
-/// <summary>
-/// A single DDL operation in a batch.
-/// </summary>
-public sealed record BatchDdlOperationApiRequest
-{
-    public required string Type { get; init; }
-    public AddColumnApiRequest? AddColumn { get; init; }
-    public UpdateColumnRequest? UpdateColumn { get; init; }
-    public Guid? DeleteColumnId { get; init; }
-    public CreateIndexApiRequest? CreateIndex { get; init; }
-    public Guid? DeleteIndexId { get; init; }
-    public CreateRelationApiRequest? CreateRelation { get; init; }
-    public Guid? DeleteRelationId { get; init; }
-}
-
-#endregion
 
 #region Changelog Response
 
