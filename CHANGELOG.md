@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **Rate limiting is off unless configured** (`RateLimiting__Enabled=true` turns it on). It was on by
+  default at 1,000 requests a minute — and it is a quota per project, shared by every caller of that
+  project, so out of the box a whole deployment's traffic to one project was capped at about 17
+  requests a second, answered `429` beyond that, with nothing in the documentation saying so. The
+  settings, headers and scope are now documented (`docs/API.md`, "Rate limiting").
+- A `429` is the documented error envelope — `{"error": "TooManyRequests", "message": …, "code":
+  "RATE_LIMIT_EXCEEDED"}`, in OData's error shape on OData routes — and `RATE_LIMIT_EXCEEDED` is in the
+  error table. The body's `retryAfter` member is gone; the `Retry-After` header carries the seconds.
+
 ## 0.26.1
 
 A patch. A record read and a real-time change cost fewer statements, and a real-time change to one

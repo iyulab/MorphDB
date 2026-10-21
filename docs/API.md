@@ -1327,6 +1327,26 @@ another and revoke the old one. Revocation keeps the row so audit records retain
 Only the master secret bypasses row-level security. An issued secret is subject to the same policies
 an anonymous caller is — with `{{role}}` now resolving to something.
 
+## Rate limiting
+
+Off unless configured. Turned on, it is a **quota per project**: every request that names a project
+(`X-Project-Id`, or the project in the route) draws from that project's bucket, whichever caller sends
+it, and real-time hub method calls draw from the same bucket. A request that names none is counted by
+client address. Past the limit a request is answered `429 RATE_LIMIT_EXCEEDED` with `Retry-After`;
+every counted response carries `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`
+(Unix seconds). Health and metrics probes are never counted.
+
+| Setting | Default | |
+|---|---|---|
+| `RateLimiting__Enabled` | `false` | Turns the quota on |
+| `RateLimiting__DefaultLimit` | `1000` | Requests per window, per project |
+| `RateLimiting__DefaultWindow` | `00:01:00` | The window |
+| `RateLimiting__IncludeHeaders` | `true` | The `X-RateLimit-*` headers |
+
+It is not a defence against a client flooding the service: callers of one project share a bucket, so
+one of them can spend the others' quota. Limit callers where you can tell them apart — a reverse proxy
+in front of MorphDB, as for any database API.
+
 ## Storage encryption
 
 MorphDB does not encrypt column values. Encrypting data at rest is the job of PostgreSQL and the
@@ -1613,5 +1633,6 @@ both.
 | 409 | `SCHEMA_VERSION_CONFLICT` | An optimistic schema update lost the race |
 | 409 | `LOCK_ACQUISITION_FAILED` | A concurrent schema operation holds the lock — retry |
 | 410 | `EXPORT_EXPIRED` | Downloading an export whose `expiresAt` has passed — its file is no longer kept; request the export again |
+| 429 | `RATE_LIMIT_EXCEEDED` | The project has used its request quota for the current window — only answered when [rate limiting](#rate-limiting) is turned on. `Retry-After` says how many seconds until the window resets |
 | 500 | `INTERNAL_ERROR` | Our defect, logged on the server — never your request's fault |
 | 503 | `SECRETS_NOT_CONFIGURED` | A secret-management route was called on a service that has no master secret injected — there is no caller it could tell apart, so it declines rather than issuing credentials to anyone who reaches the port |

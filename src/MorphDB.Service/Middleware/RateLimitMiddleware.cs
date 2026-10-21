@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.Extensions.Options;
 using MorphDB.Core.Abstractions;
+using MorphDB.Service.Models.Api;
 
 namespace MorphDB.Service.Middleware;
 
@@ -72,16 +73,19 @@ public sealed class RateLimitMiddleware
         {
             RateLimitMiddlewareLogs.RequestRateLimited(_logger, key);
 
+            var retryAfter = (int)Math.Ceiling(result.RetryAfter.TotalSeconds);
             context.Response.StatusCode = StatusCodes.Status429TooManyRequests;
-            context.Response.Headers["Retry-After"] = ((int)Math.Ceiling(result.RetryAfter.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
+            context.Response.Headers["Retry-After"] = retryAfter.ToString(CultureInfo.InvariantCulture);
 
-            await context.Response.WriteAsJsonAsync(new
+            // The documented envelope, in the protocol's own shape on OData routes, like every other
+            // answer the pipeline gives before MVC.
+            await context.Response.WriteAsJsonAsync(OData.ErrorWire.Body(context.Request, new ErrorResponse
             {
-                error = "RATE_LIMIT_EXCEEDED",
-                message = "Too many requests. Please try again later.",
-                code = "RATE_LIMIT_EXCEEDED",
-                retryAfter = (int)Math.Ceiling(result.RetryAfter.TotalSeconds)
-            });
+                Error = "TooManyRequests",
+                Message = string.Create(CultureInfo.InvariantCulture,
+                    $"This project has used its request quota for the current window ({result.Limit}). Retry after {retryAfter} second(s)."),
+                Code = "RATE_LIMIT_EXCEEDED"
+            }));
 
             return;
         }

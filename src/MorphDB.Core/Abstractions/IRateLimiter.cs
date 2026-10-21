@@ -160,9 +160,13 @@ public sealed class RateLimitConfig
     public bool IncludeHeaders { get; set; } = true;
 
     /// <summary>
-    /// Whether rate limiting is enabled. Default: true.
+    /// Whether rate limiting is enabled. Default: false — the limit is a quota per project, shared by
+    /// every caller of that project (each request names one, see <c>X-Project-Id</c>), so on by default
+    /// it caps a whole deployment's traffic per project at <see cref="DefaultLimit"/> per
+    /// <see cref="DefaultWindow"/> before anyone has chosen a number. Turn it on to give projects a quota;
+    /// limiting callers in front of the service is a reverse proxy's job, as for other database APIs.
     /// </summary>
-    public bool Enabled { get; set; } = true;
+    public bool Enabled { get; set; }
 
     /// <summary>
     /// Paths to exclude from rate limiting.

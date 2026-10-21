@@ -30,6 +30,8 @@ public class DocsErrorCodeParityTests
         // Secret enforcement — the middleware writes its own envelope (it denies before MVC) and
         // the management routes decline when no master secret is injected
         "SECRETS_NOT_CONFIGURED",
+        // Rate limiting — the middleware writes its own envelope when a project's quota is spent
+        "RATE_LIMIT_EXCEEDED",
         // SchemaException codes with contract weight
         "TABLE_HAS_DEPENDENTS", "INVALID_EXPRESSION", "COLUMN_USED_BY_POLICY",
         // SchemaException / ValidationException codes the schema routes pass through unchanged —

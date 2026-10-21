@@ -22,7 +22,7 @@ public sealed class HubRateLimitFilterTests
     private static readonly MethodInfo SubscribeMethod = typeof(TestHub).GetMethod(nameof(TestHub.Subscribe))!;
 
     private readonly Mock<IRateLimiter> _rateLimiterMock = new();
-    private readonly RateLimitConfig _config = new();
+    private readonly RateLimitConfig _config = new() { Enabled = true };
 
     private HubRateLimitFilter CreateFilter() =>
         new(_rateLimiterMock.Object, Options.Create(_config), NullLogger<HubRateLimitFilter>.Instance);
