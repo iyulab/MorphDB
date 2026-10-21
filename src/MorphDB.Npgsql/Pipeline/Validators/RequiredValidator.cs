@@ -11,6 +11,8 @@ public sealed class RequiredValidator : IValidator
 {
     public int Order => PipelineOrder.RequiredValidator;
 
+    public bool ReadsStoredRows(IWriteContext context) => false;
+
     public bool ShouldExecute(IWriteContext context)
     {
         // Only validate on insert/update, and if enabled in options

@@ -24,6 +24,20 @@
   entry carries; it took only their numbers, so a filter written from what an entry says was a `400`. The
   numbers are still read. The audit routes are now in the API reference.
 
+### Changed
+
+- **Batch inserts send their rows together** — `POST /api/batch/data/{table}/insert`, GraphQL
+  `createRecords` and `IMorphDataService.InsertBatchAsync`. Each row still runs the whole write pipeline and is its
+  own `INSERT … RETURNING` statement, so row-level security, triggers, defaults and the returned rows are
+  as before; the statements now share round trips instead of taking one each. 5,000 rows of three columns:
+  about 1.1 s → 0.17 s on a local server. A step that reads stored rows (a uniqueness or reference check, a
+  hierarchy's next sort order) first sends the rows queued before it, so a row may still reference, or
+  collide with, an earlier row of the same batch exactly as it would one by one.
+- **For embedders** (breaking for implementations of these interfaces): `IWritePipeline.InsertBatchAsync`
+  and `IWriteExecutor.ExecuteInsertBatchAsync` are new members. A custom `IValidator` or `ITransformer`
+  keeps working unchanged; it may implement `ReadsStoredRows` returning `false` when it reads nothing from
+  the database, which lets a batch keep queueing past it (the default, `true`, is always correct).
+
 ### Fixed
 
 - **The request log records the status the client received.** It sat inside the exception handler, so

@@ -250,7 +250,7 @@ public sealed class MorphDbMutation
     /// <summary>
     /// Inserts multiple records in a batch.
     /// </summary>
-    // Reaches the pipeline via IMorphDataService.InsertBatchAsync (pipeline per row, one
+    // Reaches the pipeline via IMorphDataService.InsertBatchAsync (pipeline per row, rows sent together,
     // transaction via the ambient connection scope).
     [GraphQLDescription("Inserts multiple records in a batch")]
     public async Task<MutationResult<IReadOnlyList<RecordNode>>> CreateRecords(

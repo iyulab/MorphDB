@@ -18,6 +18,19 @@ public interface IWritePipeline
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Executes the pipeline for several inserts into one table, in order. Means exactly what the same
+    /// inserts one by one do; rows are sent to the database together. The first row that fails
+    /// validation ends the batch: its failed result is the last element and later rows are not tried.
+    /// Atomicity is the caller's — run it inside a unit of work to keep all or none.
+    /// </summary>
+    Task<IReadOnlyList<WriteResult>> InsertBatchAsync(
+        Guid projectId,
+        TableMetadata table,
+        IReadOnlyList<IDictionary<string, object?>> records,
+        WriteOptions? options = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Executes the pipeline for an update operation.
     /// </summary>
     Task<WriteResult> UpdateAsync(

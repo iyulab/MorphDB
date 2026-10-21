@@ -23,6 +23,10 @@ public sealed class SortOrderApplier : ITransformer
 
     public int Order => PipelineOrder.SortOrderApplier;
 
+    // Numbering reads the parent's current maximum, unless the caller supplied the number.
+    public bool ReadsStoredRows(IWriteContext context) =>
+        !(context.Data.TryGetValue(SortOrderColumn, out var sortOrder) && sortOrder is not null);
+
     public bool ShouldExecute(IWriteContext context)
     {
         return context.Options.ApplySortOrder

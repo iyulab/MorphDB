@@ -13,6 +13,8 @@ public sealed class AuditFieldApplier : ITransformer
 
     public int Order => PipelineOrder.AuditFieldApplier;
 
+    public bool ReadsStoredRows(IWriteContext context) => false;
+
     public bool ShouldExecute(IWriteContext context)
     {
         return context.Options.ApplyAuditFields

@@ -12,6 +12,8 @@ public sealed class VersionApplier : ITransformer
 
     public int Order => PipelineOrder.VersionApplier;
 
+    public bool ReadsStoredRows(IWriteContext context) => false;
+
     public bool ShouldExecute(IWriteContext context)
     {
         return context.Options.ApplyVersion

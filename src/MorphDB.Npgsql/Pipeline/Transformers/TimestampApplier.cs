@@ -13,6 +13,8 @@ public sealed class TimestampApplier : ITransformer
 
     public int Order => PipelineOrder.TimestampApplier;
 
+    public bool ReadsStoredRows(IWriteContext context) => false;
+
     public bool ShouldExecute(IWriteContext context)
     {
         return context.Options.ApplyTimestamps

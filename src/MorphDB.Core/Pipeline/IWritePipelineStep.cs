@@ -16,6 +16,15 @@ public interface IWritePipelineStep
     bool ShouldExecute(IWriteContext context);
 
     /// <summary>
+    /// Whether executing this step for the given context reads rows already stored — a uniqueness
+    /// probe, a reference lookup, a next-number query. A batch insert sends the rows it has queued
+    /// before running such a step, so the step sees every earlier row of the batch exactly as it
+    /// would row by row; a step that reads nothing lets the batch keep queueing. Defaults to
+    /// <c>true</c>, the answer that is never wrong.
+    /// </summary>
+    bool ReadsStoredRows(IWriteContext context) => true;
+
+    /// <summary>
     /// Executes the pipeline step.
     /// </summary>
     Task ExecuteAsync(IWriteContext context);

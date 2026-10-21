@@ -532,6 +532,171 @@ public class DataServiceTests
         results.Should().BeEmpty();
     }
 
+    /// <summary>
+    /// A batch insert sends its rows together: each row is its own statement, as a single insert sends,
+    /// but the statements share round trips — not one round trip per row.
+    /// </summary>
+    [Fact]
+    public async Task A_batch_insert_sends_its_rows_in_one_round_trip_and_answers_them_in_order()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "batch_trips_" + Guid.NewGuid().ToString("N")[..8]);
+        var ids = Enumerable.Range(0, 50).Select(_ => Guid.NewGuid()).ToList();
+
+        IReadOnlyList<IDictionary<string, object?>> results = [];
+        var statements = await StatementsOfAsync(async () =>
+            results = await _dataService.InsertBatchAsync(projectId, table.LogicalName, ids.Select(id => (IDictionary<string, object?>)Row(id)).ToList(), ct));
+
+        results.Select(r => r["_id"]).Should().Equal(ids.Cast<object?>(), "results come back in input order");
+        results.Should().OnlyContain(r => r["_created_at"] != null, "the row the database stored comes back, defaults included");
+        statements.Count(s => s.Contains("INSERT INTO", StringComparison.Ordinal)).Should().Be(1, string.Join("\n---\n", statements.Take(5)));
+        (await _dataService.Query(projectId).From(table.LogicalName).CountAsync(ct)).Should().Be(50);
+    }
+
+    [Fact]
+    public async Task A_batch_larger_than_one_round_trip_keeps_every_row_in_order()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "batch_large_" + Guid.NewGuid().ToString("N")[..8]);
+        var ids = Enumerable.Range(0, 2_500).Select(_ => Guid.NewGuid()).ToList();
+
+        var results = await _dataService.InsertBatchAsync(projectId, table.LogicalName, ids.Select(id => (IDictionary<string, object?>)Row(id)).ToList(), ct);
+
+        results.Select(r => r["_id"]).Should().Equal(ids.Cast<object?>());
+        (await _dataService.Query(projectId).From(table.LogicalName).CountAsync(ct)).Should().Be(2_500);
+    }
+
+    /// <summary>
+    /// A row the database refuses in the middle of a batch — here a duplicate primary key, which no
+    /// validator reads — is the caller's mistake, and the rows before it are undone with it.
+    /// </summary>
+    [Fact]
+    public async Task A_row_the_database_refuses_mid_batch_is_a_validation_error_and_leaves_nothing()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var projectId = Guid.NewGuid();
+        var table = await CreateTestTableAsync(projectId, "batch_refused_" + Guid.NewGuid().ToString("N")[..8]);
+        var id = Guid.NewGuid();
+
+        var act = () => _dataService.InsertBatchAsync(projectId, table.LogicalName, [Row(Guid.NewGuid()), Row(id), Row(Guid.NewGuid()), Row(id)], ct);
+
+        (await act.Should().ThrowAsync<ValidationException>()).Which.Message.Should().Contain("unique constraint");
+        (await _dataService.Query(projectId).From(table.LogicalName).CountAsync(ct)).Should().Be(0);
+    }
+
+    /// <summary>
+    /// A value bound from JSON is stored the same through a batch as through a single insert — the
+    /// batch binds its parameters itself, so their types are its own to get right.
+    /// </summary>
+    [Fact]
+    public async Task A_batch_stores_values_as_a_single_insert_stores_them()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var projectId = Guid.NewGuid();
+        var table = await _schemaManager.CreateTableAsync(new CreateTableRequest
+        {
+            ProjectId = projectId,
+            LogicalName = "batch_types_" + Guid.NewGuid().ToString("N")[..8],
+            Columns =
+            [
+                new CreateColumnRequest { LogicalName = "at", DataType = MorphDataType.DateTime },
+                new CreateColumnRequest { LogicalName = "day", DataType = MorphDataType.Date },
+                new CreateColumnRequest { LogicalName = "amount", DataType = MorphDataType.Decimal },
+                new CreateColumnRequest { LogicalName = "tags", DataType = MorphDataType.Json },
+                new CreateColumnRequest { LogicalName = "ref", DataType = MorphDataType.Uuid },
+                new CreateColumnRequest { LogicalName = "note", DataType = MorphDataType.Text },
+            ]
+        }, ct);
+        var json = System.Text.Json.JsonDocument.Parse(
+            """{"at":"2026-01-15T09:30:00+09:00","day":"2026-01-15","amount":12.50,"tags":{"a":[1,2]},"ref":"0199e2a0-0000-7000-8000-000000000001","note":null}""").RootElement;
+        Dictionary<string, object?> Payload() => json.EnumerateObject().ToDictionary(p => p.Name, p => (object?)p.Value.Clone());
+
+        var single = await _dataService.InsertAsync(projectId, table.LogicalName, Payload(), ct);
+        var batched = (await _dataService.InsertBatchAsync(projectId, table.LogicalName, [Payload()], ct)).Single();
+
+        foreach (var column in new[] { "at", "day", "amount", "tags", "ref", "note" })
+        {
+            System.Text.Json.JsonSerializer.Serialize(batched[column]).Should().Be(System.Text.Json.JsonSerializer.Serialize(single[column]), column);
+        }
+    }
+
+    /// <summary>
+    /// A step that reads stored rows sees every earlier row of the batch — numbering in a hierarchy
+    /// continues within the batch instead of handing every row the same next number.
+    /// </summary>
+    [Fact]
+    public async Task Rows_of_one_batch_are_numbered_in_their_hierarchy_one_after_another()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var projectId = Guid.NewGuid();
+        var table = await _schemaManager.CreateTableAsync(new CreateTableRequest
+        {
+            ProjectId = projectId,
+            LogicalName = "batch_tree_" + Guid.NewGuid().ToString("N")[..8],
+            SystemColumns = new SystemColumnOptions { HierarchyEnabled = true },
+            Columns = [new CreateColumnRequest { LogicalName = "title", DataType = MorphDataType.Text }]
+        }, ct);
+        var parent = await _dataService.InsertAsync(projectId, table.LogicalName, new Dictionary<string, object?> { ["title"] = "root" }, ct);
+
+        var children = await _dataService.InsertBatchAsync(projectId, table.LogicalName,
+            Enumerable.Range(0, 4).Select(i => (IDictionary<string, object?>)new Dictionary<string, object?>
+            {
+                ["title"] = $"child {i}",
+                ["_parent_id"] = parent["_id"],
+            }).ToList(), ct);
+
+        children.Select(c => Convert.ToInt32(c["_sort_order"], System.Globalization.CultureInfo.InvariantCulture)).Should().Equal(1, 2, 3, 4);
+    }
+
+    /// <summary>
+    /// A reference to a row an earlier write of the same batch inserted is a reference to a row that
+    /// exists — the batch means what the same inserts one by one mean.
+    /// </summary>
+    [Fact]
+    public async Task A_row_may_reference_a_row_inserted_earlier_in_the_same_batch()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var projectId = Guid.NewGuid();
+        var table = await _schemaManager.CreateTableAsync(new CreateTableRequest
+        {
+            ProjectId = projectId,
+            LogicalName = "batch_ref_" + Guid.NewGuid().ToString("N")[..8],
+            Columns =
+            [
+                new CreateColumnRequest { LogicalName = "code", DataType = MorphDataType.Text, IsUnique = true },
+                new CreateColumnRequest { LogicalName = "parent_code", DataType = MorphDataType.Text }
+            ]
+        }, ct);
+        await _schemaManager.CreateRelationAsync(new CreateRelationRequest
+        {
+            ProjectId = projectId,
+            LogicalName = "rel_" + Guid.NewGuid().ToString("N")[..8],
+            SourceTableId = table.TableId,
+            SourceColumnId = table.Columns.First(c => c.LogicalName == "parent_code").ColumnId,
+            TargetTableId = table.TableId,
+            TargetColumnId = table.Columns.First(c => c.LogicalName == "code").ColumnId,
+            RelationType = RelationType.OneToMany
+        }, ct);
+
+        var rows = await _dataService.InsertBatchAsync(projectId, table.LogicalName,
+        [
+            new Dictionary<string, object?> { ["code"] = "A" },
+            new Dictionary<string, object?> { ["code"] = "B", ["parent_code"] = "A" },
+        ], ct);
+        rows.Should().HaveCount(2);
+
+        // And a duplicate within one batch is seen by the uniqueness check, as row by row.
+        var duplicate = () => _dataService.InsertBatchAsync(projectId, table.LogicalName,
+        [
+            new Dictionary<string, object?> { ["code"] = "C" },
+            new Dictionary<string, object?> { ["code"] = "C" },
+        ], ct);
+        (await duplicate.Should().ThrowAsync<ValidationException>()).Which.Message.Should().Contain("already exists");
+        (await _dataService.Query(projectId).From(table.LogicalName).CountAsync(ct)).Should().Be(2, "the failed batch left nothing");
+    }
+
     #endregion
 
     #region UpsertAsync Tests

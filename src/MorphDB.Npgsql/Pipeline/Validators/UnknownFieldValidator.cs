@@ -22,6 +22,8 @@ public sealed class UnknownFieldValidator : IValidator
 {
     public int Order => PipelineOrder.UnknownFieldValidator;
 
+    public bool ReadsStoredRows(IWriteContext context) => false;
+
     public bool ShouldExecute(IWriteContext context)
     {
         return !context.Options.AllowUnknownFields

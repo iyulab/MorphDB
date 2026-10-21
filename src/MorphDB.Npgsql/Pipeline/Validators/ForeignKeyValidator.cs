@@ -25,6 +25,13 @@ public sealed class ForeignKeyValidator : IValidator
 
     public int Order => PipelineOrder.ForeignKeyValidator;
 
+    // A reference may point at a row an earlier write of the same batch inserted.
+    public bool ReadsStoredRows(IWriteContext context) =>
+        EnforcedRelations(context.Table).Any(r =>
+            context.Table.Columns.FirstOrDefault(c => c.ColumnId == r.SourceColumnId) is { } column
+            && context.Data.TryGetValue(column.LogicalName, out var value)
+            && value is not null);
+
     public bool ShouldExecute(IWriteContext context)
     {
         return context.Options.ValidateForeignKeys
@@ -34,9 +41,7 @@ public sealed class ForeignKeyValidator : IValidator
     public async Task ExecuteAsync(IWriteContext context)
     {
         // Get relations where this table is the source (has FK column)
-        var relations = context.Table.Relations
-            .Where(r => r.IsActive && r.EnforceOnWrite && r.SourceTableId == context.Table.TableId)
-            .ToList();
+        var relations = EnforcedRelations(context.Table).ToList();
 
         if (relations.Count == 0)
             return;
@@ -107,6 +112,9 @@ public sealed class ForeignKeyValidator : IValidator
             }
         }
     }
+
+    private static IEnumerable<RelationMetadata> EnforcedRelations(TableMetadata table) =>
+        table.Relations.Where(r => r.IsActive && r.EnforceOnWrite && r.SourceTableId == table.TableId);
 
     private static async Task<bool> CheckReferenceExistsAsync(
         NpgsqlConnection connection,

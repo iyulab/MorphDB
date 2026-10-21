@@ -157,6 +157,78 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
         }
     }
 
+    public async Task<IReadOnlyList<WriteResult>> ExecuteInsertBatchAsync(IReadOnlyList<IWriteContext> contexts)
+    {
+        if (contexts.Count == 0)
+            return [];
+
+        var first = contexts[0];
+        var table = first.Table;
+        var cancellationToken = first.CancellationToken;
+        using var scope = new QueryExecutionScope(
+            _queryDiagnostics,
+            first.ProjectId,
+            table.LogicalName,
+            QueryOperationType.Insert,
+            "WritePipeline");
+
+        try
+        {
+            await using var conn = await _connections.LeaseAsync(cancellationToken);
+
+            // The same statement a single insert sends, once per row — row-level security, triggers and
+            // RETURNING act per statement as before; only the round trips are shared.
+            await using var batch = new NpgsqlBatch(conn.Connection, conn.Transaction);
+            foreach (var context in contexts)
+            {
+                var dataWithProject = EnsureProjectId(context.Data, context.ProjectId);
+                var (columns, parameters, values) = PrepareInsertParameters(dataWithProject, table.Columns);
+                var command = new NpgsqlBatchCommand(DmlBuilder.BuildInsert(table.PhysicalName, columns, parameters));
+                foreach (var (name, value) in (IDictionary<string, object?>)values)
+                {
+                    command.Parameters.AddWithValue(name, value ?? DBNull.Value);
+                }
+
+                batch.BatchCommands.Add(command);
+            }
+
+            var results = new List<WriteResult>(contexts.Count);
+            await using (var reader = await batch.ExecuteReaderAsync(cancellationToken))
+            {
+                do
+                {
+                    if (!await reader.ReadAsync(cancellationToken))
+                        throw new InvalidOperationException("An INSERT … RETURNING statement returned no row.");
+
+                    var row = new Dictionary<string, object?>(reader.FieldCount);
+                    for (var i = 0; i < reader.FieldCount; i++)
+                    {
+                        row[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                    }
+
+                    results.Add(WriteResult.Ok(Infrastructure.RowMapper.MapToLogicalDictionary(row, table.Columns)));
+                }
+                while (await reader.NextResultAsync(cancellationToken));
+            }
+
+            scope.SetRowCount(results.Count);
+            return results;
+        }
+        catch (PostgresException pg) when (PostgresWriteRefusal.IsCallersMistake(pg))
+        {
+            // As on a single insert. The refused statement is the one Npgsql names; its row is the
+            // first of this batch the database did not accept.
+            var translated = PostgresWriteRefusal.Translate(pg, table);
+            scope.SetError(translated.Message);
+            throw translated;
+        }
+        catch (Exception ex)
+        {
+            scope.SetError(ex.Message);
+            throw;
+        }
+    }
+
     private async Task<WriteResult> ExecuteUpdateAsync(IWriteContext context)
     {
         var table = context.Table;

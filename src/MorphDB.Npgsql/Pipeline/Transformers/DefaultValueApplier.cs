@@ -11,6 +11,8 @@ public sealed class DefaultValueApplier : ITransformer
 {
     public int Order => PipelineOrder.DefaultValueApplier;
 
+    public bool ReadsStoredRows(IWriteContext context) => false;
+
     public bool ShouldExecute(IWriteContext context)
     {
         return context.Options.ApplyDefaults

@@ -14,6 +14,9 @@ public sealed class WritePipeline : IWritePipeline
     private readonly ISecurityContextAccessor _securityContextAccessor;
     private readonly IWriteExecutor _writeExecutor;
 
+    // Statements sent in one round trip by a batch insert.
+    private const int MaxQueuedStatements = 1000;
+
     public WritePipeline(
         IEnumerable<IValidator> validators,
         IEnumerable<ITransformer> transformers,
@@ -36,6 +39,46 @@ public sealed class WritePipeline : IWritePipeline
     {
         var context = CreateContext(projectId, table, data, WriteOperationType.Insert, options, cancellationToken);
         return await ExecutePipelineAsync(context);
+    }
+
+    public async Task<IReadOnlyList<WriteResult>> InsertBatchAsync(
+        Guid projectId,
+        TableMetadata table,
+        IReadOnlyList<IDictionary<string, object?>> records,
+        WriteOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        // Each row runs the whole pipeline in order, as a single insert would; only the statements are
+        // queued and sent together. A step that reads stored rows first sends the queue, so it sees
+        // every earlier row of the batch — the batch means exactly what the same inserts one by one do.
+        var results = new List<WriteResult>(records.Count);
+        var queued = new List<IWriteContext>(Math.Min(records.Count, MaxQueuedStatements));
+
+        async Task SendQueuedAsync()
+        {
+            if (queued.Count == 0)
+                return;
+            results.AddRange(await _writeExecutor.ExecuteInsertBatchAsync(queued));
+            queued.Clear();
+        }
+
+        foreach (var record in records)
+        {
+            var context = CreateContext(projectId, table, record, WriteOperationType.Insert, options, cancellationToken);
+            if (await PrepareAsync(context, SendQueuedAsync) is { } failed)
+            {
+                await SendQueuedAsync();
+                results.Add(failed);
+                return results;
+            }
+
+            queued.Add(context);
+            if (queued.Count == MaxQueuedStatements)
+                await SendQueuedAsync();
+        }
+
+        await SendQueuedAsync();
+        return results;
     }
 
     public async Task<WriteResult> UpdateAsync(
@@ -153,17 +196,22 @@ public sealed class WritePipeline : IWritePipeline
         return results;
     }
 
-    private async Task<WriteResult> ExecutePipelineAsync(WriteContext context)
+    private async Task<WriteResult> ExecutePipelineAsync(WriteContext context) =>
+        await PrepareAsync(context) ?? await _writeExecutor.ExecuteAsync(context);
+
+    /// <summary>
+    /// Runs the transformers, then the validators. Returns the failure that ends the write, or null when
+    /// the context is ready for the executor. <paramref name="beforeReadingStoredRows"/> runs ahead of
+    /// any step that reads stored rows — a batch sends what it has queued there.
+    /// </summary>
+    private async Task<WriteResult?> PrepareAsync(WriteContext context, Func<Task>? beforeReadingStoredRows = null)
     {
         // Phase 1: Run transformers (apply defaults, timestamps, etc.)
         foreach (var transformer in _transformers)
         {
             if (!context.ShouldContinue)
                 break;
-            if (transformer.ShouldExecute(context))
-            {
-                await transformer.ExecuteAsync(context);
-            }
+            await RunStepAsync(transformer, context, beforeReadingStoredRows);
         }
 
         if (!context.ShouldContinue || context.Errors.Count > 0)
@@ -176,10 +224,7 @@ public sealed class WritePipeline : IWritePipeline
         {
             if (!context.ShouldContinue)
                 break;
-            if (validator.ShouldExecute(context))
-            {
-                await validator.ExecuteAsync(context);
-            }
+            await RunStepAsync(validator, context, beforeReadingStoredRows);
         }
 
         if (context.Errors.Count > 0)
@@ -187,8 +232,16 @@ public sealed class WritePipeline : IWritePipeline
             return WriteResult.Failed(context.Errors.ToArray());
         }
 
-        // Phase 3: Execute the actual write
-        return await _writeExecutor.ExecuteAsync(context);
+        return null;
+    }
+
+    private static async Task RunStepAsync(IWritePipelineStep step, WriteContext context, Func<Task>? beforeReadingStoredRows)
+    {
+        if (!step.ShouldExecute(context))
+            return;
+        if (beforeReadingStoredRows is not null && step.ReadsStoredRows(context))
+            await beforeReadingStoredRows();
+        await step.ExecuteAsync(context);
     }
 
     private WriteContext CreateContext(
@@ -226,4 +279,9 @@ public interface IWriteExecutor
 {
     Task<WriteResult> ExecuteAsync(IWriteContext context);
     Task<WriteResult> ExecuteDeleteAsync(IWriteContext context);
+
+    /// <summary>
+    /// Inserts prepared rows of one table in a single round trip, results in input order.
+    /// </summary>
+    Task<IReadOnlyList<WriteResult>> ExecuteInsertBatchAsync(IReadOnlyList<IWriteContext> contexts);
 }

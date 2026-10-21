@@ -20,6 +20,9 @@ public sealed class UniqueValidator : IValidator
 
     public int Order => PipelineOrder.UniqueValidator;
 
+    public bool ReadsStoredRows(IWriteContext context) =>
+        UniqueColumns(context.Table).Any(c => context.Data.TryGetValue(c.LogicalName, out var value) && value is not null);
+
     public bool ShouldExecute(IWriteContext context)
     {
         // Upsert is excluded on purpose: a collision on the conflict key is not an error there —
@@ -32,9 +35,7 @@ public sealed class UniqueValidator : IValidator
 
     public async Task ExecuteAsync(IWriteContext context)
     {
-        var uniqueColumns = context.Table.Columns
-            .Where(c => c.IsUnique && c.EnforceUniqueOnWrite && c.IsActive && !c.IsPrimaryKey)
-            .ToList();
+        var uniqueColumns = UniqueColumns(context.Table).ToList();
 
         if (uniqueColumns.Count == 0)
             return;
@@ -78,6 +79,9 @@ public sealed class UniqueValidator : IValidator
             }
         }
     }
+
+    private static IEnumerable<ColumnMetadata> UniqueColumns(TableMetadata table) =>
+        table.Columns.Where(c => c.IsUnique && c.EnforceUniqueOnWrite && c.IsActive && !c.IsPrimaryKey);
 
     private static string BuildUniqueCheckQuery(IWriteContext context, ColumnMetadata column)
     {

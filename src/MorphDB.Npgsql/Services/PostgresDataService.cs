@@ -160,19 +160,14 @@ public sealed class PostgresDataService : IMorphDataService
 
         var table = await GetTableWithColumnsAsync(projectId, tableName, cancellationToken);
 
-        // Row-by-row through the pipeline (this path always inserted row-by-row), atomic as one unit of
-        // work — or as part of the one the caller is already in.
-        var results = new List<IDictionary<string, object?>>(records.Count);
-
+        // Through the pipeline as one batch, atomic as one unit of work — or as part of the one the
+        // caller is already in. The first failed row ends it, and the unit undoes the rows before it.
         await using var unit = _units.Begin();
-        foreach (var record in records)
-        {
-            var result = await _writePipeline.InsertAsync(projectId, table, record, null, cancellationToken);
-            results.Add(UnwrapOrThrow(result, tableName));
-        }
+        var results = await _writePipeline.InsertBatchAsync(projectId, table, records, null, cancellationToken);
+        var rows = results.Select(result => UnwrapOrThrow(result, tableName)).ToList();
 
         await unit.CommitAsync(cancellationToken);
-        return results;
+        return rows;
     }
 
     /// <inheritdoc />

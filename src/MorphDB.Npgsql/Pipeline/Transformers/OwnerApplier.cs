@@ -13,6 +13,8 @@ public sealed class OwnerApplier : ITransformer
 
     public int Order => PipelineOrder.OwnerApplier;
 
+    public bool ReadsStoredRows(IWriteContext context) => false;
+
     public bool ShouldExecute(IWriteContext context)
     {
         return context.Options.ApplyOwnership

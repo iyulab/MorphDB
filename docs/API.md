@@ -372,6 +372,10 @@ POST /api/batch/data/customers/insert
 [ { "name": "Acme" }, { "name": "Globex" } ]
 ```
 
+It inserts all the rows or none, and sends them to the database together rather than one round trip
+per row — the form to load many rows with. Each row is still validated and written as a single insert
+would be, and a row may reference an earlier row of the same request.
+
 ---
 
 ### Hierarchy

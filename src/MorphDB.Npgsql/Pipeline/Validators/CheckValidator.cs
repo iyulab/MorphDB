@@ -15,6 +15,8 @@ public sealed partial class CheckValidator : IValidator
 {
     public int Order => PipelineOrder.CheckValidator;
 
+    public bool ReadsStoredRows(IWriteContext context) => false;
+
     public bool ShouldExecute(IWriteContext context)
     {
         return context.Options.ValidateCheck

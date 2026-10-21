@@ -15,6 +15,8 @@ public sealed class SoftDeleteApplier : ITransformer
     // Run early in delete operations
     public int Order => 50;
 
+    public bool ReadsStoredRows(IWriteContext context) => false;
+
     public bool ShouldExecute(IWriteContext context)
     {
         return context.OperationType == WriteOperationType.Delete

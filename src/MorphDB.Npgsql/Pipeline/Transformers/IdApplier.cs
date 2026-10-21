@@ -14,6 +14,8 @@ public sealed class IdApplier : ITransformer
     // Run first in the pipeline
     public int Order => PipelineOrder.IdApplier;
 
+    public bool ReadsStoredRows(IWriteContext context) => false;
+
     public bool ShouldExecute(IWriteContext context)
     {
         // Only apply ID on insert operations

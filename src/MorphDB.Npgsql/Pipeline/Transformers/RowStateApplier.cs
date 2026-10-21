@@ -11,6 +11,8 @@ public sealed class RowStateApplier : ITransformer
 {
     public int Order => PipelineOrder.RowStateApplier;
 
+    public bool ReadsStoredRows(IWriteContext context) => false;
+
     public bool ShouldExecute(IWriteContext context)
     {
         // Only execute for tables with RowStateEnabled

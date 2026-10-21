@@ -16,6 +16,8 @@ public sealed class TypeValidator : IValidator
 {
     public int Order => PipelineOrder.TypeValidator;
 
+    public bool ReadsStoredRows(IWriteContext context) => false;
+
     public bool ShouldExecute(IWriteContext context) =>
         context.OperationType is WriteOperationType.Insert or WriteOperationType.Update or WriteOperationType.Upsert;
 
