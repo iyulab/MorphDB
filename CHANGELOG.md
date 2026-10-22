@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.31.0
+
+A minor that lets a request act as a person. Given an issuer it trusts (`Security__Tokens__Issuer`,
+`__Audience`, beside a master secret), the service accepts people's access tokens as well as secrets,
+checks them against the issuer and runs each request under row-level security as the person it names —
+`sub`, the role claim and every claim fill the policy placeholders; a token never bypasses row-level
+security. The .NET client reports a table's relations. A deployment that sets no issuer behaves as
+0.30.x.
 
 ### Added
 
