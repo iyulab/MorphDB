@@ -276,6 +276,45 @@ public class BatchApiTests
         result.Results[0].Success.Should().BeTrue();
     }
 
+    [Fact]
+    public async Task BulkUpdate_WithoutFilter_IsRefusedAndWritesNothing()
+    {
+        var tableName = await SetupTestTableAsync();
+        var id = Guid.NewGuid();
+        await _client.PostAsJsonAsync($"/api/data/{tableName}", new Dictionary<string, object?>
+        {
+            ["_id"] = id,
+            ["name"] = "User 1",
+            ["email"] = "u1@example.com",
+            ["score"] = 10
+        }, TestContext.Current.CancellationToken);
+
+        foreach (var body in new object[]
+        {
+            new BulkUpdateRequest { Data = new Dictionary<string, object?> { ["score"] = 100 } },
+            new BulkUpdateRequest { Data = new Dictionary<string, object?> { ["score"] = 100 }, Filter = [] },
+        })
+        {
+            var response = await _client.PatchAsJsonAsync($"/api/batch/data/{tableName}", body, TestContext.Current.CancellationToken);
+
+            response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+            (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).Should().Contain("FILTER_REQUIRED");
+        }
+
+        var stored = await _client.GetFromJsonAsync<DataRecordResponse>($"/api/data/{tableName}/{id}", TestContext.Current.CancellationToken);
+        stored!.Data["score"]!.ToString().Should().Be("10");
+
+        // Every row, on purpose: a condition every row meets.
+        var everyRow = await _client.PatchAsJsonAsync($"/api/batch/data/{tableName}", new BulkUpdateRequest
+        {
+            Data = new Dictionary<string, object?> { ["score"] = 100 },
+            Filter = ["_id:isnotnull"],
+        }, TestContext.Current.CancellationToken);
+        everyRow.StatusCode.Should().Be(HttpStatusCode.OK);
+        stored = await _client.GetFromJsonAsync<DataRecordResponse>($"/api/data/{tableName}/{id}", TestContext.Current.CancellationToken);
+        stored!.Data["score"]!.ToString().Should().Be("100");
+    }
+
     #endregion
 
     #region Bulk Delete

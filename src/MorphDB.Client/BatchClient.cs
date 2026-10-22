@@ -51,8 +51,9 @@ public sealed class BatchClient
     /// <summary>
     /// Updates every row of one table the filters select — all of them apply — writing the same values to
     /// each. <see cref="BatchOperationResult.AffectedRows"/> of the single result says how many rows changed.
+    /// At least one filter is required, as the service requires it: an update with none would rewrite every row.
     /// </summary>
-    /// <exception cref="ArgumentException">No values are given.</exception>
+    /// <exception cref="ArgumentException">No filter, or no values, are given.</exception>
     public async Task<BatchResponse> UpdateManyAsync(
         string tableName,
         IReadOnlyList<Filter> filters,
@@ -61,6 +62,11 @@ public sealed class BatchClient
     {
         ArgumentNullException.ThrowIfNull(filters);
         ArgumentNullException.ThrowIfNull(data);
+        if (filters.Count == 0)
+        {
+            throw new ArgumentException("A bulk update names at least one filter, so it cannot rewrite the whole table by accident.", nameof(filters));
+        }
+
         if (data.Count == 0)
         {
             throw new ArgumentException("An update writes at least one value.", nameof(data));

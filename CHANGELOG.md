@@ -44,6 +44,10 @@
   and `IWriteExecutor.ExecuteInsertBatchAsync(contexts, firstIndex)` are new members. A custom `IValidator` or `ITransformer`
   keeps working unchanged; it may implement `ReadsStoredRows` returning `false` when it reads nothing from
   the database, which lets a batch keep queueing past it (the default, `true`, is always correct).
+- **A bulk update needs a filter** (breaking), as a bulk delete always has: `PATCH /api/batch/data/{table}`
+  with no condition is refused with `400` (`FILTER_REQUIRED`), and `client.Batch.UpdateManyAsync` with no
+  filter throws `ArgumentException` before sending. It used to rewrite every row of the table. To change
+  every row on purpose, name a condition every row meets (`_id:isnotnull`).
 
 ### Fixed
 
@@ -68,6 +72,9 @@
   indexes and relations by id where every other schema route takes names. Send each change to its own
   route: `POST /api/schema/tables/{name}/columns`, `PATCH`/`DELETE …/columns/{column}`,
   `POST …/indexes`, `DELETE /api/schema/indexes/{id}`, `POST`/`DELETE /api/schema/relations`.
+- **`filter` on an operation of `POST /api/batch/data`** (breaking for a body that sends it). Nothing read
+  it — an `UPDATE` or `DELETE` operation acts on its `id` — so a body that sent one is now refused with
+  `400` as any unknown field is, rather than ignoring the condition. Use the bulk routes to act on a filter.
 - **`MorphDBClientOptions.RetryCount` and `RetryDelay`** (breaking). Nothing read them — the client never
   retried. Delete them from your options; to retry, pass an `HttpClient` with a retry handler to
   `new MorphDBClient(httpClient, options)`.

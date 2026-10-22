@@ -140,7 +140,8 @@ public sealed class BatchController : ControllerBase
     }
 
     /// <summary>
-    /// Bulk update records in a table using a filter.
+    /// Bulk update records in a table using a filter. At least one condition is required, as for a bulk
+    /// delete: an update with none would rewrite every row of the table.
     /// </summary>
     [HttpPatch("data/{table}")]
     [ProducesResponseType(typeof(BatchResponse), StatusCodes.Status200OK)]
@@ -162,9 +163,17 @@ public sealed class BatchController : ControllerBase
             });
         }
 
-        // Build filter query
-        var query = _dataService.Query(projectId).From(table);
-        query = FilterExpressions.Apply(query, request.Filter);
+        if (!FilterExpressions.Any(request.Filter))
+        {
+            return BadRequest(new ErrorResponse
+            {
+                Error = "BadRequest",
+                Message = "Filter is required for bulk update to prevent accidentally rewriting every row",
+                Code = "FILTER_REQUIRED"
+            });
+        }
+
+        var query = FilterExpressions.Apply(_dataService.Query(projectId).From(table), request.Filter);
 
         var affected = await _dataService.UpdateBatchAsync(projectId, table, request.Data, query, cancellationToken);
 

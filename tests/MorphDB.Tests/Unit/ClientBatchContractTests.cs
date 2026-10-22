@@ -54,6 +54,18 @@ public class ClientBatchContractTests
     }
 
     [Fact]
+    public async Task UpdateMany_without_a_filter_is_refused_before_anything_is_sent()
+    {
+        var handler = new CapturingHandler("""{"results":[],"successCount":0,"failureCount":0}""");
+        var client = ClientOver(handler);
+
+        var act = () => client.Batch.UpdateManyAsync("products", [], new Dictionary<string, object?> { ["k"] = "a" }, TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<ArgumentException>().WithParameterName("filters");
+        handler.Request.Should().BeNull();
+    }
+
+    [Fact]
     public async Task Execute_targets_the_route_the_server_actually_serves()
     {
         var handler = new CapturingHandler("""{"results":[],"successCount":0,"failureCount":0}""");

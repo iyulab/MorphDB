@@ -1099,7 +1099,6 @@ public sealed record BatchOperation
     public required string Table { get; init; }
     public Guid? Id { get; init; }
     public IDictionary<string, object?>? Data { get; init; }
-    public string? Filter { get; init; }
     public IReadOnlyList<string>? KeyColumns { get; init; }
 }
 

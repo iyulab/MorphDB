@@ -272,9 +272,10 @@ JSON array as `value`. Numbers and instants are read the same on every server (i
 culture; an instant keeps its offset). A malformed condition is refused with `400` rather than skipped,
 since a dropped condition widens the result — and, for a bulk update or delete, the rows written.
 
-The same conditions select rows for `DELETE /api/batch/data/{table}?filter=…` (repeatable, at least one
-required) and for `PATCH /api/batch/data/{table}`, whose body carries them as a list:
-`{ "data": { "grade": "VIP" }, "filter": ["score:gte:90", "status:eq:active"] }`.
+The same conditions select rows for `DELETE /api/batch/data/{table}?filter=…` (repeatable) and for
+`PATCH /api/batch/data/{table}`, whose body carries them as a list:
+`{ "data": { "grade": "VIP" }, "filter": ["score:gte:90", "status:eq:active"] }`. Both require at least one
+condition — without one the request is refused with `400` (`FILTER_REQUIRED`), never applied to every row.
 
 An operator outside this list is answered with `400` listing the supported set — it is never
 silently coerced; the operator vocabulary above is the whole set, on every surface.
