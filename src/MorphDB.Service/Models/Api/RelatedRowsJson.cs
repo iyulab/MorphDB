@@ -56,9 +56,9 @@ internal static class RelatedRowsJson
         return new RelatedRows(table.GetString()!, column.GetString()!, where);
     }
 
-    /// <summary>A body's value of an <c>exists</c> condition, or the value as it came for any other operator.</summary>
+    /// <summary>A body's value of an <c>exists</c> or <c>notexists</c> condition, or the value as it came for any other operator.</summary>
     public static object? ForOperator(FilterOperator op, object? value) =>
-        op == FilterOperator.Exists
+        op.TakesRelatedRows()
             ? value is JsonElement element ? From(element) : value is RelatedRows ? value : throw new ArgumentException(Shape)
             : value;
 
@@ -76,7 +76,7 @@ internal static class RelatedRowsJson
         {
             var op = ApiModelExtensions.ParseFilterOperator(op2.GetString()!);
             var value = condition.TryGetProperty("value", out var v) ? ApiModelExtensions.NormalizeJsonValue(v) : null;
-            return new FilterCondition { Column = column2.GetString()!, Operator = op, Value = op == FilterOperator.Exists ? ForOperator(op, v) : value };
+            return new FilterCondition { Column = column2.GetString()!, Operator = op, Value = op.TakesRelatedRows() ? ForOperator(op, v) : value };
         }
 
         throw new ArgumentException(

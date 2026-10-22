@@ -667,7 +667,7 @@ internal sealed class MorphQuery : IMorphQuery
         // WHERE - a derived column filters like a stored one; an exists reads its related table, named
         // here once so the statement builds without waiting
         var related = await RelatedRowsSql.ResolveAsync(
-            Flatten(_whereConditions).Where(c => c.Operator == FilterOperator.Exists).Select(c => c.Value),
+            Flatten(_whereConditions).Where(c => c.Operator.TakesRelatedRows()).Select(c => c.Value),
             GetJoinedTableMetadataAsync,
             cancellationToken);
         foreach (var condition in _whereConditions)
@@ -859,13 +859,24 @@ internal sealed class MorphQuery : IMorphQuery
                 query.WhereNotNull(column);
                 break;
 
-            case ConditionType.Standard when condition.Operator == FilterOperator.Exists:
+            case ConditionType.Standard when condition.Operator.TakesRelatedRows():
                 var exists = RelatedRowsSql.Build(condition.Column, condition.Value, column, related,
                     static (inner, innerColumn, op, value) => ApplyStandardWhereCondition(inner, innerColumn, op, value, isOr: false));
-                if (condition.IsOr)
-                    query.OrWhereExists(exists);
-                else
-                    query.WhereExists(exists);
+                switch (condition.Operator, condition.IsOr)
+                {
+                    case (FilterOperator.Exists, false):
+                        query.WhereExists(exists);
+                        break;
+                    case (FilterOperator.Exists, true):
+                        query.OrWhereExists(exists);
+                        break;
+                    case (_, false):
+                        query.WhereNotExists(exists);
+                        break;
+                    default:
+                        query.OrWhereNotExists(exists);
+                        break;
+                }
                 break;
 
             case ConditionType.Standard:

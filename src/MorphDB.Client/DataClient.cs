@@ -328,6 +328,7 @@ public sealed class DataClient
         FilterOperator.In => "in",
         FilterOperator.NotIn => "notin",
         FilterOperator.Exists => "exists",
+        FilterOperator.NotExists => "notexists",
         // An operator this switch does not know used to be sent as "eq" — another question than the
         // caller asked, answered without a word.
         _ => throw new ArgumentOutOfRangeException(nameof(op), op, "Unsupported filter operator."),
@@ -338,7 +339,7 @@ public sealed class DataClient
     /// server reads (the same text a query string carries), anything else as it is.
     /// </summary>
     internal static object? WireValue(FilterOperator op, object? value) =>
-        op == FilterOperator.Exists && value is RelatedRows rows
+        op is FilterOperator.Exists or FilterOperator.NotExists && value is RelatedRows rows
             ? JsonDocument.Parse(FormatRelatedRows(rows)).RootElement.Clone()
             : value;
 

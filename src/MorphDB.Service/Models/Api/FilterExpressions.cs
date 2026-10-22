@@ -56,7 +56,7 @@ internal static class FilterExpressions
                 return (parts[0].Trim(), op, null);
             }
 
-            if (parts.Length == 3 && op == FilterOperator.Exists)
+            if (parts.Length == 3 && op.TakesRelatedRows())
             {
                 return (parts[0].Trim(), op, RelatedRowsJson.Parse(expression, parts[2].Trim()));
             }

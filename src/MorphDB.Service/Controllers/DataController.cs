@@ -499,8 +499,8 @@ public sealed class DataController : ControllerBase
     }
 
     private static object? ValueOf(QueryFilterCondition condition) =>
-        ApiModelExtensions.ParseFilterOperator(condition.Operator) == FilterOperator.Exists
-            ? RelatedRowsJson.ForOperator(FilterOperator.Exists, condition.Value)
+        ApiModelExtensions.ParseFilterOperator(condition.Operator) is var op && op.TakesRelatedRows()
+            ? RelatedRowsJson.ForOperator(op, condition.Value)
             : condition.Value is System.Text.Json.JsonElement je ? ParseJsonFilterValue(je) : condition.Value;
 
     private static object? ParseJsonFilterValue(System.Text.Json.JsonElement element)

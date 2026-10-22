@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **`notexists` — the rows with no related row.** The negation of `exists` (OData's `not any()`, SQL's
+  `NOT EXISTS`): it takes the same related-rows value and keeps the rows with no row of the related table
+  that holds their value and meets the conditions; with no conditions, the rows with no related row at all.
+  Every read that takes `exists` takes it — a row list (`filter=order_no:notexists:{…}`), a query body, an
+  aggregate filter, a GraphQL `records` filter — and the .NET client sends it as `FilterOperator.NotExists`.
+  It is refused where `exists` is: as a write's filter, nested inside either operator, and on a derived
+  related column.
+
 ## 0.31.0
 
 A minor that lets a request act as a person. Given an issuer it trusts (`Security__Tokens__Issuer`,

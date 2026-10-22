@@ -227,17 +227,30 @@ public enum FilterOperator
     /// the condition's column, and that the related conditions keep — <c>EXISTS</c>, as OData's <c>any()</c>
     /// and PostgREST's embedded filters ask. The value is a <see cref="RelatedRows"/>.
     /// </summary>
-    Exists
+    Exists,
+
+    /// <summary>
+    /// The row has no related row the related conditions keep — <c>NOT EXISTS</c>, as OData's <c>not any()</c>
+    /// asks; with no related conditions, the row has no related row at all. The value is a <see cref="RelatedRows"/>.
+    /// </summary>
+    NotExists
+}
+
+/// <summary>Reading a <see cref="FilterOperator"/>.</summary>
+public static class FilterOperatorExtensions
+{
+    /// <summary>Whether the operator's value is a <see cref="RelatedRows"/> — <see cref="FilterOperator.Exists"/> or <see cref="FilterOperator.NotExists"/>.</summary>
+    public static bool TakesRelatedRows(this FilterOperator op) => op is FilterOperator.Exists or FilterOperator.NotExists;
 }
 
 /// <summary>
-/// The value of an <see cref="FilterOperator.Exists"/> condition: the rows of <paramref name="Table"/> whose
+/// The value of an <see cref="FilterOperator.Exists"/> or <see cref="FilterOperator.NotExists"/> condition: the rows of <paramref name="Table"/> whose
 /// <paramref name="Column"/> holds the filtered row's value, kept by every one of <paramref name="Where"/>.
 /// The related table is read as any read of it is — soft-deleted rows left out, its row-level security applied.
 /// </summary>
 /// <param name="Table">The related table.</param>
 /// <param name="Column">The related table's column that holds the filtered row's value.</param>
-/// <param name="Where">Conditions on the related rows' stored columns; an <see cref="FilterOperator.Exists"/> among them is refused.</param>
+/// <param name="Where">Conditions on the related rows' stored columns, none to ask about any related row; an exists or not-exists among them is refused.</param>
 public sealed record RelatedRows(string Table, string Column, IReadOnlyList<FilterCondition> Where);
 
 /// <summary>

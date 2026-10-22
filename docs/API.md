@@ -258,6 +258,7 @@ GET /api/data/customers?filter=grade:eq:VIP&orderBy=_created_at:desc&page=1&page
 | `in` | Value is one of a list — a JSON array | `status:in:["open","held"]` |
 | `notin` | Value is none of a list — a JSON array | `id:notin:[3,7]` |
 | `exists` | A row of another table holds this row's value and meets conditions — a JSON object | `id:exists:{"table":"lines","column":"order_id","filter":["qty:gt:4"]}` |
+| `notexists` | No row of another table holds this row's value and meets conditions — a JSON object | `id:notexists:{"table":"lines","column":"order_id","filter":[]}` |
 
 One `filter` parameter is one condition; repeat the parameter for more, and every condition applies:
 `?filter=score:gte:20&filter=score:lt:40`. Only the first two colons separate, so a value may contain
@@ -292,6 +293,12 @@ over four. The related table is read as any read of it is: a row a soft delete h
 and its row-level security applies. It narrows reads — a row list, a query body, an aggregate, a GraphQL
 `records` filter — and is refused (`400`) as a write's filter, inside another `exists`, and on a derived
 (lookup, rollup, formula) related column. OData's `$filter` does not take it.
+
+`notexists` is its negation — OData's `not any()`: it takes the same value and keeps the rows with no related
+row the conditions keep, so with an empty `filter` list it keeps the rows with no related row at all
+(`order_no:notexists:{"table":"lines","column":"order_no","filter":[]}` finds the orders without a line).
+The related table is read the same way, and it narrows the same reads and is refused in the same places;
+neither operator nests inside the other.
 
 An operator outside this list is answered with `400` listing the supported set — it is never
 silently coerced; the operator vocabulary above is the whole set, on every surface but OData.

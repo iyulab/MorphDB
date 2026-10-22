@@ -6,7 +6,7 @@ using SqlKataQuery = SqlKata.Query;
 namespace MorphDB.Npgsql.Query;
 
 /// <summary>
-/// The <c>EXISTS</c> subquery behind an <see cref="FilterOperator.Exists"/> condition, built the same way by
+/// The <c>EXISTS</c> subquery behind an <see cref="FilterOperator.Exists"/> or <see cref="FilterOperator.NotExists"/> condition, built the same way by
 /// every reader that takes one (a row query, an aggregate): the related table under its own name, joined
 /// to the filtered row by the related column, its soft-deleted rows left out as a read of it leaves them
 /// out, and its conditions applied by the caller's own condition writer so an operator means one thing.
@@ -63,7 +63,7 @@ internal static class RelatedRowsSql
 
         foreach (var condition in rows.Where)
         {
-            if (condition.Operator == FilterOperator.Exists)
+            if (condition.Operator.TakesRelatedRows())
             {
                 throw new ValidationException(condition.Column, "the conditions of exists are on the related row's own columns; an exists inside an exists is not taken.");
             }

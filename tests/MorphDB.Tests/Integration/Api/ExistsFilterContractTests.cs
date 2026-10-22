@@ -10,7 +10,8 @@ namespace MorphDB.Tests.Integration.Api;
 
 /// <summary>
 /// The <c>exists</c> condition: a row is kept when a row of another table holds its value in a column and
-/// meets the related conditions — the orders with a line over four, as OData's <c>any()</c> asks. Every
+/// meets the related conditions — the orders with a line over four, as OData's <c>any()</c> asks — and its
+/// negation <c>notexists</c>: the orders with no such line, as <c>not any()</c> asks. Every
 /// read that takes a filter answers it alike (a row list, a query body, an aggregate, the .NET client); a
 /// write's filter refuses it, and the related table is read as any read of it is.
 /// </summary>
@@ -58,6 +59,9 @@ public class ExistsFilterContractTests(ApiIntegrationFixture fixture)
     private static string Exists(string lines, params string[] filter) =>
         "order_no:exists:" + JsonSerializer.Serialize(new { table = lines, column = "order_no", filter });
 
+    private static string NotExists(string lines, params string[] filter) =>
+        "order_no:notexists:" + JsonSerializer.Serialize(new { table = lines, column = "order_no", filter });
+
     private async Task<string[]> OrdersAsync(string orders, CancellationToken ct, params string[] conditions)
     {
         var query = string.Join("&", conditions.Select(c => "filter=" + Uri.EscapeDataString(c)));
@@ -80,6 +84,19 @@ public class ExistsFilterContractTests(ApiIntegrationFixture fixture)
     }
 
     [Fact]
+    public async Task A_row_list_keeps_the_rows_with_no_related_row_the_conditions_keep()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (orders, lines) = await OrdersAndLinesAsync(ct);
+
+        (await OrdersAsync(orders, ct, NotExists(lines, "qty:gt:4"))).Should().Equal("A-3");
+        (await OrdersAsync(orders, ct, NotExists(lines, "product:eq:nut", "qty:gt:6"))).Should().Equal("A-1", "A-3");
+        (await OrdersAsync(orders, ct, NotExists(lines))).Should().Equal(["A-3"], "with no conditions, no related row at all");
+        (await OrdersAsync(orders, ct, NotExists(lines, "product:in:[\"washer\"]"))).Should().Equal("A-1", "A-2", "A-3");
+        (await OrdersAsync(orders, ct, Exists(lines, "product:eq:bolt"), NotExists(lines, "qty:gt:6", "product:eq:nut"))).Should().Equal(["A-1"], "both apply");
+    }
+
+    [Fact]
     public async Task A_soft_deleted_related_row_does_not_count()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -90,6 +107,7 @@ public class ExistsFilterContractTests(ApiIntegrationFixture fixture)
         (await _client.DeleteAsync($"/api/data/{lines}/{id}", ct)).IsSuccessStatusCode.Should().BeTrue();
 
         (await OrdersAsync(orders, ct, Exists(lines, "qty:gt:4"))).Should().Equal("A-1");
+        (await OrdersAsync(orders, ct, NotExists(lines, "qty:gt:4"))).Should().Equal("A-2", "A-3");
     }
 
     [Fact]
@@ -116,6 +134,23 @@ public class ExistsFilterContractTests(ApiIntegrationFixture fixture)
         counted.StatusCode.Should().Be(HttpStatusCode.OK, await counted.Content.ReadAsStringAsync(ct));
         using var aggregate = JsonDocument.Parse(await counted.Content.ReadAsStringAsync(ct));
         aggregate.RootElement.GetProperty("data")[0].GetProperty("n").GetInt64().Should().Be(2);
+
+        var none = new { table = lines, column = "order_no", filter = Array.Empty<object>() };
+        var uncounted = await _client.PostAsJsonAsync($"/api/data/{orders}/aggregate", new
+        {
+            aggregations = new[] { new { function = "count", alias = "n" } },
+            filter = new[] { new { column = "order_no", @operator = "notexists", value = (object)none } },
+        }, ct);
+        uncounted.StatusCode.Should().Be(HttpStatusCode.OK, await uncounted.Content.ReadAsStringAsync(ct));
+        using var empty = JsonDocument.Parse(await uncounted.Content.ReadAsStringAsync(ct));
+        empty.RootElement.GetProperty("data")[0].GetProperty("n").GetInt64().Should().Be(1, "A-3 has no line");
+
+        var notQueried = await _client.PostAsJsonAsync($"/api/data/{orders}/query",
+            new { filter = new Dictionary<string, object?> { ["$type"] = "condition", ["column"] = "order_no", ["operator"] = "notexists", ["value"] = related } }, ct);
+        notQueried.StatusCode.Should().Be(HttpStatusCode.OK, await notQueried.Content.ReadAsStringAsync(ct));
+        using var notBody = JsonDocument.Parse(await notQueried.Content.ReadAsStringAsync(ct));
+        notBody.RootElement.GetProperty("data").EnumerateArray().Select(r => r.GetProperty("data").GetProperty("order_no").GetString())
+            .Should().BeEquivalentTo("A-3");
     }
 
     [Fact]
@@ -138,6 +173,17 @@ public class ExistsFilterContractTests(ApiIntegrationFixture fixture)
             Filter = [new ClientModels.AggregationFilter("order_no", ClientModels.FilterOperator.Exists, exists.Value)],
         }, ct);
         Convert.ToInt64(counted.Data.Single()["n"], System.Globalization.CultureInfo.InvariantCulture).Should().Be(2);
+
+        var notExists = new ClientModels.Filter("order_no", ClientModels.FilterOperator.NotExists, exists.Value);
+        var rest = await client.Data.QueryAsync(orders, new ClientModels.QueryRequest { Filters = [notExists], OrderBy = [new ClientModels.OrderBy("order_no")] }, ct);
+        rest.Data.Select(r => r.Data["order_no"]?.ToString()).Should().Equal("A-3");
+
+        var restCounted = await client.Data.AggregateAsync(orders, new ClientModels.AggregationRequest
+        {
+            Aggregations = [ClientModels.AggregationColumn.Count("n")],
+            Filter = [new ClientModels.AggregationFilter("order_no", ClientModels.FilterOperator.NotExists, new ClientModels.RelatedRows(lines, "order_no", []))],
+        }, ct);
+        Convert.ToInt64(restCounted.Data.Single()["n"], System.Globalization.CultureInfo.InvariantCulture).Should().Be(1);
     }
 
     [Fact]
@@ -153,9 +199,14 @@ public class ExistsFilterContractTests(ApiIntegrationFixture fixture)
         (await Status("order_no:exists:{\"table\":\"" + lines + "\"}")).Should().Be(HttpStatusCode.BadRequest, "the related column is required");
         (await Status(Exists(lines, "nope:eq:1"))).Should().NotBe(HttpStatusCode.OK, "a related column the table does not have");
         (await Status(Exists(lines, Exists(lines)))).Should().Be(HttpStatusCode.BadRequest, "an exists inside an exists");
+        (await Status(NotExists(lines, Exists(lines)))).Should().Be(HttpStatusCode.BadRequest, "an exists inside a not-exists");
+        (await Status(Exists(lines, NotExists(lines)))).Should().Be(HttpStatusCode.BadRequest, "a not-exists inside an exists");
+        (await Status("order_no:notexists:not-json")).Should().Be(HttpStatusCode.BadRequest);
 
         var write = await _client.DeleteAsync($"/api/batch/data/{orders}?filter={Uri.EscapeDataString(Exists(lines, "qty:gt:4"))}", ct);
         write.StatusCode.Should().Be(HttpStatusCode.BadRequest, "exists narrows reads, not writes");
+        var notWrite = await _client.DeleteAsync($"/api/batch/data/{orders}?filter={Uri.EscapeDataString(NotExists(lines))}", ct);
+        notWrite.StatusCode.Should().Be(HttpStatusCode.BadRequest, "notexists narrows reads, not writes");
         (await OrdersAsync(orders, ct)).Should().HaveCount(3, "the refused delete wrote nothing");
     }
 }

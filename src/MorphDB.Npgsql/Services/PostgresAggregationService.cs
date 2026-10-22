@@ -62,7 +62,7 @@ public sealed class PostgresAggregationService : IAggregationService
 
         // The related tables an exists condition reads, named once so the statement builds without waiting.
         var related = await RelatedRowsSql.ResolveAsync(
-            (request.Filter ?? []).Where(f => f.Operator == FilterOperator.Exists).Select(f => f.Value),
+            (request.Filter ?? []).Where(f => f.Operator.TakesRelatedRows()).Select(f => f.Value),
             async (name, ct) => await _metadataRepository.GetTableByNameAsync(projectId, name, includeColumns: true, ct)
                 ?? throw new TableNotFoundException(name),
             cancellationToken);
@@ -256,9 +256,13 @@ public sealed class PostgresAggregationService : IAggregationService
     {
         foreach (var filter in filters)
         {
-            if (filter.Operator == FilterOperator.Exists)
+            if (filter.Operator.TakesRelatedRows())
             {
-                query.WhereExists(RelatedRowsSql.Build(filter.Column, filter.Value, source.Column(filter.Column), related, ApplyFilter));
+                var exists = RelatedRowsSql.Build(filter.Column, filter.Value, source.Column(filter.Column), related, ApplyFilter);
+                if (filter.Operator == FilterOperator.Exists)
+                    query.WhereExists(exists);
+                else
+                    query.WhereNotExists(exists);
                 continue;
             }
 
