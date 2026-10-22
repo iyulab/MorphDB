@@ -1,6 +1,15 @@
 # Changelog
 
-## Unreleased
+## 0.30.0
+
+A minor that adds a filter for related rows and gives the .NET client every documented route. `exists`
+keeps the rows that have a related row meeting conditions — the orders with a line over four. The client
+presents a secret and reaches security policies, hierarchies, the audit log, schema history and bulk jobs.
+Batch inserts send their rows together. Breaking: a view read takes repeated `filter` parameters (it split
+one on `" AND "` and dropped what it could not read), a bulk update needs a filter, `POST /api/schema/batch`
+and an operation's `filter` in `POST /api/batch/data` are removed, and the client's unused retry options are
+gone. Fixed: a view read's `in` list and value types, the client's `DateOnly` filter values and its validation
+reasons, and the request log's status for handled errors.
 
 ### Added
 
