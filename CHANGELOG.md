@@ -47,6 +47,9 @@
 
 ### Fixed
 
+- **`MorphDBValidationException.Errors` carries the server's reasons by field.** The client never read the
+  error envelope's `details`, so `Errors` was always empty and a field's reason — or the refused row of a
+  batch insert (`[2].email`) — could be read only out of the message.
 - **The request log records the status the client received.** It sat inside the exception handler, so
   every error answered with a 4xx (a validation failure, a missing table, a refused secret) was logged as
   `responded 500` at Error level with its stack — client mistakes counted as server failures. A 4xx is now

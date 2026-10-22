@@ -48,6 +48,22 @@ public class ClientErrorEnvelopeTests
         ex.ErrorCode.Should().Be("VALIDATION_ERROR");
     }
 
+    /// <summary>
+    /// The reasons by field the server sends under <c>details</c> reach <see cref="MorphDBValidationException.Errors"/>,
+    /// which was always empty — a batch's refused row (<c>[2].email</c>) could be read only from the message.
+    /// </summary>
+    [Fact]
+    public async Task A_validation_failure_carries_the_servers_reasons_by_field()
+    {
+        await using var client = ClientReturning(HttpStatusCode.BadRequest,
+            """{"error":"ValidationError","message":"Validation error for '[2].email': a value is required","code":"VALIDATION_ERROR","details":{"[2].email":["a value is required"]}}""");
+
+        var act = () => client.Batch.InsertManyAsync("items", [new Dictionary<string, object?>()]);
+
+        var ex = (await act.Should().ThrowAsync<MorphDBValidationException>()).Which;
+        ex.Errors.Should().ContainKey("[2].email").WhoseValue.Should().Equal("a value is required");
+    }
+
     [Fact]
     public async Task A_conflict_carries_the_servers_code_through_the_schema_surface()
     {
