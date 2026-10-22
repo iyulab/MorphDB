@@ -13,6 +13,11 @@
   read as anonymous, a token claiming `master` or `service` is refused, and an issuer without a master
   secret or an audience stops start-up.
 
+- **The .NET client reports a table's relations**: `TableInfo.Relations`, each `RelationInfo` with the
+  ids of its two tables and columns (`SourceTableId`, `SourceColumnId`, `TargetTableId`,
+  `TargetColumnId`). The service has always returned them with the table; the client dropped them, so a
+  caller could not find what refers to a table without going to HTTP.
+
 ### Changed
 
 - A request with no credential while enforcement is on is told to send a secret or a token

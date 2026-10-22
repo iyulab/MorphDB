@@ -258,6 +258,13 @@ public sealed class TableInfo
     public IReadOnlyList<IndexInfo> Indexes { get; init; } = [];
 
     /// <summary>
+    /// The relations the table takes part in, on either side, as the server reports them — which side
+    /// this table is on is read from <see cref="RelationInfo.SourceTableId"/> and
+    /// <see cref="RelationInfo.TargetTableId"/> against <see cref="Id"/>.
+    /// </summary>
+    public IReadOnlyList<RelationInfo> Relations { get; init; } = [];
+
+    /// <summary>
     /// Creation timestamp.
     /// </summary>
     public DateTimeOffset CreatedAt { get; init; }
@@ -483,6 +490,18 @@ public sealed class RelationInfo
     /// Relation name.
     /// </summary>
     public required string Name { get; init; }
+
+    /// <summary>The table holding the referring column (the child).</summary>
+    public Guid SourceTableId { get; init; }
+
+    /// <summary>The referring column.</summary>
+    public Guid SourceColumnId { get; init; }
+
+    /// <summary>The table referred to (the parent).</summary>
+    public Guid TargetTableId { get; init; }
+
+    /// <summary>The column referred to.</summary>
+    public Guid TargetColumnId { get; init; }
 
     /// <summary>
     /// Relation type.

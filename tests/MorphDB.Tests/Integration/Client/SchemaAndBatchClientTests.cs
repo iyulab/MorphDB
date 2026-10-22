@@ -90,7 +90,18 @@ public class SchemaAndBatchClientTests(ApiIntegrationFixture fixture)
             TargetColumn = "code",
         }, Ct);
 
+        // Each side reports the relation with its ends, so a caller can find what refers to a table.
+        foreach (var side in new[] { parent, child })
+        {
+            var reported = Assert.Single((await client.Schema.GetTableAsync(side.Name, Ct))!.Relations);
+            Assert.Equal(relation.Id, reported.Id);
+            Assert.Equal(child.Id, reported.SourceTableId);
+            Assert.Equal(parent.Id, reported.TargetTableId);
+            Assert.Equal(child.Columns.Single(c => c.Name == "parent_code").Id, reported.SourceColumnId);
+        }
+
         await client.Schema.DeleteRelationAsync(relation.Id, Ct);
+        Assert.Empty((await client.Schema.GetTableAsync(parent.Name, Ct))!.Relations);
 
         // The relation is gone: a child row naming no parent is written, where the relation refused it.
         await client.Data.InsertAsync(child.Name, new Dictionary<string, object?> { ["parent_code"] = "nobody" }, Ct);
