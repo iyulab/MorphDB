@@ -51,6 +51,10 @@
 
 ### Fixed
 
+- **.NET client: a `DateOnly` or `TimeOnly` filter value is sent as an ISO day and a time-of-day span.** A
+  row query wrote it in the query string with the invariant culture's short form (`10/21/2026`), which the
+  server does not read as a date; it is now written as a request body writes it (`2026-10-21`, `08:30:00`),
+  in a list too.
 - **`MorphDBValidationException.Errors` carries the server's reasons by field.** The client never read the
   error envelope's `details`, so `Errors` was always empty and a field's reason — or the refused row of a
   batch insert (`[2].email`) — could be read only out of the message.

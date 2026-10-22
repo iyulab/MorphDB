@@ -51,4 +51,30 @@ public class ClientFilterListContractTests
             "n:notin:[1,2,1.5,true]",
             """at:in:["2026-01-02T03:04:05.0000000+09:00"]""");
     }
+
+    [Fact]
+    public async Task A_day_or_a_time_of_day_is_sent_as_the_request_body_writes_it()
+    {
+        var handler = new CapturingHandler();
+        var client = new MorphDBClient("http://morphdb.test", new MorphDBClientOptions { HttpMessageHandler = handler });
+
+        await client.Data.QueryAsync("t", new QueryRequest
+        {
+            Filters =
+            [
+                new Filter("on", FilterOperator.GreaterThanOrEqual, new DateOnly(2026, 10, 21)),
+                new Filter("at", FilterOperator.Equal, new TimeOnly(8, 30)),
+                new Filter("days", FilterOperator.In, new[] { new DateOnly(2026, 1, 2) }),
+            ],
+        }, TestContext.Current.CancellationToken);
+
+        var filters = handler.RequestUri!.Query.TrimStart('?').Split('&')
+            .Where(p => p.StartsWith("filter=", StringComparison.Ordinal))
+            .Select(p => Uri.UnescapeDataString(p["filter=".Length..]))
+            .ToList();
+        filters.Should().Equal(
+            "on:gte:2026-10-21",
+            "at:eq:08:30:00",
+            """days:in:["2026-01-02"]""");
+    }
 }

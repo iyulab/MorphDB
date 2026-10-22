@@ -267,6 +267,10 @@ public sealed class DataClient
         System.Collections.IEnumerable list and not string => FormatFilterList(list),
         DateTimeOffset instant => instant.ToString("O", CultureInfo.InvariantCulture),
         DateTime dateTime => dateTime.ToString("O", CultureInfo.InvariantCulture),
+        // A day and a time of day are written as a request body writes them (MorphDBJson): an ISO day,
+        // and the span since midnight. The invariant culture's own formats ("10/21/2026") are not ISO.
+        DateOnly date => date.ToString("O", CultureInfo.InvariantCulture),
+        TimeOnly time => time.ToTimeSpan().ToString("c", CultureInfo.InvariantCulture),
         bool flag => flag ? "true" : "false",
         IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture),
         _ => value.ToString() ?? string.Empty,
