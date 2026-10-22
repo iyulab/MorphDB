@@ -257,6 +257,7 @@ GET /api/data/customers?filter=grade:eq:VIP&orderBy=_created_at:desc&page=1&page
 | `isnotnull` | Column has a value — takes none | `closedAt:isnotnull` |
 | `in` | Value is one of a list — a JSON array | `status:in:["open","held"]` |
 | `notin` | Value is none of a list — a JSON array | `id:notin:[3,7]` |
+| `exists` | A row of another table holds this row's value and meets conditions — a JSON object | `id:exists:{"table":"lines","column":"order_id","filter":["qty:gt:4"]}` |
 
 One `filter` parameter is one condition; repeat the parameter for more, and every condition applies:
 `?filter=score:gte:20&filter=score:lt:40`. Only the first two colons separate, so a value may contain
@@ -282,8 +283,18 @@ applies — alongside `select`, `orderBy` (`column:asc|desc`, comma-separated) a
 column the view does not have, or a condition the view cannot answer (`between`), is refused with `400`
 (`INVALID_FILTER`).
 
+`exists` keeps the rows that have a related row — OData's `any()`, PostgREST's embedded filter. Its value
+names the related `table`, the related table's `column` that holds this row's value of the filtered column,
+and a `filter` list of conditions on the related rows (filter texts as above, or in a body
+`{"column", "operator", "value"}` objects); every condition applies, and with none any related row counts.
+`order_no:exists:{"table":"lines","column":"order_no","filter":["qty:gt:4"]}` finds the orders with a line
+over four. The related table is read as any read of it is: a row a soft delete has marked does not count,
+and its row-level security applies. It narrows reads — a row list, a query body, an aggregate, a GraphQL
+`records` filter — and is refused (`400`) as a write's filter, inside another `exists`, and on a derived
+(lookup, rollup, formula) related column. OData's `$filter` does not take it.
+
 An operator outside this list is answered with `400` listing the supported set — it is never
-silently coerced; the operator vocabulary above is the whole set, on every surface.
+silently coerced; the operator vocabulary above is the whole set, on every surface but OData.
 
 ### Complex query — `POST /api/data/{table}/query`
 

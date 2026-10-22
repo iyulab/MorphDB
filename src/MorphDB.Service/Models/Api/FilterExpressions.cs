@@ -56,6 +56,11 @@ internal static class FilterExpressions
                 return (parts[0].Trim(), op, null);
             }
 
+            if (parts.Length == 3 && op == FilterOperator.Exists)
+            {
+                return (parts[0].Trim(), op, RelatedRowsJson.Parse(expression, parts[2].Trim()));
+            }
+
             if (parts.Length == 3)
             {
                 return op is FilterOperator.In or FilterOperator.NotIn

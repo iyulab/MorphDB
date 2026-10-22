@@ -140,8 +140,23 @@ public enum FilterOperator
     In,
 
     /// <summary>Not in list.</summary>
-    NotIn
+    NotIn,
+
+    /// <summary>
+    /// Has a related row: a row of another table whose column holds this row's value of the filter's column,
+    /// and that the related conditions keep. The value is a <see cref="RelatedRows"/>.
+    /// </summary>
+    Exists
 }
+
+/// <summary>
+/// The value of an <see cref="FilterOperator.Exists"/> filter: the rows of <paramref name="Table"/> whose
+/// <paramref name="Column"/> holds the filtered row's value, kept by every one of <paramref name="Where"/>.
+/// </summary>
+/// <param name="Table">The related table.</param>
+/// <param name="Column">The related table's column that holds the filtered row's value.</param>
+/// <param name="Where">Conditions on the related rows' stored columns.</param>
+public sealed record RelatedRows(string Table, string Column, IReadOnlyList<Filter> Where);
 
 /// <summary>
 /// Ordering specification.

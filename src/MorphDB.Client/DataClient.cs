@@ -161,7 +161,7 @@ public sealed class DataClient
             .ToList(),
         GroupBy: request.GroupBy,
         Filter: request.Filter?
-            .Select(f => new AggregateWireFilter(f.Column, GetOperatorString(f.Operator), f.Value))
+            .Select(f => new AggregateWireFilter(f.Column, GetOperatorString(f.Operator), WireValue(f.Operator, f.Value)))
             .ToList(),
         Having: request.Having?
             .Select(h => new AggregateWireHaving(h.Alias, GetOperatorString(h.Operator), h.Value))
@@ -204,7 +204,7 @@ public sealed class DataClient
 
     private static QueryWireNode Wire(FilterNode node) => node switch
     {
-        FilterCondition condition => new QueryWireCondition(condition.Filter.Column, GetOperatorString(condition.Filter.Operator), condition.Filter.Value),
+        FilterCondition condition => new QueryWireCondition(condition.Filter.Column, GetOperatorString(condition.Filter.Operator), WireValue(condition.Filter.Operator, condition.Filter.Value)),
         FilterGroup group => new QueryWireGroup(group.Logic == FilterLogic.Or ? "or" : "and", [.. group.Filters.Select(Wire)]),
         _ => throw new ArgumentException($"A filter node of type {node.GetType().Name} cannot be sent.", nameof(node)),
     };
@@ -264,6 +264,7 @@ public sealed class DataClient
     internal static string FormatFilterValue(object? value) => value switch
     {
         null => string.Empty,
+        RelatedRows rows => FormatRelatedRows(rows),
         System.Collections.IEnumerable list and not string => FormatFilterList(list),
         DateTimeOffset instant => instant.ToString("O", CultureInfo.InvariantCulture),
         DateTime dateTime => dateTime.ToString("O", CultureInfo.InvariantCulture),
@@ -326,8 +327,41 @@ public sealed class DataClient
         FilterOperator.IsNotNull => "isnotnull",
         FilterOperator.In => "in",
         FilterOperator.NotIn => "notin",
-        _ => "eq"
+        FilterOperator.Exists => "exists",
+        // An operator this switch does not know used to be sent as "eq" — another question than the
+        // caller asked, answered without a word.
+        _ => throw new ArgumentOutOfRangeException(nameof(op), op, "Unsupported filter operator."),
     };
+
+    /// <summary>
+    /// A filter value as a request body carries it: the related rows of an exists as the JSON object the
+    /// server reads (the same text a query string carries), anything else as it is.
+    /// </summary>
+    internal static object? WireValue(FilterOperator op, object? value) =>
+        op == FilterOperator.Exists && value is RelatedRows rows
+            ? JsonDocument.Parse(FormatRelatedRows(rows)).RootElement.Clone()
+            : value;
+
+    private static string FormatRelatedRows(RelatedRows rows)
+    {
+        var buffer = new System.Buffers.ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("table", rows.Table);
+            writer.WriteString("column", rows.Column);
+            writer.WriteStartArray("filter");
+            foreach (var filter in rows.Where)
+            {
+                writer.WriteStringValue(FilterText(filter));
+            }
+
+            writer.WriteEndArray();
+            writer.WriteEndObject();
+        }
+
+        return System.Text.Encoding.UTF8.GetString(buffer.WrittenSpan);
+    }
 
 }
 

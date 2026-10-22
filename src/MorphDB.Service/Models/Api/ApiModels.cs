@@ -1922,7 +1922,9 @@ public sealed record QueryFilterConditionApiRequest
     {
         Column = Column,
         Operator = ApiModelExtensions.ParseFilterOperator(Operator),
-        Value = ApiModelExtensions.NormalizeJsonValue(Value)
+        Value = ApiModelExtensions.ParseFilterOperator(Operator) == MorphDB.Core.Abstractions.FilterOperator.Exists
+            ? RelatedRowsJson.ForOperator(MorphDB.Core.Abstractions.FilterOperator.Exists, Value)
+            : ApiModelExtensions.NormalizeJsonValue(Value)
     };
 }
 
@@ -2381,11 +2383,12 @@ public static class ApiModelExtensions
             "isnotnull" => FilterOperator.IsNotNull,
             "in" => FilterOperator.In,
             "notin" or "not-in" => FilterOperator.NotIn,
+            "exists" => FilterOperator.Exists,
             // An unknown operator used to fall back to Equals silently — the caller's typo became a
             // different query with no signal. Failing loudly is the contract boundary doing its job.
             _ => throw new ArgumentException(
                 $"Unknown filter operator '{op}'. Supported operators: eq, neq, gt, gte, lt, lte, " +
-                "like, ilike, contains, startswith, endswith, isnull, isnotnull, in, notin.")
+                "like, ilike, contains, startswith, endswith, isnull, isnotnull, in, notin, exists.")
         };
     }
 }

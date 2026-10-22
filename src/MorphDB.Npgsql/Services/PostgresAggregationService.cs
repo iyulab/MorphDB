@@ -60,8 +60,15 @@ public sealed class PostgresAggregationService : IAggregationService
         var source = await TableSource.CreateAsync(
             projectId, table, alias: null, _lookupResolver, _rollupResolver, _formulaResolver, cancellationToken);
 
+        // The related tables an exists condition reads, named once so the statement builds without waiting.
+        var related = await RelatedRowsSql.ResolveAsync(
+            (request.Filter ?? []).Where(f => f.Operator == FilterOperator.Exists).Select(f => f.Value),
+            async (name, ct) => await _metadataRepository.GetTableByNameAsync(projectId, name, includeColumns: true, ct)
+                ?? throw new TableNotFoundException(name),
+            cancellationToken);
+
         // Build the aggregation query
-        var query = BuildAggregationQuery(source, request);
+        var query = BuildAggregationQuery(source, request, related);
 
         // Compile and execute
         var compiled = _compiler.Compile(query);
@@ -83,7 +90,7 @@ public sealed class PostgresAggregationService : IAggregationService
         long? totalGroups = null;
         if (request.Limit.HasValue || request.Offset.HasValue)
         {
-            totalGroups = await CountGroupsAsync(source, request, cancellationToken);
+            totalGroups = await CountGroupsAsync(source, request, related, cancellationToken);
         }
 
         return new AggregationResult
@@ -98,7 +105,7 @@ public sealed class PostgresAggregationService : IAggregationService
         };
     }
 
-    private SqlKataQuery BuildAggregationQuery(TableSource source, AggregationRequest request)
+    private SqlKataQuery BuildAggregationQuery(TableSource source, AggregationRequest request, IReadOnlyDictionary<string, TableMetadata> related)
     {
         var query = new SqlKataQuery();
         source.ApplyFrom(query);
@@ -119,7 +126,7 @@ public sealed class PostgresAggregationService : IAggregationService
         // Add WHERE conditions
         if (request.Filter is { Count: > 0 })
         {
-            ApplyFilterConditions(query, source, request.Filter);
+            ApplyFilterConditions(query, source, request.Filter, related);
         }
 
         // Add GROUP BY
@@ -244,10 +251,17 @@ public sealed class PostgresAggregationService : IAggregationService
         }));
     }
 
-    private void ApplyFilterConditions(SqlKataQuery query, TableSource source, IReadOnlyList<FilterCondition> filters)
+    private void ApplyFilterConditions(
+        SqlKataQuery query, TableSource source, IReadOnlyList<FilterCondition> filters, IReadOnlyDictionary<string, TableMetadata> related)
     {
         foreach (var filter in filters)
         {
+            if (filter.Operator == FilterOperator.Exists)
+            {
+                query.WhereExists(RelatedRowsSql.Build(filter.Column, filter.Value, source.Column(filter.Column), related, ApplyFilter));
+                continue;
+            }
+
             ApplyFilter(query, source.Column(filter.Column), filter.Operator, filter.Value);
         }
     }
@@ -371,6 +385,7 @@ public sealed class PostgresAggregationService : IAggregationService
     private async Task<long> CountGroupsAsync(
         TableSource source,
         AggregationRequest request,
+        IReadOnlyDictionary<string, TableMetadata> related,
         CancellationToken cancellationToken)
     {
         // Build a count query for total groups
@@ -380,7 +395,7 @@ public sealed class PostgresAggregationService : IAggregationService
         // Add WHERE conditions
         if (request.Filter is { Count: > 0 })
         {
-            ApplyFilterConditions(subQuery, source, request.Filter);
+            ApplyFilterConditions(subQuery, source, request.Filter, related);
         }
 
         // Add GROUP BY

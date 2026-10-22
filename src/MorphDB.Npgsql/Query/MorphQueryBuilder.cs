@@ -664,10 +664,15 @@ internal sealed class MorphQuery : IMorphQuery
         var query = new SqlKataQuery();
         source.ApplyFrom(query);
 
-        // WHERE - a derived column filters like a stored one
+        // WHERE - a derived column filters like a stored one; an exists reads its related table, named
+        // here once so the statement builds without waiting
+        var related = await RelatedRowsSql.ResolveAsync(
+            Flatten(_whereConditions).Where(c => c.Operator == FilterOperator.Exists).Select(c => c.Value),
+            GetJoinedTableMetadataAsync,
+            cancellationToken);
         foreach (var condition in _whereConditions)
         {
-            ApplyWhereCondition(query, source.Column, condition);
+            ApplyWhereCondition(query, source.Column, condition, related);
         }
 
         // JOIN - resolve physical table and column names
@@ -793,11 +798,17 @@ internal sealed class MorphQuery : IMorphQuery
         }
     }
 
+    /// <summary>Every condition, a group's included, as one list.</summary>
+    private static IEnumerable<WhereCondition> Flatten(IEnumerable<WhereCondition> conditions) =>
+        conditions.SelectMany(c => c.Type == ConditionType.Group ? Flatten(c.Children!) : [c]);
+
     /// <summary>
     /// One condition, its column named through <paramref name="columnOf"/> — a group's conditions inside
-    /// parentheses, joined to what precedes it by its own AND or OR.
+    /// parentheses, joined to what precedes it by its own AND or OR. An exists reads its table from
+    /// <paramref name="related"/>; without one (a write's filter) it is refused.
     /// </summary>
-    private static void ApplyWhereCondition(SqlKataQuery query, Func<string, string> columnOf, WhereCondition condition)
+    private static void ApplyWhereCondition(
+        SqlKataQuery query, Func<string, string> columnOf, WhereCondition condition, IReadOnlyDictionary<string, TableMetadata>? related = null)
     {
         if (condition.Type == ConditionType.Group)
         {
@@ -805,7 +816,7 @@ internal sealed class MorphQuery : IMorphQuery
             {
                 foreach (var child in condition.Children!)
                 {
-                    ApplyWhereCondition(inner, columnOf, child);
+                    ApplyWhereCondition(inner, columnOf, child, related);
                 }
 
                 return inner;
@@ -846,6 +857,15 @@ internal sealed class MorphQuery : IMorphQuery
 
             case ConditionType.NotNull:
                 query.WhereNotNull(column);
+                break;
+
+            case ConditionType.Standard when condition.Operator == FilterOperator.Exists:
+                var exists = RelatedRowsSql.Build(condition.Column, condition.Value, column, related,
+                    static (inner, innerColumn, op, value) => ApplyStandardWhereCondition(inner, innerColumn, op, value, isOr: false));
+                if (condition.IsOr)
+                    query.OrWhereExists(exists);
+                else
+                    query.WhereExists(exists);
                 break;
 
             case ConditionType.Standard:

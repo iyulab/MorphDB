@@ -4,6 +4,14 @@
 
 ### Added
 
+- **A filter can ask for a related row: the `exists` operator.** `column:exists:{"table", "column",
+  "filter"}` keeps the rows for which a row of another table holds their value of `column` and meets the
+  related conditions — the orders with a line over four (`order_no:exists:{"table":"lines","column":
+  "order_no","filter":["qty:gt:4"]}`), as OData's `any()` and PostgREST's embedded filters ask. A row list,
+  a query body, an aggregate and a GraphQL `records` filter take it; a soft-deleted related row does not
+  count and the related table's row-level security applies. It is refused as a write's filter, nested, and
+  on a derived related column. The .NET client sends it as `FilterOperator.Exists` with a `RelatedRows`.
+
 - **The .NET client presents a secret.** `MorphDBClientOptions.Secret` is sent as
   `Authorization: Bearer <secret>` on every call and on the real-time connection. The client had no way
   to send one, so against a service started with a master secret every call from a client built on a base
@@ -57,6 +65,9 @@
   `contains`, `startswith` and `endswith` ignore case and match their value literally, as on a table read.
 
 ### Fixed
+
+- **.NET client: an operator the client does not map is refused rather than sent as `eq`.** The
+  mapping fell back to equality for any operator it did not list — another question than the caller asked.
 
 - **A view read's filter values are bound as values.** A list (`in`) reached the database as the text
   `System.Object[]`, and an unknown operator was read as equality. Values are now sent as parameters the
