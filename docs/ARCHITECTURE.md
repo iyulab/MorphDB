@@ -49,8 +49,8 @@ MorphDB is an abstraction layer over PostgreSQL that enables runtime schema chan
 │  ├── _morph_indexes    Index definitions                    │
 │  └── _morph_changelog  DDL change history                   │
 │                                                             │
-│  project_{id} schema (User Data)                             │
-│  └── tbl_* (hash-based table names)                         │
+│  public schema (User Data, every project)                   │
+│  └── tbl_* (hash-based names, a project_id column per row)  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
