@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **People's access tokens.** With `Security__Tokens__Issuer` and `Security__Tokens__Audience` set (and a
+  master secret injected), a bearer value that parses as a JSON Web Token is checked against the issuer's
+  published keys, issuer, audience and lifetime, and the request runs under row-level security as the
+  person it names: `sub` fills `{{user_id}}`, the role claim (`Security__Tokens__RoleClaim`, default
+  `role`) fills `{{role}}`, and each top-level claim fills `{{claims.x}}`. A request acting for a person
+  no longer has to borrow a shared secret's identity. A token that fails a check is refused rather than
+  read as anonymous, a token claiming `master` or `service` is refused, and an issuer without a master
+  secret or an audience stops start-up.
+
+### Changed
+
+- A request with no credential while enforcement is on is told to send a secret or a token
+  (`This request presented no credential.`).
+- `MorphDB.Npgsql` no longer depends on `System.IdentityModel.Tokens.Jwt`, which nothing in it used.
+
 ## 0.30.0
 
 A minor that adds a filter for related rows and gives the .NET client every documented route. `exists`

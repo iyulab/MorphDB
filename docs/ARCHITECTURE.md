@@ -179,7 +179,8 @@ every definition from the database.
 
 ```
 X-Project-Id header → SecurityContextMiddleware ─┐
-Authorization: Bearer → SecretAuthenticationMiddleware ─┴→ SecurityContext (ambient) → RLS / write pipeline
+Authorization: Bearer → CredentialAuthenticationMiddleware ─┴→ SecurityContext (ambient) → RLS / write pipeline
+                         (secret, or a token → JWT bearer handler)
 ```
 
 The project header scopes a request to a schema namespace via `IProjectContextAccessor`; **it is
@@ -187,13 +188,21 @@ never a credential.** Credentials are separate and opt-in:
 
 - **No master secret injected — the default.** The service carries no authentication of its own;
   access control belongs to the deployment (private binding, or an authenticating proxy in front).
-- **`Security__MasterSecret` injected.** `SecretAuthenticationMiddleware` requires a secret on every
-  request but the health and metrics probes, and fills in `SecurityContext.Role` from the secret
+- **`Security__MasterSecret` injected.** `CredentialAuthenticationMiddleware` requires a credential on
+  every request but the health and metrics probes, and fills in `SecurityContext.Role` from the secret
   that authenticated — which is what the `{{role}}` placeholder in a policy then resolves to.
+- **`Security__Tokens__Issuer` and `__Audience` set as well.** A bearer value that parses as a JSON Web
+  Token is checked by ASP.NET Core's JWT bearer handler — signature against the issuer's discovered
+  keys, issuer, audience, lifetime — and the request runs as the person it names: `sub` → `{{user_id}}`,
+  the role claim (`Security__Tokens__RoleClaim`, default `role`) → `{{role}}`, every top-level claim →
+  `{{claims.x}}`. A token never bypasses row-level security: one claiming `master` or `service` is
+  refused, and one that fails a check is refused rather than read as anonymous. Tokens require the master
+  secret — start-up refuses an issuer without one, since a token means nothing while an anonymous request
+  may do anything.
 
 The two middlewares are separate deliberately. `SecurityContextMiddleware` only acts when the
 project header is present and parses, so enforcement placed inside it could be skipped by omitting
-that header; the secret check runs on every non-exempt request regardless of what it carries.
+that header; the credential check runs on every non-exempt request regardless of what it carries.
 
 ## Virtual Constraint Architecture
 

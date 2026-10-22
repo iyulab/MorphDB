@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -7,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.IdentityModel.Tokens;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Audit;
 using MorphDB.Core.Models;
@@ -18,6 +20,7 @@ using MorphDB.Npgsql.Schema;
 using MorphDB.Npgsql.Security;
 using MorphDB.Npgsql.Services;
 using MorphDB.Service.Models.Api;
+using MorphDB.Service.Security;
 using Npgsql;
 
 namespace MorphDB.Tests.Fixtures;
@@ -262,6 +265,41 @@ public sealed class ApiTestFixture : IAsyncLifetime
                 }));
 
             _secretFactories[masterSecret] = factory;
+        }
+
+        return factory;
+    }
+
+    /// <summary>
+    /// Returns a factory that enforces <paramref name="masterSecret"/> and accepts access tokens from
+    /// <paramref name="tokens"/>' issuer, signed by <paramref name="signingKey"/> — the keys a real
+    /// deployment would discover from the issuer, handed over directly. Cached like
+    /// <see cref="WithMasterSecret"/>.
+    /// </summary>
+    public WebApplicationFactory<Program> WithTokens(string masterSecret, TokenOptions tokens, SecurityKey signingKey)
+    {
+        var key = $"tokens:{masterSecret}:{tokens.Issuer}:{tokens.Audience}";
+        if (!_secretFactories.TryGetValue(key, out var factory))
+        {
+            factory = _factory!.WithWebHostBuilder(builder =>
+                builder.ConfigureTestServices(services =>
+                {
+                    services.RemoveAll<SecretOptions>();
+                    services.AddSingleton(new SecretOptions { MasterSecret = masterSecret });
+                    services.RemoveAll<TokenOptions>();
+                    services.AddSingleton(tokens);
+                    services.Configure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, jwt =>
+                    {
+                        jwt.Authority = null;
+                        jwt.MetadataAddress = string.Empty;
+                        jwt.TokenValidationParameters.ValidIssuer = tokens.Issuer;
+                        jwt.TokenValidationParameters.ValidAudience = tokens.Audience;
+                        jwt.TokenValidationParameters.IssuerSigningKey = signingKey;
+                        jwt.TokenValidationParameters.RoleClaimType = tokens.RoleClaim;
+                    });
+                }));
+
+            _secretFactories[key] = factory;
         }
 
         return factory;

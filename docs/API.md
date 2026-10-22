@@ -1361,6 +1361,45 @@ another and revoke the old one. Revocation keeps the row so audit records retain
 Only the master secret bypasses row-level security. An issued secret is subject to the same policies
 an anonymous caller is — with `{{role}}` now resolving to something.
 
+### People's access tokens
+
+A secret identifies a *connection*. When a request acts for a person — an application querying on a
+user's behalf — row-level security should see that person, not the application's shared secret. For
+that the service accepts **access tokens from an issuer the deployment trusts** (its own identity
+provider), and checks them; it issues none and keeps no users. This is the position PostgREST takes
+with JWT authentication.
+
+```yaml
+environment:
+  Security__MasterSecret: <a long random string>      # required: tokens need enforcement on
+  Security__Tokens__Issuer: https://id.example.com/realms/acme
+  Security__Tokens__Audience: morphdb
+  # Security__Tokens__MetadataAddress: <discovery URL, when not {Issuer}/.well-known/openid-configuration>
+  # Security__Tokens__RoleClaim: role                  # the claim {{role}} becomes
+```
+
+A token is presented the same way as a secret:
+
+```http
+Authorization: Bearer eyJhbGciOiJSUzI1NiIs...
+```
+
+A bearer value that parses as a JSON Web Token is a token; anything else is a secret. The token's
+signature is checked against the issuer's published keys, and its `iss`, `aud` and lifetime against
+the configuration. It then runs as the person it names:
+
+| Policy placeholder | Comes from |
+|---|---|
+| `{{user_id}}` | `sub` |
+| `{{role}}` | the role claim (`role` unless configured) — absent means no role |
+| `{{claims.x}}` | the top-level claim `x`; a non-string value as its JSON text |
+
+A token that fails any check is answered `401 UNAUTHENTICATED` — it is never read as anonymous. A
+token whose role claim is `master` or `service` is answered `403 FORBIDDEN`: **a token never bypasses
+row-level security**, so a table a token reads should carry a policy. Starting the service with
+`Security__Tokens__Issuer` but no master secret fails at start-up, as does an issuer without an
+audience.
+
 ## Rate limiting
 
 Off unless configured. Turned on, it is a **quota per project**: every request that names a project

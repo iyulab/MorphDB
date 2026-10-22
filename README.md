@@ -216,8 +216,9 @@ Every schema and data endpoint is project-scoped, so a bare request is answered 
 >
 > **Out of the box the service does not authenticate any endpoint.** Inject a master secret
 > (`Security__MasterSecret`) and it requires `Authorization: Bearer <secret>` on everything but the
-> health and metrics probes; you then issue further secrets, each carrying a role.
-> See [Connection secrets](docs/API.md#connection-secrets). If you are building something
+> health and metrics probes; you then issue further secrets, each carrying a role. Set an issuer as well
+> and it accepts people's access tokens, so row-level security sees the person a request acts for.
+> See [Connection secrets](docs/API.md#connection-secrets) and [People's access tokens](docs/API.md#peoples-access-tokens). If you are building something
 > multi-user, that boundary is still yours to stand, in front of MorphDB.
 
 ```bash

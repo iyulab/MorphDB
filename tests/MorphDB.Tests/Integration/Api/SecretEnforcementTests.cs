@@ -62,7 +62,7 @@ public class SecretEnforcementTests
         return client;
     }
 
-    // (1) The body of the boundary. Delete the deny branch in SecretAuthenticationMiddleware and
+    // (1) The body of the boundary. Delete the deny branch in CredentialAuthenticationMiddleware and
     // this goes green on a 200.
     [Fact]
     public async Task A_request_with_no_secret_is_refused_when_a_master_secret_is_injected()
@@ -138,7 +138,7 @@ public class SecretEnforcementTests
     [Fact]
     public void The_exemption_list_does_not_grow_unnoticed()
     {
-        SecretAuthenticationMiddleware.ExemptPathPrefixes.Should().BeEquivalentTo(
+        CredentialAuthenticationMiddleware.ExemptPathPrefixes.Should().BeEquivalentTo(
             ExpectedExemptPrefixes,
             "every prefix here is a route that answers without a secret — adding one is a change to " +
             "the attack surface and belongs in a commit that says so");
@@ -246,7 +246,7 @@ public class SecretEnforcementTests
         // out to its caller. Downstream is the only place the context is ever observed in
         // production, so this is also the honest place to observe it here.
         SecurityContext? observed = null;
-        var middleware = new SecretAuthenticationMiddleware(_ =>
+        var middleware = new CredentialAuthenticationMiddleware(_ =>
         {
             observed = accessor.ContextOrNull;
             return Task.CompletedTask;
@@ -259,6 +259,7 @@ public class SecretEnforcementTests
         await middleware.InvokeAsync(
             httpContext,
             new SecretOptions { MasterSecret = MasterSecret },
+            new TokenOptions(),
             services.GetRequiredService<ISecretService>(),
             accessor);
 

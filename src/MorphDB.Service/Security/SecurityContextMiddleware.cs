@@ -7,7 +7,7 @@ namespace MorphDB.Service.Security;
 /// <para>
 /// This establishes the anonymous context of the project a request addresses; row-level security
 /// evaluates against it. Whether the caller is anyone in particular is a separate question, decided
-/// after this by <see cref="SecretAuthenticationMiddleware"/> — which replaces this context with an
+/// after this by <see cref="CredentialAuthenticationMiddleware"/> — which replaces this context with an
 /// authenticated one when a deployment has injected a master secret, and leaves it untouched when
 /// none is injected (the default, in which the service authenticates nothing).
 /// </para>

@@ -23,7 +23,6 @@
     <PackageReference Include="StackExchange.Redis" />
     <PackageReference Include="ClosedXML" />
     <PackageReference Include="Polly" />
-    <PackageReference Include="System.IdentityModel.Tokens.Jwt" />
     <PackageReference Include="BCrypt.Net-Next" />
   </ItemGroup>
 

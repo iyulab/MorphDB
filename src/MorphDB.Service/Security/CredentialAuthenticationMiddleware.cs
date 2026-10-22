@@ -1,10 +1,24 @@
+using System.Text.Json;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Tokens;
 using MorphDB.Core.Security;
 using MorphDB.Service.Models.Api;
 
 namespace MorphDB.Service.Security;
 
 /// <summary>
-/// Enforces connection secrets, when a deployment has injected a master secret.
+/// Authenticates the credential a request presents: a connection secret, enforced when a deployment
+/// has injected a master secret, or a person's access token from the issuer it trusts
+/// (<see cref="TokenOptions"/>).
+/// <para>
+/// Both arrive as <c>Authorization: Bearer</c>. A value that parses as a JSON Web Token is a token
+/// when tokens are accepted, and anything else is a secret. A token is checked by the framework's
+/// JWT bearer handler and runs as the person it names — subject, role and claims fill the policy
+/// placeholders, and it never bypasses row-level security. A token that fails is refused outright,
+/// never read as anonymous: a caller that meant to be someone must not silently become no one.
+/// </para>
 /// <para>
 /// This is a middleware of its own rather than a branch inside
 /// <see cref="SecurityContextMiddleware"/>, and the distinction is load-bearing: that middleware
@@ -17,7 +31,7 @@ namespace MorphDB.Service.Security;
 /// still recorded — a denial nobody can see is not much of a boundary.
 /// </para>
 /// </summary>
-public sealed class SecretAuthenticationMiddleware
+public sealed class CredentialAuthenticationMiddleware
 {
     /// <summary>
     /// The header carrying the secret.
@@ -44,7 +58,7 @@ public sealed class SecretAuthenticationMiddleware
 
     private readonly RequestDelegate _next;
 
-    public SecretAuthenticationMiddleware(RequestDelegate next)
+    public CredentialAuthenticationMiddleware(RequestDelegate next)
     {
         _next = next;
     }
@@ -52,20 +66,34 @@ public sealed class SecretAuthenticationMiddleware
     public async Task InvokeAsync(
         HttpContext context,
         SecretOptions options,
+        TokenOptions tokens,
         ISecretService secrets,
         ISecurityContextAccessor securityContextAccessor)
     {
-        if (!options.IsEnforced || IsExempt(context.Request.Path))
+        if (IsExempt(context.Request.Path))
         {
             await _next(context);
             return;
         }
 
-        var presented = ExtractSecret(context.Request);
+        var presented = ExtractBearer(context.Request);
+
+        if (tokens.IsEnabled && presented is not null && LooksLikeToken(presented))
+        {
+            await AuthenticateTokenAsync(context, presented, tokens, securityContextAccessor);
+            return;
+        }
+
+        if (!options.IsEnforced)
+        {
+            await _next(context);
+            return;
+        }
+
         if (presented is null)
         {
             await DenyAsync(context, StatusCodes.Status401Unauthorized, "UNAUTHENTICATED",
-                "This request presented no secret. Send an Authorization: Bearer <secret> header.");
+                "This request presented no credential. Send an Authorization: Bearer <secret or token> header.");
             return;
         }
 
@@ -109,7 +137,73 @@ public sealed class SecretAuthenticationMiddleware
         ExemptPathPrefixes.Any(prefix =>
             path.StartsWithSegments(prefix, StringComparison.OrdinalIgnoreCase));
 
-    private static string? ExtractSecret(HttpRequest request)
+    private async Task AuthenticateTokenAsync(
+        HttpContext context,
+        string token,
+        TokenOptions tokens,
+        ISecurityContextAccessor securityContextAccessor)
+    {
+        var result = await context.AuthenticateAsync(JwtBearerDefaults.AuthenticationScheme);
+        if (!result.Succeeded || result.Principal is null)
+        {
+            // Why it failed (signature, issuer, audience, expiry) is logged by the handler; the
+            // caller learns only that the token was not accepted.
+            await DenyAsync(context, StatusCodes.Status401Unauthorized, "UNAUTHENTICATED",
+                "This token is not valid.");
+            return;
+        }
+
+        var principal = result.Principal;
+        var role = principal.FindFirst(tokens.RoleClaim)?.Value;
+        if (role is not null && SecretRoles.Reserved.Contains(role))
+        {
+            await DenyAsync(context, StatusCodes.Status403Forbidden, "FORBIDDEN",
+                $"A token may not carry the reserved role '{role}'.");
+            return;
+        }
+
+        securityContextAccessor.SetContext(new SecurityContext
+        {
+            ProjectId = securityContextAccessor.ContextOrNull?.ProjectId ?? Guid.Empty,
+            IsAuthenticated = true,
+            BypassRls = false,
+            Role = role,
+            UserId = principal.FindFirst(JwtRegisteredClaimNames.Sub)?.Value,
+            Email = principal.FindFirst(JwtRegisteredClaimNames.Email)?.Value,
+            Principal = principal,
+            Claims = ClaimsOf(token)
+        });
+
+        await _next(context);
+    }
+
+    /// <summary>
+    /// The token's payload as <c>{{claims.x}}</c> sees it: each top-level claim by its name, strings
+    /// as they are and anything else (numbers, booleans, arrays, objects) as its JSON text. Read from
+    /// the token itself rather than the principal, which splits arrays into repeated claims.
+    /// </summary>
+    private static Dictionary<string, string> ClaimsOf(string token)
+    {
+        var payload = Base64UrlEncoder.DecodeBytes(new JsonWebToken(token).EncodedPayload);
+        using var document = JsonDocument.Parse(payload);
+
+        var claims = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var property in document.RootElement.EnumerateObject())
+        {
+            claims[property.Name] = property.Value.ValueKind == JsonValueKind.String
+                ? property.Value.GetString()!
+                : property.Value.GetRawText();
+        }
+
+        return claims;
+    }
+
+    private static bool LooksLikeToken(string presented) =>
+        TokenHandler.CanReadToken(presented);
+
+    private static readonly JsonWebTokenHandler TokenHandler = new();
+
+    private static string? ExtractBearer(HttpRequest request)
     {
         if (!request.Headers.TryGetValue(HeaderName, out var values))
         {
@@ -140,12 +234,12 @@ public sealed class SecretAuthenticationMiddleware
 }
 
 /// <summary>
-/// Pipeline registration for <see cref="SecretAuthenticationMiddleware"/>.
+/// Pipeline registration for <see cref="CredentialAuthenticationMiddleware"/>.
 /// </summary>
-public static class SecretAuthenticationMiddlewareExtensions
+public static class CredentialAuthenticationMiddlewareExtensions
 {
-    public static IApplicationBuilder UseSecretAuthentication(this IApplicationBuilder app)
+    public static IApplicationBuilder UseCredentialAuthentication(this IApplicationBuilder app)
     {
-        return app.UseMiddleware<SecretAuthenticationMiddleware>();
+        return app.UseMiddleware<CredentialAuthenticationMiddleware>();
     }
 }

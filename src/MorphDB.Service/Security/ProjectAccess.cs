@@ -7,7 +7,7 @@ namespace MorphDB.Service.Security;
 /// Decides what a secret may do on the routes that address a project by its path rather than by the
 /// <c>X-Project-Id</c> header.
 /// <para>
-/// <see cref="SecretAuthenticationMiddleware"/> holds a confined secret to the project its header
+/// <see cref="CredentialAuthenticationMiddleware"/> holds a confined secret to the project its header
 /// names, and nowhere else — so a route that takes the project from its path (<c>/api/projects/{id}</c>,
 /// its audit log) was addressed with the header set to the secret's own project and answered for any
 /// other. These routes ask here instead. Creating, changing and deleting a project is administration,

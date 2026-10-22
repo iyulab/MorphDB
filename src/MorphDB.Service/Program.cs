@@ -1,4 +1,5 @@
 using System.Globalization;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.OpenApi;
 using MorphDB.Core.Abstractions;
@@ -176,6 +177,42 @@ try
     var secretOptions = builder.Configuration.GetSection(SecretOptions.SectionName).Get<SecretOptions>()
         ?? new SecretOptions();
     builder.Services.AddSingleton(secretOptions);
+
+    // People's access tokens, from the issuer the deployment trusts (Security__Tokens__Issuer). The
+    // framework's JWT bearer handler checks them; CredentialAuthenticationMiddleware decides when to
+    // ask it. Accepting tokens while nothing is enforced would let an anonymous request do anything a
+    // token holder could, so that combination is refused here rather than advertised.
+    var tokenOptions = builder.Configuration.GetSection(TokenOptions.SectionName).Get<TokenOptions>()
+        ?? new TokenOptions();
+    if (tokenOptions.IsEnabled && !secretOptions.IsEnforced)
+    {
+        throw new InvalidOperationException(
+            "Security:Tokens:Issuer is set but Security:MasterSecret is not. Tokens are accepted only while " +
+            "the service enforces credentials; inject a master secret as well.");
+    }
+
+    if (tokenOptions.IsEnabled && string.IsNullOrWhiteSpace(tokenOptions.Audience))
+    {
+        throw new InvalidOperationException(
+            "Security:Tokens:Audience is required when Security:Tokens:Issuer is set.");
+    }
+
+    builder.Services.AddSingleton(tokenOptions);
+    builder.Services.AddAuthentication()
+        .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, jwt =>
+        {
+            jwt.Authority = tokenOptions.Issuer;
+            jwt.Audience = tokenOptions.Audience;
+            jwt.MetadataAddress = tokenOptions.MetadataAddress ?? string.Empty;
+            jwt.RequireHttpsMetadata = tokenOptions.RequireHttpsMetadata;
+            jwt.MapInboundClaims = false;
+            jwt.TokenValidationParameters.ValidIssuer = tokenOptions.Issuer;
+            jwt.TokenValidationParameters.ValidateIssuer = true;
+            jwt.TokenValidationParameters.ValidateAudience = true;
+            jwt.TokenValidationParameters.ValidateLifetime = true;
+            jwt.TokenValidationParameters.RequireExpirationTime = true;
+            jwt.TokenValidationParameters.RoleClaimType = tokenOptions.RoleClaim;
+        });
     builder.Services.AddSingleton<ISecretService, SecretService>();
     builder.Services.AddSingleton<ProjectAccess>();
 
@@ -281,8 +318,8 @@ try
     app.UseHttpsRedirection();
     app.UseWebSockets(); // The real-time hub's WebSocket transport (SignalR)
     app.UseSecurityContext();
-    app.UseSecretAuthentication(); // Enforces secrets when one is injected; before rate limiting and
-                                   // audit logging so a denial is still counted and still recorded
+    app.UseCredentialAuthentication(); // Secrets when one is injected, tokens when an issuer is set; before
+                                       // rate limiting and audit logging so a denial is still counted and recorded
     app.UseRateLimiting(); // Rate limiting after auth
     app.UseAuditLogging(); // Audit logging captures all requests including rate-limited ones
 
