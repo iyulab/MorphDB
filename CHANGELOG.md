@@ -48,8 +48,20 @@
   with no condition is refused with `400` (`FILTER_REQUIRED`), and `client.Batch.UpdateManyAsync` with no
   filter throws `ArgumentException` before sending. It used to rewrite every row of the table. To change
   every row on purpose, name a condition every row meets (`_id:isnotnull`).
+- **A view read takes the table read's filter language** (breaking): `GET /api/views/{name}/data` reads one
+  condition per repeated `filter` parameter — `?filter=age:gte:30&filter=score:lt:80` — where it split a
+  single parameter on `" AND "`. To migrate, send each condition as its own `filter` parameter; the .NET
+  client's `client.Views.QueryAsync` already does. A malformed condition, an operator the view cannot
+  answer, or a column the view does not have is refused with `400` (`INVALID_FILTER`); the view endpoint
+  used to drop a condition it could not read and answer for every row. `in`/`notin` take a JSON array, and
+  `contains`, `startswith` and `endswith` ignore case and match their value literally, as on a table read.
 
 ### Fixed
+
+- **A view read's filter values are bound as values.** A list (`in`) reached the database as the text
+  `System.Object[]`, and an unknown operator was read as equality. Values are now sent as parameters the
+  database reads as the compared column's type, and a number in a view's stored filter is written in the
+  invariant culture (`1.5`, not `1,5`) wherever the service runs.
 
 - **.NET client: a `DateOnly` or `TimeOnly` filter value is sent as an ISO day and a time-of-day span.** A
   row query wrote it in the query string with the invariant culture's short form (`10/21/2026`), which the

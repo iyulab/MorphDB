@@ -368,6 +368,10 @@ public sealed class ViewController : ControllerBase
                 Code = ex.ErrorCode
             });
         }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new ErrorResponse { Error = "BadRequest", Message = ex.Message, Code = "INVALID_FILTER" });
+        }
     }
 
     #endregion
@@ -493,38 +497,20 @@ public sealed class ViewController : ControllerBase
         return select.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
     }
 
-    private static List<ViewFilterSpec>? ParseFilters(string? filter)
+    /// <summary>
+    /// The query's conditions, read by the table read's own parser: one condition per <c>filter</c>
+    /// parameter, a malformed one refused rather than dropped.
+    /// </summary>
+    private static List<ViewFilterSpec>? ParseFilters(string[]? filters)
     {
-        if (string.IsNullOrWhiteSpace(filter))
+        if (!FilterExpressions.Any(filters))
             return null;
 
-        var filters = new List<ViewFilterSpec>();
-        var parts = filter.Split(" AND ", StringSplitOptions.RemoveEmptyEntries);
-
-        foreach (var part in parts)
+        return [.. filters!.Select(expression =>
         {
-            var colonIndex = part.IndexOf(':');
-            if (colonIndex > 0)
-            {
-                var secondColonIndex = part.IndexOf(':', colonIndex + 1);
-                if (secondColonIndex > 0)
-                {
-                    var field = part[..colonIndex];
-                    var op = part[(colonIndex + 1)..secondColonIndex];
-                    var value = part[(secondColonIndex + 1)..];
-
-                    filters.Add(new ViewFilterSpec
-                    {
-                        Field = field,
-                        Operator = ApiModelExtensions.ParseFilterOperator(op),
-                        Value = value,
-                        LogicalOp = LogicalOperator.And
-                    });
-                }
-            }
-        }
-
-        return filters.Count > 0 ? filters : null;
+            var (column, op, value) = FilterExpressions.Parse(expression);
+            return new ViewFilterSpec { Field = column, Operator = op, Value = value, LogicalOp = LogicalOperator.And };
+        })];
     }
 
     private static List<ViewOrderSpec>? ParseOrderBy(string? orderBy)

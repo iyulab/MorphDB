@@ -101,9 +101,8 @@ public sealed class ViewClient
     }
 
     /// <summary>
-    /// A view read's query string. The view endpoint takes its filters as one <c>AND</c>-joined
-    /// parameter and pages by <c>skip</c>/<c>take</c>, where a table read repeats <c>filter</c> and
-    /// pages by <c>page</c>/<c>pageSize</c>/<c>offset</c>.
+    /// A view read's query string. Filters repeat <c>filter</c>, as on a table read; the view endpoint
+    /// pages by <c>skip</c>/<c>take</c> where a table read pages by <c>page</c>/<c>pageSize</c>/<c>offset</c>.
     /// </summary>
     private static string BuildQueryString(QueryRequest? request)
     {
@@ -115,12 +114,8 @@ public sealed class ViewClient
         if (request.Select.Count > 0)
             parts.Add($"select={Uri.EscapeDataString(string.Join(",", request.Select))}");
 
-        if (request.Filters.Count > 0)
-        {
-            var filters = request.Filters.Select(f =>
-                $"{f.Column}:{DataClient.GetOperatorString(f.Operator)}:{DataClient.FormatFilterValue(f.Value)}");
-            parts.Add($"filter={Uri.EscapeDataString(string.Join(" AND ", filters))}");
-        }
+        foreach (var filter in request.Filters)
+            parts.Add($"filter={Uri.EscapeDataString(DataClient.FilterText(filter))}");
 
         if (request.OrderBy.Count > 0)
         {

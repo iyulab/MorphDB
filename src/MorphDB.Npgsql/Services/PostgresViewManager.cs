@@ -334,8 +334,10 @@ public sealed class PostgresViewManager : IViewManager
         }
 
         // Build query against the view
-        var sql = BuildViewQuerySql(view, request);
-        var countSql = BuildViewCountSql(view, request);
+        var parameters = new UntypedParameters();
+        var sql = BuildViewQuerySql(view, request, parameters);
+        var countParameters = new UntypedParameters();
+        var countSql = BuildViewCountSql(view, request, countParameters);
 
         await using var connection = await _connections.OpenAsync(cancellationToken);
 
@@ -352,11 +354,11 @@ public sealed class PostgresViewManager : IViewManager
         }
 
         // Execute data query
-        var data = await connection.QueryAsync<dynamic>(sql);
+        var data = await connection.QueryAsync<dynamic>(new CommandDefinition(sql, parameters, cancellationToken: cancellationToken));
         var results = data.Select(row => (IDictionary<string, object?>)row).ToList();
 
         // Execute count query
-        var totalCount = await connection.ExecuteScalarAsync<long>(countSql);
+        var totalCount = await connection.ExecuteScalarAsync<long>(new CommandDefinition(countSql, countParameters, cancellationToken: cancellationToken));
 
         var hasMore = request.Skip.GetValueOrDefault(0) + request.Take.GetValueOrDefault(results.Count) < totalCount;
 
@@ -416,7 +418,7 @@ public sealed class PostgresViewManager : IViewManager
         await transaction.CommitAsync(cancellationToken);
     }
 
-    private static string BuildViewQuerySql(ViewMetadata view, ViewQueryRequest request)
+    private static string BuildViewQuerySql(ViewMetadata view, ViewQueryRequest request, UntypedParameters parameters)
     {
         var sb = new System.Text.StringBuilder();
 
@@ -424,7 +426,7 @@ public sealed class PostgresViewManager : IViewManager
         sb.Append("SELECT ");
         if (request.Columns != null && request.Columns.Count > 0)
         {
-            sb.Append(string.Join(", ", request.Columns.Select(DdlBuilder.QuoteIdentifier)));
+            sb.Append(string.Join(", ", request.Columns.Select(c => DdlBuilder.QuoteIdentifier(ViewColumn(view, c, "select")))));
         }
         else
         {
@@ -436,16 +438,7 @@ public sealed class PostgresViewManager : IViewManager
         sb.Append(DdlBuilder.QuoteIdentifier(view.PhysicalName));
 
         // WHERE (project isolation built into view)
-        if (request.Filters != null && request.Filters.Count > 0)
-        {
-            sb.Append(" WHERE ");
-            var conditions = new List<string>();
-            foreach (var filter in request.Filters)
-            {
-                conditions.Add(BuildFilterCondition(filter));
-            }
-            sb.Append(string.Join(" AND ", conditions));
-        }
+        AppendWhere(sb, view, request, parameters);
 
         // ORDER BY
         if (request.OrderBy != null && request.OrderBy.Count > 0)
@@ -455,7 +448,7 @@ public sealed class PostgresViewManager : IViewManager
             foreach (var order in request.OrderBy)
             {
                 var direction = order.Descending ? " DESC" : " ASC";
-                orderClauses.Add($"{DdlBuilder.QuoteIdentifier(order.Column)}{direction}");
+                orderClauses.Add($"{DdlBuilder.QuoteIdentifier(ViewColumn(view, order.Column, "orderBy"))}{direction}");
             }
             sb.Append(string.Join(", ", orderClauses));
         }
@@ -473,67 +466,119 @@ public sealed class PostgresViewManager : IViewManager
         return sb.ToString();
     }
 
-    private static string BuildViewCountSql(ViewMetadata view, ViewQueryRequest request)
+    private static string BuildViewCountSql(ViewMetadata view, ViewQueryRequest request, UntypedParameters parameters)
     {
         var sb = new System.Text.StringBuilder();
         sb.Append("SELECT COUNT(*) FROM ");
         sb.Append(DdlBuilder.QuoteIdentifier(view.PhysicalName));
-
-        if (request.Filters != null && request.Filters.Count > 0)
-        {
-            sb.Append(" WHERE ");
-            var conditions = new List<string>();
-            foreach (var filter in request.Filters)
-            {
-                conditions.Add(BuildFilterCondition(filter));
-            }
-            sb.Append(string.Join(" AND ", conditions));
-        }
-
+        AppendWhere(sb, view, request, parameters);
         return sb.ToString();
     }
 
-    private static string BuildFilterCondition(ViewFilterSpec filter)
+    private static void AppendWhere(System.Text.StringBuilder sb, ViewMetadata view, ViewQueryRequest request, UntypedParameters parameters)
     {
-        var field = DdlBuilder.QuoteIdentifier(filter.Field);
-        var value = FormatValue(filter.Value);
+        if (request.Filters == null || request.Filters.Count == 0)
+        {
+            return;
+        }
+
+        sb.Append(" WHERE ");
+        sb.Append(string.Join(" AND ", request.Filters.Select(f => BuildFilterCondition(view, f, parameters))));
+    }
+
+    /// <summary>
+    /// A query-time condition on a view. Each operator means what it means on the data endpoint — the
+    /// <c>contains</c> family matches its value literally and ignores case, <c>in</c> takes a list — and an
+    /// operator the view cannot answer is refused rather than read as equality.
+    /// </summary>
+    private static string BuildFilterCondition(ViewMetadata view, ViewFilterSpec filter, UntypedParameters parameters)
+    {
+        var field = DdlBuilder.QuoteIdentifier(ViewColumn(view, filter.Field, "filter"));
 
         return filter.Operator switch
         {
-            FilterOperator.Equals => $"{field} = {value}",
-            FilterOperator.NotEquals => $"{field} <> {value}",
-            FilterOperator.GreaterThan => $"{field} > {value}",
-            FilterOperator.GreaterThanOrEquals => $"{field} >= {value}",
-            FilterOperator.LessThan => $"{field} < {value}",
-            FilterOperator.LessThanOrEquals => $"{field} <= {value}",
-            FilterOperator.Like => $"{field} LIKE {value}",
-            FilterOperator.ILike => $"{field} ILIKE {value}",
-            FilterOperator.In => $"{field} IN ({value})",
-            FilterOperator.NotIn => $"{field} NOT IN ({value})",
+            FilterOperator.Equals => $"{field} = {parameters.Add(filter.Value)}",
+            FilterOperator.NotEquals => $"{field} <> {parameters.Add(filter.Value)}",
+            FilterOperator.GreaterThan => $"{field} > {parameters.Add(filter.Value)}",
+            FilterOperator.GreaterThanOrEquals => $"{field} >= {parameters.Add(filter.Value)}",
+            FilterOperator.LessThan => $"{field} < {parameters.Add(filter.Value)}",
+            FilterOperator.LessThanOrEquals => $"{field} <= {parameters.Add(filter.Value)}",
+            FilterOperator.Like => $"{field} LIKE {parameters.Add(filter.Value)}",
+            FilterOperator.NotLike => $"{field} NOT LIKE {parameters.Add(filter.Value)}",
+            FilterOperator.ILike => $"{field} ILIKE {parameters.Add(filter.Value)}",
+            FilterOperator.Contains => $"{field} ILIKE {parameters.Add(LikePattern.Contains(filter.Value))}",
+            FilterOperator.StartsWith => $"{field} ILIKE {parameters.Add(LikePattern.StartsWith(filter.Value))}",
+            FilterOperator.EndsWith => $"{field} ILIKE {parameters.Add(LikePattern.EndsWith(filter.Value))}",
+            FilterOperator.In => ListCondition(field, "IN", "FALSE", filter.Value, parameters),
+            FilterOperator.NotIn => ListCondition(field, "NOT IN", "TRUE", filter.Value, parameters),
             FilterOperator.IsNull => $"{field} IS NULL",
             FilterOperator.IsNotNull => $"{field} IS NOT NULL",
-            FilterOperator.Between => $"{field} BETWEEN {value}",
-            FilterOperator.Contains => $"{field} LIKE '%' || {value} || '%'",
-            FilterOperator.StartsWith => $"{field} LIKE {value} || '%'",
-            FilterOperator.EndsWith => $"{field} LIKE '%' || {value}",
-            FilterOperator.NotLike => $"{field} NOT LIKE {value}",
-            _ => $"{field} = {value}"
+            _ => throw new ArgumentException($"Filter operator '{filter.Operator}' is not available on a view query."),
         };
     }
 
-    private static string FormatValue(object? value)
+    /// <summary>An empty list matches nothing (<c>in</c>) or everything (<c>notin</c>), as on the data endpoint.</summary>
+    private static string ListCondition(string field, string op, string whenEmpty, object? value, UntypedParameters parameters)
     {
-        // Filter values cross the API boundary (and JSONB storage) as JsonElement; unwrap so the
-        // type checks below quote/render them correctly instead of falling through to ToString().
-        value = JsonValueConverter.ToClrValue(value);
+        if (value is not System.Collections.IEnumerable list || value is string)
+        {
+            throw new ArgumentException("The values of in and notin are a list.");
+        }
 
-        if (value == null)
-            return "NULL";
-        if (value is string s)
-            return $"'{s.Replace("'", "''")}'";
-        if (value is bool b)
-            return b ? "true" : "false";
-        return value.ToString() ?? "NULL";
+        var names = list.Cast<object?>().Select(parameters.Add).ToList();
+        return names.Count == 0 ? whenEmpty : $"{field} {op} ({string.Join(", ", names)})";
+    }
+
+    /// <summary>
+    /// A column the request names, checked against the view's columns so a misspelling is the caller's
+    /// error, not a database error. A view whose columns were not recorded is passed through.
+    /// </summary>
+    private static string ViewColumn(ViewMetadata view, string name, string where)
+    {
+        if (view.Columns.Count > 0 && !view.Columns.Any(c => string.Equals(c.LogicalName, name, StringComparison.Ordinal)))
+        {
+            throw new ArgumentException($"View '{view.LogicalName}' has no column '{name}' ({where}).");
+        }
+
+        return name;
+    }
+
+    /// <summary>
+    /// Filter values bound as parameters of unknown type, so PostgreSQL reads each the way it reads a
+    /// quoted literal: as the type of the column it is compared with. A value reaches the server as its
+    /// invariant text — <c>1.5</c>, an instant with its offset — whatever culture the service runs in.
+    /// </summary>
+    private sealed class UntypedParameters : SqlMapper.IDynamicParameters
+    {
+        private readonly List<(string Name, string? Text)> _values = [];
+
+        public string Add(object? value)
+        {
+            var name = $"f{_values.Count}";
+            _values.Add((name, Text(JsonValueConverter.ToClrValue(value))));
+            return "@" + name;
+        }
+
+        public void AddParameters(System.Data.IDbCommand command, SqlMapper.Identity identity)
+        {
+            var parameters = ((NpgsqlCommand)command).Parameters;
+            foreach (var (name, text) in _values)
+            {
+                parameters.Add(new NpgsqlParameter(name, NpgsqlTypes.NpgsqlDbType.Unknown) { Value = (object?)text ?? DBNull.Value });
+            }
+        }
+
+        private static string? Text(object? value) => value switch
+        {
+            null => null,
+            string text => text,
+            bool flag => flag ? "true" : "false",
+            DateTimeOffset instant => instant.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
+            DateTime instant => instant.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
+            DateOnly day => day.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
+            IFormattable formattable => formattable.ToString(null, System.Globalization.CultureInfo.InvariantCulture),
+            _ => value.ToString(),
+        };
     }
 
     private static List<ViewColumnMetadata> BuildViewColumns(Guid viewId, ViewDefinition definition)

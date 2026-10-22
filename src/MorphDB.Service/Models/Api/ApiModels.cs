@@ -2723,9 +2723,10 @@ public sealed record ViewQueryApiParameters
     public string? Select { get; init; }
 
     /// <summary>
-    /// Filter expression (column:op:value format).
+    /// Filter conditions, one <c>column:op:value</c> per repeated <c>filter</c> parameter; all apply — the
+    /// same language as a table read.
     /// </summary>
-    public string? Filter { get; init; }
+    public string[]? Filter { get; init; }
 
     /// <summary>
     /// Order by columns (column:asc or column:desc).

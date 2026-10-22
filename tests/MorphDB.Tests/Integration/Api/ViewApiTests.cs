@@ -544,6 +544,60 @@ public class ViewApiTests
         result!.Data.Count.Should().BeLessThanOrEqualTo(2);
     }
 
+    /// <summary>
+    /// A view read takes the table read's filter language: one condition per repeated <c>filter</c>
+    /// parameter, a malformed one refused. The view endpoint used to split one parameter on <c>" AND "</c>
+    /// and drop a condition it could not read — an answer wider than the question.
+    /// </summary>
+    [Fact]
+    public async Task QueryViewData_Filters_ReadAsOnATableRead()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var baseTable = await CreateBaseTableAsync();
+        await InsertTestDataAsync(baseTable);
+        var viewName = $"vw_filt_{Guid.NewGuid():N}"[..30];
+        (await _client.PostAsJsonAsync("/api/views", new CreateViewApiRequest
+        {
+            Name = viewName,
+            BaseTable = baseTable,
+            Columns =
+            [
+                new ViewColumnApiSpec { Source = "name", Alias = "name" },
+                new ViewColumnApiSpec { Source = "email", Alias = "email" },
+                new ViewColumnApiSpec { Source = "age", Alias = "age" },
+                new ViewColumnApiSpec { Source = "score", Alias = "score" },
+            ],
+        }, ct)).StatusCode.Should().Be(HttpStatusCode.Created);
+
+        async Task<string[]> Names(string query)
+        {
+            var response = await _client.GetAsync($"/api/views/{viewName}/data?{query}&orderBy=name:asc", ct);
+            response.StatusCode.Should().Be(HttpStatusCode.OK, query);
+            var result = await response.Content.ReadFromJsonAsync<ViewQueryApiResponse>(ct);
+            var names = result!.Data.Select(r => r["name"]?.ToString()!).ToArray();
+            result.TotalCount.Should().Be(names.Length, "the count is taken under the same conditions");
+            return names;
+        }
+
+        static string F(string condition) => "filter=" + Uri.EscapeDataString(condition);
+
+        (await Names($"{F("age:gte:30")}&{F("score:lt:80")}")).Should().Equal("Carol");
+        (await Names(F("score:gt:80.0"))).Should().Equal("Alice", "Bob");
+        (await Names(F("name:in:[\"Alice\",\"Bob\"]"))).Should().Equal("Alice", "Bob");
+        (await Names(F("name:notin:[\"Alice\"]"))).Should().Equal("Bob", "Carol");
+        (await Names(F("name:in:[]"))).Should().BeEmpty();
+        (await Names(F("email:contains:ALICE"))).Should().Equal("Alice");
+        (await Names(F("email:contains:%"))).Should().BeEmpty("contains matches its value literally");
+        (await Names(F("name:eq:Alice AND age:gt:0"))).Should().BeEmpty("a value may hold the word AND");
+
+        foreach (var refused in new[] { F("age:gte"), F("nope:eq:1"), F("name:in:Alice,Bob"), "filter=" + Uri.EscapeDataString("age:between:1") })
+        {
+            var response = await _client.GetAsync($"/api/views/{viewName}/data?{refused}", ct);
+            response.StatusCode.Should().Be(HttpStatusCode.BadRequest, refused);
+            (await response.Content.ReadFromJsonAsync<ErrorResponse>(ct))!.Code.Should().Be("INVALID_FILTER");
+        }
+    }
+
     #endregion
 
     #region Project Isolation Tests

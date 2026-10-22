@@ -277,6 +277,11 @@ The same conditions select rows for `DELETE /api/batch/data/{table}?filter=…` 
 `{ "data": { "grade": "VIP" }, "filter": ["score:gte:90", "status:eq:active"] }`. Both require at least one
 condition — without one the request is refused with `400` (`FILTER_REQUIRED`), never applied to every row.
 
+A view read, `GET /api/views/{name}/data`, takes the same conditions — repeated `filter`, every one
+applies — alongside `select`, `orderBy` (`column:asc|desc`, comma-separated) and `skip`/`take` paging. A
+column the view does not have, or a condition the view cannot answer (`between`), is refused with `400`
+(`INVALID_FILTER`).
+
 An operator outside this list is answered with `400` listing the supported set — it is never
 silently coerced; the operator vocabulary above is the whole set, on every surface.
 

@@ -295,7 +295,16 @@ public sealed class ViewQueryBuilder
             return string.Join(", ", values);
         }
 
-        return value.ToString() ?? "NULL";
+        // A number is written in the invariant culture: a stored 1.5 is "1.5" in the view's SQL wherever
+        // the service runs, not "1,5". Anything else that is not a number is a quoted literal PostgreSQL
+        // reads as the column's type.
+        return value switch
+        {
+            sbyte or byte or short or ushort or int or uint or long or ulong or float or double or decimal =>
+                ((IFormattable)value).ToString(null, CultureInfo.InvariantCulture),
+            IFormattable formattable => $"'{formattable.ToString(value is DateTimeOffset or DateTime or DateOnly ? "O" : null, CultureInfo.InvariantCulture).Replace("'", "''")}'",
+            _ => $"'{(value.ToString() ?? string.Empty).Replace("'", "''")}'",
+        };
     }
 
     private async Task<string> TranslateColumnNameAsync(

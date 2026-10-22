@@ -15,6 +15,8 @@ namespace MorphDB.Tests.Integration.Client;
 [Trait("Category", "ApiIntegration")]
 public class ViewClientTests(ApiIntegrationFixture fixture)
 {
+    private static readonly string[] TitlesBAndC = ["b", "c"];
+
     [Fact]
     public async Task A_view_created_through_the_client_reads_back_and_serves_its_rows()
     {
@@ -73,6 +75,18 @@ public class ViewClientTests(ApiIntegrationFixture fixture)
             PageSize = 1,
         }, ct);
         Assert.Equal(["b"], page.Data.Select(r => r["title"]?.ToString()));
+
+        // Several filters each apply — sent as repeated parameters, the way a table read sends them —
+        // and a list goes as the list it is.
+        var narrowed = await client.Views.QueryAsync(name, new QueryRequest
+        {
+            Filters =
+            [
+                new Filter("score", FilterOperator.GreaterThanOrEqual, 6),
+                new Filter("title", FilterOperator.In, TitlesBAndC),
+            ],
+        }, ct);
+        Assert.Equal(["c"], narrowed.Data.Select(r => r["title"]?.ToString()));
 
         await client.Views.DeleteAsync(name, ct);
         Assert.Null(await client.Views.GetAsync(name, ct));
