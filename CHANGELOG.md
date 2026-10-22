@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.32.0
+
+A minor with one new filter operator: `notexists`, the negation of `exists` — the rows with no related
+row the conditions keep, or with no related row at all. No breaking change; a client that does not send
+it behaves as with 0.31.x.
 
 ### Added
 
