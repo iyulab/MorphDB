@@ -1359,8 +1359,9 @@ DELETE /api/security/secrets/{secretId}        # Revoke
 - **`projectId`** — `null` for every project, or a project id to confine the secret to it. A
   confined secret addressing another project is answered `403 FORBIDDEN` — whether the request names
   the project in `X-Project-Id` or in its path (`/api/projects/{id}`, `/stats`, `/health`, the
-  project's audit log, or a slug that is not its own project's). Listing projects returns only its
-  own.
+  project's audit log, or a slug that is not its own project's). A confined secret that names no
+  project — no `X-Project-Id` — addresses its own: the one project it can reach is the one it asks for.
+  Listing projects returns only its own.
 
 The response carries the plaintext **once**. It is stored only as a hash; if it is lost, issue
 another and revoke the old one. Revocation keeps the row so audit records retain a name for it.

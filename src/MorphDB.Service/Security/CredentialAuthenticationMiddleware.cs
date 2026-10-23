@@ -107,7 +107,10 @@ public sealed class CredentialAuthenticationMiddleware
             return;
         }
 
-        var requestedProject = securityContextAccessor.ContextOrNull?.ProjectId ?? Guid.Empty;
+        // A confined secret reaches one project only, so a request that names none asks for that one —
+        // the same answer as naming it in X-Project-Id. Without this default such a request would be
+        // refused as addressing "a different project" when it addressed none.
+        var requestedProject = securityContextAccessor.ContextOrNull?.ProjectId ?? secret.ProjectId ?? Guid.Empty;
 
         // A secret confined to a project is confined by this check and nowhere else. Storing the
         // column without enforcing it would be a boundary that exists only in the schema.

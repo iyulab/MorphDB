@@ -1,4 +1,5 @@
 using MorphDB.Core.Exceptions;
+using MorphDB.Core.Security;
 
 namespace MorphDB.Service.Services;
 
@@ -58,11 +59,18 @@ internal static class ProjectIdResolver
                 // same "nothing usable" bucket as an absent header — only a value that fails to parse
                 // at all is something the caller can be told to fix.
                 var malformed = Guid.TryParse(raw, out _) ? null : raw;
-                return (null, malformed);
+                if (malformed is not null)
+                {
+                    return (null, malformed);
+                }
             }
         }
 
-        return (null, null);
+        // 3. Otherwise the project the presented secret is confined to: it can reach no other, so a
+        //    request that names none means that one.
+        var confinedTo = (httpContext.RequestServices?.GetService(typeof(ISecurityContextAccessor)) as ISecurityContextAccessor)
+            ?.ContextOrNull?.ConfinedToProjectId;
+        return (confinedTo, null);
     }
 
     /// <summary>

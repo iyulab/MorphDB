@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- A secret confined to a project that sent no `X-Project-Id` was refused with `403` "This secret is
+  confined to a different project." — for its own project's path (`/api/projects/{id}`), for listing
+  projects, and on every project-scoped route. A confined secret that names no project now addresses
+  the one it is confined to; naming another project, in the header or the path, is still `403`.
+
 ## 0.32.0
 
 A minor with one new filter operator: `notexists`, the negation of `exists` — the rows with no related

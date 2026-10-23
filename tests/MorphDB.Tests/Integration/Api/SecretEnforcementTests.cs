@@ -351,6 +351,30 @@ public class SecretEnforcementTests
         page.Pagination.TotalCount.Should().Be(1);
     }
 
+    [Fact]
+    public async Task A_confined_secret_that_names_no_project_addresses_its_own()
+    {
+        var master = EnforcedClient(MasterSecret);
+        var other = await CreateProjectAsync(master);
+        var secret = await IssueAsync(master, "confined-no-header", "reader", _fixture.Api.ProjectId);
+        var confined = EnforcedClient(secret, Guid.Empty);
+        var ct = TestContext.Current.CancellationToken;
+
+        // No X-Project-Id: the one project the secret can reach is the one it asks for.
+        (await confined.GetAsync($"/api/projects/{_fixture.Api.ProjectId}", ct)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await confined.GetAsync("/api/schema/tables", ct)).StatusCode.Should().Be(HttpStatusCode.OK, "a project-scoped route reads its project");
+        var page = await confined.GetFromJsonAsync<PagedResponse<ProjectApiResponse>>("/api/projects?count=true", ct);
+        page!.Data.Select(p => p.Id).Should().Equal(_fixture.Api.ProjectId);
+
+        // Naming another project is still refused, by header and by path.
+        (await EnforcedClient(secret, other.Id).GetAsync("/api/schema/tables", ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await confined.GetAsync($"/api/projects/{other.Id}", ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        // A secret for every project that names none still has no project to read.
+        var unconfined = EnforcedClient(await IssueAsync(master, "unconfined-no-header", "reader", null), Guid.Empty);
+        (await unconfined.GetAsync("/api/schema/tables", ct)).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
     [Theory]
     [InlineData(null)]   // an issued secret for every project
     [InlineData("own")]  // confined to the fixture project — even its own project is not its to manage
