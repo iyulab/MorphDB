@@ -670,9 +670,10 @@ internal sealed class MorphQuery : IMorphQuery
             Flatten(_whereConditions).Where(c => c.Operator.TakesRelatedRows()).Select(c => c.Value),
             GetJoinedTableMetadataAsync,
             cancellationToken);
+        var table = await GetTableMetadataAsync(cancellationToken);
         foreach (var condition in _whereConditions)
         {
-            ApplyWhereCondition(query, source.Column, condition, related);
+            ApplyWhereCondition(query, source.Column, Typed(condition, table), related);
         }
 
         // JOIN - resolve physical table and column names
@@ -794,9 +795,21 @@ internal sealed class MorphQuery : IMorphQuery
 
         foreach (var condition in conditions)
         {
-            ApplyWhereCondition(query, Physical, condition);
+            ApplyWhereCondition(query, Physical, Typed(condition, table));
         }
     }
+
+    /// <summary>
+    /// The condition with its value read as its column's type (<see cref="ColumnValues"/>) — each value of a list, and
+    /// each condition of a group. An exists keeps its own conditions, which are read against its related table.
+    /// </summary>
+    private static WhereCondition Typed(WhereCondition condition, TableMetadata table) => condition.Type switch
+    {
+        ConditionType.Group => condition with { Children = [.. condition.Children!.Select(c => Typed(c, table))] },
+        ConditionType.In or ConditionType.NotIn or ConditionType.Standard =>
+            condition with { Value = ColumnValues.OfCondition(table, condition.Column, condition.Operator, condition.Value) },
+        _ => condition,
+    };
 
     /// <summary>Every condition, a group's included, as one list.</summary>
     private static IEnumerable<WhereCondition> Flatten(IEnumerable<WhereCondition> conditions) =>

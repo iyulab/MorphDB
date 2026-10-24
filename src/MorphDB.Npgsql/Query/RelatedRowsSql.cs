@@ -68,7 +68,7 @@ internal static class RelatedRowsSql
                 throw new ValidationException(condition.Column, "the conditions of exists are on the related row's own columns; an exists inside an exists is not taken.");
             }
 
-            applyCondition(subquery, Column(table, condition.Column), condition.Operator, condition.Value);
+            applyCondition(subquery, Column(table, condition.Column), condition.Operator, ColumnValues.OfCondition(table, condition.Column, condition.Operator, condition.Value));
         }
 
         return subquery;

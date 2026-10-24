@@ -259,7 +259,7 @@ public sealed class DataClient
     /// A filter value as the server reads it back: numbers and instants in the invariant culture (an
     /// instant round-trips with its offset), so the query means the same whatever culture the caller
     /// runs in. A list — the values of <see cref="FilterOperator.In"/> or <see cref="FilterOperator.NotIn"/> —
-    /// is written as a JSON array, the form the server reads a list in.
+    /// is written as a JSON array, the form the server reads a list in. A string is quoted.
     /// </summary>
     internal static string FormatFilterValue(object? value) => value switch
     {
@@ -273,6 +273,9 @@ public sealed class DataClient
         DateOnly date => date.ToString("O", CultureInfo.InvariantCulture),
         TimeOnly time => time.ToTimeSpan().ToString("c", CultureInfo.InvariantCulture),
         bool flag => flag ? "true" : "false",
+        // Quoted, so a text value is text to every server: one that read a value's type from its shape compared a
+        // text column with the number or the id the text spelled.
+        string text => $"\"{text}\"",
         IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture),
         _ => value.ToString() ?? string.Empty,
     };
@@ -299,6 +302,10 @@ public sealed class DataClient
                         break;
                     case float or double or decimal:
                         writer.WriteNumberValue(Convert.ToDecimal(item, CultureInfo.InvariantCulture));
+                        break;
+                    case string text:
+                        // A JSON string is already text; quoting it again would put the quotes in the value.
+                        writer.WriteStringValue(text);
                         break;
                     default:
                         writer.WriteStringValue(FormatFilterValue(item));

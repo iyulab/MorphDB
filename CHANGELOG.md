@@ -16,6 +16,13 @@
   confined to a different project." — for its own project's path (`/api/projects/{id}`), for listing
   projects, and on every project-scoped route. A confined secret that names no project now addresses
   the one it is confined to; naming another project, in the header or the path, is still `403`.
+- **A filter value is read as the type of the column it compares with.** A REST filter's value used to take
+  its type from its text, so a text column filtered by a value shaped like a number, an id, a boolean or a
+  date (`code:eq:12345`, a 32-digit hex key, `true`, `2026-10-25`) was compared with that number or id, and
+  the read failed with `500`. The value now means what its column says: text against a text column, the
+  number against an integer one; `in` and `notin` lists alike. Text that does not read as the column's type
+  (`score:eq:ten`) is refused with `400` naming the column. The .NET client quotes a string value, so a
+  text value is text to a server before this one too.
 
 ## 0.32.0
 

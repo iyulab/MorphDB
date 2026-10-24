@@ -353,7 +353,8 @@ public class ClientRequestBodyContractTests
 
         var update = new CapturingHandler("""{"results":[],"successCount":1,"failureCount":0}""");
         await ClientOver(update).Batch.UpdateManyAsync("t", filters, new Dictionary<string, object?> { ["status"] = "closed" }, cancellationToken);
-        update.Body.Should().Be("""{"data":{"status":"closed"},"filter":["status:eq:open","qty:gt:3"]}""");
+        // A text value is sent quoted, so the service reads it as text whatever it spells.
+        update.Body.Should().Be("""{"data":{"status":"closed"},"filter":["status:eq:\u0022open\u0022","qty:gt:3"]}""");
 
         var upsert = new CapturingHandler(RecordJson);
         await ClientOver(upsert).Data.UpsertAsync("t", new Dictionary<string, object?> { ["sku"] = "a", ["qty"] = 1 }, ["sku"], cancellationToken);

@@ -1,4 +1,3 @@
-using System.Globalization;
 using MorphDB.Core.Abstractions;
 
 namespace MorphDB.Service.Models.Api;
@@ -65,7 +64,7 @@ internal static class FilterExpressions
             {
                 return op is FilterOperator.In or FilterOperator.NotIn
                     ? (parts[0].Trim(), op, ParseList(expression, parts[2].Trim()))
-                    : (parts[0].Trim(), op, ParseValue(parts[2].Trim()));
+                    : (parts[0].Trim(), op, TextOf(parts[2].Trim()));
             }
         }
 
@@ -95,9 +94,8 @@ internal static class FilterExpressions
     }
 
     /// <summary>
-    /// One value of an <c>in</c> list, as JSON writes it: a number is a number and a boolean a boolean; a
-    /// string is read as a single value's text is (<see cref="ParseValue"/>) only where JSON has no form of
-    /// its own — an instant or an id — and stays a string otherwise. <c>null</c> is refused: <c>in</c>
+    /// One value of an <c>in</c> list, as JSON writes it: a number is a number, a boolean a boolean and a
+    /// string a string — read, like a single value's text, as the type of the column it compares with. <c>null</c> is refused: <c>in</c>
     /// never matches an empty column, and <c>isnull</c> is the condition that does.
     /// </summary>
     public static object ListElement(System.Text.Json.JsonElement element) => element.ValueKind switch
@@ -105,43 +103,19 @@ internal static class FilterExpressions
         System.Text.Json.JsonValueKind.Number => element.TryGetInt64(out var integral) ? integral : element.GetDecimal(),
         System.Text.Json.JsonValueKind.True => true,
         System.Text.Json.JsonValueKind.False => false,
-        System.Text.Json.JsonValueKind.String => ListText(element.GetString()!),
+        System.Text.Json.JsonValueKind.String => element.GetString()!,
         _ => throw new ArgumentException(
             $"A list of values holds numbers, strings and booleans, and this one holds a JSON {element.ValueKind.ToString().ToLowerInvariant()}; " +
             "an empty column is matched with isnull."),
     };
 
-    private static object ListText(string text)
-    {
-        var typed = ParseValue(text);
-        return typed is Guid or DateTimeOffset ? typed : text;
-    }
-
     /// <summary>
-    /// A value's type is read from its text, the same on every server: numbers and instants are parsed
-    /// with the invariant culture, so <c>1.5</c> is a decimal wherever the service runs, and an instant
-    /// is carried as UTC with its offset kept rather than reinterpreted in the server's time zone.
+    /// A value as its text, quotes taken off a quoted one. What type it is is the column's to say: the statement reads
+    /// it as the type of the column it compares with, so <c>12345</c> is a number against an integer column and text
+    /// against a text one.
     /// </summary>
-    public static object ParseValue(string value)
+    public static string TextOf(string value)
     {
-        if (bool.TryParse(value, out var boolValue))
-            return boolValue;
-
-        if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var intValue))
-            return intValue;
-
-        if (long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var longValue))
-            return longValue;
-
-        if (decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out var decimalValue))
-            return decimalValue;
-
-        if (Guid.TryParse(value, out var guidValue))
-            return guidValue;
-
-        if (DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var instant))
-            return instant.ToUniversalTime();
-
         if (value.Length >= 2 && value.StartsWith('"') && value.EndsWith('"'))
             return value[1..^1];
 

@@ -275,6 +275,66 @@ public class FilterExpressionContractTests
         Int64(result!.Data[0]["n"]).Should().Be(4);
     }
 
+    /// <summary>
+    /// A value means what its column says: in a text column a code shaped like a number, an id, a boolean or a date is
+    /// that text, compared as text — reading its type from its shape compared a text column with a number or a uuid,
+    /// and the read failed. The same text against an integer column is the number.
+    /// </summary>
+    [Theory]
+    [InlineData("12345")]
+    [InlineData("0007")]
+    [InlineData("true")]
+    [InlineData("2026-10-25")]
+    [InlineData("3f2b8c0a9d4e4f1aa1b2c3d4e5f60718")]
+    [InlineData("3f2b8c0a-9d4e-4f1a-a1b2-c3d4e5f60718")]
+    public async Task A_text_column_compares_a_value_shaped_like_another_type_as_text(string code)
+    {
+        var table = await SeedAsync();
+        (await _client.PostAsJsonAsync($"/api/data/{table}", new Dictionary<string, object?> { ["name"] = "coded", ["label"] = code }, TestContext.Current.CancellationToken))
+            .EnsureSuccessStatusCode();
+
+        (await QueryNamesAsync(table, $"label:eq:{code}")).Should().Equal("coded");
+        (await QueryNamesAsync(table, $"label:in:[\"{code}\",\"odd\"]")).Should().BeEquivalentTo(["c", "d", "coded"]);
+        (await QueryNamesAsync(table, "score:eq:20", $"label:neq:{code}")).Should().Equal("b");
+    }
+
+    /// <summary>OData spells a number or a boolean unquoted; against a text column it is the text spelled the same way.</summary>
+    [Theory]
+    [InlineData("label eq 12345", "12345")]
+    [InlineData("label eq true", "true")]
+    [InlineData("label eq '12345'", "12345")]
+    [InlineData("score eq '30'", null)]
+    public async Task An_odata_literal_is_read_as_the_type_of_its_column(string filter, string? label)
+    {
+        var table = await SeedAsync();
+        if (label is not null)
+        {
+            (await _client.PostAsJsonAsync($"/api/data/{table}", new Dictionary<string, object?> { ["name"] = "coded", ["label"] = label }, TestContext.Current.CancellationToken))
+                .EnsureSuccessStatusCode();
+        }
+
+        // OData names a table's entity set in Pascal case: filter_ab12 → FilterAb12.
+        var set = string.Concat(table.Split('_').Select(p => p.Length > 0 ? char.ToUpperInvariant(p[0]) + p[1..].ToLowerInvariant() : p));
+        var response = await _client.GetAsync($"/odata/{set}?$filter={Uri.EscapeDataString(filter)}", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK, body);
+        var names = JsonDocument.Parse(body).RootElement.GetProperty("value").EnumerateArray().Select(r => r.GetProperty("name").GetString()).ToArray();
+        names.Should().Equal(label is null ? "c" : "coded");
+    }
+
+    [Fact]
+    public async Task A_value_that_does_not_read_as_its_columns_type_is_refused_naming_the_column()
+    {
+        var table = await SeedAsync();
+
+        var response = await _client.GetAsync($"/api/data/{table}?filter={Uri.EscapeDataString("score:eq:ten")}", TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).Should().Contain("score");
+        (await QueryNamesAsync(table, "score:eq:\"30\"")).Should().Equal("c");
+    }
+
     private async Task<string> SeedAsync()
     {
         var table = $"filter_{Guid.NewGuid():N}"[..30];
