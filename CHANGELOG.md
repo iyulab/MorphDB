@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.33.0
+
+A minor that fixes a defect in 0.32.0 and earlier: a text column filtered by a value shaped like a number,
+an id, a boolean or a date failed with `500`. One addition: an audit entry names who acted for its actor.
+No breaking change; the .NET client now sends a string filter value quoted, which every server reads as
+text.
+
 ### Added
 
 - **An audit entry names who acted for its actor.** A request made with a token obtained by exchange —
