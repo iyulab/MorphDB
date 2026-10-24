@@ -86,6 +86,10 @@ public sealed class AuditLogEntry
     public AuditSeverity Severity { get; init; }
     public string? ActorId { get; init; }
     public string? ActorType { get; init; }
+
+    /// <summary>Who acted for <see cref="ActorId"/> — the subject of the caller's token's <c>act</c> claim — or null.</summary>
+    public string? ActedBy { get; init; }
+
     public string? ResourceType { get; init; }
     public string? ResourceId { get; init; }
     public string? HttpMethod { get; init; }

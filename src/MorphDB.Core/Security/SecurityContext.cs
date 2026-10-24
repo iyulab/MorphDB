@@ -33,6 +33,13 @@ public sealed class SecurityContext
     public bool IsAuthenticated { get; set; }
 
     /// <summary>
+    /// Gets or sets who is acting for the end-user, when the caller's token says so: the subject of its
+    /// <c>act</c> claim (RFC 8693 §4.1) — the party a token exchange issued the token to, acting on behalf
+    /// of <see cref="UserId"/>. Of a nested chain, the outermost: the party acting now.
+    /// </summary>
+    public string? ActedBy { get; set; }
+
+    /// <summary>
     /// Gets or sets the project the authenticating secret is confined to, or null when it is not
     /// confined. A route that takes its project from somewhere other than the request's project
     /// header compares against this.

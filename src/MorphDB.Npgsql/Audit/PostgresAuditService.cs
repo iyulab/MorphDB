@@ -117,6 +117,7 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
                 "severity" AS Severity,
                 "actor_id" AS ActorId,
                 "actor_type" AS ActorType,
+                "acted_by" AS ActedBy,
                 "resource_type" AS ResourceType,
                 "resource_id" AS ResourceId,
                 "http_method" AS HttpMethod,
@@ -148,6 +149,7 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
             Severity = (AuditSeverity)r.Severity,
             ActorId = r.ActorId,
             ActorType = r.ActorType,
+            ActedBy = r.ActedBy,
             ResourceType = r.ResourceType,
             ResourceId = r.ResourceId,
             HttpMethod = r.HttpMethod,
@@ -190,6 +192,7 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
                 "severity" AS Severity,
                 "actor_id" AS ActorId,
                 "actor_type" AS ActorType,
+                "acted_by" AS ActedBy,
                 "resource_type" AS ResourceType,
                 "resource_id" AS ResourceId,
                 "http_method" AS HttpMethod,
@@ -219,6 +222,7 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
             Severity = (AuditSeverity)row.Severity,
             ActorId = row.ActorId,
             ActorType = row.ActorType,
+            ActedBy = row.ActedBy,
             ResourceType = row.ResourceType,
             ResourceId = row.ResourceId,
             HttpMethod = row.HttpMethod,
@@ -429,11 +433,11 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
 
                 var sql = $"""
                     INSERT INTO {QuoteIdentifier(schemaNames.SystemSchema)}."_audit_logs"
-                    ("category", "action", "severity", "actor_id", "actor_type", "resource_type", "resource_id",
+                    ("category", "action", "severity", "actor_id", "actor_type", "acted_by", "resource_type", "resource_id",
                      "http_method", "request_path", "status_code", "ip_address", "user_agent",
                      "duration_ms", "metadata", "error_message", "timestamp")
                     VALUES
-                    (@category, @action, @severity, @actorId, @actorType, @resourceType, @resourceId,
+                    (@category, @action, @severity, @actorId, @actorType, @actedBy, @resourceType, @resourceId,
                      @httpMethod, @requestPath, @statusCode, @ipAddress, @userAgent,
                      @durationMs, @metadata::jsonb, @errorMessage, @timestamp)
                     """;
@@ -450,6 +454,7 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
                         severity = (int)evt.Severity,
                         actorId = evt.ActorId,
                         actorType = evt.ActorType,
+                        actedBy = evt.ActedBy,
                         resourceType = evt.ResourceType,
                         resourceId = evt.ResourceId,
                         httpMethod = evt.HttpMethod,
@@ -574,6 +579,7 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
         public int Severity { get; init; }
         public string? ActorId { get; init; }
         public string? ActorType { get; init; }
+        public string? ActedBy { get; init; }
         public string? ResourceType { get; init; }
         public string? ResourceId { get; init; }
         public string? HttpMethod { get; init; }

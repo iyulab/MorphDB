@@ -165,6 +165,7 @@ public sealed class CredentialAuthenticationMiddleware
             return;
         }
 
+        var claims = ClaimsOf(token);
         securityContextAccessor.SetContext(new SecurityContext
         {
             ProjectId = securityContextAccessor.ContextOrNull?.ProjectId ?? Guid.Empty,
@@ -174,10 +175,37 @@ public sealed class CredentialAuthenticationMiddleware
             UserId = principal.FindFirst(JwtRegisteredClaimNames.Sub)?.Value,
             Email = principal.FindFirst(JwtRegisteredClaimNames.Email)?.Value,
             Principal = principal,
-            Claims = ClaimsOf(token)
+            Claims = claims,
+            ActedBy = ActedByOf(claims)
         });
 
         await _next(context);
+    }
+
+    /// <summary>
+    /// The subject of the token's <c>act</c> claim — the party acting for the token's subject — or null
+    /// when the token names none. An <c>act</c> that is not an object with a string <c>sub</c> names no one.
+    /// </summary>
+    internal static string? ActedByOf(IReadOnlyDictionary<string, string> claims)
+    {
+        if (!claims.TryGetValue("act", out var act))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(act);
+            return document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("sub", out var sub) && sub.ValueKind == JsonValueKind.String
+                && !string.IsNullOrEmpty(sub.GetString())
+                ? sub.GetString()
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     /// <summary>

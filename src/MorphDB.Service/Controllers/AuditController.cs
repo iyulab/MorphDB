@@ -249,6 +249,7 @@ public sealed class AuditLogEntryApiResponse
     public string Severity { get; init; } = string.Empty;
     public string? ActorId { get; init; }
     public string? ActorType { get; init; }
+    public string? ActedBy { get; init; }
     public string? ResourceType { get; init; }
     public string? ResourceId { get; init; }
     public string? HttpMethod { get; init; }
@@ -270,6 +271,7 @@ public sealed class AuditLogEntryApiResponse
         Severity = model.Severity.ToString().ToLowerInvariant(),
         ActorId = model.ActorId,
         ActorType = model.ActorType,
+        ActedBy = model.ActedBy,
         ResourceType = model.ResourceType,
         ResourceId = model.ResourceId,
         HttpMethod = model.HttpMethod,

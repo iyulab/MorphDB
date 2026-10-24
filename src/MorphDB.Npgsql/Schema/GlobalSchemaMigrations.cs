@@ -130,6 +130,24 @@ public static class GlobalSchemaMigrations
         -- the table is certain to exist). Existing rows name none.
         ALTER TABLE IF EXISTS morphdb._morph_webhook_deliveries ADD COLUMN IF NOT EXISTS change_key TEXT;
 
+        -- An audit row names who acted for its actor when the caller's token says so (its act claim,
+        -- RFC 8693): a person's request made by a service holding an exchanged token is otherwise
+        -- indistinguishable from the person's own. Each project keeps its audit trail in its own
+        -- system schema, so every one gets the column. NULL on every existing row is correct: what
+        -- acted then was never kept.
+        DO $$
+        DECLARE
+            target RECORD;
+        BEGIN
+            FOR target IN
+                SELECT table_schema
+                FROM information_schema.tables
+                WHERE table_name = '_audit_logs' AND table_schema LIKE 'p\_%\_sys'
+            LOOP
+                EXECUTE format('ALTER TABLE %I."_audit_logs" ADD COLUMN IF NOT EXISTS acted_by VARCHAR(255)', target.table_schema);
+            END LOOP;
+        END $$;
+
         ALTER TABLE IF EXISTS morphdb._morph_tables ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
         ALTER TABLE IF EXISTS morphdb._morph_columns ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
         ALTER TABLE IF EXISTS morphdb._morph_indexes ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+
+- **An audit entry names who acted for its actor.** A request made with a token obtained by exchange —
+  a service acting for a person — carries the token's `act` claim (RFC 8693): the entry keeps the person
+  as `actorId` and the service (the outermost `act`'s `sub`) as the new `actedBy`, on the audit log
+  endpoints and the .NET client's `AuditLogEntry.ActedBy`. Each project's audit table gains the column
+  on the next start; existing entries have none.
+
 ### Fixed
 
 - A secret confined to a project that sent no `X-Project-Id` was refused with `403` "This secret is

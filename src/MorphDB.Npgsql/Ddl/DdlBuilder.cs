@@ -598,6 +598,7 @@ public static class DdlBuilder
                 "severity" SMALLINT NOT NULL DEFAULT 1,
                 "actor_id" VARCHAR(100),
                 "actor_type" VARCHAR(20),
+                "acted_by" VARCHAR(255),
                 "resource_type" VARCHAR(50),
                 "resource_id" VARCHAR(100),
                 "http_method" VARCHAR(10),

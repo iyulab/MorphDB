@@ -2,11 +2,14 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
+using Dapper;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
+using MorphDB.Npgsql.Schema;
 using MorphDB.Service.Models.Api;
 using MorphDB.Service.Security;
 using MorphDB.Tests.Fixtures;
+using Npgsql;
 
 namespace MorphDB.Tests.Integration.Api;
 
@@ -178,5 +181,81 @@ public class TokenAuthenticationTests
         (await OwnersSeenBy(Token("alice"))).Should().Equal("alice");
         (await OwnersSeenBy(Token("dave", new Dictionary<string, object> { ["team"] = "red" }))).Should().Equal("alice", "bob");
         (await OwnersSeenBy(Token("erin"))).Should().BeEmpty("a token is no master: the policy holds for it");
+    }
+
+    /// <summary>
+    /// A token obtained by exchange names, in its <c>act</c> claim, the party it was issued to: a service
+    /// acting for the person. The audit row keeps both — the person as the actor, the service as who acted
+    /// for them — so a request an agent made on someone's behalf is not read as theirs alone.
+    /// </summary>
+    [Fact]
+    public async Task Who_acted_for_a_tokens_subject_reaches_the_audit_trail()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var person = $"person-{Guid.NewGuid():N}"[..20];
+        var exchanged = Token(person, new Dictionary<string, object> { ["act"] = new Dictionary<string, object> { ["sub"] = "agent-7" } });
+        var own = Token($"{person}-own");
+
+        (await Client(exchanged).GetAsync("/api/schema/tables", ct)).EnsureSuccessStatusCode();
+        (await Client(own).GetAsync("/api/schema/tables", ct)).EnsureSuccessStatusCode();
+
+        (await ActedByAsync(person, ct)).Should().Be("agent-7");
+        (await ActedByAsync($"{person}-own", ct)).Should().BeNull("a person acting for themselves has no one acting for them");
+    }
+
+    /// <summary>
+    /// A project created by an earlier version has an audit table without the column; the bootstrap that
+    /// runs on every start adds it, and running it again changes nothing.
+    /// </summary>
+    [Fact]
+    public async Task An_audit_trail_from_an_earlier_version_gains_the_column_and_keeps_its_rows()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        (await Client(Token($"before-{Guid.NewGuid():N}"[..20])).GetAsync("/api/schema/tables", ct)).EnsureSuccessStatusCode();
+        await using var connection = new NpgsqlConnection(_fixture.Postgres.ConnectionString);
+        await connection.OpenAsync(ct);
+        var schemas = (await connection.QueryAsync<string>(
+            "SELECT table_schema FROM information_schema.columns WHERE table_name = '_audit_logs' AND column_name = 'acted_by'")).ToList();
+        schemas.Should().NotBeEmpty();
+        var rows = await connection.ExecuteScalarAsync<long>($"""SELECT count(*) FROM "{schemas[0]}"."_audit_logs" """);
+        await connection.ExecuteAsync($"""ALTER TABLE "{schemas[0]}"."_audit_logs" DROP COLUMN acted_by""");
+
+        await connection.ExecuteAsync(GlobalSchemaMigrations.BuildPreBootstrapDdl());
+        await connection.ExecuteAsync(GlobalSchemaMigrations.BuildPreBootstrapDdl());
+
+        (await connection.ExecuteScalarAsync<long>(
+            "SELECT count(*) FROM information_schema.columns WHERE table_schema = @schema AND table_name = '_audit_logs' AND column_name = 'acted_by'",
+            new { schema = schemas[0] })).Should().Be(1);
+        (await connection.ExecuteScalarAsync<long>($"""SELECT count(*) FROM "{schemas[0]}"."_audit_logs" """)).Should().BeGreaterThanOrEqualTo(rows);
+    }
+
+    [Theory]
+    [InlineData("""{"sub":"agent-7","act":{"sub":"saem"}}""", "agent-7")]
+    [InlineData("""{"client_id":"x"}""", null)]
+    [InlineData("\"agent-7\"", null)]
+    [InlineData("not json", null)]
+    public void The_party_acting_now_is_the_outermost_act(string act, string? expected) =>
+        CredentialAuthenticationMiddleware.ActedByOf(new Dictionary<string, string> { ["act"] = act }).Should().Be(expected);
+
+    private async Task<string?> ActedByAsync(string actor, CancellationToken ct)
+    {
+        // The audit trail is written in batches behind the request; the row arrives shortly after.
+        var master = Client(MasterSecret);
+        for (var attempt = 0; attempt < 50; attempt++)
+        {
+            var page = await master.GetFromJsonAsync<System.Text.Json.JsonElement>(
+                $"/api/projects/{_fixture.Api.ProjectId}/audit/logs?actorId={Uri.EscapeDataString(actor)}", ct);
+            var items = page.GetProperty("items");
+            if (items.GetArrayLength() > 0)
+            {
+                return items[0].TryGetProperty("actedBy", out var actedBy) && actedBy.ValueKind == System.Text.Json.JsonValueKind.String
+                    ? actedBy.GetString()
+                    : null;
+            }
+
+            await Task.Delay(200, ct);
+        }
+
+        throw new TimeoutException($"No audit row for '{actor}' arrived.");
     }
 }

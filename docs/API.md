@@ -1590,6 +1590,12 @@ GET    /api/projects/{projectId}/audit/stats         # Counts by category, sever
 
 `stats` takes `from` and `to`. A secret confined to one project reads only that project's log.
 
+An entry made for a person's token names the person as its actor (`actorId`, the token's `sub`). When the
+token was obtained by exchange for a service acting on that person's behalf, its `act` claim (RFC 8693
+§4.1) names the service, and the entry carries it as `actedBy` — so a request an agent made for someone
+is told apart from one they made themselves. Of a nested `act`, the outermost is kept: the party acting
+when the request was made. An entry from a secret, or from a token without `act`, has none.
+
 ## Audit retention
 
 A project decides how much of its own audit history it keeps, through its settings:

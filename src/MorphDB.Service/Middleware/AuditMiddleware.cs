@@ -130,6 +130,7 @@ public sealed class AuditMiddleware
         // in readable form through the audit trail.
         var actorId = securityContext?.IsAuthenticated == true ? securityContext.UserId : null;
         var actorType = securityContext?.IsAuthenticated == true ? securityContext.Role : null;
+        var actedBy = securityContext?.IsAuthenticated == true ? securityContext.ActedBy : null;
 
         // Extract resource info from path
         var (resourceType, resourceId) = ExtractResourceInfo(request.Path.Value ?? "");
@@ -142,6 +143,7 @@ public sealed class AuditMiddleware
             Severity = severity,
             ActorId = actorId,
             ActorType = actorType,
+            ActedBy = actedBy,
             ResourceType = resourceType,
             ResourceId = resourceId,
             HttpMethod = request.Method,

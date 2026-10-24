@@ -22,6 +22,7 @@ internal static class SecurityContextSnapshot
     private const string UserId = "userId";
     private const string Role = "role";
     private const string Email = "email";
+    private const string ActedBy = "actedBy";
     private const string IsAuthenticated = "isAuthenticated";
     private const string BypassRls = "bypassRls";
     private const string Claims = "claims";
@@ -42,6 +43,7 @@ internal static class SecurityContextSnapshot
             writer.WriteString(UserId, context.UserId);
             writer.WriteString(Role, context.Role);
             writer.WriteString(Email, context.Email);
+            writer.WriteString(ActedBy, context.ActedBy);
             writer.WriteBoolean(IsAuthenticated, context.IsAuthenticated);
             writer.WriteBoolean(BypassRls, context.BypassRls);
 
@@ -90,6 +92,7 @@ internal static class SecurityContextSnapshot
                 UserId = StringOf(root, UserId),
                 Role = StringOf(root, Role),
                 Email = StringOf(root, Email),
+                ActedBy = StringOf(root, ActedBy),
                 IsAuthenticated = BooleanOf(root, IsAuthenticated),
                 BypassRls = BooleanOf(root, BypassRls),
             };

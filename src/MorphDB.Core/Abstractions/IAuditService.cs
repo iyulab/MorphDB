@@ -110,6 +110,12 @@ public sealed class AuditEvent
     public string? ActorType { get; init; }
 
     /// <summary>
+    /// Who acted for <see cref="ActorId"/>, when the caller's token said so (its <c>act</c> claim, RFC 8693) —
+    /// the service or agent a token exchange issued the token to. Null when the actor acted for themselves.
+    /// </summary>
+    public string? ActedBy { get; init; }
+
+    /// <summary>
     /// Resource type affected (table, column, record, etc.).
     /// </summary>
     public string? ResourceType { get; init; }
@@ -378,6 +384,11 @@ public sealed class AuditLogEntry
     /// Type of actor.
     /// </summary>
     public string? ActorType { get; init; }
+
+    /// <summary>
+    /// Who acted for <see cref="ActorId"/> (the token's <c>act</c> claim), or null.
+    /// </summary>
+    public string? ActedBy { get; init; }
 
     /// <summary>
     /// Resource type affected.
