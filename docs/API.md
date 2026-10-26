@@ -1476,6 +1476,31 @@ row-level security**, so a table a token reads should carry a policy. Starting t
 `Security__Tokens__Issuer` but no master secret fails at start-up, as does an issuer without an
 audience.
 
+## MCP door (read-only)
+
+A service can answer [Model Context Protocol](https://modelcontextprotocol.io) clients, so an agent can read a project's
+tables without writing REST calls. It is off by default and it only reads.
+
+```bash
+MorphDB__Mcp__Enabled=true        # the door, at /mcp (MorphDB__Mcp__Path)
+MorphDB__Mcp__MaxPageSize=100     # the most rows one tool call returns
+```
+
+It is the same service, not a second one: a request is authenticated by the credential the REST API asks for (a
+connection secret or a person's access token, [above](#connection-secrets)), scoped by the `X-Project-Id` header, and a
+person's token runs under row-level security as that person — a tool call sees the rows the same call over REST sees.
+Turning the door on while the service enforces no credential (`Security:MasterSecret` unset) is refused at
+start-up. Streamable HTTP, stateless.
+
+| Tool | Reads |
+|---|---|
+| `describe_tables` | The project's tables and how many columns each declares |
+| `describe_table` | One table's columns, their data types and whether each is required |
+| `query_records` | One page of a table's rows — `select`, `filter` (`column:op:value`), `orderBy`, `search`, `page`, `pageSize` as on `GET /api/data/{table}` |
+
+There is no tool that writes. A page is capped at `MaxPageSize`; `hasNext` says whether more follow. A request the REST
+API would refuse (an unknown table, a filter it does not accept, no project) is the tool's error, in the same words.
+
 ## Rate limiting
 
 Off unless configured. Turned on, it is a **quota per project**: every request that names a project

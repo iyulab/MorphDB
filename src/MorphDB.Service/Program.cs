@@ -10,7 +10,9 @@ using MorphDB.Service;
 using MorphDB.Service.Extensions;
 using MorphDB.Service.GraphQL;
 using MorphDB.Service.Health;
+using MorphDB.Mcp;
 using MorphDB.Service.Infrastructure;
+using MorphDB.Service.Mcp;
 using MorphDB.Service.Middleware;
 using MorphDB.Service.OData;
 using MorphDB.Service.RateLimiting;
@@ -199,6 +201,10 @@ try
     }
 
     builder.Services.AddSingleton(tokenOptions);
+
+    // The read-only MCP door: off unless MorphDB__Mcp__Enabled, and never on a service that enforces no credential.
+    builder.Services.AddMorphDbMcp(builder.Configuration, authenticationEnforced: secretOptions.IsEnforced);
+    builder.Services.AddScoped<IMorphReadPort, ServiceReadPort>();
     builder.Services.AddAuthentication()
         .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, jwt =>
         {
@@ -325,6 +331,7 @@ try
     app.UseAuditLogging(); // Audit logging captures all requests including rate-limited ones
 
     app.MapControllers();
+    app.MapMorphDbMcp(); // maps nothing while the door is off
     app.MapGraphQL().WithOptions(options =>
         options.Tool.Enable = app.Environment.IsDevelopment());
 

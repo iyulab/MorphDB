@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\MorphDB.Core\MorphDB.Core.csproj" />
+    <ProjectReference Include="..\MorphDB.Mcp\MorphDB.Mcp.csproj" />
     <ProjectReference Include="..\MorphDB.Npgsql\MorphDB.Npgsql.csproj" />
   </ItemGroup>
 

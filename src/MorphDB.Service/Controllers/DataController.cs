@@ -82,58 +82,9 @@ public sealed class DataController : ControllerBase
                 return BadRequest(new ErrorResponse { Error = "BadRequest", Message = unknown, Code = "INVALID_ARGUMENT" });
             }
 
-            // Validate pagination
-            var pageSize = Math.Clamp(query.PageSize, 1, Math.Min(1000, MaxPageSize));
-            var page = Math.Max(query.Page, 1);
-            var skip = PaginationInfo.Skip(page, pageSize, query.Offset);
+            var read = await DataReads.QueryAsync(_dataService, _metadataRepository, projectId, table, query, cancellationToken);
 
-            // Build query
-            var morphQuery = _dataService.Query(projectId).From(table);
-            if (query.IncludeDeleted)
-            {
-                morphQuery = morphQuery.IncludeDeleted();
-            }
-
-            // Select columns
-            if (!string.IsNullOrEmpty(query.Select))
-            {
-                var columns = query.Select.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                morphQuery = morphQuery.SelectColumns([.. SystemColumns.WithRecordId(columns)]);
-            }
-            else
-            {
-                morphQuery = morphQuery.SelectAll();
-            }
-
-            // Apply filters
-            morphQuery = FilterExpressions.Apply(morphQuery, query.Filter);
-
-            // Apply search across text columns
-            if (!string.IsNullOrEmpty(query.Search))
-            {
-                var tableMetadata = await _metadataRepository.GetTableByNameAsync(
-                    projectId, table, includeColumns: true, cancellationToken);
-
-                if (tableMetadata is not null)
-                {
-                    morphQuery = ApplySearch(morphQuery, query.Search, tableMetadata.Columns);
-                }
-            }
-
-            // Apply row state filter if specified
-            morphQuery = ApplyRowStateFilter(morphQuery, query.State);
-
-            // Apply ordering
-            if (!string.IsNullOrEmpty(query.OrderBy))
-            {
-                morphQuery = OrderExpressions.Apply(morphQuery, query.OrderBy);
-            }
-
-            // Count only when asked; the page is read one row past its size to know whether more follow
-            long? totalCount = query.Count ? await morphQuery.CountAsync(cancellationToken) : null;
-            var (results, more) = PaginationInfo.Probe(await morphQuery.Limit(pageSize + 1).Offset(skip).ToListAsync(cancellationToken), pageSize);
-
-            var records = results.Select(r => new DataRecordResponse
+            var records = read.Rows.Select(r => new DataRecordResponse
             {
                 Id = SystemColumns.RequireRecordId(r),
                 Data = r
@@ -144,11 +95,11 @@ public sealed class DataController : ControllerBase
                 Data = records,
                 Pagination = new PaginationInfo
                 {
-                    Page = query.Offset is null ? page : PaginationInfo.PageOf(skip, pageSize),
-                    PageSize = pageSize,
+                    Page = read.Number,
+                    PageSize = read.Size,
                     Offset = query.Offset,
-                    TotalCount = totalCount,
-                    HasNext = more
+                    TotalCount = read.TotalCount,
+                    HasNext = read.HasNext
                 }
             };
 
@@ -519,79 +470,6 @@ public sealed class DataController : ControllerBase
             System.Text.Json.JsonValueKind.Null => null,
             System.Text.Json.JsonValueKind.Array => element.EnumerateArray().Select(FilterExpressions.ListElement).ToArray(),
             _ => element.GetRawText()
-        };
-    }
-
-    /// <summary>
-    /// Determines if a MorphDataType is a text-like type suitable for ILIKE search.
-    /// </summary>
-    private static bool IsTextSearchable(MorphDataType dataType) => dataType is
-        MorphDataType.Text or
-        MorphDataType.LongText or
-        MorphDataType.Email or
-        MorphDataType.Url or
-        MorphDataType.Phone or
-        MorphDataType.SingleSelect;
-
-    private static IMorphQuery ApplySearch(
-        IMorphQuery query,
-        string searchText,
-        IReadOnlyList<ColumnMetadata> columns)
-    {
-        var textColumns = columns
-            .Where(c => !c.IsSystemColumn && !c.IsDerived && IsTextSearchable(c.DataType))
-            .ToList();
-
-        if (textColumns.Count == 0)
-            return query;
-
-        var searchPattern = $"%{searchText}%";
-        var isFirst = true;
-
-        foreach (var column in textColumns)
-        {
-            if (isFirst)
-            {
-                query = query.Where(column.LogicalName, FilterOperator.ILike, searchPattern);
-                isFirst = false;
-            }
-            else
-            {
-                query = query.OrWhere(column.LogicalName, FilterOperator.ILike, searchPattern);
-            }
-        }
-
-        return query;
-    }
-
-    private static IMorphQuery ApplyRowStateFilter(IMorphQuery query, string? state)
-    {
-        // If state is not specified, don't apply any filter (backward compatible).
-        // This allows queries on tables without RowStateEnabled to work normally.
-        if (string.IsNullOrWhiteSpace(state))
-        {
-            return query;
-        }
-
-        // Normalize state to lowercase
-        var normalizedState = state.Trim().ToLowerInvariant();
-
-        return normalizedState switch
-        {
-            // "all" returns all records regardless of _row_state
-            "all" => query,
-
-            // "draft" returns only draft records
-            "draft" => query.Where(SystemColumns.RowState, FilterOperator.Equals, RowStateValue.Draft.ToString().ToLowerInvariant()),
-
-            // "error" returns only error records
-            "error" => query.Where(SystemColumns.RowState, FilterOperator.Equals, RowStateValue.Error.ToString().ToLowerInvariant()),
-
-            // "valid" returns valid records only
-            "valid" => query.Where(SystemColumns.RowState, FilterOperator.Equals, RowStateValue.Valid.ToString().ToLowerInvariant()),
-
-            // An unknown state used to apply no filter at all — an answer wider than the question.
-            _ => throw new ArgumentException($"Unknown row state '{state}'. Supported: valid, draft, error, all.")
         };
     }
 

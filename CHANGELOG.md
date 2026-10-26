@@ -4,6 +4,13 @@
 
 ### Added
 
+- **A read-only MCP door.** `MorphDB.Mcp` (new package) lets a service answer Model Context Protocol clients with three
+  tools — `describe_tables`, `describe_table` and `query_records` — and nothing that writes. It runs inside the service,
+  behind its own credential check, project scoping and row-level security (a person's token sees what that person sees
+  over REST), is off unless `MorphDB__Mcp__Enabled` is set, and the service refuses to start with it on while no master
+  secret is injected. The row-list rules (filters, ordering, search, paging) moved into one place that the REST list and
+  the tool both use. See `docs/API.md`.
+
 - **OData `$filter` reads `and`, `or`, `not`, parentheses and `in`.** The filter was one comparison or one function:
   `qty ge 2 and qty le 3`, `a eq 1 or b eq 2`, `(a eq 1 or a eq 2) and b eq 3` and `a in (1, 2)` were refused with
   `400`, and they are what Excel and Power BI send. `not` governs comparisons, `in` lists and groups of them (`not

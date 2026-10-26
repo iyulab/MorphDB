@@ -306,6 +306,48 @@ public sealed class ApiTestFixture : IAsyncLifetime
     }
 
     /// <summary>
+    /// Returns a factory with the MCP door open, on a service that enforces <paramref name="masterSecret"/> and accepts
+    /// <paramref name="tokens"/> — the door reads the configuration at start-up, so the secret and the issuer are given as
+    /// settings as well as the service replacements <see cref="WithTokens"/> makes. <paramref name="maxPageSize"/> is the
+    /// most rows one tool call returns. Cached like <see cref="WithMasterSecret"/>.
+    /// </summary>
+    public WebApplicationFactory<Program> WithMcp(string masterSecret, TokenOptions tokens, SecurityKey signingKey, int maxPageSize = 100)
+    {
+        var key = $"mcp:{masterSecret}:{tokens.Issuer}:{tokens.Audience}:{maxPageSize}";
+        if (!_secretFactories.TryGetValue(key, out var factory))
+        {
+            factory = _factory!.WithWebHostBuilder(builder =>
+            {
+                builder.UseSetting("MorphDB:Mcp:Enabled", "true");
+                builder.UseSetting("MorphDB:Mcp:MaxPageSize", maxPageSize.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                builder.UseSetting("Security:MasterSecret", masterSecret);
+                builder.UseSetting("Security:Tokens:Issuer", tokens.Issuer);
+                builder.UseSetting("Security:Tokens:Audience", tokens.Audience);
+                builder.ConfigureTestServices(services =>
+                {
+                    services.RemoveAll<SecretOptions>();
+                    services.AddSingleton(new SecretOptions { MasterSecret = masterSecret });
+                    services.RemoveAll<TokenOptions>();
+                    services.AddSingleton(tokens);
+                    services.Configure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, jwt =>
+                    {
+                        jwt.Authority = null;
+                        jwt.MetadataAddress = string.Empty;
+                        jwt.TokenValidationParameters.ValidIssuer = tokens.Issuer;
+                        jwt.TokenValidationParameters.ValidAudience = tokens.Audience;
+                        jwt.TokenValidationParameters.IssuerSigningKey = signingKey;
+                        jwt.TokenValidationParameters.RoleClaimType = tokens.RoleClaim;
+                    });
+                });
+            });
+
+            _secretFactories[key] = factory;
+        }
+
+        return factory;
+    }
+
+    /// <summary>
     /// Returns a factory identical to this one plus <paramref name="configure"/>'s service changes, for a
     /// test that has to observe something only a service registration exposes (a log sink, say).
     /// <para>
