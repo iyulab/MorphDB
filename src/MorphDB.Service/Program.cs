@@ -295,6 +295,11 @@ try
 
     var app = builder.Build();
 
+    if (!secretOptions.IsEnforced)
+    {
+        OpenServiceLog.Open(app.Logger);
+    }
+
     // Ensure global morphdb schema exists (replaces init.sql for embedded mode)
     await app.Services.EnsureMorphDbSchemaAsync();
 
