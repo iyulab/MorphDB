@@ -122,7 +122,11 @@ public class ViewDefaultColumnsContractTests
         }, Ct)).EnsureSuccessStatusCode();
         (await _client.PostAsJsonAsync($"/api/data/{orders}", new Dictionary<string, object?>
         {
-            ["order_no"] = "A-1", ["status"] = "open", ["qty"] = 3, ["price"] = 2.5m, ["customer_id"] = customerId,
+            ["order_no"] = "A-1",
+            ["status"] = "open",
+            ["qty"] = 3,
+            ["price"] = 2.5m,
+            ["customer_id"] = customerId,
         }, Ct)).EnsureSuccessStatusCode();
 
         // The request body of API.md's example, with the tables of this test.
