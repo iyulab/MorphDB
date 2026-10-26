@@ -47,24 +47,9 @@ internal sealed class RequireProjectFilter : IAsyncActionFilter
 
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
-        if (_projectContext.ProjectIdOrNull is not { } projectId)
+        if ((await ProjectScope.CheckAsync(_projectContext, _projectRepository, context.HttpContext.RequestAborted)).Refusal is { } refused)
         {
-            // The exception type owns the wording — duplicating the literal here once let the two
-            // drift, and the filter briefly advertised an API key the server never asks for. Which
-            // type to instantiate follows the accessor's own distinction: a header that failed to
-            // parse said something and gets told what; a request that said nothing gets asked to say
-            // something.
-            MorphDbException missing = _projectContext.MalformedProjectIdHeaderValue is { } raw
-                ? new MalformedProjectIdException(raw)
-                : new MissingProjectException();
-            context.Result = Refusal(StatusCodes.Status400BadRequest, "BadRequest", missing);
-            return;
-        }
-
-        // A deleted project's rows are still in its tables, and must not stay reachable.
-        if (!await _projectRepository.ExistsAsync(projectId, context.HttpContext.RequestAborted))
-        {
-            context.Result = Refusal(StatusCodes.Status404NotFound, "NotFound", new ProjectNotFoundException(projectId));
+            context.Result = Refusal(refused.Status, refused.Error, refused.Exception);
             return;
         }
 

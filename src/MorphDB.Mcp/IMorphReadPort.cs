@@ -15,6 +15,10 @@ public interface IMorphReadPort
     /// <exception cref="MorphReadRefusedException">The request names no usable project.</exception>
     ValueTask<McpTableDescription?> DescribeTableAsync(string table, CancellationToken cancellationToken);
 
+    /// <summary>One record by its id, or <see langword="null"/> when there is none the caller may see.</summary>
+    /// <exception cref="MorphReadRefusedException">The request names no usable project, the table is unknown, or the id is not one.</exception>
+    ValueTask<IDictionary<string, object?>?> GetRecordAsync(string table, string id, CancellationToken cancellationToken);
+
     /// <summary>One page of a table's rows, under the caller's own row-level rules.</summary>
     /// <exception cref="MorphReadRefusedException">The request names no usable project, the table is unknown, or the filter, ordering or search is not accepted.</exception>
     ValueTask<McpRecordPage> QueryRecordsAsync(McpRecordQuery query, CancellationToken cancellationToken);
@@ -72,3 +76,7 @@ public sealed record McpRecordPage(IReadOnlyList<IDictionary<string, object?>> R
 /// <summary>The tables of a project, as an object — a tool's structured result is one.</summary>
 /// <param name="Tables">The tables.</param>
 public sealed record McpTableList(IReadOnlyList<McpTableSummary> Tables);
+
+/// <summary>One record, by column name.</summary>
+/// <param name="Record">The record's columns and values.</param>
+public sealed record McpRecord(IDictionary<string, object?> Record);

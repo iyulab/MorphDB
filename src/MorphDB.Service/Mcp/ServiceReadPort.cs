@@ -38,6 +38,24 @@ internal sealed class ServiceReadPort(
         return new McpTableDescription(response.Name, [.. response.Columns.Select(c => new McpColumn(c.Name, c.Type, !c.Nullable))]);
     }
 
+    public async ValueTask<IDictionary<string, object?>?> GetRecordAsync(string table, string id, CancellationToken cancellationToken)
+    {
+        var projectId = await ProjectAsync(cancellationToken);
+        if (!Guid.TryParse(id, out var recordId))
+        {
+            throw new MorphReadRefusedException($"'{id}' is not a record id; a record id is a GUID.");
+        }
+
+        try
+        {
+            return await dataService.GetByIdAsync(projectId, table, recordId, cancellationToken);
+        }
+        catch (NotFoundException e)
+        {
+            throw new MorphReadRefusedException(e.Message, e);
+        }
+    }
+
     public async ValueTask<McpRecordPage> QueryRecordsAsync(McpRecordQuery query, CancellationToken cancellationToken)
     {
         var projectId = await ProjectAsync(cancellationToken);
@@ -69,20 +87,7 @@ internal sealed class ServiceReadPort(
     /// <summary>The project the request is scoped to, refused as the REST API refuses a request with none.</summary>
     private async ValueTask<Guid> ProjectAsync(CancellationToken cancellationToken)
     {
-        if (projectContext.ProjectIdOrNull is not { } projectId)
-        {
-            MorphDbException missing = projectContext.MalformedProjectIdHeaderValue is { } raw
-                ? new MalformedProjectIdException(raw)
-                : new MissingProjectException();
-            throw new MorphReadRefusedException(missing.Message);
-        }
-
-        // A deleted project's rows are still in its tables, and must not stay reachable.
-        if (!await projects.ExistsAsync(projectId, cancellationToken))
-        {
-            throw new MorphReadRefusedException(new ProjectNotFoundException(projectId).Message);
-        }
-
-        return projectId;
+        var (projectId, refusal) = await ProjectScope.CheckAsync(projectContext, projects, cancellationToken);
+        return projectId ?? throw new MorphReadRefusedException(refusal!.Exception.Message);
     }
 }

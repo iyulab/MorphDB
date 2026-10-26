@@ -4,8 +4,8 @@
 
 ### Added
 
-- **A read-only MCP door.** `MorphDB.Mcp` (new package) lets a service answer Model Context Protocol clients with three
-  tools — `describe_tables`, `describe_table` and `query_records` — and nothing that writes. It runs inside the service,
+- **A read-only MCP door.** `MorphDB.Mcp` (new package) lets a service answer Model Context Protocol clients with four
+  tools — `describe_tables`, `describe_table`, `query_records` and `get_record` — and nothing that writes. It runs inside the service,
   behind its own credential check, project scoping and row-level security (a person's token sees what that person sees
   over REST), is off unless `MorphDB__Mcp__Enabled` is set, and the service refuses to start with it on while no master
   secret is injected. The row-list rules (filters, ordering, search, paging) moved into one place that the REST list and

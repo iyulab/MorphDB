@@ -140,13 +140,13 @@ public class McpDoorTests
 
     // Add a tool and this goes red until the list is changed here, on purpose; a write tool cannot arrive unseen.
     [Fact]
-    public async Task The_door_offers_the_three_read_tools_and_every_one_says_it_is_read_only()
+    public async Task The_door_offers_only_read_tools_and_every_one_says_it_is_read_only()
     {
         await using var client = await McpAs(Token("alice"));
 
         var tools = await client.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        tools.Select(t => t.Name).Order().Should().Equal("describe_table", "describe_tables", "query_records");
+        tools.Select(t => t.Name).Order().Should().Equal("describe_table", "describe_tables", "get_record", "query_records");
         tools.Should().OnlyContain(t => t.ProtocolTool.Annotations!.ReadOnlyHint == true && t.ProtocolTool.Annotations.DestructiveHint != true);
     }
 
@@ -168,6 +168,29 @@ public class McpDoorTests
         // …and the same rows the REST API gives alice.
         var viaRest = await RestAs(Token("alice")).GetFromJsonAsync<PagedResponse<DataRecordResponse>>($"/api/data/{table}", ct);
         viaRest!.Data.Should().HaveCount(2);
+    }
+
+    // The id a person holds is no key to a row they may not see: bob asking for alice's record is told it is not there.
+    [Fact]
+    public async Task A_record_by_id_is_read_under_the_callers_rules_and_never_leaks_across_them()
+    {
+        var table = await RowLevelTableAsync();
+        var ct = TestContext.Current.CancellationToken;
+        await using var alice = await McpAs(Token("alice"));
+        await using var bob = await McpAs(Token("bob"));
+        var rows = (await alice.CallToolAsync("query_records", new Dictionary<string, object?> { ["table"] = table }, cancellationToken: ct))
+            .StructuredContent!.Value.GetProperty("rows");
+        var alicesId = rows.EnumerateArray().First().GetProperty("_id").GetString()!;
+
+        var own = await alice.CallToolAsync("get_record", new Dictionary<string, object?> { ["table"] = table, ["id"] = alicesId }, cancellationToken: ct);
+        var theirs = await bob.CallToolAsync("get_record", new Dictionary<string, object?> { ["table"] = table, ["id"] = alicesId }, cancellationToken: ct);
+        var notAnId = await alice.CallToolAsync("get_record", new Dictionary<string, object?> { ["table"] = table, ["id"] = "nope" }, cancellationToken: ct);
+
+        own.IsError.Should().NotBe(true);
+        own.StructuredContent!.Value.GetProperty("record").GetProperty("owner").GetString().Should().Be("alice");
+        theirs.IsError.Should().BeTrue();
+        string.Join(" ", theirs.Content.OfType<TextContentBlock>().Select(c => c.Text)).Should().NotContain("alice's");
+        notAnId.IsError.Should().BeTrue();
     }
 
     [Fact]

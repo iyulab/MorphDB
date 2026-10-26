@@ -13,7 +13,7 @@ namespace MorphDB.Mcp;
 internal sealed class MorphDbMcpTools(IMorphReadPort port, IOptions<MorphDbMcpOptions> options)
 {
     /// <summary>The names the door offers, so a test can hold the list to this.</summary>
-    internal static readonly IReadOnlyList<string> ToolNames = ["describe_tables", "describe_table", "query_records"];
+    internal static readonly IReadOnlyList<string> ToolNames = ["describe_tables", "describe_table", "query_records", "get_record"];
 
     [McpServerTool(Name = "describe_tables", Title = "List the project's tables", ReadOnly = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
     [Description("Lists the tables of the project this request is scoped to, with how many columns each declares. Read-only; runs as the authenticated caller.")]
@@ -41,6 +41,14 @@ internal sealed class MorphDbMcpTools(IMorphReadPort port, IOptions<MorphDbMcpOp
         await Guard(() => port.QueryRecordsAsync(
             new McpRecordQuery(table, select, filter, orderBy, search, Math.Max(page, 1), Math.Clamp(pageSize, 1, Math.Max(options.Value.MaxPageSize, 1))),
             cancellationToken));
+
+    [McpServerTool(Name = "get_record", Title = "Read one record", ReadOnly = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
+    [Description("Reads one record by its id as the authenticated caller. A record their row-level rules do not let them see is reported as not found. Read-only.")]
+    public async Task<McpRecord> GetRecord(
+        [Description("The table's name.")] string table,
+        [Description("The record's id (a GUID, the '_id' of a row).")] string id,
+        CancellationToken cancellationToken = default) =>
+        new(await Guard(() => port.GetRecordAsync(table, id, cancellationToken)) ?? throw new McpException($"The table '{table}' has no record '{id}' you can see."));
 
     // A refusal the caller can act on is the tool's error, in the refusal's own words — anything else is not shown to them.
     private static async Task<T> Guard<T>(Func<ValueTask<T>> read)
