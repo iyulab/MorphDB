@@ -13,19 +13,19 @@
     <!-- API Frameworks -->
     <!-- 16.x: Any carries a parsed JSON value in both directions (see GraphQlAny). 15.1.14+ had
          closed GHSA-qr3m-xw4c-jqw3 in the transitive HotChocolate.Language; 16 carries it forward. -->
-    <PackageVersion Include="HotChocolate.AspNetCore" Version="16.6.9" />
-    <PackageVersion Include="HotChocolate.Data" Version="16.6.9" />
+    <PackageVersion Include="HotChocolate.AspNetCore" Version="16.7.1" />
+    <PackageVersion Include="HotChocolate.Data" Version="16.7.1" />
     <PackageVersion Include="Microsoft.AspNetCore.OData" Version="9.5.0" />
     <!-- Swashbuckle 10.2.1+ pulls Microsoft.OpenApi 2.7.5, closing GHSA-v5pm-xwqc-g5wc -->
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.3.1" />
     <!-- Caching -->
-    <PackageVersion Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.13" />
-    <PackageVersion Include="StackExchange.Redis" Version="3.4.5" />
+    <PackageVersion Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.14" />
+    <PackageVersion Include="StackExchange.Redis" Version="3.4.20" />
     <!-- Authentication & Security -->
-    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.14" />
     <PackageVersion Include="BCrypt.Net-Next" Version="4.2.0" />
     <!-- Real-time -->
-    <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.14" />
     <!-- Logging & Diagnostics -->
     <PackageVersion Include="Serilog.AspNetCore" Version="10.0.0" />
     <PackageVersion Include="Serilog.Sinks.Console" Version="6.1.1" />
@@ -46,7 +46,7 @@
     <!-- Bulk Operations -->
     <PackageVersion Include="ClosedXML" Version="0.105.1" />
     <!-- Testing -->
-    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.13" />
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.14" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
     <PackageVersion Include="xunit.v3" Version="4.0.2" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
