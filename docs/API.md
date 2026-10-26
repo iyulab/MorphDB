@@ -450,6 +450,51 @@ read are still returned where the caller may read them; ancestors and siblings a
 record, so a record the caller may not read, or that does not exist, has none. An unknown table is
 `404 TABLE_NOT_FOUND`.
 
+### Views
+
+A view is a stored query over a table, read like one.
+
+```yaml
+POST   /api/views                       # Create a view
+GET    /api/views                       # List views
+GET    /api/views/{name}                # Get a view and its columns
+PATCH  /api/views/{name}                # Change a view
+DELETE /api/views/{name}                # Delete a view
+GET    /api/views/{name}/data           # Read the view's rows
+POST   /api/views/{name}/refresh        # Refresh a materialized view
+GET    /api/views/{name}/stale          # Whether a materialized view is out of date
+```
+
+```http
+POST /api/views
+X-Project-Id: <project id>
+
+{
+  "name": "open_orders",
+  "baseTable": "orders",
+  "columns": [
+    { "source": "order_no", "alias": "order_no" },
+    { "source": "customer.name", "alias": "customer" },
+    { "expression": "qty * price", "alias": "total", "dataType": "decimal" }
+  ],
+  "joins": [ { "table": "customer", "condition": "orders.customer_id = customer._id" } ],
+  "filters": [ { "field": "status", "operator": "eq", "value": "open" } ],
+  "orderBy": [ { "column": "order_no" } ]
+}
+```
+
+A column takes its value from a `source` (a column of the base table, or `table.column` of a joined one) or from an
+`expression`, and is read under its `alias`; `aggregation` and a top-level `groupBy` make an aggregate view. `filters`
+are the view's own and always apply; `joins`, `orderBy`, `limit`, `distinct`, `materialized`, `refreshPolicy`,
+`refreshSchedule` and `description` are as the request names them. A view that names **no columns** (and does not
+group) selects every column of its base table by the name the table's own reads use, with `_id`, `_created_at` and
+`_updated_at` — never the table's physical names; columns of a joined table are named explicitly.
+
+`GET /api/views/{name}/data` takes `select`, `orderBy`, `skip` and `take`, and the conditions of a row list: repeat
+`filter` for more than one, every condition applies. A column the view does not have is refused with `400`, and so is
+a value that is not its column's type (`qty:eq:ten`), naming the column. A view is read through the policies of the
+tables it reads (see the note on materialized views under [Row-Level Security Policies](#row-level-security-policies)).
+
 ## GraphQL
 
 **Endpoint**: `/graphql`

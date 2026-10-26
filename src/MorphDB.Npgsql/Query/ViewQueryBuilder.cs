@@ -26,6 +26,47 @@ public sealed class ViewQueryBuilder
     }
 
     /// <summary>
+    /// The definition with the columns a view that names none stands for: every column of the base table, by logical
+    /// name, with its type, and the system columns <c>_id</c>, <c>_created_at</c> and <c>_updated_at</c>. A definition that
+    /// names columns, or groups, is returned as it is.
+    /// </summary>
+    public async Task<ViewDefinition> WithColumnsAsync(ViewDefinition definition, CancellationToken cancellationToken = default)
+    {
+        // A view that names columns is what it says. One that names none (and does not group) selects the base table's
+        // own columns, by the names its reads use — never its physical ones, which no request can then address.
+        if (definition.Columns.Count > 0 || definition.GroupBy.Count > 0)
+        {
+            return definition;
+        }
+
+        var baseTable = await GetTableMetadataAsync(definition.BaseTable, cancellationToken)
+            ?? throw new MorphDB.Core.Exceptions.TableNotFoundException(definition.BaseTable);
+
+        List<ViewColumnSpec> columns =
+        [
+            new() { Source = SystemColumns.Id, Alias = SystemColumns.Id, DataType = MorphDataType.Uuid },
+            new() { Source = SystemColumns.CreatedAt, Alias = SystemColumns.CreatedAt, DataType = MorphDataType.DateTime },
+            new() { Source = SystemColumns.UpdatedAt, Alias = SystemColumns.UpdatedAt, DataType = MorphDataType.DateTime },
+            .. baseTable.Columns
+                .Where(c => c is { IsSystemColumn: false, IsActive: true, IsDerived: false })
+                .OrderBy(c => c.OrdinalPosition)
+                .Select(c => new ViewColumnSpec { Source = c.LogicalName, Alias = c.LogicalName, DataType = c.DataType }),
+        ];
+
+        return new ViewDefinition
+        {
+            BaseTable = definition.BaseTable,
+            Joins = definition.Joins,
+            Columns = columns,
+            Filters = definition.Filters,
+            GroupBy = definition.GroupBy,
+            OrderBy = definition.OrderBy,
+            Limit = definition.Limit,
+            Distinct = definition.Distinct,
+        };
+    }
+
+    /// <summary>
     /// Builds a SQL SELECT statement from a view definition.
     /// </summary>
     public async Task<string> BuildSelectStatementAsync(

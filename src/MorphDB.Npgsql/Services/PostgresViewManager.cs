@@ -68,14 +68,15 @@ public sealed class PostgresViewManager : IViewManager
 
         // Build the SELECT statement from view definition
         var queryBuilder = new ViewQueryBuilder(_metadataRepository, request.ProjectId);
-        var selectStatement = await queryBuilder.BuildSelectStatementAsync(request.Definition, cancellationToken);
+        var definition = await queryBuilder.WithColumnsAsync(request.Definition, cancellationToken);
+        var selectStatement = await queryBuilder.BuildSelectStatementAsync(definition, cancellationToken);
 
         // Create the view in PostgreSQL
         await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         if (request.IsMaterialized)
         {
             await BuildMaterializedViewAsync(
-                connection, request.Name, physicalName, selectStatement, request.Definition, replace: false, cancellationToken);
+                connection, request.Name, physicalName, selectStatement, definition, replace: false, cancellationToken);
         }
         else
         {
@@ -83,7 +84,7 @@ public sealed class PostgresViewManager : IViewManager
         }
 
         // Build view columns metadata from definition
-        var columns = BuildViewColumns(viewId, request.Definition);
+        var columns = BuildViewColumns(viewId, definition);
 
         // Save view metadata
         var viewMetadata = new ViewMetadata
@@ -92,7 +93,7 @@ public sealed class PostgresViewManager : IViewManager
             ProjectId = request.ProjectId,
             LogicalName = request.Name,
             PhysicalName = physicalName,
-            Definition = request.Definition,
+            Definition = definition,
             IsMaterialized = request.IsMaterialized,
             RefreshPolicy = request.RefreshPolicy,
             RefreshSchedule = request.RefreshSchedule,
@@ -156,10 +157,12 @@ public sealed class PostgresViewManager : IViewManager
             cancellationToken);
 
         // If definition changed, recreate the view
+        var definition = request.Definition;
         if (request.Definition != null)
         {
             var queryBuilder = new ViewQueryBuilder(_metadataRepository, view.ProjectId);
-            var selectStatement = await queryBuilder.BuildSelectStatementAsync(request.Definition, cancellationToken);
+            definition = await queryBuilder.WithColumnsAsync(request.Definition, cancellationToken);
+            var selectStatement = await queryBuilder.BuildSelectStatementAsync(definition, cancellationToken);
 
             await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
@@ -167,7 +170,7 @@ public sealed class PostgresViewManager : IViewManager
             {
                 // Drop and recreate materialized view (no CREATE OR REPLACE for mat views)
                 await BuildMaterializedViewAsync(
-                    connection, view.LogicalName, view.PhysicalName, selectStatement, request.Definition, replace: true, cancellationToken);
+                    connection, view.LogicalName, view.PhysicalName, selectStatement, definition, replace: true, cancellationToken);
             }
             else
             {
@@ -179,7 +182,7 @@ public sealed class PostgresViewManager : IViewManager
         await _viewRepository.UpdateViewAsync(
             request.ViewId,
             request.Name,
-            request.Definition,
+            definition,
             request.RefreshPolicy,
             request.RefreshSchedule,
             request.Description,

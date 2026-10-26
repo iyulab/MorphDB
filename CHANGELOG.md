@@ -22,6 +22,11 @@
   `true` or `false` and a `$format` other than `json` are refused too, in a `$batch` item as on its own — an item's
   `$top=abc` was read as no `$top`. `$top=0` is no rows (it answered a page of 100), and a `$top` larger than a page
   carries is paged with `@odata.nextLink` instead of cut at the page limit without a word.
+- **A view that names no columns reads the base table by its own names.** `POST /api/views` with no `columns` was
+  created (`201`) as `SELECT *`, so the view's rows carried the table's physical names (`col_e9af1e674b83`) and a
+  filter on a column's own name was a `500` from the database. The view now selects every column of its base table
+  by name, with its type, and `_id`, `_created_at` and `_updated_at`; a view over a join names the joined columns
+  explicitly. A view created before this keeps the columns it was created with.
 - **A GraphQL error the server cannot explain is logged with its exception.** The client is told only
   "Unexpected Execution Error", and nothing was written on the server; the request's own line said `200`.
 
