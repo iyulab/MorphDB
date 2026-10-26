@@ -56,6 +56,25 @@ public class ViewDefaultColumnsContractTests
     }
 
     [Fact]
+    public async Task A_column_taken_from_the_table_reports_the_type_of_its_source()
+    {
+        var (table, _) = await SeedViewAsync(withColumns: false);
+        var view = $"vt_{table}"[..30];
+        (await _client.PostAsJsonAsync("/api/views", new CreateViewApiRequest
+        {
+            Name = view,
+            BaseTable = table,
+            Columns = [new ViewColumnApiSpec { Source = "qty", Alias = "quantity" }, new ViewColumnApiSpec { Source = "code", Alias = "label", DataType = "longtext" }],
+        }, Ct)).EnsureSuccessStatusCode();
+
+        var columns = JsonDocument.Parse(await (await _client.GetAsync($"/api/views/{view}", Ct)).Content.ReadAsStringAsync(Ct)).RootElement.GetProperty("columns")
+            .EnumerateArray().ToDictionary(c => c.GetProperty("name").GetString()!, c => c.GetProperty("dataType").GetString()!);
+
+        columns["quantity"].Should().Be("Integer", "an integer column read through a view is still an integer");
+        columns["label"].Should().Be("LongText", "a type the request states is the type it gets");
+    }
+
+    [Fact]
     public async Task A_filter_on_a_name_the_view_does_not_have_is_refused()
     {
         var (_, view) = await SeedViewAsync(withColumns: false);

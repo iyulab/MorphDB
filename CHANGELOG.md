@@ -27,6 +27,10 @@
   filter on a column's own name was a `500` from the database. The view now selects every column of its base table
   by name, with its type, and `_id`, `_created_at` and `_updated_at`; a view over a join names the joined columns
   explicitly. A view created before this keeps the columns it was created with.
+- **A view's column that is taken from a table reports that column's type.** A view column that named no type was
+  recorded as `Text` whatever it selected, so an integer column read through a view was reported as text; it takes
+  the type of its source (a column of the base table or of a joined one, or `_id`, `_created_at`, `_updated_at`).
+  A type the request states is kept.
 - **A row list and a view read refuse a query parameter they do not have.** A parameter spelled `fliter` or `filters`
   narrowed nothing, so the list answered every row with a `200` — a query body already refused a member it does not
   know. Both now answer `400 INVALID_ARGUMENT` naming the parameter and listing the ones they take. A view read with a

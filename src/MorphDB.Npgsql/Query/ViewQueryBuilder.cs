@@ -36,7 +36,7 @@ public sealed class ViewQueryBuilder
         // own columns, by the names its reads use — never its physical ones, which no request can then address.
         if (definition.Columns.Count > 0 || definition.GroupBy.Count > 0)
         {
-            return definition;
+            return await WithColumnTypesAsync(definition, cancellationToken);
         }
 
         var baseTable = await GetTableMetadataAsync(definition.BaseTable, cancellationToken)
@@ -63,6 +63,55 @@ public sealed class ViewQueryBuilder
             OrderBy = definition.OrderBy,
             Limit = definition.Limit,
             Distinct = definition.Distinct,
+        };
+    }
+
+    /// <summary>
+    /// The definition with the type of each plain column that names none: a column taken as it is from a table has the
+    /// type of the column it is taken from, not "text". Expressions and aggregates keep what they declared.
+    /// </summary>
+    private async Task<ViewDefinition> WithColumnTypesAsync(ViewDefinition definition, CancellationToken cancellationToken)
+    {
+        var columns = new List<ViewColumnSpec>(definition.Columns.Count);
+        foreach (var column in definition.Columns)
+        {
+            var type = column is { DataType: null, Aggregation: null, Source: { Length: > 0 } source } && string.IsNullOrEmpty(column.Expression)
+                ? await SourceTypeAsync(definition.BaseTable, source, cancellationToken)
+                : null;
+            columns.Add(type is null
+                ? column
+                : new ViewColumnSpec { Source = column.Source, Expression = column.Expression, Alias = column.Alias, DataType = type, Aggregation = column.Aggregation });
+        }
+
+        return new ViewDefinition
+        {
+            BaseTable = definition.BaseTable,
+            Joins = definition.Joins,
+            Columns = columns,
+            Filters = definition.Filters,
+            GroupBy = definition.GroupBy,
+            OrderBy = definition.OrderBy,
+            Limit = definition.Limit,
+            Distinct = definition.Distinct,
+        };
+    }
+
+    private async Task<MorphDataType?> SourceTypeAsync(string baseTable, string source, CancellationToken cancellationToken)
+    {
+        var parts = source.Split('.', 2);
+        var tableName = parts.Length == 2 ? parts[0] : baseTable;
+        var columnName = parts.Length == 2 ? parts[1] : source;
+        var table = await GetTableMetadataAsync(tableName, cancellationToken);
+        if (table?.Columns.FirstOrDefault(c => c.LogicalName == columnName) is { } column)
+        {
+            return column.DataType;
+        }
+
+        return columnName switch
+        {
+            SystemColumns.Id => MorphDataType.Uuid,
+            SystemColumns.CreatedAt or SystemColumns.UpdatedAt => MorphDataType.DateTime,
+            _ => null,
         };
     }
 
