@@ -92,6 +92,18 @@ public sealed partial class MorphODataController : ControllerBase
         [FromQuery(Name = "$count")] bool count,
         CancellationToken cancellationToken)
     {
+        // The request's own options are read here, where they are the request's; a batch item states its own.
+        if (ODataSystemOptions.Problem(Request.Query, entity: false) is { } problem)
+        {
+            return OptionsRefused(problem);
+        }
+
+        return await ReadEntitySetAsync(entitySet, filter, orderBy, top, skip, select, count, cancellationToken);
+    }
+
+    private async Task<IActionResult> ReadEntitySetAsync(
+        string entitySet, string? filter, string? orderBy, int? top, int? skip, string? select, bool count, CancellationToken cancellationToken)
+    {
         var projectId = _projectAccessor.ProjectId;
         var modelResult = await _modelProvider.GetModelWithMappingAsync(projectId, cancellationToken);
 
@@ -99,7 +111,7 @@ public sealed partial class MorphODataController : ControllerBase
         {
             Filter = filter,
             OrderBy = orderBy,
-            Top = top ?? 0,
+            Top = top,
             Skip = skip ?? 0,
             Select = select,
             Count = count
@@ -141,6 +153,11 @@ public sealed partial class MorphODataController : ControllerBase
             }
 
             next["$skip"] = nextSkip.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            if (result.NextTop is { } nextTop)
+            {
+                next["$top"] = nextTop.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+
             response.NextLink = Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString(
                 $"{Request.Scheme}://{Request.Host}/odata/{entitySet}", next);
         }
@@ -158,6 +175,16 @@ public sealed partial class MorphODataController : ControllerBase
         Guid key,
         [FromQuery(Name = "$select")] string? select,
         CancellationToken cancellationToken)
+    {
+        if (ODataSystemOptions.Problem(Request.Query, entity: true) is { } problem)
+        {
+            return OptionsRefused(problem);
+        }
+
+        return await ReadEntityAsync(entitySet, key, select, cancellationToken);
+    }
+
+    private async Task<IActionResult> ReadEntityAsync(string entitySet, Guid key, string? select, CancellationToken cancellationToken)
     {
         var projectId = _projectAccessor.ProjectId;
         var modelResult = await _modelProvider.GetModelWithMappingAsync(projectId, cancellationToken);
@@ -453,13 +480,20 @@ public sealed partial class MorphODataController : ControllerBase
                 return Item(request.Id, StatusCodes.Status400BadRequest, ODataError.Of("INVALID_ARGUMENT", $"Request '{request.Id}': {problem}"));
             }
 
+            // A read is held to the options the same request on its own is.
+            if (request.Method.Equals("GET", StringComparison.OrdinalIgnoreCase)
+                && ODataSystemOptions.Problem(target.Options, entity: target.Key is not null) is { } optionsProblem)
+            {
+                return Item(request.Id, StatusCodes.Status400BadRequest, ODataError.Of("INVALID_ARGUMENT", $"Request '{request.Id}': {optionsProblem}"));
+            }
+
             var body = request.Body ?? JsonSerializer.SerializeToElement(new Dictionary<string, object?>());
             var result = (request.Method.ToUpperInvariant(), target.Key) switch
             {
-                ("GET", null) => await GetEntitySet(target.EntitySet, target.Query("$filter"), target.Query("$orderby"),
+                ("GET", null) => await ReadEntitySetAsync(target.EntitySet, target.Query("$filter"), target.Query("$orderby"),
                     target.IntQuery("$top"), target.IntQuery("$skip"), target.Query("$select"),
                     string.Equals(target.Query("$count"), "true", StringComparison.OrdinalIgnoreCase), cancellationToken),
-                ("GET", { } key) => await GetEntity(target.EntitySet, key, target.Query("$select"), cancellationToken),
+                ("GET", { } key) => await ReadEntityAsync(target.EntitySet, key, target.Query("$select"), cancellationToken),
                 ("POST", null) => await CreateEntity(target.EntitySet, body, cancellationToken),
                 ("PATCH", { } key) => await UpdateEntity(target.EntitySet, key, body, cancellationToken),
                 ("DELETE", { } key) => await DeleteEntity(target.EntitySet, key, cancellationToken),
@@ -496,6 +530,8 @@ public sealed partial class MorphODataController : ControllerBase
 
     private static ODataBatchResponseItem Item(string id, int status, object? body, IReadOnlyDictionary<string, string>? headers = null) =>
         new() { Id = id, Status = status, Body = body, Headers = headers };
+
+    private BadRequestObjectResult OptionsRefused(string problem) => BadRequest(ODataError.Of("INVALID_ARGUMENT", problem));
 
     private NotFoundObjectResult EntityNotFound(string entitySet, Guid key) => NotFound(new ODataError(EntityMissing(entitySet, key)));
 

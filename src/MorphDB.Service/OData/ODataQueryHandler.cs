@@ -77,28 +77,37 @@ public sealed partial class ODataQueryHandler
         long? totalCount = options.Count ? await query.CountAsync(cancellationToken) : null;
 
         // Apply $skip
-        if (options.Skip > 0)
+        var skip = Math.Max(options.Skip, 0);
+        if (skip > 0)
         {
-            query = query.Offset(options.Skip);
+            query = query.Offset(skip);
         }
 
-        // Without $top the server pages (OData 4.01 §11.2.5.7): one row past the page tells whether
-        // there is a next one, and the answer then says where it is instead of stopping silently.
-        var paged = options.Top <= 0;
-        query = query.Limit(paged ? ServerPageSize + 1 : options.Top);
+        // A page carries what $top asks for, and no more than the server serves in one: ServerPageSize without
+        // $top, one row under the query limit with it (the row past the page is read to know whether the rest
+        // is still to come). The rest of a larger $top is the next page's — a $top the page cannot hold is paged,
+        // not answered with fewer rows and no word of it (OData 4.01 §11.2.5.7, §11.2.6.2).
+        var page = Math.Min(options.Top ?? int.MaxValue, options.Top is null ? ServerPageSize : QueryLimits.MaxPageSize - 1);
+        var cut = (options.Top ?? int.MaxValue) > page;
+        IReadOnlyList<IDictionary<string, object?>> records = [];
+        if (page > 0)
+        {
+            query = query.Limit(cut ? page + 1 : page);
+            records = await query.ToListAsync(cancellationToken);
+        }
 
-        var records = await query.ToListAsync(cancellationToken);
-        var more = paged && records.Count > ServerPageSize;
+        var more = cut && records.Count > page;
         if (more)
         {
-            records = [.. records.Take(ServerPageSize)];
+            records = [.. records.Take(page)];
         }
 
         return new ODataQueryResult
         {
             Records = records,
             TotalCount = totalCount,
-            NextSkip = more ? Math.Max(options.Skip, 0) + ServerPageSize : null,
+            NextSkip = more ? skip + page : null,
+            NextTop = more && options.Top is { } top ? top - page : null,
             EntitySetName = entitySetName,
             TableMetadata = table
         };
@@ -312,7 +321,8 @@ public sealed class ODataQueryOptions
     public string? Filter { get; init; }
     public string? OrderBy { get; init; }
     public string? Select { get; init; }
-    public int Top { get; init; }
+    /// <summary>The rows asked for; null when the request says no <c>$top</c> (zero is zero rows).</summary>
+    public int? Top { get; init; }
     public int Skip { get; init; }
     public bool Count { get; init; }
 }
@@ -327,6 +337,9 @@ public sealed class ODataQueryResult
 
     /// <summary>The <c>$skip</c> of the next page when the server cut this one, else null.</summary>
     public int? NextSkip { get; init; }
+
+    /// <summary>The <c>$top</c> of the next page — what is left of the rows asked for — when the request had one.</summary>
+    public int? NextTop { get; init; }
     public required string EntitySetName { get; init; }
     public required TableMetadata TableMetadata { get; init; }
 }

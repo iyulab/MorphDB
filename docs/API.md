@@ -684,6 +684,14 @@ POST /odata/$batch
 
 **Supported query options**: `$filter`, `$orderby`, `$top`, `$skip`, `$select`, `$count`
 
+Any other system option — `$search`, `$expand`, `$apply`, `$skiptoken`, one that is not in OData at all — is refused with
+`400 INVALID_ARGUMENT` naming it, rather than answered without it: left out, a narrowing option would hand back every
+row with a `200`. One entity read (`Customers(<id>)`) takes `$select` and `$format`, and refuses the options of a
+collection. `$format` is `json` — nothing else is written. Options that are not system options are the request's own and
+are left alone: a custom option (`debug=1`) and a parameter alias (`@name=…`). `$top` and `$skip` are non-negative whole
+numbers and `$count` is `true` or `false`; `$top=0` is no rows (and `$count=true` still counts). A batch request is
+held to the same rules as the request on its own.
+
 Errors are OData error objects (`{"error": {"code", "message"}}`) carrying the codes of the
 [error table](#errors). A collection travels in `value`; one entity — read by key, or answered by a create or an update — is
 the entity object itself, its properties beside `@odata.context` (`…/$metadata#Customers/$entity`),
@@ -691,9 +699,10 @@ as OData JSON writes it.
 
 `$count` is a query option, not a path segment: `?$count=true` puts `@odata.count` — the rows
 `$filter` selects, before `$skip` and `$top` — on the collection response, and
-`/odata/Customers/$count` is not a route. A read without `$top` answers at most 100 rows; when there
-are more it carries `@odata.nextLink`, the same request with `$skip` moved on, and following it reads
-every row once.
+`/odata/Customers/$count` is not a route. A read without `$top` answers at most 100 rows, and one page
+never carries more than 9,999 whatever `$top` asks for; when there are more rows to come it carries
+`@odata.nextLink`, the same request with `$skip` moved on (and `$top` reduced by what the page carried), and
+following it reads every row once.
 
 **`$batch` takes a JSON batch** (OData JSON Format 4.01 §19). Each request names its `method` and its
 `url` relative to the service root, and is answered exactly as the same request on its own — the

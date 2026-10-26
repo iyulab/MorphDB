@@ -15,6 +15,13 @@
   `in` or `notin` filter — it counted every row — and a comparison with no value (`gt`, `gte`, `lt`, `lte`, `like`,
   `contains`, …) in a query body or an aggregate filter was dropped the same way. A list operator given no list, a
   list holding a `null`, and a comparison with no value are now answered with `400`.
+- **OData refuses a system query option it does not serve, and reads `$top` as written.** `$search`, `$apply`,
+  `$expand` and any other `$` option the service does not answer were ignored — a narrowing option answered with every
+  row and a `200`. They are now `400 INVALID_ARGUMENT` naming the option (one entity read takes `$select` and
+  `$format`; custom options and `@` aliases are left alone). A negative `$skip` or `$top`, a `$count` that is not
+  `true` or `false` and a `$format` other than `json` are refused too, in a `$batch` item as on its own — an item's
+  `$top=abc` was read as no `$top`. `$top=0` is no rows (it answered a page of 100), and a `$top` larger than a page
+  carries is paged with `@odata.nextLink` instead of cut at the page limit without a word.
 - **A GraphQL error the server cannot explain is logged with its exception.** The client is told only
   "Unexpected Execution Error", and nothing was written on the server; the request's own line said `200`.
 

@@ -23,6 +23,9 @@ internal sealed class ODataBatchUrl
 
     public Guid? Key { get; }
 
+    /// <summary>Every query option the URL carries, by name.</summary>
+    public IReadOnlyDictionary<string, StringValues> Options => _query;
+
     public string? Query(string option) => _query.TryGetValue(option, out var value) ? value.ToString() : null;
 
     public int? IntQuery(string option) => Query(option) is { } text && int.TryParse(text, System.Globalization.CultureInfo.InvariantCulture, out var n) ? n : null;
