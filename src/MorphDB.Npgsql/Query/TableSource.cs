@@ -46,6 +46,12 @@ internal sealed class TableSource
     /// <summary>What the statement calls the table (unquoted).</summary>
     public string Name { get; }
 
+    /// <summary>
+    /// The value of a condition on <paramref name="column"/>, read as the type of that column (<see cref="ColumnValues"/>) —
+    /// so every read of a table compares what its column holds with what the caller meant, and refuses what it cannot read.
+    /// </summary>
+    public object? ValueOf(string column, FilterOperator op, object? value) => ColumnValues.OfCondition(_table, column, op, value);
+
     /// <summary>Whether the table has derived columns, read through a derived table.</summary>
     public bool IsDerived => _derived is not null;
 

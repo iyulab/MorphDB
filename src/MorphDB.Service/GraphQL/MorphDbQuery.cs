@@ -257,7 +257,7 @@ public sealed class MorphDbQuery
             {
                 Column = f.Column,
                 Operator = ApiModelExtensions.ParseFilterOperator(f.Operator),
-                Value = GraphQlAny.ToRuntimeValue(f.Value)
+                Value = GraphQlAny.ToFilterValue(f.Value)
             }).ToList(),
             Having = having?.Select(h => new HavingCondition
             {

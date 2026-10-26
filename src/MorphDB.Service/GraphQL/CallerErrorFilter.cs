@@ -14,8 +14,13 @@ namespace MorphDB.Service.GraphQL;
 /// Anything <see cref="ErrorClassification"/> calls ours is left as it was: unexplained, because its
 /// text is not contract.
 /// </para>
+/// <para>
+/// Those errors are logged here. HotChocolate reports an exception it did not classify to the client without
+/// a cause and writes nothing itself, so the server's own log said only that the request answered <c>200</c> —
+/// the REST pipeline logs every 5xx with its exception, and this door held to the same.
+/// </para>
 /// </summary>
-internal sealed class CallerErrorFilter : IErrorFilter
+internal sealed partial class CallerErrorFilter(ILogger<CallerErrorFilter> logger) : IErrorFilter
 {
     public IError OnError(IError error)
     {
@@ -27,6 +32,7 @@ internal sealed class CallerErrorFilter : IErrorFilter
         var (status, _, code) = ErrorClassification.Classify(exception);
         if (status >= StatusCodes.Status500InternalServerError)
         {
+            LogUnexpected(exception, error.Path?.Print());
             return error;
         }
 
@@ -36,4 +42,7 @@ internal sealed class CallerErrorFilter : IErrorFilter
             .SetExtension("status", status)
             .Build();
     }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Unexpected error resolving GraphQL field {Path}")]
+    private partial void LogUnexpected(Exception exception, string? path);
 }

@@ -47,6 +47,24 @@ internal static class GraphQlAny
     }
 
     /// <summary>
+    /// A comparison value as the caller wrote it: a string stays the text it is, a list is a list. The column the value is
+    /// compared with decides what it means (<c>ColumnValues</c>) — reading a type from the text's shape here meant a text
+    /// column's code shaped like a date or an id was compared as a date or an id, and a list was handed on as one string.
+    /// </summary>
+    public static object? ToFilterValue(JsonElement element) => element.ValueKind switch
+    {
+        JsonValueKind.Null or JsonValueKind.Undefined => null,
+        JsonValueKind.True => true,
+        JsonValueKind.False => false,
+        JsonValueKind.Number when element.TryGetInt32(out var intVal) => intVal,
+        JsonValueKind.Number when element.TryGetInt64(out var longVal) => longVal,
+        JsonValueKind.Number when element.TryGetDecimal(out var decVal) => decVal,
+        JsonValueKind.String => element.GetString(),
+        JsonValueKind.Array => element.EnumerateArray().Select(ToFilterValue).ToArray(),
+        _ => element.GetRawText(),
+    };
+
+    /// <summary>
     /// Narrows a parsed JSON value to the CLR type the storage layer expects. Objects and arrays
     /// stay JSON text: a jsonb column holds what the caller sent, and re-materialising it as nested
     /// dictionaries would only have to be re-serialized on the way to the database.

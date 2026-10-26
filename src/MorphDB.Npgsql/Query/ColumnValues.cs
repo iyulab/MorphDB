@@ -23,11 +23,62 @@ internal static class ColumnValues
     /// the value of a comparison. A pattern (<c>like</c>, <c>contains</c>, …) is text whatever the column holds, and an
     /// exists keeps its related rows, whose conditions are read against their own table.
     /// </summary>
-    public static object? OfCondition(TableMetadata table, string logicalName, FilterOperator op, object? value) => value switch
+    public static object? OfCondition(TableMetadata table, string logicalName, FilterOperator op, object? value) =>
+        Complete(logicalName, op, value) switch
+        {
+            var v when op.TakesRelatedRows() || IsPattern(op) => v,
+            object[] values => values.Select(v => Of(table, logicalName, v)!).ToArray(),
+            var v => Of(table, logicalName, v),
+        };
+
+    /// <summary>
+    /// The condition's value, or a refusal when it is not one the operator can be answered with: a list operator
+    /// is given a list, and a comparison is given a value. A condition that cannot be read is the caller's mistake —
+    /// dropping it would answer a wider question than the one asked, with a success.
+    /// </summary>
+    /// <exception cref="ArgumentException">A list operator was not given a list.</exception>
+    /// <exception cref="ValidationException">A comparison was given no value.</exception>
+    private static object? Complete(string column, FilterOperator op, object? value)
     {
-        _ when op.TakesRelatedRows() || IsPattern(op) => value,
-        object[] values => values.Select(v => Of(table, logicalName, v)!).ToArray(),
-        _ => Of(table, logicalName, value),
+        if (op is FilterOperator.In or FilterOperator.NotIn)
+        {
+            if (value is not System.Collections.IEnumerable list || value is string)
+            {
+                throw new ArgumentException($"The values of '{Wire(op)}' on '{column}' are a list.");
+            }
+
+            object?[] values = value as object?[] ?? [.. list.Cast<object?>()];
+            return Array.IndexOf(values, null) >= 0
+                ? throw new ArgumentException($"The list of '{Wire(op)}' on '{column}' holds a null; 'isnull' is the condition that matches an empty column.")
+                : values;
+        }
+
+        return value is null && Compares(op)
+            ? throw new ValidationException(column, $"'{Wire(op)}' compares with a value, and none was given.")
+            : value;
+    }
+
+    /// <summary>The operators that compare a column with one value — a missing value is never what they mean.</summary>
+    private static bool Compares(FilterOperator op) =>
+        op is FilterOperator.GreaterThan or FilterOperator.GreaterThanOrEquals or FilterOperator.LessThan or FilterOperator.LessThanOrEquals || IsPattern(op);
+
+    private static string Wire(FilterOperator op) => op switch
+    {
+        FilterOperator.Equals => "eq",
+        FilterOperator.NotEquals => "neq",
+        FilterOperator.GreaterThan => "gt",
+        FilterOperator.GreaterThanOrEquals => "gte",
+        FilterOperator.LessThan => "lt",
+        FilterOperator.LessThanOrEquals => "lte",
+        FilterOperator.Like => "like",
+        FilterOperator.NotLike => "notlike",
+        FilterOperator.ILike => "ilike",
+        FilterOperator.Contains => "contains",
+        FilterOperator.StartsWith => "startswith",
+        FilterOperator.EndsWith => "endswith",
+        FilterOperator.In => "in",
+        FilterOperator.NotIn => "notin",
+        _ => op.ToString().ToLowerInvariant(),
     };
 
     private static bool IsPattern(FilterOperator op) =>

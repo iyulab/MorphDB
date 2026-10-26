@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### Fixed
+
+- **A filter's value is read as the type of its column on every read.** 0.33.0 did it for a row list, a query
+  body, GraphQL `records`, OData and the conditions of `exists`; the aggregate filter (over REST and GraphQL) and a
+  view read still read it their own way. A text column filtered by a value shaped like a date failed through GraphQL
+  `aggregate`, a number written as text (`"1"`) against an integer column and a number against a text column failed
+  with `500` through REST `aggregate`, and a value that is not its column's type (`qty:eq:ten`) was a `500` through
+  an aggregate and a view read, and an error without a cause through GraphQL. They now read the value the way a row
+  list does, and a value that is not the column's type is refused with `400` naming the column.
+- **A condition that cannot be read is refused rather than dropped.** GraphQL `aggregate` ignored the list of an
+  `in` or `notin` filter — it counted every row — and a comparison with no value (`gt`, `gte`, `lt`, `lte`, `like`,
+  `contains`, …) in a query body or an aggregate filter was dropped the same way. A list operator given no list, a
+  list holding a `null`, and a comparison with no value are now answered with `400`.
+- **A GraphQL error the server cannot explain is logged with its exception.** The client is told only
+  "Unexpected Execution Error", and nothing was written on the server; the request's own line said `200`.
+
 ## 0.33.0
 
 A minor that fixes a defect in 0.32.0 and earlier: a text column filtered by a value shaped like a number,

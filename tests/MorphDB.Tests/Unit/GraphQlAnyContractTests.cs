@@ -40,6 +40,21 @@ public class GraphQlAnyContractTests
         GraphQlAny.ToRuntimeValue(Json("\"plain\"")).Should().BeOfType<string>().And.Be("plain");
     }
 
+    /// <summary>
+    /// A comparison value does not take its type from its shape: a text column's code that looks like a date or an id is
+    /// text until the column it is compared with says otherwise, and a list is a list.
+    /// </summary>
+    [Fact]
+    public void A_filter_value_keeps_a_string_as_text_and_a_list_as_a_list()
+    {
+        GraphQlAny.ToFilterValue(Json("\"2026-10-25\"")).Should().BeOfType<string>().And.Be("2026-10-25");
+        GraphQlAny.ToFilterValue(Json("\"3f2504e0-4f89-11d3-9a0c-0305e82c3301\"")).Should().BeOfType<string>();
+        GraphQlAny.ToFilterValue(Json("7")).Should().BeOfType<int>().And.Be(7);
+        GraphQlAny.ToFilterValue(Json("null")).Should().BeNull();
+        GraphQlAny.ToFilterValue(Json("[\"12345\", 2, \"2026-10-25\"]")).Should().BeOfType<object[]>()
+            .Which.Should().Equal("12345", 2, "2026-10-25");
+    }
+
     [Fact]
     public void Booleans_and_null_cross_as_themselves()
     {

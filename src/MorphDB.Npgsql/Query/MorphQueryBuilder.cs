@@ -806,7 +806,10 @@ internal sealed class MorphQuery : IMorphQuery
     private static WhereCondition Typed(WhereCondition condition, TableMetadata table) => condition.Type switch
     {
         ConditionType.Group => condition with { Children = [.. condition.Children!.Select(c => Typed(c, table))] },
-        ConditionType.In or ConditionType.NotIn or ConditionType.Standard =>
+        // A list condition keeps its operator in its type; the column's value reading wants to be told which it is.
+        ConditionType.In => condition with { Value = ColumnValues.OfCondition(table, condition.Column, FilterOperator.In, condition.Value) },
+        ConditionType.NotIn => condition with { Value = ColumnValues.OfCondition(table, condition.Column, FilterOperator.NotIn, condition.Value) },
+        ConditionType.Standard =>
             condition with { Value = ColumnValues.OfCondition(table, condition.Column, condition.Operator, condition.Value) },
         _ => condition,
     };

@@ -266,7 +266,7 @@ public sealed class PostgresAggregationService : IAggregationService
                 continue;
             }
 
-            ApplyFilter(query, source.Column(filter.Column), filter.Operator, filter.Value);
+            ApplyFilter(query, source.Column(filter.Column), filter.Operator, source.ValueOf(filter.Column, filter.Operator, filter.Value));
         }
     }
 
@@ -308,12 +308,10 @@ public sealed class PostgresAggregationService : IAggregationService
                 query.WhereLike(column, LikePattern.EndsWith(value));
                 break;
             case FilterOperator.In:
-                if (value is IEnumerable<object> inValues)
-                    query.WhereIn(column, inValues);
+                query.WhereIn(column, ListOf(op, value));
                 break;
             case FilterOperator.NotIn:
-                if (value is IEnumerable<object> notInValues)
-                    query.WhereNotIn(column, notInValues);
+                query.WhereNotIn(column, ListOf(op, value));
                 break;
             case FilterOperator.IsNull:
                 query.WhereNull(column);
@@ -322,13 +320,17 @@ public sealed class PostgresAggregationService : IAggregationService
                 query.WhereNotNull(column);
                 break;
             case FilterOperator.Between:
-                if (value is object[] range && range.Length == 2)
-                    query.WhereBetween(column, range[0], range[1]);
+                var range = ListOf(op, value);
+                query.WhereBetween(column, range[0], range.Length == 2 ? range[1] : throw new ArgumentException("between takes two values."));
                 break;
             default:
                 throw new ArgumentException($"Unsupported filter operator: {op}");
         }
     }
+
+    /// <summary>A list operator's values. The condition is read before it is applied, so what is not a list is a defect here, never a condition to skip.</summary>
+    private static object[] ListOf(FilterOperator op, object? value) =>
+        value as object[] ?? throw new ArgumentException($"The values of {op} are a list.");
 
     private void ApplyHavingConditions(SqlKataQuery query, TableSource source, AggregationRequest request)
     {

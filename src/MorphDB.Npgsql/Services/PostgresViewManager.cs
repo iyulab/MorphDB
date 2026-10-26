@@ -354,7 +354,16 @@ public sealed class PostgresViewManager : IViewManager
         }
 
         // Execute data query
-        var data = await connection.QueryAsync<dynamic>(new CommandDefinition(sql, parameters, cancellationToken: cancellationToken));
+        IEnumerable<dynamic> data;
+        try
+        {
+            data = await connection.QueryAsync<dynamic>(new CommandDefinition(sql, parameters, cancellationToken: cancellationToken));
+        }
+        catch (PostgresException ex) when (IsDataException(ex) && request.Filters is { Count: > 0 })
+        {
+            throw await RefuseUnreadableFilterAsync(connection, view, request.Filters, ex, cancellationToken);
+        }
+
         var results = data.Select(row => (IDictionary<string, object?>)row).ToList();
 
         // Execute count query
@@ -369,6 +378,38 @@ public sealed class PostgresViewManager : IViewManager
             HasMore = hasMore,
             Metadata = view
         };
+    }
+
+    /// <summary>An error of the "data exception" class: a value the database could not read as the type it was compared with.</summary>
+    private static bool IsDataException(PostgresException ex) => ex.SqlState is { } state && state.StartsWith("22", StringComparison.Ordinal);
+
+    /// <summary>
+    /// A view's columns take the type of what they select, so the database is the one that knows whether a value reads
+    /// as a column's type: a value it refuses is the caller's mistake, and what is refused names the column — the one
+    /// condition that fails on its own — like every other door's. Found by asking about each condition by itself, which
+    /// costs a statement per condition and only on this path.
+    /// </summary>
+    private static async Task<Exception> RefuseUnreadableFilterAsync(
+        NpgsqlConnection connection, ViewMetadata view, IReadOnlyList<ViewFilterSpec> filters, PostgresException cause, CancellationToken cancellationToken)
+    {
+        foreach (var filter in filters)
+        {
+            var parameters = new UntypedParameters();
+            var probe = $"SELECT 1 FROM {DdlBuilder.QuoteIdentifier(view.PhysicalName)} WHERE {BuildFilterCondition(view, filter, parameters)} LIMIT 0";
+            try
+            {
+                await connection.ExecuteAsync(new CommandDefinition(probe, parameters, cancellationToken: cancellationToken));
+            }
+            catch (PostgresException ex) when (IsDataException(ex))
+            {
+                var shown = filter.Value is System.Collections.IEnumerable list and not string
+                    ? string.Join(", ", list.Cast<object?>())
+                    : Convert.ToString(filter.Value, System.Globalization.CultureInfo.InvariantCulture);
+                return new ValidationException(filter.Field, $"'{shown}' is not a value of the column's type.");
+            }
+        }
+
+        return cause;
     }
 
     /// <summary>
