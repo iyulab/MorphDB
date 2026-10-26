@@ -9,7 +9,7 @@ namespace MorphDB.Service.OData;
 /// <summary>
 /// Handles OData query options and converts them to MorphDB queries.
 /// </summary>
-public sealed partial class ODataQueryHandler
+public sealed class ODataQueryHandler
 {
     /// <summary>The rows a collection read answers when the request does not say <c>$top</c>.</summary>
     public const int ServerPageSize = 100;
@@ -63,7 +63,7 @@ public sealed partial class ODataQueryHandler
         // Apply $filter
         if (!string.IsNullOrEmpty(options.Filter))
         {
-            query = ApplyFilter(query, options.Filter, table);
+            query = ApplyFilter(query, options.Filter);
         }
 
         // Apply $orderby
@@ -158,65 +158,7 @@ public sealed partial class ODataQueryHandler
         return record;
     }
 
-    private static IMorphQuery ApplyFilter(IMorphQuery query, string filter, TableMetadata table)
-    {
-        // Parse simple OData filter expressions
-        // Supports: eq, ne, gt, ge, lt, le, contains, startswith, endswith
-        // Examples: name eq 'John', age gt 18, contains(name, 'test')
-
-        var match = SimpleFilterRegex().Match(filter);
-        if (match.Success)
-        {
-            var column = match.Groups["column"].Value;
-            var op = match.Groups["op"].Value.ToLowerInvariant();
-            var value = ParseValue(match.Groups["value"].Value);
-
-            return op switch
-            {
-                "eq" => query.Where(column, FilterOperator.Equals, value),
-                "ne" => query.Where(column, FilterOperator.NotEquals, value),
-                "gt" => query.Where(column, FilterOperator.GreaterThan, value),
-                "ge" => query.Where(column, FilterOperator.GreaterThanOrEquals, value),
-                "lt" => query.Where(column, FilterOperator.LessThan, value),
-                "le" => query.Where(column, FilterOperator.LessThanOrEquals, value),
-                _ => throw UnsupportedFilter(filter)
-            };
-        }
-
-        // Check for function-based filters
-        var containsMatch = ContainsFilterRegex().Match(filter);
-        if (containsMatch.Success)
-        {
-            var column = containsMatch.Groups["column"].Value;
-            var value = containsMatch.Groups["value"].Value.Trim('\'');
-            return query.Where(column, FilterOperator.Contains, value);
-        }
-
-        var startsWithMatch = StartsWithFilterRegex().Match(filter);
-        if (startsWithMatch.Success)
-        {
-            var column = startsWithMatch.Groups["column"].Value;
-            var value = startsWithMatch.Groups["value"].Value.Trim('\'');
-            return query.Where(column, FilterOperator.StartsWith, value);
-        }
-
-        var endsWithMatch = EndsWithFilterRegex().Match(filter);
-        if (endsWithMatch.Success)
-        {
-            var column = endsWithMatch.Groups["column"].Value;
-            var value = endsWithMatch.Groups["value"].Value.Trim('\'');
-            return query.Where(column, FilterOperator.EndsWith, value);
-        }
-
-        // A filter this handler cannot parse must refuse loudly: answering 200 with the filter
-        // silently ignored hands the caller every row and lets them believe it matched their predicate.
-        throw UnsupportedFilter(filter);
-    }
-
-    private static MorphDB.Core.Exceptions.ValidationException UnsupportedFilter(string filter) =>
-        new("$filter", $"Unsupported or malformed OData filter expression: '{filter}'. " +
-            "Supported forms: <column> eq|ne|gt|ge|lt|le <value>, contains(<column>,'v'), " +
-            "startswith(<column>,'v'), endswith(<column>,'v').");
+    private static IMorphQuery ApplyFilter(IMorphQuery query, string filter) => ODataFilter.Apply(query, filter);
 
     private static IMorphQuery ApplyOrderBy(IMorphQuery query, string orderBy)
     {
@@ -236,46 +178,6 @@ public sealed partial class ODataQueryHandler
             query = isDescending ? query.OrderByDesc(column) : query.OrderBy(column);
         }
         return query;
-    }
-
-    private static object? ParseValue(string value)
-    {
-        if (value.StartsWith('\'') && value.EndsWith('\''))
-        {
-            return value[1..^1];
-        }
-
-        if (value.Equals("null", StringComparison.OrdinalIgnoreCase))
-        {
-            return null;
-        }
-
-        if (value.Equals("true", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        if (value.Equals("false", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var intValue))
-        {
-            return intValue;
-        }
-
-        if (decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out var decValue))
-        {
-            return decValue;
-        }
-
-        if (Guid.TryParse(value, out var guidValue))
-        {
-            return guidValue;
-        }
-
-        return value;
     }
 
     private static string ToLogicalName(string entitySetName)
@@ -305,18 +207,6 @@ public sealed partial class ODataQueryHandler
         }
         return result.ToString();
     }
-
-    [GeneratedRegex(@"^(?<column>\w+)\s+(?<op>eq|ne|gt|ge|lt|le)\s+(?<value>'[^']*'|\d+\.?\d*|true|false|null|[0-9a-f-]{36})$", RegexOptions.IgnoreCase)]
-    private static partial Regex SimpleFilterRegex();
-
-    [GeneratedRegex(@"^contains\((?<column>\w+),\s*(?<value>'[^']*')\)$", RegexOptions.IgnoreCase)]
-    private static partial Regex ContainsFilterRegex();
-
-    [GeneratedRegex(@"^startswith\((?<column>\w+),\s*(?<value>'[^']*')\)$", RegexOptions.IgnoreCase)]
-    private static partial Regex StartsWithFilterRegex();
-
-    [GeneratedRegex(@"^endswith\((?<column>\w+),\s*(?<value>'[^']*')\)$", RegexOptions.IgnoreCase)]
-    private static partial Regex EndsWithFilterRegex();
 }
 
 /// <summary>

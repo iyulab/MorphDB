@@ -734,6 +734,15 @@ POST /odata/$batch
 
 **Supported query options**: `$filter`, `$orderby`, `$top`, `$skip`, `$select`, `$count`
 
+`$filter` reads comparisons — `eq` `ne` `gt` `ge` `lt` `le` between a column and a value — `<column> in (v1, v2, …)` and
+`contains(<column>,'text')`, `startswith(…)`, `endswith(…)`, combined with `and`, `or`, `not` and parentheses (`not` binds
+tightest, then `and`, then `or`; keywords are read without regard to case, column names are not). A value is a text in
+single quotes (`'O''Brien'` holds a quote), a number, `true`, `false`, `null` (`eq null` / `ne null` ask for an empty / a
+non-empty column), an id, or a date or instant written bare; it is read as the type of the column it is compared with.
+`not` governs comparisons, `in` lists and groups of them — `not contains(…)` is refused. A filter outside this — a function
+such as `tolower`, a comparison between two columns, an arithmetic expression — is refused with `400` and a message listing
+what is read, never answered as less than it says.
+
 Any other system option — `$search`, `$expand`, `$apply`, `$skiptoken`, one that is not in OData at all — is refused with
 `400 INVALID_ARGUMENT` naming it, rather than answered without it: left out, a narrowing option would hand back every
 row with a `200`. One entity read (`Customers(<id>)`) takes `$select` and `$format`, and refuses the options of a

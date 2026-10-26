@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Added
+
+- **OData `$filter` reads `and`, `or`, `not`, parentheses and `in`.** The filter was one comparison or one function:
+  `qty ge 2 and qty le 3`, `a eq 1 or b eq 2`, `(a eq 1 or a eq 2) and b eq 3` and `a in (1, 2)` were refused with
+  `400`, and they are what Excel and Power BI send. `not` governs comparisons, `in` lists and groups of them (`not
+  contains(…)` is refused), `eq null` / `ne null` ask for an empty / a non-empty column, and a quote inside a text is
+  doubled (`'O''Brien'`). A filter outside the language is still refused, now with a message that lists what is read.
+  The supported language is written in `docs/API.md`.
+
 ## 0.34.0
 
 A minor that fixes defects in 0.33.0 and earlier where a read answered the wrong thing with a `200` or failed with
