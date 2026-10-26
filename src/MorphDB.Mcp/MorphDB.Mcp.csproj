@@ -3,7 +3,15 @@
   <PropertyGroup>
     <RootNamespace>MorphDB.Mcp</RootNamespace>
     <Description>A read-only MCP door for a MorphDB service: tools that list, describe and read a project's tables as the caller the service has already authenticated.</Description>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <!--
+      The service's MCP door, built into the service (a container image), not a package of its own: the service is the
+      only thing that serves it, and a consumer that embeds MorphDB reads through the client or the core, not through MCP.
+      A package would also publish by itself: the release workflow publishes every package nuget.org does not have at the
+      version it holds, so a new package id at an already released version would go out from a later commit than the tag.
+    -->
+    <IsPackable>false</IsPackable>
+    <!-- Not a package, so no API documentation file (src/Directory.Build.props). -->
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
 
   <ItemGroup>
@@ -15,7 +23,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="README.md" Pack="true" PackagePath="\" />
     <InternalsVisibleTo Include="MorphDB.Tests" />
   </ItemGroup>
 

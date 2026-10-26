@@ -7,7 +7,7 @@
 - **A service that enforces no credential says so as it starts.** With no `Security__MasterSecret` injected the service
   has always answered every caller that can reach it; it now logs one warning at start-up saying so, so an open service
   nobody meant to leave open shows in the first lines of its log.
-- **A read-only MCP door.** `MorphDB.Mcp` (new package) lets a service answer Model Context Protocol clients with five
+- **A read-only MCP door.** A service can answer Model Context Protocol clients with five
   tools — `describe_tables`, `describe_table`, `query_records`, `get_record` and `aggregate` — and nothing that writes. It runs inside the service,
   behind its own credential check, project scoping and row-level security (a person's token sees what that person sees
   over REST), is off unless `MorphDB__Mcp__Enabled` is set, and the service refuses to start with it on while no master
