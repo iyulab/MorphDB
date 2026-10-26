@@ -41,13 +41,7 @@ jobs:
         run: dotnet build --no-restore --configuration Release
 
       - name: Test
-        run: dotnet test --no-build --configuration Release --verbosity normal --coverlet --coverlet-output-format cobertura --results-directory ./coverage
-
-      - name: Upload coverage
-        uses: codecov/codecov-action@v7
-        with:
-          directory: ./coverage
-          fail_ci_if_error: false
+        run: dotnet test --no-build --configuration Release --verbosity normal
 
   lint:
     runs-on: ubuntu-latest
