@@ -77,6 +77,11 @@ public sealed class DataController : ControllerBase
         {
             var projectId = GetProjectId();
 
+            if (QueryParameterCheck.Unknown<DataQueryParameters>(Request.Query.Keys) is { } unknown)
+            {
+                return BadRequest(new ErrorResponse { Error = "BadRequest", Message = unknown, Code = "INVALID_ARGUMENT" });
+            }
+
             // Validate pagination
             var pageSize = Math.Clamp(query.PageSize, 1, Math.Min(1000, MaxPageSize));
             var page = Math.Max(query.Page, 1);

@@ -339,6 +339,16 @@ public sealed class ViewController : ControllerBase
         {
             var projectId = GetProjectId();
 
+            if (QueryParameterCheck.Unknown<ViewQueryApiParameters>(Request.Query.Keys) is { } unknown)
+            {
+                return BadRequest(new ErrorResponse { Error = "BadRequest", Message = unknown, Code = "INVALID_ARGUMENT" });
+            }
+
+            if (query.Skip < 0 || query.Take < 0)
+            {
+                return BadRequest(new ErrorResponse { Error = "BadRequest", Message = "'skip' and 'take' are not negative.", Code = "INVALID_ARGUMENT" });
+            }
+
             var queryRequest = new ViewQueryRequest
             {
                 ProjectId = projectId,

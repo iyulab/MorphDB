@@ -27,6 +27,13 @@
   filter on a column's own name was a `500` from the database. The view now selects every column of its base table
   by name, with its type, and `_id`, `_created_at` and `_updated_at`; a view over a join names the joined columns
   explicitly. A view created before this keeps the columns it was created with.
+- **A row list and a view read refuse a query parameter they do not have.** A parameter spelled `fliter` or `filters`
+  narrowed nothing, so the list answered every row with a `200` — a query body already refused a member it does not
+  know. Both now answer `400 INVALID_ARGUMENT` naming the parameter and listing the ones they take. A view read with a
+  negative `skip` or `take` was a `500`; it is `400` too. (Breaking for a caller that sends a parameter these reads
+  never used.)
+- **OData `$orderby` refuses a direction it cannot read.** `code sideways` was read as `code asc`; only `asc` and `desc`
+  are directions.
 - **A GraphQL error the server cannot explain is logged with its exception.** The client is told only
   "Unexpected Execution Error", and nothing was written on the server; the request's own line said `200`.
 

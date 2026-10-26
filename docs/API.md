@@ -238,6 +238,11 @@ GET /api/data/customers?filter=grade:eq:VIP&orderBy=_created_at:desc&page=1&page
 | `offset` | Rows to skip, instead of `page` — a slice that need not start on a page boundary. Refused (`400`) below zero or beside a `page` other than 1; the response's `pagination` then carries `offset` | `5` |
 | `count` | Also count the rows the list matches: the response's `pagination` then carries `totalCount` and `totalPages`. Without it the list does not count — counting is a second statement over every matching row — and `hasNext` still says whether more rows follow (the page is read one row past its size), as PostgREST (`Prefer: count=exact`) and OData (`$count=true`) count only when asked | `true` |
 
+A parameter the list does not take is refused with `400 INVALID_ARGUMENT`, naming it and listing the ones it takes: a
+parameter spelled `fliter` narrows nothing, so it would answer every row with a `200`. (Parameter names are read
+without regard to case, as they always were.) A view read (`GET /api/views/{name}/data`) is held to the same, and
+refuses a negative `skip` or `take`.
+
 #### Filter Operators
 
 | Operator | Description | Example |

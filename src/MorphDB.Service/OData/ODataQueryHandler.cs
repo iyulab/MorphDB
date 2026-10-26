@@ -225,6 +225,12 @@ public sealed partial class ODataQueryHandler
         {
             var tokens = part.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
             var column = tokens[0];
+            // "name", "name asc" or "name desc" — a direction it cannot read is the caller's mistake, not "ascending".
+            if (tokens.Length > 2 || (tokens.Length == 2 && !tokens[1].Equals("asc", StringComparison.OrdinalIgnoreCase) && !tokens[1].Equals("desc", StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new ArgumentException($"'$orderby' takes 'column', 'column asc' or 'column desc'; '{part.Trim()}' is none of them.");
+            }
+
             var isDescending = tokens.Length > 1 && tokens[1].Equals("desc", StringComparison.OrdinalIgnoreCase);
 
             query = isDescending ? query.OrderByDesc(column) : query.OrderBy(column);
