@@ -13,7 +13,7 @@ namespace MorphDB.Mcp;
 internal sealed class MorphDbMcpTools(IMorphReadPort port, IOptions<MorphDbMcpOptions> options)
 {
     /// <summary>The names the door offers, so a test can hold the list to this.</summary>
-    internal static readonly IReadOnlyList<string> ToolNames = ["describe_tables", "describe_table", "query_records", "get_record"];
+    internal static readonly IReadOnlyList<string> ToolNames = ["describe_tables", "describe_table", "query_records", "get_record", "aggregate"];
 
     [McpServerTool(Name = "describe_tables", Title = "List the project's tables", ReadOnly = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
     [Description("Lists the tables of the project this request is scoped to, with how many columns each declares. Read-only; runs as the authenticated caller.")]
@@ -49,6 +49,19 @@ internal sealed class MorphDbMcpTools(IMorphReadPort port, IOptions<MorphDbMcpOp
         [Description("The record's id (a GUID, the '_id' of a row).")] string id,
         CancellationToken cancellationToken = default) =>
         new(await Guard(() => port.GetRecordAsync(table, id, cancellationToken)) ?? throw new McpException($"The table '{table}' has no record '{id}' you can see."));
+
+    [McpServerTool(Name = "aggregate", Title = "Count, sum or average a table's rows", ReadOnly = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
+    [Description("Aggregates a table's rows as the authenticated caller, who is counted over only the rows their row-level rules allow: count, countDistinct, sum, avg, min or max, optionally grouped. Read-only. The number of groups is capped.")]
+    public async Task<McpAggregation> Aggregate(
+        [Description("The table's name.")] string table,
+        [Description("What to compute: objects with 'function' (count, countDistinct, sum, avg, min, max), 'column' (omit for a count of rows) and 'alias' (the result's name).")] McpAggregate[] aggregates,
+        [Description("Columns to group by.")] string[]? groupBy = null,
+        [Description("Conditions on the rows before grouping, each 'column:operator:value'; all must hold.")] string[]? filter = null,
+        [Description("The most groups to return; capped by the door.")] int maxGroups = 100,
+        CancellationToken cancellationToken = default) =>
+        await Guard(() => port.AggregateAsync(
+            new McpAggregateQuery(table, aggregates, groupBy, filter, Math.Clamp(maxGroups, 1, Math.Max(options.Value.MaxPageSize, 1))),
+            cancellationToken));
 
     // A refusal the caller can act on is the tool's error, in the refusal's own words — anything else is not shown to them.
     private static async Task<T> Guard<T>(Func<ValueTask<T>> read)

@@ -1497,6 +1497,7 @@ start-up. Streamable HTTP, stateless.
 | `describe_tables` | The project's tables and how many columns each declares |
 | `describe_table` | One table's columns, their data types and whether each is required |
 | `get_record` | One record by its `_id` — a record the caller's row-level rules hide is reported as not found |
+| `aggregate` | `count`, `countDistinct`, `sum`, `avg`, `min`, `max` over a table's rows — `aggregates` (`function`, `column`, `alias`), `groupBy`, `filter` (`column:op:value`, applied before grouping), `maxGroups` (capped at `MaxPageSize`) — as `POST /api/data/{table}/aggregate`, counted over the rows the caller may see |
 | `query_records` | One page of a table's rows — `select`, `filter` (`column:op:value`), `orderBy`, `search`, `page`, `pageSize` as on `GET /api/data/{table}` |
 
 There is no tool that writes. A page is capped at `MaxPageSize`; `hasNext` says whether more follow. A request the REST

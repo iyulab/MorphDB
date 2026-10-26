@@ -37,6 +37,7 @@ public class McpDoorTests
     }
 
     private static readonly string[] BadFilter = ["owner:nonsense:x"];
+    private static readonly string[] GroupByOwner = ["owner"];
 
     private static TokenOptions Tokens => new() { Issuer = Issuer, Audience = Audience };
 
@@ -107,6 +108,8 @@ public class McpDoorTests
         return table;
     }
 
+    private static string Text(CallToolResult result) => string.Join(" ", result.Content.OfType<TextContentBlock>().Select(c => c.Text));
+
     private static string[] Owners(CallToolResult result)
     {
         result.IsError.Should().NotBe(true, string.Join(" ", result.Content.OfType<TextContentBlock>().Select(c => c.Text)));
@@ -146,7 +149,7 @@ public class McpDoorTests
 
         var tools = await client.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        tools.Select(t => t.Name).Order().Should().Equal("describe_table", "describe_tables", "get_record", "query_records");
+        tools.Select(t => t.Name).Order().Should().Equal("aggregate", "describe_table", "describe_tables", "get_record", "query_records");
         tools.Should().OnlyContain(t => t.ProtocolTool.Annotations!.ReadOnlyHint == true && t.ProtocolTool.Annotations.DestructiveHint != true);
     }
 
@@ -191,6 +194,51 @@ public class McpDoorTests
         theirs.IsError.Should().BeTrue();
         string.Join(" ", theirs.Content.OfType<TextContentBlock>().Select(c => c.Text)).Should().NotContain("alice's");
         notAnId.IsError.Should().BeTrue();
+    }
+
+    // A count is a way to read rows too: it counts only the rows the caller's rules let them see.
+    [Fact]
+    public async Task An_aggregate_counts_only_the_rows_the_caller_may_see()
+    {
+        var table = await RowLevelTableAsync();
+        var ct = TestContext.Current.CancellationToken;
+        await using var alice = await McpAs(Token("alice"));
+        await using var bob = await McpAs(Token("bob"));
+        var call = new Dictionary<string, object?> { ["table"] = table, ["aggregates"] = new[] { new { function = "count", alias = "n" } } };
+
+        async Task<long> CountFor(McpClient client)
+        {
+            var result = await client.CallToolAsync("aggregate", call, cancellationToken: ct);
+            result.IsError.Should().NotBe(true, Text(result));
+            var groups = result.StructuredContent!.Value.GetProperty("groups").EnumerateArray().ToList();
+            return groups.Count == 0 ? 0 : groups[0].GetProperty("n").GetInt64();
+        }
+
+        (await CountFor(alice)).Should().Be(2);
+        (await CountFor(bob)).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Aggregates_group_filter_and_cap_by_the_rest_apis_rules()
+    {
+        var table = await RowLevelTableAsync();
+        var ct = TestContext.Current.CancellationToken;
+        await using var master = await McpAs(MasterSecret);
+        var byOwner = new Dictionary<string, object?>
+        {
+            ["table"] = table,
+            ["aggregates"] = new[] { new { function = "count", alias = "n" } },
+            ["groupBy"] = GroupByOwner,
+            ["maxGroups"] = 1,
+        };
+
+        var capped = await master.CallToolAsync("aggregate", byOwner, cancellationToken: ct);
+        var unknown = await master.CallToolAsync("aggregate", new Dictionary<string, object?> { ["table"] = table, ["aggregates"] = new[] { new { function = "median", alias = "m" } } }, cancellationToken: ct);
+
+        capped.StructuredContent!.Value.GetProperty("groups").GetArrayLength().Should().Be(1);
+        capped.StructuredContent!.Value.GetProperty("maxGroups").GetInt32().Should().Be(1);
+        unknown.IsError.Should().BeTrue();
+        Text(unknown).Should().Contain("Unknown aggregate function");
     }
 
     [Fact]

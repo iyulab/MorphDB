@@ -17,7 +17,8 @@ internal sealed class ServiceReadPort(
     IProjectRepository projects,
     ISchemaManager schemaManager,
     IMorphDataService dataService,
-    IMetadataRepository metadataRepository) : IMorphReadPort
+    IMetadataRepository metadataRepository,
+    IAggregationService aggregationService) : IMorphReadPort
 {
     public async ValueTask<IReadOnlyList<McpTableSummary>> ListTablesAsync(CancellationToken cancellationToken)
     {
@@ -36,6 +37,36 @@ internal sealed class ServiceReadPort(
 
         var response = TableApiResponse.FromMetadata(found);
         return new McpTableDescription(response.Name, [.. response.Columns.Select(c => new McpColumn(c.Name, c.Type, !c.Nullable))]);
+    }
+
+    public async ValueTask<McpAggregation> AggregateAsync(McpAggregateQuery query, CancellationToken cancellationToken)
+    {
+        var projectId = await ProjectAsync(cancellationToken);
+        if (query.Aggregates.Count == 0)
+        {
+            throw new MorphReadRefusedException("At least one aggregate is required.");
+        }
+
+        try
+        {
+            var request = new AggregationApiRequest
+            {
+                Aggregations = [.. query.Aggregates.Select(a => new AggregationColumnApiRequest { Function = a.Function, Column = a.Column, Alias = a.Alias })],
+                GroupBy = query.GroupBy ?? [],
+                Limit = query.MaxGroups,
+            }.ToModel() with
+            {
+                Filter = query.Filter is { Count: > 0 }
+                    ? [.. query.Filter.Select(e => FilterExpressions.Parse(e)).Select(c => new FilterCondition { Column = c.Column, Operator = c.Operator, Value = c.Value })]
+                    : null,
+            };
+            var result = await aggregationService.AggregateAsync(projectId, query.Table, request, cancellationToken);
+            return new McpAggregation(result.Data, result.TotalGroups, query.MaxGroups);
+        }
+        catch (Exception e) when (e is ArgumentException or NotFoundException)
+        {
+            throw new MorphReadRefusedException(e.Message, e);
+        }
     }
 
     public async ValueTask<IDictionary<string, object?>?> GetRecordAsync(string table, string id, CancellationToken cancellationToken)

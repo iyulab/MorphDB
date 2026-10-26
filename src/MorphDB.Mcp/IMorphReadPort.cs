@@ -19,6 +19,10 @@ public interface IMorphReadPort
     /// <exception cref="MorphReadRefusedException">The request names no usable project, the table is unknown, or the id is not one.</exception>
     ValueTask<IDictionary<string, object?>?> GetRecordAsync(string table, string id, CancellationToken cancellationToken);
 
+    /// <summary>Aggregates (count, sum, average, minimum, maximum) over a table's rows, under the caller's own row-level rules.</summary>
+    /// <exception cref="MorphReadRefusedException">The request names no usable project, the table or a column is unknown, or an aggregate, grouping or filter is not accepted.</exception>
+    ValueTask<McpAggregation> AggregateAsync(McpAggregateQuery query, CancellationToken cancellationToken);
+
     /// <summary>One page of a table's rows, under the caller's own row-level rules.</summary>
     /// <exception cref="MorphReadRefusedException">The request names no usable project, the table is unknown, or the filter, ordering or search is not accepted.</exception>
     ValueTask<McpRecordPage> QueryRecordsAsync(McpRecordQuery query, CancellationToken cancellationToken);
@@ -80,3 +84,23 @@ public sealed record McpTableList(IReadOnlyList<McpTableSummary> Tables);
 /// <summary>One record, by column name.</summary>
 /// <param name="Record">The record's columns and values.</param>
 public sealed record McpRecord(IDictionary<string, object?> Record);
+
+/// <summary>One aggregate to compute.</summary>
+/// <param name="Function">count, countDistinct, sum, avg, min or max.</param>
+/// <param name="Column">The column to aggregate; none for a count of rows.</param>
+/// <param name="Alias">The name the result carries.</param>
+public sealed record McpAggregate(string Function, string? Column, string Alias);
+
+/// <summary>An aggregation of a table's rows.</summary>
+/// <param name="Table">The table.</param>
+/// <param name="Aggregates">What to compute.</param>
+/// <param name="GroupBy">Columns to group by; one row of results overall when none.</param>
+/// <param name="Filter">Conditions on the rows, each <c>column:op:value</c>; all apply before grouping.</param>
+/// <param name="MaxGroups">The most groups to return; the door caps it.</param>
+public sealed record McpAggregateQuery(string Table, IReadOnlyList<McpAggregate> Aggregates, IReadOnlyList<string>? GroupBy, IReadOnlyList<string>? Filter, int MaxGroups);
+
+/// <summary>The result of an aggregation.</summary>
+/// <param name="Groups">One row per group: the grouping columns' values and the aggregates under their aliases.</param>
+/// <param name="TotalGroups">How many groups there are before the cap, when known.</param>
+/// <param name="MaxGroups">The cap applied.</param>
+public sealed record McpAggregation(IReadOnlyList<IDictionary<string, object?>> Groups, long? TotalGroups, int MaxGroups);
