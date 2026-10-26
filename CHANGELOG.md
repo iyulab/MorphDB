@@ -11,6 +11,10 @@
   with `500` through REST `aggregate`, and a value that is not its column's type (`qty:eq:ten`) was a `500` through
   an aggregate and a view read, and an error without a cause through GraphQL. They now read the value the way a row
   list does, and a value that is not the column's type is refused with `400` naming the column.
+- **A virtual column is compared as the type it was declared with.** The value of a filter on a formula, lookup or
+  rollup column was read from its shape, so a text formula or lookup column holding a code shaped like a number, an id
+  or a date (`12345`, `2026-10-25`) failed with `500` on every read that filters by it — the failure 0.33.0 fixed for
+  stored columns. A formula is read as its `returnType`, a lookup or rollup as its declared `type`.
 - **A condition that cannot be read is refused rather than dropped.** GraphQL `aggregate` ignored the list of an
   `in` or `notin` filter — it counted every row — and a comparison with no value (`gt`, `gte`, `lt`, `lte`, `like`,
   `contains`, …) in a query body or an aggregate filter was dropped the same way. A list operator given no list, a

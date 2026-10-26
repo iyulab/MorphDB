@@ -2,6 +2,7 @@ using System.Globalization;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
+using MorphDB.Npgsql.Infrastructure;
 
 namespace MorphDB.Npgsql.Query;
 
@@ -94,9 +95,20 @@ internal static class ColumnValues
         }
 
         var column = table.Columns.FirstOrDefault(c => c.LogicalName == logicalName);
-        var native = column is { IsDerived: false } ? column.NativeType : TextSystemColumns.Contains(logicalName) ? "text" : null;
+        var native = column switch
+        {
+            { IsDerived: false } => column.NativeType,
+            // A virtual column is compared as the type it was declared to read — a formula's own return type first.
+            { IsDerived: true } => Declared(column.FormulaConfig?.ReturnType) ?? Declared(column.DataType),
+            _ => TextSystemColumns.Contains(logicalName) ? "text" : null,
+        };
         return native is null ? Shaped(value) : As(native, logicalName, value);
     }
+
+    /// <summary>The storage type a declared column type reads as; none for the names that only mark a column as virtual.</summary>
+    private static string? Declared(MorphDataType? type) => type is null or MorphDataType.Lookup or MorphDataType.Computed or MorphDataType.Rollup or MorphDataType.Formula
+        ? null
+        : TypeMapper.ToNativeType(type.Value);
 
     private static object? As(string native, string column, object value)
     {

@@ -52,6 +52,44 @@ public class ConditionDoorsContractTests
         }
     }
 
+    /// <summary>A virtual (formula) column reads like a stored one — the same code compares as the text it is.</summary>
+    [Theory]
+    [MemberData(nameof(Doors))]
+    public async Task A_formula_column_of_text_compares_a_code_shaped_like_another_type_as_text(string door)
+    {
+        if (door == "view")
+        {
+            return;
+        }
+
+        var table = await SeedAsync();
+
+        foreach (var code in CodeRows)
+        {
+            (await AskAsync(door, table, new Cond("tag", "eq", code))).Should().Be(Answer.Rows(1), $"{door}: tag eq {code}");
+        }
+
+        (await AskAsync(door, table, new Cond("tag", "in", new object[] { "12345", "007", "2026-10-25" }))).Should().Be(Answer.Rows(3), $"{door}: tag in");
+    }
+
+    /// <summary>A lookup column is virtual too: it compares as the type it was declared with.</summary>
+    [Theory]
+    [MemberData(nameof(Doors))]
+    public async Task A_lookup_column_of_text_compares_a_code_shaped_like_another_type_as_text(string door)
+    {
+        if (door == "view")
+        {
+            return;
+        }
+
+        var table = await SeedAsync();
+
+        foreach (var code in CodeRows)
+        {
+            (await AskAsync(door, table, new Cond("echo", "eq", code))).Should().Be(Answer.Rows(1), $"{door}: echo eq {code}");
+        }
+    }
+
     /// <summary>A list of text codes: each element is read as text too, and a list is a list on every door.</summary>
     [Theory]
     [MemberData(nameof(Doors))]
@@ -280,6 +318,13 @@ public class ConditionDoorsContractTests
                 new CreateColumnApiRequest { Name = "flag", Type = "boolean", Nullable = true },
                 new CreateColumnApiRequest { Name = "ref", Type = "uuid", Nullable = true },
                 new CreateColumnApiRequest { Name = "amt", Type = "decimal", Nullable = true },
+                new CreateColumnApiRequest { Name = "tag", Type = "text", Nullable = true, Formula = new FormulaConfigApiRequest { Formula = "{code}", ReturnType = "text" } },
+                // A lookup of the table's own code by the same code: a virtual column that reads the text it was given.
+                new CreateColumnApiRequest
+                {
+                    Name = "echo", Type = "text", Nullable = true,
+                    Lookup = new LookupConfigApiRequest { RelationColumn = "code", TargetTable = table, TargetColumn = "code", MatchColumn = "code" },
+                },
             ],
         }, Ct)).EnsureSuccessStatusCode();
 
