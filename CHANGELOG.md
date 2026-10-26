@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.34.0
+
+A minor that fixes defects in 0.33.0 and earlier where a read answered the wrong thing with a `200` or failed with
+`500`: a filter's value was read one way on a row list and another on an aggregate or a view, a condition that could
+not be read was dropped — a count of every row — and an OData request naming an option the service does not answer
+was served without it. Breaking, as a refusal where there was an answer: a row list and a view read refuse a query
+parameter they do not have (it narrowed nothing), and OData refuses the system options it does not serve, a negative
+`$skip` or `$top`, and an `$orderby` direction it cannot read. A view that names no columns now reads by its table's
+column names. No change to what a read answers for a request it understood.
+
 ### Fixed
 
 - **A filter's value is read as the type of its column on every read.** 0.33.0 did it for a row list, a query
