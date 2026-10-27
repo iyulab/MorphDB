@@ -9,6 +9,7 @@ COPY Directory.Packages.props ./
 # Copy project files for restore
 COPY src/MorphDB.Core/MorphDB.Core.csproj src/MorphDB.Core/
 COPY src/MorphDB.Npgsql/MorphDB.Npgsql.csproj src/MorphDB.Npgsql/
+COPY src/MorphDB.Mcp/MorphDB.Mcp.csproj src/MorphDB.Mcp/
 COPY src/MorphDB.Service/MorphDB.Service.csproj src/MorphDB.Service/
 
 # Restore dependencies
