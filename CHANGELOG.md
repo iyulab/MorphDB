@@ -21,6 +21,10 @@
   doubled (`'O''Brien'`). A filter outside the language is still refused, now with a message that lists what is read.
   The supported language is written in `docs/API.md`.
 
+### Changed
+
+- `Polly` 8.8.1.
+
 ## 0.34.0
 
 A minor that fixes defects in 0.33.0 and earlier where a read answered the wrong thing with a `200` or failed with
