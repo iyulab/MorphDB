@@ -668,6 +668,17 @@ public sealed class ODataBatchRequestItem
 
     [System.Text.Json.Serialization.JsonPropertyName("atomicityGroup")]
     public string? AtomicityGroup { get; set; }
+
+    /// <summary>
+    /// Every member the request carries that this class has no property for. A JSON batch is refused when it
+    /// holds one that is not an instance annotation (<see cref="ODataBatchGroups.Problem"/>), so a member the
+    /// service does not understand — <c>if</c> above all, which makes a request conditional — is never
+    /// silently dropped while the request runs unconditionally. This is the OData surface's counterpart of
+    /// <c>StrictRequestBinding</c>, which refuses unmapped members on the REST models: these types sit outside
+    /// that namespace rule, a batch answers with an OData error object, and the format allows instance annotations.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonExtensionData]
+    public IDictionary<string, System.Text.Json.JsonElement>? UnknownMembers { get; set; }
 }
 
 /// <summary>

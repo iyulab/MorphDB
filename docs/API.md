@@ -794,6 +794,11 @@ read by key — `$h`, `$h?$select=no`; the request `<id>` must be among its `dep
     { "id": "n", "method": "POST", "url": "Notes", "body": { "text": "order placed" }, "dependsOn": ["order"] } ] }
 ```
 
+A request member the service does not understand makes the whole batch `400`, before any request runs — an
+`if` condition in particular: conditional requests in a batch are not supported, so `Capabilities.BatchSupport`'s
+`RequestDependencyConditionsSupported` would be `false`, and a request meant to run only under a condition is not run
+without it. Instance annotations (names holding `@`) on a request are accepted and ignored.
+
 Relations are not navigable
 from this surface — the metadata document declares no navigation properties, so there is nothing
 for `$expand` to reach. Read a related table as its own entity set instead.

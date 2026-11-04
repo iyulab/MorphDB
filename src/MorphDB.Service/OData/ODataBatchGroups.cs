@@ -8,8 +8,8 @@ namespace MorphDB.Service.OData;
 internal static class ODataBatchGroups
 {
     /// <summary>
-    /// Why the batch is malformed as a whole, or null: a request without an id, an id given twice, a group
-    /// named like a request, or a group whose requests are not adjacent.
+    /// Why the batch is malformed as a whole, or null: a request without an id, an id given twice, a member
+    /// the service does not understand, a group named like a request, or a group whose requests are not adjacent.
     /// </summary>
     public static string? Problem(IReadOnlyList<ODataBatchRequestItem> requests)
     {
@@ -24,6 +24,13 @@ internal static class ODataBatchGroups
             if (!ids.Add(request.Id))
             {
                 return $"The id '{request.Id}' is given to more than one request of the batch.";
+            }
+
+            if (UnsupportedMember(request) is { } member)
+            {
+                return member.Equals("if", StringComparison.Ordinal)
+                    ? $"Request '{request.Id}' carries an 'if' condition; this service does not support conditional requests in a batch (Capabilities.BatchSupport RequestDependencyConditionsSupported is false), so the batch is refused rather than run without the condition."
+                    : $"Request '{request.Id}' carries the member '{member}', which a batch request does not have; it would be ignored, so the batch is refused.";
             }
         }
 
@@ -55,6 +62,15 @@ internal static class ODataBatchGroups
 
         return null;
     }
+
+    /// <summary>
+    /// The first member of a request the service does not understand, or null. Instance annotations (a name
+    /// holding <c>@</c>) are data about the request and are skipped; any other member would change what the
+    /// request means — an <c>if</c> that makes it conditional, a misspelt <c>dependsOn</c> — so it is not
+    /// silently dropped.
+    /// </summary>
+    private static string? UnsupportedMember(ODataBatchRequestItem request) =>
+        request.UnknownMembers?.Keys.FirstOrDefault(name => !name.Contains('@', StringComparison.Ordinal));
 
     /// <summary>The batch as runs: each request outside a group on its own, each group as one run.</summary>
     public static IEnumerable<(string? Group, IReadOnlyList<ODataBatchRequestItem> Requests)> Segments(IReadOnlyList<ODataBatchRequestItem> requests)

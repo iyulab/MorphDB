@@ -504,6 +504,64 @@ public class ODataApiTests
         new { id, method = "POST", url = set, atomicityGroup = group, dependsOn, body = new { name, email = $"{name}@example.com", is_active = true } };
 
     [Fact]
+    public async Task A_batch_request_with_an_if_condition_is_refused_and_nothing_runs()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var set = ToPascalCase(await SetupTestTableAsync());
+
+        var response = await _client.PostAsJsonAsync("/odata/$batch", new
+        {
+            requests = new object[]
+            {
+                Create("1", set, "kept-out"),
+                new { id = "2", method = "POST", url = set, dependsOn = DependsOn("1"), @if = "$1/$succeeded eq false", body = new { name = "fallback", email = "fallback@example.com", is_active = true } },
+            },
+        }, ct);
+
+        response.StatusCode.Should().Be(System.Net.HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync(ct)).Should().Contain("'if' condition").And.Contain("'2'");
+        (await CountAsync(set, ct)).Should().Be(0, "a batch the service cannot read as written runs none of it — the first request is not applied either");
+    }
+
+    [Fact]
+    public async Task A_batch_request_member_the_service_does_not_know_is_refused_not_dropped()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var set = ToPascalCase(await SetupTestTableAsync());
+
+        var response = await _client.PostAsJsonAsync("/odata/$batch", new
+        {
+            requests = new object[] { new { id = "1", method = "POST", url = set, dependOn = DependsOn("0"), body = new { name = "a", email = "a@example.com", is_active = true } } },
+        }, ct);
+
+        response.StatusCode.Should().Be(System.Net.HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync(ct)).Should().Contain("'dependOn'");
+        (await CountAsync(set, ct)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task An_instance_annotation_on_a_batch_request_is_accepted()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var set = ToPascalCase(await SetupTestTableAsync());
+
+        var response = await _client.PostAsJsonAsync("/odata/$batch", new Dictionary<string, object>
+        {
+            ["requests"] = new object[]
+            {
+                new Dictionary<string, object?>
+                {
+                    ["id"] = "1", ["method"] = "POST", ["url"] = set, ["@example.note"] = "from a client",
+                    ["body"] = new { name = "annotated", email = "annotated@example.com", is_active = true },
+                },
+            },
+        }, ct);
+
+        response.StatusCode.Should().Be(System.Net.HttpStatusCode.OK);
+        (await CountAsync(set, ct)).Should().Be(1);
+    }
+
+    [Fact]
     public async Task An_atomicity_group_is_applied_whole()
     {
         var ct = TestContext.Current.CancellationToken;

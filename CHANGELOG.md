@@ -21,6 +21,15 @@
   doubled (`'O''Brien'`). A filter outside the language is still refused, now with a message that lists what is read.
   The supported language is written in `docs/API.md`.
 
+### Fixed
+
+- **A `$batch` request carrying a member the service does not understand is refused instead of run without it.** A JSON batch
+  request with an `if` condition (OData JSON Format 4.01 §19.1) used to run unconditionally, because the member was dropped
+  while reading the body — a `DELETE` meant to run only when an earlier request failed ran regardless. Such a batch is now
+  refused with `400` before any request runs, and the message names the request and the member (`if` says that conditional
+  requests in a batch are not supported). The same goes for any other member that is not a request member of the format, such
+  as a misspelt `dependOn`; instance annotations (names holding `@`) are still accepted.
+
 ### Changed
 
 - `Polly` 8.9.0, `HotChocolate` 16.7.3, `StackExchange.Redis` 3.4.31 and `ModelContextProtocol.AspNetCore` 2.3.1.
