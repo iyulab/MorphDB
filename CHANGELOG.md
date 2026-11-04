@@ -23,7 +23,7 @@
 
 ### Changed
 
-- `Polly` 8.8.1.
+- `Polly` 8.9.0, `HotChocolate` 16.7.3, `StackExchange.Redis` 3.4.31 and `ModelContextProtocol.AspNetCore` 2.3.1.
 
 ## 0.34.0
 
