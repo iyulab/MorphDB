@@ -26,6 +26,30 @@ public class SqlIdentifierRewriterTests
     }
 
     /// <summary>
+    /// A column reference qualified by its table is one reference however each part is written: the quotes
+    /// are PostgreSQL habit (a camelCase name needs them there), and a name written with or without them
+    /// is the same name -- the rule a bare quoted identifier already follows.
+    /// </summary>
+    [Theory]
+    [InlineData("orders.owner = 1")]
+    [InlineData("orders.\"owner\" = 1")]
+    [InlineData("\"orders\".owner = 1")]
+    [InlineData("\"orders\".\"owner\" = 1")]
+    public void A_table_qualified_reference_is_one_reference_whichever_parts_are_quoted(string text)
+    {
+        Rename(text, "orders.owner", "t.holder").Should().Be("t.holder = 1");
+        SqlIdentifierRewriter.Identifiers(text).Should().Equal("orders.owner");
+    }
+
+    [Fact]
+    public void A_qualified_reference_inside_a_string_literal_is_a_value_and_a_quoted_part_may_hold_a_dot()
+    {
+        Rename("note = 'orders.owner' AND orders.owner = 1", "orders.owner", "t.holder")
+            .Should().Be("note = 'orders.owner' AND t.holder = 1");
+        SqlIdentifierRewriter.Identifiers("\"a.b\" = 1").Should().Equal("a.b");
+    }
+
+    /// <summary>
     /// <c>{{email}}</c> is the caller's value. A table may well have a column called <c>email</c>,
     /// and the two must not be confused.
     /// </summary>

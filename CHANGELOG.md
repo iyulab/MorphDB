@@ -32,8 +32,7 @@
   as a misspelt `dependOn`; instance annotations (names holding `@`) are still accepted.
 - **A view whose join condition or column expression names something the view does not read is refused with `400
   INVALID_EXPRESSION` instead of an opaque `500`.** Creating or changing a view with a column no table has, a
-  table-qualified quoted identifier (`table."column"` — write it `table.column`), a syntax error or operands an operator does
-  not take, or a filter value that is not of its column's type, used to surface PostgreSQL's error as `500`. The answer now
+  syntax error or operands an operator does not take, or a filter value that is not of its column's type, used to surface PostgreSQL's error as `500`. The answer now
   names the kind of refusal — never the database's own text, which can carry a physical name — and a refused change leaves
   the view as it was. A negative `limit` is refused too (it used to create a view that failed every read).
 - **An index `where` written in the table's own column names now works, and one PostgreSQL cannot accept is refused with `400
@@ -54,6 +53,12 @@
   a fault the caller cannot tell from the service failing, and one that made the whole table or view unreadable. The answer
   now says it is a data error and names the kind (never the database's text); REST and GraphQL classify it the same way. A
   read still fails as a whole when one row cannot be computed — isolating the row is a separate question.
+
+- **A table-qualified quoted identifier in a view expression, join condition, index predicate or policy is read like the same name
+  unquoted.** `orders."createdAt"`, `"orders".createdAt` and `"orders"."createdAt"` named no column: the name rewriter read the
+  table and the quoted part as two separate names — although a bare `"createdAt"` and `createdAt` already resolved alike —
+  so PostgreSQL then failed on the untranslated table qualifier. A camelCase column, which PostgreSQL needs quoted, could not
+  be written the way a PostgreSQL user writes it once a second table was involved.
 
 ### Changed
 

@@ -426,7 +426,7 @@ public sealed class PostgresViewManager : IViewManager
         DefinitionRefusal.AsInvalidExpressionAsync(
             "The view's definition",
             "every name in a join condition or column expression must be a column of the base table or of a joined table, "
-            + "written as the table's own reads name it, and as table.column -- both parts unquoted -- when it belongs to a joined table.",
+            + "written as the table's own reads name it, and as table.column when it belongs to a joined table (each part may be quoted).",
             build);
 
     /// <summary>

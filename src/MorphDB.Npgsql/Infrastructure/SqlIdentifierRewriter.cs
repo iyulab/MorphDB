@@ -54,7 +54,7 @@ internal static partial class SqlIdentifierRewriter
                 continue;
             }
 
-            yield return match.Value.StartsWith('"') ? Unquote(match.Value) : match.Value;
+            yield return NameOf(match.Value);
         }
     }
 
@@ -65,16 +65,27 @@ internal static partial class SqlIdentifierRewriter
             return token;
         }
 
-        var name = token.StartsWith('"') ? Unquote(token) : token;
-        return map(name) ?? token;
+        return map(NameOf(token)) ?? token;
     }
+
+    /// <summary>
+    /// The name a token stands for: each part unquoted, joined by a dot, so <c>"orders"."status"</c>,
+    /// <c>orders."status"</c> and <c>orders.status</c> are one reference.
+    /// </summary>
+    private static string NameOf(string token) =>
+        string.Join('.', Part().Matches(token).Select(m => m.Value.StartsWith('"') ? Unquote(m.Value) : m.Value));
 
     private static bool IsVerbatim(string token) => token.StartsWith('\'') || token.StartsWith('{');
 
     private static string Unquote(string quoted) => quoted[1..^1].Replace("\"\"", "\"", StringComparison.Ordinal);
 
-    // A single-quoted literal, a double-quoted identifier (both with doubled-quote escapes), a
-    // placeholder, or a bare/dotted identifier.
-    [GeneratedRegex(@"'(?:[^']|'')*'|""(?:[^""]|"""")*""|\{\{\w+(?:\.\w+)?\}\}|\b[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?\b")]
+    // A single-quoted literal, a placeholder, or an identifier: a bare or double-quoted name (quotes
+    // escaped by doubling), optionally qualified by a table name written either way (<c>t.c</c>,
+    // <c>t."c"</c>, <c>"t".c</c>, <c>"t"."c"</c>).
+    [GeneratedRegex(@"'(?:[^']|'')*'|\{\{\w+(?:\.\w+)?\}\}|(?:\b[A-Za-z_][A-Za-z0-9_]*|""(?:[^""]|"""")*"")(?:\.(?:[A-Za-z_][A-Za-z0-9_]*\b|""(?:[^""]|"""")*""))?")]
     private static partial Regex Token();
+
+    // One name inside an identifier token.
+    [GeneratedRegex(@"""(?:[^""]|"""")*""|[A-Za-z_][A-Za-z0-9_]*")]
+    private static partial Regex Part();
 }

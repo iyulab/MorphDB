@@ -26,7 +26,7 @@ public class ViewDefinitionRefusalContractTests
 
     [Theory]
     [InlineData("{o}.no_such_column - {c}.at", "an expression naming a column no table has")]
-    [InlineData("{c}.\"at\" - {o}.\"at\"", "a table-qualified quoted identifier, whose qualifier the translator reads as a separate name")]
+    [InlineData("{c}.\"no_such_column\" - {o}.\"at\"", "a table-qualified quoted column no table has")]
     public async Task A_view_expression_that_names_what_the_view_does_not_read_is_a_400_not_a_500(string expressionTemplate, string because)
     {
         var (orders, customers) = await SeedTablesAsync();

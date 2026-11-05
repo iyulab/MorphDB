@@ -126,8 +126,10 @@ public class ViewQueryBuilderTests
     /// This is the contract that "a delta between two records is a view's job" rests on: an expression that
     /// reaches across the join, qualified by logical table names, runs against Postgres as written.
     /// </summary>
-    [Fact]
-    public async Task BuildSelectStatementAsync_ExpressionAcrossJoinedTables_ComputesPerRowDeltaAndLeavesUnmatchedRowsNull()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task BuildSelectStatementAsync_ExpressionAcrossJoinedTables_ComputesPerRowDeltaAndLeavesUnmatchedRowsNull(bool quoted)
     {
         var projectId = Guid.NewGuid();
         var viewBuilder = new ViewQueryBuilder(new MetadataRepository(_fixture.Connections), projectId);
@@ -184,7 +186,10 @@ public class ViewQueryBuilderTests
                 new ViewColumnSpec { Source = "lot", Alias = "lot" },
                 new ViewColumnSpec
                 {
-                    Expression = $"EXTRACT(EPOCH FROM ({arrivals.LogicalName}.arrived_at - {dispatches.LogicalName}.sent_at)) / 3600",
+                    // Written the way a PostgreSQL user writes a camelCase name -- quoted -- or not: the same reference.
+                    Expression = quoted
+                        ? $"EXTRACT(EPOCH FROM ({arrivals.LogicalName}.\"arrived_at\" - \"{dispatches.LogicalName}\".\"sent_at\")) / 3600"
+                        : $"EXTRACT(EPOCH FROM ({arrivals.LogicalName}.arrived_at - {dispatches.LogicalName}.sent_at)) / 3600",
                     Alias = "lead_hours",
                 },
             ],
