@@ -27,6 +27,8 @@ public class DocsErrorCodeParityTests
         "PROJECT_NOT_FOUND", "SCHEMA_VERSION_CONFLICT",
         "LOCK_ACQUISITION_FAILED", "NOT_FOUND", "INVALID_ARGUMENT", "INTERNAL_ERROR",
         "UNAUTHENTICATED", "FORBIDDEN", "ROW_REFERENCED",
+        // A data exception (SQLSTATE class 22) a request's computed values raised -- ErrorClassification
+        "DATA_EXCEPTION",
         // Secret enforcement — the middleware writes its own envelope (it denies before MVC) and
         // the management routes decline when no master secret is injected
         "SECRETS_NOT_CONFIGURED",

@@ -49,6 +49,12 @@
   now refuse an expression outside the grammar or one that reads a field the table does not have, with `400 INVALID_ARGUMENT`
   naming the field; a blank expression still clears the check.
 
+- **A data error raised while a request is answered is a `400 DATA_EXCEPTION`, not a `500`.** A formula column or a view
+  expression that divides by zero for a row (or a number out of range) failed the read that met it with `500 INTERNAL_ERROR` —
+  a fault the caller cannot tell from the service failing, and one that made the whole table or view unreadable. The answer
+  now says it is a data error and names the kind (never the database's text); REST and GraphQL classify it the same way. A
+  read still fails as a whole when one row cannot be computed — isolating the row is a separate question.
+
 ### Changed
 
 - `Polly` 8.9.0, `HotChocolate` 16.7.3, `StackExchange.Redis` 3.4.31 and `ModelContextProtocol.AspNetCore` 2.3.1.

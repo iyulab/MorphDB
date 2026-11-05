@@ -1808,6 +1808,7 @@ both.
 | 400 | `MISSING_PROJECT` | The request did not say which project it applies to — send `X-Project-Id` |
 | 400 | `INVALID_PROJECT_ID` | `X-Project-Id` was sent but is not a GUID |
 | 400 | `INVALID_EXPRESSION` | A CHECK predicate, index predicate, policy expression, or a view's join condition or column expression that could escape the clause it is written into, or that PostgreSQL cannot resolve (a name that is no column of the base table or a joined table, a table-qualified quoted identifier, a syntax error, operands of types the operator does not take, a value of the wrong type) — creating or changing a view, creating an index; the answer names the kind of refusal, not the database's text |
+| 400 | `DATA_EXCEPTION` | A value the database computes for the request raised a data error — a formula column or a view expression dividing by zero for some row, a number out of range. A read that meets such a row fails as a whole; the answer names the kind of error, not the database's text |
 | 400 | `TABLE_HAS_DEPENDENTS` | Deleting a table another table still references — delete those relations first |
 | 400 | `COLUMN_USED_BY_POLICY` | Deleting or retyping a column a row-level security policy reads, or renaming or adding a column under a name a policy already uses for something else — change or delete the policy first |
 | 400 | `EMPTY_BATCH` | A batch request with no operations |

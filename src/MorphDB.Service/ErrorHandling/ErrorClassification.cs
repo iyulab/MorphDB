@@ -1,5 +1,6 @@
 using MorphDB.Core.Exceptions;
 using MorphDB.Service.Models.Api;
+using Npgsql;
 
 namespace MorphDB.Service.ErrorHandling;
 
@@ -22,11 +23,30 @@ internal static class ErrorClassification
         {
             Error = error,
             Code = code,
-            Message = status >= StatusCodes.Status500InternalServerError ? "An unexpected error occurred" : exception.Message,
+            Message = status >= StatusCodes.Status500InternalServerError ? "An unexpected error occurred"
+                : exception is PostgresException pg ? DataErrorMessage(pg)
+                : exception.Message,
             Details = exception is ValidationException { Field: { } field, Reason: { } reason }
                 ? new Dictionary<string, string[]> { [field] = [reason] }
                 : null,
         });
+    }
+
+    /// <summary>
+    /// What a data exception says to the caller: the kind of error and that a computed value raised it.
+    /// PostgreSQL's own text is not shown -- it can quote a value or carry a physical name.
+    /// </summary>
+    private static string DataErrorMessage(PostgresException pg)
+    {
+        var kind = pg.SqlState switch
+        {
+            PostgresErrorCodes.DivisionByZero => "division by zero",
+            PostgresErrorCodes.NumericValueOutOfRange => "a number out of range",
+            PostgresErrorCodes.InvalidTextRepresentation or PostgresErrorCodes.InvalidDatetimeFormat => "a value that is not of its type",
+            _ => "a data error",
+        };
+        return $"A value in this request, or one computed for it, raised {kind}. A formula column or a view expression raises it "
+            + "for the rows it cannot be computed for, and a read that meets such a row fails as a whole.";
     }
 
     public static (int Status, string Error, string Code) Classify(Exception exception)
@@ -55,6 +75,11 @@ internal static class ErrorClassification
             System.Collections.Generic.KeyNotFoundException => (StatusCodes.Status404NotFound, "NotFound", "TABLE_NOT_FOUND"),
             MorphDB.Core.Exceptions.SchemaException se => (StatusCodes.Status400BadRequest, "SchemaError", se.ErrorCode),
             ArgumentException => (StatusCodes.Status400BadRequest, "BadRequest", "INVALID_ARGUMENT"),
+            // A data exception (SQLSTATE class 22) that escaped a request was raised by a value the
+            // database computed -- a formula column or a view expression dividing by zero for a row, a
+            // number out of range -- never by a fault of this service. It is said as such, once, here, so
+            // every door that reads (REST, GraphQL) answers it the same way.
+            PostgresException { SqlState: ['2', '2', ..] } => (StatusCodes.Status400BadRequest, "DataError", "DATA_EXCEPTION"),
             _ => (StatusCodes.Status500InternalServerError, "InternalError", "INTERNAL_ERROR")
         };
     }
