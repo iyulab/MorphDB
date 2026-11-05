@@ -66,13 +66,15 @@
   no metadata. A deadlock victim's statement changes nothing, so it is now sent again (a few times, with a short wait) — the
   retry PostgreSQL documents for it. Other failures are thrown as before.
 
-- **A schema change that fails halfway no longer leaves a table, column, index or foreign key that nothing describes.** Creating
-  a table, adding a column, creating an index and creating a relation (with the junction table of a many-to-many one) built
-  the physical object first and wrote its description afterwards, as separate commits. A failure in between — a deadlock
-  victim, a failing change log — left the object in the database with nothing describing it, and the same request then failed
-  because the name was already there; a process that died in between left it for good. Each of these changes is now one
-  transaction — the physical statements, the description, the version it moves the table to and the change-log entry — so it
-  happens whole or not at all, and a deadlock victim runs the whole change again.
+- **A schema change that fails halfway no longer leaves a table, column, index or foreign key that nothing describes — or
+  a description of one that is gone.** Creating a table, adding a column, creating an index and creating a relation (with the
+  junction table of a many-to-many one) built the physical object first and wrote its description afterwards, as separate
+  commits. A failure in between — a deadlock victim, a failing change log — left the object in the database with nothing
+  describing it, and the same request then failed because the name was already there; a process that died in between left it
+  for good. Deleting a table, column, index or relation dropped the physical object first the same way, so a failure after it
+  left a description of something that no longer existed, and every read that met it ended in `500`. Each of these changes is
+  now one transaction — the physical statements, the description, the version it moves the table to and the change-log entry —
+  so it happens whole or not at all, and a deadlock victim runs the whole change again.
 
 ### Changed
 

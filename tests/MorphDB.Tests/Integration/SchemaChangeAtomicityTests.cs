@@ -148,6 +148,107 @@ public class SchemaChangeAtomicityTests
         (await SchemaManager().GetTableAsync(projectId, junction, ct)).Should().NotBeNull("the junction name is free again");
     }
 
+    [Fact]
+    public async Task A_column_whose_deletion_cannot_be_logged_is_still_there_and_can_be_deleted_again()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var table = await CreateTableAsync(SchemaManager(), Guid.NewGuid(), ct);
+        var note = (await SchemaManager().AddColumnAsync(new AddColumnRequest
+        {
+            TableId = table.TableId,
+            LogicalName = "note",
+            DataType = MorphDataType.Text,
+            IsNullable = true,
+            ExpectedVersion = table.SchemaVersion,
+        }, ct));
+
+        var act = () => SchemaManager(new ThrowingChangeLogger(SchemaOperation.DeleteColumn)).DeleteColumnAsync(note.ColumnId, ct);
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("change log is down");
+
+        (await PhysicalColumnsAsync(table.PhysicalName, note.PhysicalName, ct))
+            .Should().Be(1, "a deletion that did not happen leaves the column where it was");
+        (await Repository().GetTableByIdAsync(table.TableId, includeColumns: true, ct))!
+            .Columns.Should().Contain(c => c.LogicalName == "note", "and its description with it");
+
+        await SchemaManager().DeleteColumnAsync(note.ColumnId, ct);
+        (await PhysicalColumnsAsync(table.PhysicalName, note.PhysicalName, ct)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task An_index_whose_deletion_cannot_be_logged_is_still_there_and_can_be_deleted_again()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var table = await CreateTableAsync(SchemaManager(), Guid.NewGuid(), ct);
+        var index = await SchemaManager().CreateIndexAsync(new CreateIndexRequest
+        {
+            TableId = table.TableId,
+            LogicalName = "ix_qty",
+            ColumnIds = [table.Columns.Single(c => c.LogicalName == "qty").ColumnId],
+            IndexType = IndexType.BTree,
+        }, ct);
+
+        var act = () => SchemaManager(new ThrowingChangeLogger(SchemaOperation.DeleteIndex)).DeleteIndexAsync(index.IndexId, ct);
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("change log is down");
+
+        (await RelationsNamedAsync(index.PhysicalName, "i", ct)).Should().Be(1, "a deletion that did not happen leaves the index where it was");
+        (await Repository().GetIndexesByTableIdAsync(table.TableId, ct)).Should().ContainSingle("and its description with it");
+
+        await SchemaManager().DeleteIndexAsync(index.IndexId, ct);
+        (await RelationsNamedAsync(index.PhysicalName, "i", ct)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task A_relation_whose_deletion_cannot_be_logged_keeps_its_constraint_and_can_be_deleted_again()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var projectId = Guid.NewGuid();
+        var parent = await CreateTableAsync(SchemaManager(), projectId, ct);
+        var child = await CreateTableAsync(SchemaManager(), projectId, ct, extra: new CreateColumnRequest
+        {
+            LogicalName = "parent_ref",
+            DataType = MorphDataType.Uuid,
+            IsNullable = true,
+        });
+        var source = child.Columns.Single(c => c.LogicalName == "parent_ref");
+        var relation = await SchemaManager().CreateRelationAsync(new CreateRelationRequest
+        {
+            ProjectId = projectId,
+            LogicalName = "child_parent",
+            SourceTableId = child.TableId,
+            SourceColumnId = source.ColumnId,
+            TargetTableId = parent.TableId,
+            TargetColumnId = parent.Columns.Single(c => c.LogicalName == SystemColumns.Id).ColumnId,
+            RelationType = RelationType.OneToMany,
+            EnforceOnWrite = true,
+        }, ct);
+
+        var act = () => SchemaManager(new ThrowingChangeLogger(SchemaOperation.DeleteRelation)).DeleteRelationAsync(relation.RelationId, ct);
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("change log is down");
+
+        var constraint = $"fk_{child.PhysicalName}_{source.PhysicalName}";
+        (await ConstraintsNamedAsync(constraint, ct)).Should().Be(1, "a deletion that did not happen leaves the foreign key where it was");
+        (await Repository().GetRelationByIdAsync(relation.RelationId, ct)).Should().NotBeNull("and its description with it");
+
+        await SchemaManager().DeleteRelationAsync(relation.RelationId, ct);
+        (await ConstraintsNamedAsync(constraint, ct)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task A_table_whose_deletion_cannot_be_logged_is_still_there_and_can_be_deleted_again()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var table = await CreateTableAsync(SchemaManager(), Guid.NewGuid(), ct);
+
+        var act = () => SchemaManager(new ThrowingChangeLogger(SchemaOperation.DeleteTable)).DeleteTableAsync(table.TableId, ct);
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("change log is down");
+
+        (await RelationsNamedAsync(table.PhysicalName, "r", ct)).Should().Be(1, "a deletion that did not happen leaves the table where it was");
+        (await Repository().GetTableByIdAsync(table.TableId, includeColumns: true, ct)).Should().NotBeNull("and its description with it");
+
+        await SchemaManager().DeleteTableAsync(table.TableId, ct);
+        (await RelationsNamedAsync(table.PhysicalName, "r", ct)).Should().Be(0);
+    }
+
     private static async Task<TableMetadata> CreateTableAsync(
         PostgresSchemaManager schema, Guid projectId, CancellationToken ct, CreateColumnRequest? extra = null)
     {
@@ -181,6 +282,12 @@ public class SchemaChangeAtomicityTests
             "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace " +
             "WHERE c.relkind = @Kind AND c.relname = @Name",
             new { Kind = kind, Name = physicalName });
+    }
+
+    private async Task<long> ConstraintsNamedAsync(string name, CancellationToken ct)
+    {
+        await using var connection = await _fixture.DataSource.OpenConnectionAsync(ct);
+        return await connection.ExecuteScalarAsync<long>("SELECT count(*) FROM pg_constraint WHERE conname = @Name", new { Name = name });
     }
 
     private MetadataRepository Repository() => new(_fixture.Connections);

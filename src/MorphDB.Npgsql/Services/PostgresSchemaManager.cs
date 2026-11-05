@@ -392,6 +392,18 @@ public sealed class PostgresSchemaManager : ISchemaManager
         return result;
     }
 
+    /// <inheritdoc cref="InUnitAsync{T}"/>
+    private async Task InUnitAsync(
+        Func<NpgsqlConnection, NpgsqlTransaction, Task> change,
+        CancellationToken cancellationToken) =>
+        await InUnitAsync<bool>(
+            async (connection, transaction) =>
+            {
+                await change(connection, transaction);
+                return true;
+            },
+            cancellationToken);
+
     /// <summary>
     /// One DDL statement of a schema change. What PostgreSQL refuses is reported as the change's failure;
     /// a deadlock or a serialization failure is left as it is for <see cref="InUnitAsync{T}"/> to run again.
@@ -495,40 +507,43 @@ public sealed class PostgresSchemaManager : ISchemaManager
 
         var currentVersion = await _repository.GetCurrentVersionAsync(tableId, cancellationToken: cancellationToken);
 
-        // Execute DDL
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-        var dropTableSql = DdlBuilder.BuildDropTable(table.PhysicalName);
-        try
+        // The physical table, the table's description and the log entry are one change: a table whose
+        // deletion cannot be written down is still there.
+        await InUnitAsync(async (connection, transaction) =>
         {
-            await connection.ExecuteAsync(new CommandDefinition(dropTableSql, cancellationToken: cancellationToken));
-        }
-        catch (PostgresException pg) when (pg.SqlState == PostgresErrorCodes.DependentObjectsStillExist)
-        {
-            // A relation pointing at this table is a foreign key on the other table, and the DROP
-            // carries no CASCADE — deliberately, since tearing down another table's constraint is
-            // not something a delete of this one should decide. The caller has to remove the
-            // relation first, and needs to be told so: left alone this escaped as an opaque 500
-            // naming a physical table they are not supposed to know exists.
-            throw new SchemaException(
-                "TABLE_HAS_DEPENDENTS",
-                $"Table '{table.LogicalName}' cannot be deleted while other tables reference it. " +
-                "Delete the relations that target it first.");
-        }
-
-        // Soft delete metadata
-        await _repository.SoftDeleteTableAsync(tableId, cancellationToken: cancellationToken);
-
-        // Log change
-        await _changeLogger.LogChangeAsync(new SchemaChangeEntry
-        {
-            TableId = tableId,
-            Operation = SchemaOperation.DeleteTable,
-            SchemaVersion = currentVersion,
-            Changes = new
+            var dropTableSql = DdlBuilder.BuildDropTable(table.PhysicalName);
+            try
             {
-                LogicalName = table.LogicalName
+                await connection.ExecuteAsync(new CommandDefinition(dropTableSql, transaction: transaction, cancellationToken: cancellationToken));
             }
-        }, cancellationToken: cancellationToken);
+            catch (PostgresException pg) when (pg.SqlState == PostgresErrorCodes.DependentObjectsStillExist)
+            {
+                // A relation pointing at this table is a foreign key on the other table, and the DROP
+                // carries no CASCADE — deliberately, since tearing down another table's constraint is
+                // not something a delete of this one should decide. The caller has to remove the
+                // relation first, and needs to be told so: left alone this escaped as an opaque 500
+                // naming a physical table they are not supposed to know exists.
+                throw new SchemaException(
+                    "TABLE_HAS_DEPENDENTS",
+                    $"Table '{table.LogicalName}' cannot be deleted while other tables reference it. " +
+                    "Delete the relations that target it first.");
+            }
+
+            // Soft delete metadata
+            await _repository.SoftDeleteTableAsync(tableId, transaction, cancellationToken);
+
+            // Log change
+            await _changeLogger.LogChangeAsync(new SchemaChangeEntry
+            {
+                TableId = tableId,
+                Operation = SchemaOperation.DeleteTable,
+                SchemaVersion = currentVersion,
+                Changes = new
+                {
+                    LogicalName = table.LogicalName
+                }
+            }, transaction, cancellationToken);
+        }, cancellationToken);
     }
 
     #endregion
@@ -997,18 +1012,40 @@ public sealed class PostgresSchemaManager : ISchemaManager
 
         var currentVersion = await _repository.GetCurrentVersionAsync(column.TableId, cancellationToken: cancellationToken);
 
-        // Execute DDL
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-        var dropColumnSql = DdlBuilder.BuildDropColumn(table.PhysicalName, column.PhysicalName);
         try
         {
-            await connection.ExecuteAsync(new CommandDefinition(dropColumnSql, cancellationToken: cancellationToken));
+            // The physical column, its description, the version and the log entry are one change: a column
+            // whose deletion cannot be written down is still there.
+            await InUnitAsync(async (connection, transaction) =>
+            {
+                var dropColumnSql = DdlBuilder.BuildDropColumn(table.PhysicalName, column.PhysicalName);
+                await connection.ExecuteAsync(new CommandDefinition(dropColumnSql, transaction: transaction, cancellationToken: cancellationToken));
+
+                // Soft delete metadata
+                await _repository.SoftDeleteColumnAsync(columnId, transaction, cancellationToken);
+                await _repository.IncrementVersionAsync(column.TableId, transaction, cancellationToken);
+
+                // Log change
+                await _changeLogger.LogChangeAsync(new SchemaChangeEntry
+                {
+                    TableId = column.TableId,
+                    Operation = SchemaOperation.DeleteColumn,
+                    SchemaVersion = currentVersion + 1,
+                    Changes = new
+                    {
+                        ColumnId = columnId,
+                        column.LogicalName
+                    }
+                }, transaction, cancellationToken);
+            }, cancellationToken);
         }
         catch (PostgresException pg) when (pg.SqlState == PostgresErrorCodes.DependentObjectsStillExist)
         {
             // A policy that reads the column depends on it, and the DROP carries no CASCADE —
             // deliberately: removing a column must not quietly remove the rule that guarded the
             // table's rows. The caller changes or deletes the policy first, and is told which.
+            // (The failed change has been rolled back; the policies are read on a connection of their own.)
+            await using var connection = await _connections.OpenSystemAsync(cancellationToken);
             if (await RowLevelSecurityRefusal.ForColumnAsync(connection, table, column, "deleted", cancellationToken) is { } refusal)
             {
                 throw refusal;
@@ -1016,23 +1053,6 @@ public sealed class PostgresSchemaManager : ISchemaManager
 
             throw;
         }
-
-        // Soft delete metadata
-        await _repository.SoftDeleteColumnAsync(columnId, cancellationToken: cancellationToken);
-        await _repository.IncrementVersionAsync(column.TableId, cancellationToken: cancellationToken);
-
-        // Log change
-        await _changeLogger.LogChangeAsync(new SchemaChangeEntry
-        {
-            TableId = column.TableId,
-            Operation = SchemaOperation.DeleteColumn,
-            SchemaVersion = currentVersion + 1,
-            Changes = new
-            {
-                ColumnId = columnId,
-                column.LogicalName
-            }
-        }, cancellationToken: cancellationToken);
     }
 
     #endregion
@@ -1176,27 +1196,29 @@ public sealed class PostgresSchemaManager : ISchemaManager
 
         var currentVersion = await _repository.GetCurrentVersionAsync(index.TableId, cancellationToken: cancellationToken);
 
-        // Execute DDL
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-        var dropIndexSql = DdlBuilder.BuildDropIndex(index.PhysicalName);
-        await connection.ExecuteAsync(new CommandDefinition(dropIndexSql, cancellationToken: cancellationToken));
-
-        // Soft delete metadata
-        await _repository.SoftDeleteIndexAsync(indexId, cancellationToken: cancellationToken);
-        await _repository.IncrementVersionAsync(index.TableId, cancellationToken: cancellationToken);
-
-        // Log change
-        await _changeLogger.LogChangeAsync(new SchemaChangeEntry
+        // The physical index, its description, the version and the log entry are one change.
+        await InUnitAsync(async (connection, transaction) =>
         {
-            TableId = index.TableId,
-            Operation = SchemaOperation.DeleteIndex,
-            SchemaVersion = currentVersion + 1,
-            Changes = new
+            var dropIndexSql = DdlBuilder.BuildDropIndex(index.PhysicalName);
+            await connection.ExecuteAsync(new CommandDefinition(dropIndexSql, transaction: transaction, cancellationToken: cancellationToken));
+
+            // Soft delete metadata
+            await _repository.SoftDeleteIndexAsync(indexId, transaction, cancellationToken);
+            await _repository.IncrementVersionAsync(index.TableId, transaction, cancellationToken);
+
+            // Log change
+            await _changeLogger.LogChangeAsync(new SchemaChangeEntry
             {
-                index.LogicalName,
-                index.PhysicalName
-            }
-        }, cancellationToken: cancellationToken);
+                TableId = index.TableId,
+                Operation = SchemaOperation.DeleteIndex,
+                SchemaVersion = currentVersion + 1,
+                Changes = new
+                {
+                    index.LogicalName,
+                    index.PhysicalName
+                }
+            }, transaction, cancellationToken);
+        }, cancellationToken);
     }
 
     #endregion
@@ -1466,28 +1488,30 @@ public sealed class PostgresSchemaManager : ISchemaManager
 
         var currentVersion = await _repository.GetCurrentVersionAsync(relation.SourceTableId, cancellationToken: cancellationToken);
 
-        // Execute DDL
-        var constraintName = $"fk_{sourceTable.PhysicalName}_{sourceColumn.PhysicalName}";
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-        var dropFkSql = DdlBuilder.BuildDropForeignKey(sourceTable.PhysicalName, constraintName);
-        await connection.ExecuteAsync(new CommandDefinition(dropFkSql, cancellationToken: cancellationToken));
-
-        // Soft delete metadata
-        await _repository.SoftDeleteRelationAsync(relationId, cancellationToken: cancellationToken);
-        await _repository.IncrementVersionAsync(relation.SourceTableId, cancellationToken: cancellationToken);
-
-        // Log change
-        await _changeLogger.LogChangeAsync(new SchemaChangeEntry
+        // The foreign key, the relation's description, the version and the log entry are one change.
+        await InUnitAsync(async (connection, transaction) =>
         {
-            TableId = relation.SourceTableId,
-            Operation = SchemaOperation.DeleteRelation,
-            SchemaVersion = currentVersion + 1,
-            Changes = new
+            var constraintName = $"fk_{sourceTable.PhysicalName}_{sourceColumn.PhysicalName}";
+            var dropFkSql = DdlBuilder.BuildDropForeignKey(sourceTable.PhysicalName, constraintName);
+            await connection.ExecuteAsync(new CommandDefinition(dropFkSql, transaction: transaction, cancellationToken: cancellationToken));
+
+            // Soft delete metadata
+            await _repository.SoftDeleteRelationAsync(relationId, transaction, cancellationToken);
+            await _repository.IncrementVersionAsync(relation.SourceTableId, transaction, cancellationToken);
+
+            // Log change
+            await _changeLogger.LogChangeAsync(new SchemaChangeEntry
             {
-                relation.LogicalName,
-                RelationId = relationId
-            }
-        }, cancellationToken: cancellationToken);
+                TableId = relation.SourceTableId,
+                Operation = SchemaOperation.DeleteRelation,
+                SchemaVersion = currentVersion + 1,
+                Changes = new
+                {
+                    relation.LogicalName,
+                    RelationId = relationId
+                }
+            }, transaction, cancellationToken);
+        }, cancellationToken);
     }
 
     #endregion
