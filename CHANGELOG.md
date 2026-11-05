@@ -60,6 +60,12 @@
   so PostgreSQL then failed on the untranslated table qualifier. A camelCase column, which PostgreSQL needs quoted, could not
   be written the way a PostgreSQL user writes it once a second table was involved.
 
+- **Creating a table no longer fails with `500` when PostgreSQL picks one of its metadata inserts as a deadlock victim.** The
+  physical table is created first and its metadata rows are inserted afterwards as separate statements; under load one of those
+  inserts was occasionally cancelled as a deadlock victim (`40P01`) and the request ended in `500`, leaving a physical table with
+  no metadata. A deadlock victim's statement changes nothing, so it is now sent again (a few times, with a short wait) — the
+  retry PostgreSQL documents for it. Other failures are thrown as before.
+
 ### Changed
 
 - `Polly` 8.9.0, `HotChocolate` 16.7.3, `StackExchange.Redis` 3.4.31 and `ModelContextProtocol.AspNetCore` 2.3.1.

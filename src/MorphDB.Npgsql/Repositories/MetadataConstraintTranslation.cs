@@ -27,7 +27,7 @@ internal static class MetadataConstraintTranslation
     {
         try
         {
-            return await insert().ConfigureAwait(false);
+            return await DeadlockRetry.RunAsync(insert).ConfigureAwait(false);
         }
         catch (PostgresException pg) when (pg.SqlState == PostgresErrorCodes.UniqueViolation)
         {
@@ -43,7 +43,11 @@ internal static class MetadataConstraintTranslation
     {
         try
         {
-            await insert().ConfigureAwait(false);
+            await DeadlockRetry.RunAsync(async () =>
+            {
+                await insert().ConfigureAwait(false);
+                return true;
+            }).ConfigureAwait(false);
         }
         catch (PostgresException pg) when (pg.SqlState == PostgresErrorCodes.UniqueViolation)
         {

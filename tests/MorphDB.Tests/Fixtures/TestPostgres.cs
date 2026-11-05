@@ -32,6 +32,9 @@ public static class TestPostgres
         new NpgsqlConnectionStringBuilder(container.GetConnectionString())
         {
             Username = ServiceRole,
-            Password = ServicePassword
+            Password = ServicePassword,
+            // A server error carries its detail (a deadlock names the statements involved) so a failure that
+            // shows up once in a full run can be read from its log instead of guessed at.
+            IncludeErrorDetail = true,
         }.ConnectionString;
 }
