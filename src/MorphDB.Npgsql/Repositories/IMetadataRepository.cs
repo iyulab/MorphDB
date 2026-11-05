@@ -1,4 +1,5 @@
 using MorphDB.Core.Models;
+using Npgsql;
 
 namespace MorphDB.Npgsql.Repositories;
 
@@ -11,6 +12,7 @@ public interface IMetadataRepository
 
     Task<TableMetadata> InsertTableAsync(
         TableMetadata table,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default);
 
     Task<TableMetadata?> GetTableByIdAsync(
@@ -33,10 +35,12 @@ public interface IMetadataRepository
         Guid tableId,
         string? logicalName,
         int newVersion,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default);
 
     Task SoftDeleteTableAsync(
         Guid tableId,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default);
 
     #endregion
@@ -45,6 +49,7 @@ public interface IMetadataRepository
 
     Task<ColumnMetadata> InsertColumnAsync(
         ColumnMetadata column,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default);
 
     Task<ColumnMetadata?> GetColumnByIdAsync(
@@ -63,6 +68,7 @@ public interface IMetadataRepository
         Guid columnId,
         string? logicalName,
         string? defaultValue,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default);
 
     Task UpdateColumnMetadataAsync(
@@ -72,10 +78,12 @@ public interface IMetadataRepository
         bool? isNullable,
         bool? isUnique,
         string? checkExpression,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default);
 
     Task SoftDeleteColumnAsync(
         Guid columnId,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default);
 
     #endregion
@@ -84,6 +92,7 @@ public interface IMetadataRepository
 
     Task<IndexMetadata> InsertIndexAsync(
         IndexMetadata index,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default);
 
     Task<IndexMetadata?> GetIndexByIdAsync(
@@ -96,6 +105,7 @@ public interface IMetadataRepository
 
     Task SoftDeleteIndexAsync(
         Guid indexId,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default);
 
     #endregion
@@ -104,6 +114,7 @@ public interface IMetadataRepository
 
     Task<RelationMetadata> InsertRelationAsync(
         RelationMetadata relation,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default);
 
     Task<RelationMetadata?> GetRelationByIdAsync(
@@ -116,6 +127,7 @@ public interface IMetadataRepository
 
     Task SoftDeleteRelationAsync(
         Guid relationId,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default);
 
     #endregion
@@ -124,11 +136,19 @@ public interface IMetadataRepository
 
     Task<int> GetCurrentVersionAsync(
         Guid tableId,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default);
 
     Task IncrementVersionAsync(
         Guid tableId,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default);
 
     #endregion
+
+    /// <summary>
+    /// Empties whatever this repository keeps in memory. A write given a <c>transaction</c> leaves it alone
+    /// — nobody else can see the write yet — so whoever commits that transaction calls this afterwards.
+    /// </summary>
+    void InvalidateCache();
 }

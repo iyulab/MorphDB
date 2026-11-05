@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Dapper;
 using MorphDB.Npgsql.Infrastructure;
+using Npgsql;
 
 namespace MorphDB.Npgsql.Services;
 
@@ -24,6 +25,7 @@ public sealed class ChangeLogger : IChangeLogger
 
     public async Task LogChangeAsync(
         SchemaChangeEntry entry,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default)
     {
         const string sql = """
@@ -35,8 +37,13 @@ public sealed class ChangeLogger : IChangeLogger
 
         var changesJson = JsonSerializer.Serialize(entry.Changes, JsonOptions);
 
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-        await connection.ExecuteAsync(sql, new
+        await using var lease = transaction is null
+            ? new ScopedConnection(await _connections.OpenSystemAsync(cancellationToken), null, ownsConnection: true)
+            : new ScopedConnection(
+                transaction.Connection ?? throw new InvalidOperationException("The transaction has already ended."),
+                transaction,
+                ownsConnection: false);
+        await lease.Connection.ExecuteAsync(sql, new
         {
             entry.ChangeId,
             entry.TableId,
@@ -45,7 +52,7 @@ public sealed class ChangeLogger : IChangeLogger
             Changes = changesJson,
             entry.PerformedBy,
             entry.PerformedAt
-        });
+        }, transaction);
     }
 
     public async Task<IReadOnlyList<SchemaChangeEntry>> GetHistoryAsync(

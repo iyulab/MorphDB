@@ -35,7 +35,7 @@ public class MetadataRepositoryTests
         };
 
         // Act
-        var result = await _repository.InsertTableAsync(table, TestContext.Current.CancellationToken);
+        var result = await _repository.InsertTableAsync(table, cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().NotBeNull();
@@ -57,7 +57,7 @@ public class MetadataRepositoryTests
             PhysicalName = "t_" + Guid.NewGuid().ToString("N")[..16],
             SchemaVersion = 1
         };
-        await _repository.InsertTableAsync(table, TestContext.Current.CancellationToken);
+        await _repository.InsertTableAsync(table, cancellationToken: TestContext.Current.CancellationToken);
 
         // Act
         var result = await _repository.GetTableByIdAsync(table.TableId, cancellationToken: TestContext.Current.CancellationToken);
@@ -91,7 +91,7 @@ public class MetadataRepositoryTests
             PhysicalName = "t_" + Guid.NewGuid().ToString("N")[..16],
             SchemaVersion = 1
         };
-        await _repository.InsertTableAsync(table, TestContext.Current.CancellationToken);
+        await _repository.InsertTableAsync(table, cancellationToken: TestContext.Current.CancellationToken);
 
         // Act
         var result = await _repository.GetTableByNameAsync(projectId, table.LogicalName, cancellationToken: TestContext.Current.CancellationToken);
@@ -113,10 +113,10 @@ public class MetadataRepositoryTests
             PhysicalName = "t_" + Guid.NewGuid().ToString("N")[..16],
             SchemaVersion = 1
         };
-        await _repository.InsertTableAsync(table, TestContext.Current.CancellationToken);
+        await _repository.InsertTableAsync(table, cancellationToken: TestContext.Current.CancellationToken);
 
         // Act
-        await _repository.SoftDeleteTableAsync(table.TableId, TestContext.Current.CancellationToken);
+        await _repository.SoftDeleteTableAsync(table.TableId, cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
         var result = await _repository.GetTableByIdAsync(table.TableId, cancellationToken: TestContext.Current.CancellationToken);
@@ -139,7 +139,7 @@ public class MetadataRepositoryTests
             PhysicalName = "t_" + Guid.NewGuid().ToString("N")[..16],
             SchemaVersion = 1
         };
-        await _repository.InsertTableAsync(table, TestContext.Current.CancellationToken);
+        await _repository.InsertTableAsync(table, cancellationToken: TestContext.Current.CancellationToken);
 
         var column = new ColumnMetadata
         {
@@ -154,7 +154,7 @@ public class MetadataRepositoryTests
         };
 
         // Act
-        var result = await _repository.InsertColumnAsync(column, TestContext.Current.CancellationToken);
+        var result = await _repository.InsertColumnAsync(column, cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().NotBeNull();
@@ -175,7 +175,7 @@ public class MetadataRepositoryTests
             PhysicalName = "t_" + Guid.NewGuid().ToString("N")[..16],
             SchemaVersion = 1
         };
-        await _repository.InsertTableAsync(table, TestContext.Current.CancellationToken);
+        await _repository.InsertTableAsync(table, cancellationToken: TestContext.Current.CancellationToken);
 
         var column1 = new ColumnMetadata
         {
@@ -199,8 +199,8 @@ public class MetadataRepositoryTests
             OrdinalPosition = 2
         };
 
-        await _repository.InsertColumnAsync(column1, TestContext.Current.CancellationToken);
-        await _repository.InsertColumnAsync(column2, TestContext.Current.CancellationToken);
+        await _repository.InsertColumnAsync(column1, cancellationToken: TestContext.Current.CancellationToken);
+        await _repository.InsertColumnAsync(column2, cancellationToken: TestContext.Current.CancellationToken);
 
         // Act
         var columns = await _repository.GetColumnsByTableIdAsync(table.TableId, TestContext.Current.CancellationToken);
@@ -223,7 +223,7 @@ public class MetadataRepositoryTests
             PhysicalName = "t_" + Guid.NewGuid().ToString("N")[..16],
             SchemaVersion = 1
         };
-        await _repository.InsertTableAsync(table, TestContext.Current.CancellationToken);
+        await _repository.InsertTableAsync(table, cancellationToken: TestContext.Current.CancellationToken);
 
         var column = new ColumnMetadata
         {
@@ -235,7 +235,7 @@ public class MetadataRepositoryTests
             NativeType = "TEXT",
             OrdinalPosition = 1
         };
-        await _repository.InsertColumnAsync(column, TestContext.Current.CancellationToken);
+        await _repository.InsertColumnAsync(column, cancellationToken: TestContext.Current.CancellationToken);
 
         // Act
         var nextPosition = await _repository.GetNextOrdinalPositionAsync(table.TableId, TestContext.Current.CancellationToken);
@@ -260,7 +260,7 @@ public class MetadataRepositoryTests
             PhysicalName = "t_" + Guid.NewGuid().ToString("N")[..16],
             SchemaVersion = 1
         };
-        await _repository.InsertTableAsync(table, TestContext.Current.CancellationToken);
+        await _repository.InsertTableAsync(table, cancellationToken: TestContext.Current.CancellationToken);
 
         var column = new ColumnMetadata
         {
@@ -272,7 +272,7 @@ public class MetadataRepositoryTests
             NativeType = "TEXT",
             OrdinalPosition = 1
         };
-        await _repository.InsertColumnAsync(column, TestContext.Current.CancellationToken);
+        await _repository.InsertColumnAsync(column, cancellationToken: TestContext.Current.CancellationToken);
 
         var index = new IndexMetadata
         {
@@ -296,7 +296,7 @@ public class MetadataRepositoryTests
         };
 
         // Act
-        var result = await _repository.InsertIndexAsync(index, TestContext.Current.CancellationToken);
+        var result = await _repository.InsertIndexAsync(index, cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
         result.Should().NotBeNull();
@@ -317,7 +317,7 @@ public class MetadataRepositoryTests
             PhysicalName = "t_" + Guid.NewGuid().ToString("N")[..16],
             SchemaVersion = 1
         };
-        await _repository.InsertTableAsync(table, TestContext.Current.CancellationToken);
+        await _repository.InsertTableAsync(table, cancellationToken: TestContext.Current.CancellationToken);
 
         var column = new ColumnMetadata
         {
@@ -329,7 +329,7 @@ public class MetadataRepositoryTests
             NativeType = "TEXT",
             OrdinalPosition = 1
         };
-        await _repository.InsertColumnAsync(column, TestContext.Current.CancellationToken);
+        await _repository.InsertColumnAsync(column, cancellationToken: TestContext.Current.CancellationToken);
 
         var index = new IndexMetadata
         {
@@ -351,7 +351,7 @@ public class MetadataRepositoryTests
             IndexType = IndexType.BTree,
             IsUnique = false
         };
-        await _repository.InsertIndexAsync(index, TestContext.Current.CancellationToken);
+        await _repository.InsertIndexAsync(index, cancellationToken: TestContext.Current.CancellationToken);
 
         // Act
         var indexes = await _repository.GetIndexesByTableIdAsync(table.TableId, TestContext.Current.CancellationToken);
@@ -376,11 +376,11 @@ public class MetadataRepositoryTests
             PhysicalName = "t_" + Guid.NewGuid().ToString("N")[..16],
             SchemaVersion = 1
         };
-        await _repository.InsertTableAsync(table, TestContext.Current.CancellationToken);
+        await _repository.InsertTableAsync(table, cancellationToken: TestContext.Current.CancellationToken);
 
         // Act
-        await _repository.IncrementVersionAsync(table.TableId, TestContext.Current.CancellationToken);
-        var version = await _repository.GetCurrentVersionAsync(table.TableId, TestContext.Current.CancellationToken);
+        await _repository.IncrementVersionAsync(table.TableId, cancellationToken: TestContext.Current.CancellationToken);
+        var version = await _repository.GetCurrentVersionAsync(table.TableId, cancellationToken: TestContext.Current.CancellationToken);
 
         // Assert
         version.Should().Be(2);

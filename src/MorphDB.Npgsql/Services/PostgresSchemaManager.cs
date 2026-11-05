@@ -61,23 +61,44 @@ public sealed class PostgresSchemaManager : ISchemaManager
         CancellationToken cancellationToken = default)
     {
         LogicalNameValidator.ValidateEntityName(request.LogicalName, "Table");
-
-        // Check if table already exists
-        var existing = await _repository.GetTableByNameAsync(
-            request.ProjectId, request.LogicalName, cancellationToken: cancellationToken);
-        if (existing is not null)
-        {
-            throw new DuplicateNameException("Table", request.LogicalName);
-        }
+        await EnsureTableNameFreeAsync(request.ProjectId, request.LogicalName, cancellationToken);
 
         var tableId = Guid.NewGuid();
-        var physicalTableName = _nameHasher.GenerateTableName(request.ProjectId, request.LogicalName);
 
         // Acquire advisory lock for DDL
         await using var lockHandle = await _lockManager.AcquireDdlLockAsync(
             $"table:{tableId}",
             _options.LockTimeout,
             cancellationToken);
+
+        var plan = PlanTable(request, tableId);
+        return await InUnitAsync(
+            (connection, transaction) => ApplyTableAsync(plan, connection, transaction, cancellationToken),
+            cancellationToken);
+    }
+
+    private async Task EnsureTableNameFreeAsync(Guid projectId, string logicalName, CancellationToken cancellationToken)
+    {
+        var existing = await _repository.GetTableByNameAsync(projectId, logicalName, cancellationToken: cancellationToken);
+        if (existing is not null)
+        {
+            throw new DuplicateNameException("Table", logicalName);
+        }
+    }
+
+    /// <summary>
+    /// What a table is made of -- its description, its columns and the definitions the DDL builds them from --
+    /// worked out from the request alone, before anything is written.
+    /// </summary>
+    private sealed record TablePlan(
+        TableMetadata Table,
+        List<ColumnMetadata> Columns,
+        List<ColumnDefinition> ColumnDefinitions,
+        SystemColumnOptions SystemColumns);
+
+    private TablePlan PlanTable(CreateTableRequest request, Guid tableId)
+    {
+        var physicalTableName = _nameHasher.GenerateTableName(request.ProjectId, request.LogicalName);
 
         // Build column metadata
         var columns = new List<ColumnMetadata>();
@@ -266,120 +287,128 @@ public sealed class PostgresSchemaManager : ISchemaManager
             RowStateEnabled = sysOpts.RowStateEnabled
         };
 
-        // Execute DDL and insert metadata in a transaction
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-
-        try
-        {
-            // Create physical table
-            var createTableSql = DdlBuilder.BuildCreateTable(physicalTableName, columnDefinitions);
-            await connection.ExecuteAsync(new CommandDefinition(createTableSql, transaction: transaction, cancellationToken: cancellationToken));
-
-            // Create project_id index for RLS performance
-            var projectIndexSql = DdlBuilder.BuildCreateIndex(new IndexDefinition
-            {
-                PhysicalName = $"idx_{physicalTableName}_project",
-                TablePhysicalName = physicalTableName,
-                Columns = [new IndexColumnInfo { ColumnId = projectColumn.ColumnId, LogicalName = projectColumn.LogicalName, PhysicalName = projectColumn.PhysicalName }],
-                IndexType = IndexType.BTree
-            });
-            await connection.ExecuteAsync(new CommandDefinition(projectIndexSql, transaction: transaction, cancellationToken: cancellationToken));
-
-            // Create unique/indexed columns
-            foreach (var col in columns.Where(c => c.IsUnique && !c.IsPrimaryKey))
-            {
-                var uniqueConstraintSql = DdlBuilder.BuildAddUniqueConstraint(
-                    physicalTableName,
-                    $"uq_{physicalTableName}_{col.PhysicalName}",
-                    col.PhysicalName,
-                    overActiveRowsOnly: sysOpts.SoftDeleteEnabled);
-                await connection.ExecuteAsync(new CommandDefinition(uniqueConstraintSql, transaction: transaction, cancellationToken: cancellationToken));
-            }
-
-            foreach (var col in columns.Where(c => c.IsIndexed && !c.IsPrimaryKey && !c.IsUnique))
-            {
-                var indexSql = DdlBuilder.BuildCreateIndex(new IndexDefinition
-                {
-                    PhysicalName = $"idx_{physicalTableName}_{col.PhysicalName}",
-                    TablePhysicalName = physicalTableName,
-                    Columns = [new IndexColumnInfo { ColumnId = col.ColumnId, LogicalName = col.LogicalName, PhysicalName = col.PhysicalName }],
-                    IndexType = TypeMapper.GetRecommendedIndexType(col.DataType)
-                });
-                await connection.ExecuteAsync(new CommandDefinition(indexSql, transaction: transaction, cancellationToken: cancellationToken));
-            }
-
-            // Lookup, rollup and formula columns are checked by planning the read that computes them,
-            // before the table exists for anyone: one that cannot run refuses the whole declaration.
-            await Query.TableSource.VerifyAsync(
-                connection, transaction, tableMetadata, _lookupResolver, _rollupResolver, _formulaResolver, cancellationToken);
-
-            await transaction.CommitAsync(cancellationToken);
-        }
-        catch (PostgresException ex)
-        {
-            await transaction.RollbackAsync(cancellationToken);
-            throw new SchemaException("DDL_EXECUTION_FAILED", $"DDL execution failed: {ex.MessageText}", ex);
-        }
-        catch
-        {
-            await transaction.RollbackAsync(cancellationToken);
-            throw;
-        }
-
-        // The physical table is committed; its metadata follows as separate statements, so a failure
-        // from here on would leave a table nobody can see -- and its name could not be created again.
-        // Whatever fails, the table this call just built is taken down again before the failure is thrown.
-        try
-        {
-            // Insert metadata (after DDL success)
-            var insertedTable = await _repository.InsertTableAsync(tableMetadata, cancellationToken);
-            foreach (var column in columns)
-            {
-                await _repository.InsertColumnAsync(column, cancellationToken);
-            }
-
-            // Log change
-            await _changeLogger.LogChangeAsync(new SchemaChangeEntry
-            {
-                TableId = tableId,
-                Operation = SchemaOperation.CreateTable,
-                SchemaVersion = 1,
-                Changes = new
-                {
-                    LogicalName = request.LogicalName,
-                    ColumnCount = columns.Count
-                }
-            }, cancellationToken);
-
-            // The inserted row read back carries everything the table was created with (its system
-            // column options are restored from the descriptor); only the columns are inserted separately.
-            return insertedTable with { Columns = columns };
-        }
-        catch
-        {
-            await TakeDownUnregisteredTableAsync(tableId, physicalTableName);
-            throw;
-        }
+        return new TablePlan(tableMetadata, columns, columnDefinitions, sysOpts);
     }
 
     /// <summary>
-    /// Removes the physical table a failed <see cref="CreateTableAsync"/> built, and any metadata it had
-    /// already written, so the name can be created again. Best effort: the failure that got us here is the
-    /// one the caller must see, so a failure of this clean-up does not replace it. Runs to completion even
-    /// when the request was cancelled.
+    /// Builds the physical table and writes everything that describes it, on the transaction given: the
+    /// table does not exist for anyone until the description does, and neither exists if either fails.
     /// </summary>
-    private async Task TakeDownUnregisteredTableAsync(Guid tableId, string physicalTableName)
+    private async Task<TableMetadata> ApplyTableAsync(
+        TablePlan plan,
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        var (tableMetadata, columns, columnDefinitions, sysOpts) = plan;
+        var physicalTableName = tableMetadata.PhysicalName;
+        var projectColumn = columns.First(c => c.LogicalName == SystemColumns.ProjectId);
+
+        // Create physical table
+        await ExecuteDdlAsync(connection, transaction, DdlBuilder.BuildCreateTable(physicalTableName, columnDefinitions), cancellationToken);
+
+        // Create project_id index for RLS performance
+        await ExecuteDdlAsync(connection, transaction, DdlBuilder.BuildCreateIndex(new IndexDefinition
+        {
+            PhysicalName = $"idx_{physicalTableName}_project",
+            TablePhysicalName = physicalTableName,
+            Columns = [new IndexColumnInfo { ColumnId = projectColumn.ColumnId, LogicalName = projectColumn.LogicalName, PhysicalName = projectColumn.PhysicalName }],
+            IndexType = IndexType.BTree
+        }), cancellationToken);
+
+        // Create unique/indexed columns
+        foreach (var col in columns.Where(c => c.IsUnique && !c.IsPrimaryKey))
+        {
+            await ExecuteDdlAsync(connection, transaction, DdlBuilder.BuildAddUniqueConstraint(
+                physicalTableName,
+                $"uq_{physicalTableName}_{col.PhysicalName}",
+                col.PhysicalName,
+                overActiveRowsOnly: sysOpts.SoftDeleteEnabled), cancellationToken);
+        }
+
+        foreach (var col in columns.Where(c => c.IsIndexed && !c.IsPrimaryKey && !c.IsUnique))
+        {
+            await ExecuteDdlAsync(connection, transaction, DdlBuilder.BuildCreateIndex(new IndexDefinition
+            {
+                PhysicalName = $"idx_{physicalTableName}_{col.PhysicalName}",
+                TablePhysicalName = physicalTableName,
+                Columns = [new IndexColumnInfo { ColumnId = col.ColumnId, LogicalName = col.LogicalName, PhysicalName = col.PhysicalName }],
+                IndexType = TypeMapper.GetRecommendedIndexType(col.DataType)
+            }), cancellationToken);
+        }
+
+        // Lookup, rollup and formula columns are checked by planning the read that computes them,
+        // before the table exists for anyone: one that cannot run refuses the whole declaration.
+        await Query.TableSource.VerifyAsync(
+            connection, transaction, tableMetadata, _lookupResolver, _rollupResolver, _formulaResolver, cancellationToken);
+
+        // Insert metadata
+        var insertedTable = await _repository.InsertTableAsync(tableMetadata, transaction, cancellationToken);
+        foreach (var column in columns)
+        {
+            await _repository.InsertColumnAsync(column, transaction, cancellationToken);
+        }
+
+        // Log change
+        await _changeLogger.LogChangeAsync(new SchemaChangeEntry
+        {
+            TableId = tableMetadata.TableId,
+            Operation = SchemaOperation.CreateTable,
+            SchemaVersion = 1,
+            Changes = new
+            {
+                LogicalName = tableMetadata.LogicalName,
+                ColumnCount = columns.Count
+            }
+        }, transaction, cancellationToken);
+
+        // The inserted row read back carries everything the table was created with (its system
+        // column options are restored from the descriptor); only the columns are inserted separately.
+        return insertedTable with { Columns = columns };
+    }
+
+    /// <summary>
+    /// Runs a schema change -- the physical statements and the writes that describe them -- as one
+    /// transaction. A schema change that leaves one without the other is a column, index or table that
+    /// nothing describes or a description of something that is not there, and the same request could then
+    /// never be made again. A deadlock victim is the whole transaction, nothing of it survived, so the
+    /// whole change is run again.
+    /// </summary>
+    private async Task<T> InUnitAsync<T>(
+        Func<NpgsqlConnection, NpgsqlTransaction, Task<T>> change,
+        CancellationToken cancellationToken)
+    {
+        var result = await DeadlockRetry.RunAsync(async () =>
+        {
+            await using var connection = await _connections.OpenSystemAsync(cancellationToken);
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+            var value = await change(connection, transaction);
+            await transaction.CommitAsync(cancellationToken);
+            return value;
+        });
+
+        // Committed: only now can anyone else see the change, so only now is what is kept in memory out of date.
+        _repository.InvalidateCache();
+        return result;
+    }
+
+    /// <summary>
+    /// One DDL statement of a schema change. What PostgreSQL refuses is reported as the change's failure;
+    /// a deadlock or a serialization failure is left as it is for <see cref="InUnitAsync{T}"/> to run again.
+    /// </summary>
+    private static async Task ExecuteDdlAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        string sql,
+        CancellationToken cancellationToken)
     {
         try
         {
-            await using var connection = await _connections.OpenSystemAsync(CancellationToken.None);
-            await connection.ExecuteAsync(new CommandDefinition(DdlBuilder.BuildDropTable(physicalTableName), cancellationToken: CancellationToken.None));
-            await _repository.SoftDeleteTableAsync(tableId, CancellationToken.None);
+            await connection.ExecuteAsync(new CommandDefinition(sql, transaction: transaction, cancellationToken: cancellationToken));
         }
-        catch (Exception)
+        catch (PostgresException ex) when (ex.SqlState is not (PostgresErrorCodes.DeadlockDetected or PostgresErrorCodes.SerializationFailure))
         {
-            // The original failure is rethrown by the caller; there is nothing more to do here.
+            throw new SchemaException("DDL_EXECUTION_FAILED", $"DDL execution failed: {ex.MessageText}", ex);
         }
     }
 
@@ -413,7 +442,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
             ?? throw new TableNotFoundException(request.TableId.ToString());
 
         // Optimistic concurrency check
-        var currentVersion = await _repository.GetCurrentVersionAsync(request.TableId, cancellationToken);
+        var currentVersion = await _repository.GetCurrentVersionAsync(request.TableId, cancellationToken: cancellationToken);
         if (currentVersion != request.ExpectedVersion)
         {
             throw new SchemaVersionConflictException(request.ExpectedVersion, currentVersion);
@@ -433,7 +462,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         }
 
         var newVersion = currentVersion + 1;
-        await _repository.UpdateTableAsync(request.TableId, request.LogicalName, newVersion, cancellationToken);
+        await _repository.UpdateTableAsync(request.TableId, request.LogicalName, newVersion, cancellationToken: cancellationToken);
 
         // Log change
         await _changeLogger.LogChangeAsync(new SchemaChangeEntry
@@ -446,7 +475,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
                 OldLogicalName = table.LogicalName,
                 NewLogicalName = request.LogicalName ?? table.LogicalName
             }
-        }, cancellationToken);
+        }, cancellationToken: cancellationToken);
 
         return (await _repository.GetTableByIdAsync(request.TableId, includeColumns: true, cancellationToken))!;
     }
@@ -464,7 +493,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
             _options.LockTimeout,
             cancellationToken);
 
-        var currentVersion = await _repository.GetCurrentVersionAsync(tableId, cancellationToken);
+        var currentVersion = await _repository.GetCurrentVersionAsync(tableId, cancellationToken: cancellationToken);
 
         // Execute DDL
         await using var connection = await _connections.OpenSystemAsync(cancellationToken);
@@ -487,7 +516,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         }
 
         // Soft delete metadata
-        await _repository.SoftDeleteTableAsync(tableId, cancellationToken);
+        await _repository.SoftDeleteTableAsync(tableId, cancellationToken: cancellationToken);
 
         // Log change
         await _changeLogger.LogChangeAsync(new SchemaChangeEntry
@@ -499,7 +528,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
             {
                 LogicalName = table.LogicalName
             }
-        }, cancellationToken);
+        }, cancellationToken: cancellationToken);
     }
 
     #endregion
@@ -522,7 +551,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         }
 
         // Optimistic concurrency check
-        var currentVersion = await _repository.GetCurrentVersionAsync(request.TableId, cancellationToken);
+        var currentVersion = await _repository.GetCurrentVersionAsync(request.TableId, cancellationToken: cancellationToken);
         if (currentVersion != request.ExpectedVersion)
         {
             throw new SchemaVersionConflictException(request.ExpectedVersion, currentVersion);
@@ -579,10 +608,11 @@ public sealed class PostgresSchemaManager : ISchemaManager
             FormulaConfig = request.FormulaConfig
         };
 
-        // Only execute DDL for physical columns
+        // Only a physical column has DDL
+        ColumnDefinition? columnDef = null;
         if (!isVirtualColumn)
         {
-            var columnDef = ColumnDefinition.FromMetadata(column);
+            columnDef = ColumnDefinition.FromMetadata(column);
 
             // Virtual constraint: declaration gate only, nothing reaches DDL (see CreateTableAsync).
             if (columnDef.CheckExpression is not null)
@@ -591,80 +621,65 @@ public sealed class PostgresSchemaManager : ISchemaManager
                 Infrastructure.CheckGrammar.EnsureFieldsExist(
                     columnDef.CheckExpression, table.Columns.Select(c => c.LogicalName).Append(request.LogicalName));
             }
+        }
 
-            await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-
-            try
+        // The physical column, its description, the version the table moves to and the log entry are one
+        // change: a column added whose description cannot be written is taken back with it.
+        return await InUnitAsync(async (connection, transaction) =>
+        {
+            if (columnDef is not null)
             {
-                var addColumnSql = DdlBuilder.BuildAddColumn(table.PhysicalName, columnDef);
-                await connection.ExecuteAsync(new CommandDefinition(addColumnSql, transaction: transaction, cancellationToken: cancellationToken));
+                await ExecuteDdlAsync(connection, transaction, DdlBuilder.BuildAddColumn(table.PhysicalName, columnDef), cancellationToken);
 
                 if (request.IsUnique)
                 {
-                    var uniqueSql = DdlBuilder.BuildAddUniqueConstraint(
+                    await ExecuteDdlAsync(connection, transaction, DdlBuilder.BuildAddUniqueConstraint(
                         table.PhysicalName,
                         $"uq_{table.PhysicalName}_{physicalColName}",
                         physicalColName,
-                        overActiveRowsOnly: table.SoftDeleteEnabled);
-                    await connection.ExecuteAsync(new CommandDefinition(uniqueSql, transaction: transaction, cancellationToken: cancellationToken));
+                        overActiveRowsOnly: table.SoftDeleteEnabled), cancellationToken);
                 }
 
                 if (request.IsIndexed && !request.IsUnique)
                 {
-                    var indexSql = DdlBuilder.BuildCreateIndex(new IndexDefinition
+                    await ExecuteDdlAsync(connection, transaction, DdlBuilder.BuildCreateIndex(new IndexDefinition
                     {
                         PhysicalName = $"idx_{table.PhysicalName}_{physicalColName}",
                         TablePhysicalName = table.PhysicalName,
                         Columns = [new IndexColumnInfo { ColumnId = columnId, LogicalName = request.LogicalName, PhysicalName = physicalColName }],
                         IndexType = TypeMapper.GetRecommendedIndexType(request.DataType)
-                    });
-                    await connection.ExecuteAsync(new CommandDefinition(indexSql, transaction: transaction, cancellationToken: cancellationToken));
+                    }), cancellationToken);
                 }
-
-                await transaction.CommitAsync(cancellationToken);
             }
-            catch (PostgresException ex)
+            else
             {
-                await transaction.RollbackAsync(cancellationToken);
-                throw new SchemaException("DDL_EXECUTION_FAILED", $"DDL execution failed: {ex.MessageText}", ex);
+                // Checked by planning the read that would compute it, with the column in place.
+                var declared = table with { Columns = [.. table.Columns, column] };
+                await Query.TableSource.VerifyAsync(
+                    connection, transaction, declared, _lookupResolver, _rollupResolver, _formulaResolver, cancellationToken);
             }
-            catch
+
+            // Insert metadata and increment version
+            var insertedColumn = await _repository.InsertColumnAsync(column, transaction, cancellationToken);
+            await _repository.IncrementVersionAsync(request.TableId, transaction, cancellationToken);
+
+            // Log change
+            await _changeLogger.LogChangeAsync(new SchemaChangeEntry
             {
-                await transaction.RollbackAsync(cancellationToken);
-                throw;
-            }
-        }
+                TableId = request.TableId,
+                Operation = SchemaOperation.AddColumn,
+                SchemaVersion = currentVersion + 1,
+                Changes = new
+                {
+                    ColumnId = insertedColumn.ColumnId,
+                    column.LogicalName,
+                    DataType = request.DataType.ToString(),
+                    IsVirtual = isVirtualColumn
+                }
+            }, transaction, cancellationToken);
 
-        if (isVirtualColumn)
-        {
-            // Checked by planning the read that would compute it, with the column in place.
-            var declared = table with { Columns = [.. table.Columns, column] };
-            await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-            await Query.TableSource.VerifyAsync(
-                connection, null, declared, _lookupResolver, _rollupResolver, _formulaResolver, cancellationToken);
-        }
-
-        // Insert metadata and increment version
-        var insertedColumn = await _repository.InsertColumnAsync(column, cancellationToken);
-        await _repository.IncrementVersionAsync(request.TableId, cancellationToken);
-
-        // Log change
-        await _changeLogger.LogChangeAsync(new SchemaChangeEntry
-        {
-            TableId = request.TableId,
-            Operation = SchemaOperation.AddColumn,
-            SchemaVersion = currentVersion + 1,
-            Changes = new
-            {
-                ColumnId = insertedColumn.ColumnId,
-                column.LogicalName,
-                DataType = request.DataType.ToString(),
-                IsVirtual = isVirtualColumn
-            }
+            return insertedColumn;
         }, cancellationToken);
-
-        return insertedColumn;
     }
 
     public async Task<ColumnMetadata> UpdateColumnAsync(
@@ -696,7 +711,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         }
 
         // Optimistic concurrency check
-        var currentVersion = await _repository.GetCurrentVersionAsync(column.TableId, cancellationToken);
+        var currentVersion = await _repository.GetCurrentVersionAsync(column.TableId, cancellationToken: cancellationToken);
         if (currentVersion != request.ExpectedVersion)
         {
             throw new SchemaVersionConflictException(request.ExpectedVersion, currentVersion);
@@ -715,7 +730,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         }
         else
         {
-            await _repository.UpdateColumnAsync(request.ColumnId, request.LogicalName, request.DefaultValue, cancellationToken);
+            await _repository.UpdateColumnAsync(request.ColumnId, request.LogicalName, request.DefaultValue, cancellationToken: cancellationToken);
         }
 
         // Apply DDL changes for type/constraint modifications
@@ -745,10 +760,10 @@ public sealed class PostgresSchemaManager : ISchemaManager
             await _repository.UpdateColumnMetadataAsync(
                 request.ColumnId, newDataType, newNativeType,
                 request.IsNullable, request.IsUnique,
-                request.CheckExpression, cancellationToken);
+                request.CheckExpression, cancellationToken: cancellationToken);
         }
 
-        await _repository.IncrementVersionAsync(column.TableId, cancellationToken);
+        await _repository.IncrementVersionAsync(column.TableId, cancellationToken: cancellationToken);
 
         // Log change
         await _changeLogger.LogChangeAsync(new SchemaChangeEntry
@@ -769,7 +784,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
                 NewIsUnique = request.IsUnique,
                 NewCheckExpression = request.CheckExpression
             }
-        }, cancellationToken);
+        }, cancellationToken: cancellationToken);
 
         return (await _repository.GetColumnByIdAsync(request.ColumnId, cancellationToken))!;
     }
@@ -875,7 +890,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         }
 
         // Optimistic concurrency check
-        var currentVersion = await _repository.GetCurrentVersionAsync(column.TableId, cancellationToken);
+        var currentVersion = await _repository.GetCurrentVersionAsync(column.TableId, cancellationToken: cancellationToken);
         if (currentVersion != request.ExpectedVersion)
         {
             throw new SchemaVersionConflictException(request.ExpectedVersion, currentVersion);
@@ -896,7 +911,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
         await RenameColumnWithPoliciesAsync(
             table, column, request.NewLogicalName, newPhysicalName, defaultValue: null, cancellationToken);
 
-        await _repository.IncrementVersionAsync(column.TableId, cancellationToken);
+        await _repository.IncrementVersionAsync(column.TableId, cancellationToken: cancellationToken);
 
         // Log change
         await _changeLogger.LogChangeAsync(new SchemaChangeEntry
@@ -910,7 +925,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
                 OldLogicalName = column.LogicalName,
                 NewLogicalName = request.NewLogicalName
             }
-        }, cancellationToken);
+        }, cancellationToken: cancellationToken);
 
         return (await _repository.GetColumnByIdAsync(request.ColumnId, cancellationToken))!;
     }
@@ -980,7 +995,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
             _options.LockTimeout,
             cancellationToken);
 
-        var currentVersion = await _repository.GetCurrentVersionAsync(column.TableId, cancellationToken);
+        var currentVersion = await _repository.GetCurrentVersionAsync(column.TableId, cancellationToken: cancellationToken);
 
         // Execute DDL
         await using var connection = await _connections.OpenSystemAsync(cancellationToken);
@@ -1003,8 +1018,8 @@ public sealed class PostgresSchemaManager : ISchemaManager
         }
 
         // Soft delete metadata
-        await _repository.SoftDeleteColumnAsync(columnId, cancellationToken);
-        await _repository.IncrementVersionAsync(column.TableId, cancellationToken);
+        await _repository.SoftDeleteColumnAsync(columnId, cancellationToken: cancellationToken);
+        await _repository.IncrementVersionAsync(column.TableId, cancellationToken: cancellationToken);
 
         // Log change
         await _changeLogger.LogChangeAsync(new SchemaChangeEntry
@@ -1017,7 +1032,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
                 ColumnId = columnId,
                 column.LogicalName
             }
-        }, cancellationToken);
+        }, cancellationToken: cancellationToken);
     }
 
     #endregion
@@ -1033,7 +1048,22 @@ public sealed class PostgresSchemaManager : ISchemaManager
         var table = await _repository.GetTableByIdAsync(request.TableId, includeColumns: true, cancellationToken)
             ?? throw new TableNotFoundException(request.TableId.ToString());
 
-        // Validate columns exist
+        var indexColumns = ResolveIndexColumns(request, table);
+
+        // Acquire advisory lock
+        await using var lockHandle = await _lockManager.AcquireDdlLockAsync(
+            $"table:{request.TableId}",
+            _options.LockTimeout,
+            cancellationToken);
+
+        return await InUnitAsync(
+            (connection, transaction) => CreateIndexInAsync(request, table, indexColumns, connection, transaction, cancellationToken),
+            cancellationToken);
+    }
+
+    /// <summary>The columns an index is declared over, each of them a column of <paramref name="table"/>.</summary>
+    private static List<IndexColumnInfo> ResolveIndexColumns(CreateIndexRequest request, TableMetadata table)
+    {
         var indexColumns = new List<IndexColumnInfo>();
         foreach (var colId in request.ColumnIds)
         {
@@ -1048,12 +1078,21 @@ public sealed class PostgresSchemaManager : ISchemaManager
             });
         }
 
-        // Acquire advisory lock
-        await using var lockHandle = await _lockManager.AcquireDdlLockAsync(
-            $"table:{request.TableId}",
-            _options.LockTimeout,
-            cancellationToken);
+        return indexColumns;
+    }
 
+    /// <summary>
+    /// Builds an index and writes its description, on the transaction given. The table is passed in rather
+    /// than read: it may be one the same transaction created, which nobody else can see yet.
+    /// </summary>
+    private async Task<IndexMetadata> CreateIndexInAsync(
+        CreateIndexRequest request,
+        TableMetadata table,
+        IReadOnlyList<IndexColumnInfo> indexColumns,
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        CancellationToken cancellationToken)
+    {
         var indexId = Guid.NewGuid();
         var physicalIndexName = _nameHasher.GenerateIndexName(request.TableId, request.LogicalName);
 
@@ -1071,7 +1110,6 @@ public sealed class PostgresSchemaManager : ISchemaManager
         };
 
         // Execute DDL
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
         var createIndexSql = DdlBuilder.BuildCreateIndex(new IndexDefinition
         {
             PhysicalName = physicalIndexName,
@@ -1085,13 +1123,13 @@ public sealed class PostgresSchemaManager : ISchemaManager
             "The index definition",
             "a predicate may use only the table's own columns, written as the table's own reads name them -- unquoted -- "
             + "and only functions PostgreSQL marks immutable.",
-            () => connection.ExecuteAsync(new CommandDefinition(createIndexSql, cancellationToken: cancellationToken)));
+            () => connection.ExecuteAsync(new CommandDefinition(createIndexSql, transaction: transaction, cancellationToken: cancellationToken)));
 
         // Insert metadata and increment version
-        var insertedIndex = await _repository.InsertIndexAsync(index, cancellationToken);
-        await _repository.IncrementVersionAsync(request.TableId, cancellationToken);
+        var insertedIndex = await _repository.InsertIndexAsync(index, transaction, cancellationToken);
+        await _repository.IncrementVersionAsync(request.TableId, transaction, cancellationToken);
 
-        var newVersion = await _repository.GetCurrentVersionAsync(request.TableId, cancellationToken);
+        var newVersion = await _repository.GetCurrentVersionAsync(request.TableId, transaction, cancellationToken);
 
         // Log change
         await _changeLogger.LogChangeAsync(new SchemaChangeEntry
@@ -1105,7 +1143,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
                 index.PhysicalName,
                 ColumnCount = request.ColumnIds.Count
             }
-        }, cancellationToken);
+        }, transaction, cancellationToken);
 
         return insertedIndex;
     }
@@ -1136,7 +1174,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
             _options.LockTimeout,
             cancellationToken);
 
-        var currentVersion = await _repository.GetCurrentVersionAsync(index.TableId, cancellationToken);
+        var currentVersion = await _repository.GetCurrentVersionAsync(index.TableId, cancellationToken: cancellationToken);
 
         // Execute DDL
         await using var connection = await _connections.OpenSystemAsync(cancellationToken);
@@ -1144,8 +1182,8 @@ public sealed class PostgresSchemaManager : ISchemaManager
         await connection.ExecuteAsync(new CommandDefinition(dropIndexSql, cancellationToken: cancellationToken));
 
         // Soft delete metadata
-        await _repository.SoftDeleteIndexAsync(indexId, cancellationToken);
-        await _repository.IncrementVersionAsync(index.TableId, cancellationToken);
+        await _repository.SoftDeleteIndexAsync(indexId, cancellationToken: cancellationToken);
+        await _repository.IncrementVersionAsync(index.TableId, cancellationToken: cancellationToken);
 
         // Log change
         await _changeLogger.LogChangeAsync(new SchemaChangeEntry
@@ -1158,7 +1196,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
                 index.LogicalName,
                 index.PhysicalName
             }
-        }, cancellationToken);
+        }, cancellationToken: cancellationToken);
     }
 
     #endregion
@@ -1213,102 +1251,109 @@ public sealed class PostgresSchemaManager : ISchemaManager
                 cancellationToken);
 
         var relationId = Guid.NewGuid();
-        Guid? junctionTableId = null;
-        string? junctionTableName = null;
 
-        // For ManyToMany relations, auto-generate junction table
-        if (request.RelationType == RelationType.ManyToMany)
+        // A junction table with its index, the foreign key, the relation's description, the version and the
+        // log entry are one change: whatever is built before a failure is taken back with it.
+        return await InUnitAsync(async (connection, transaction) =>
         {
-            junctionTableName = request.JunctionTableName
-                ?? $"{sourceTable.LogicalName}_{targetTable.LogicalName}";
+            Guid? junctionTableId = null;
+            string? junctionTableName = null;
 
-            var junctionTable = await CreateJunctionTableAsync(
-                request.ProjectId,
-                junctionTableName,
-                sourceTable,
-                targetTable,
-                cancellationToken);
-
-            junctionTableId = junctionTable.TableId;
-        }
-
-        var relation = new RelationMetadata
-        {
-            RelationId = relationId,
-            ProjectId = request.ProjectId,
-            LogicalName = request.LogicalName,
-            SourceTableId = request.SourceTableId,
-            SourceColumnId = request.SourceColumnId,
-            TargetTableId = request.TargetTableId,
-            TargetColumnId = request.TargetColumnId,
-            SourceTableName = sourceTable.LogicalName,
-            SourceColumnName = sourceColumn.LogicalName,
-            TargetTableName = targetTable.LogicalName,
-            TargetColumnName = targetColumn.LogicalName,
-            RelationType = request.RelationType,
-            OnDelete = request.OnDelete,
-            MaxHierarchyDepth = request.MaxHierarchyDepth,
-            JunctionTableId = junctionTableId,
-            JunctionTableName = junctionTableName,
-            // Whether the relation is checked on write is the caller's to say: these were pinned
-            // to true here, so the request's values were discarded and every relation enforced
-            // regardless.
-            EnforceOnWrite = enforceOnWrite,
-            VirtualCascade = request.VirtualCascade,
-            IsActive = true
-        };
-
-        // For non-ManyToMany, create the physical FK. Referential integrity is enforced by the
-        // database — app-layer validation runs ahead of it to translate a caller's mistake into a
-        // 4xx, not to replace the backstop. The option below exists for deployments that manage
-        // constraints out of band, not as the recommended shape.
-        //
-        // A relation that resolves to non-enforcing gets no physical constraint either. Without
-        // this clause EnforceOnWrite would only turn off the layer that answers politely: the
-        // database would still reject the write, so the option would appear to do nothing. It reads
-        // the resolved value rather than the request, so a project default reaches both layers or
-        // neither — the same switch that is otherwise only half thrown.
-        if (request.RelationType != RelationType.ManyToMany
-            && _options.CreatePhysicalForeignKeys
-            && enforceOnWrite)
-        {
-            await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-            var constraintName = $"fk_{sourceTable.PhysicalName}_{sourceColumn.PhysicalName}";
-            var addFkSql = DdlBuilder.BuildAddForeignKey(new ForeignKeyDefinition
+            // For ManyToMany relations, auto-generate junction table
+            if (request.RelationType == RelationType.ManyToMany)
             {
-                ConstraintName = constraintName,
-                SourceTablePhysicalName = sourceTable.PhysicalName,
-                SourceColumnPhysicalName = sourceColumn.PhysicalName,
-                TargetTablePhysicalName = targetTable.PhysicalName,
-                TargetColumnPhysicalName = targetColumn.PhysicalName,
-                OnDelete = request.OnDelete
-            });
-            await connection.ExecuteAsync(new CommandDefinition(addFkSql, cancellationToken: cancellationToken));
-        }
+                junctionTableName = request.JunctionTableName
+                    ?? $"{sourceTable.LogicalName}_{targetTable.LogicalName}";
 
-        // Insert metadata and increment version
-        var insertedRelation = await _repository.InsertRelationAsync(relation, cancellationToken);
-        await _repository.IncrementVersionAsync(request.SourceTableId, cancellationToken);
+                var junctionTable = await CreateJunctionTableAsync(
+                    request.ProjectId,
+                    junctionTableName,
+                    sourceTable,
+                    targetTable,
+                    connection,
+                    transaction,
+                    cancellationToken);
 
-        var newVersion = await _repository.GetCurrentVersionAsync(request.SourceTableId, cancellationToken);
-
-        // Log change
-        await _changeLogger.LogChangeAsync(new SchemaChangeEntry
-        {
-            TableId = request.SourceTableId,
-            Operation = SchemaOperation.CreateRelation,
-            SchemaVersion = newVersion,
-            Changes = new
-            {
-                relation.LogicalName,
-                SourceTable = sourceTable.LogicalName,
-                TargetTable = targetTable.LogicalName,
-                JunctionTable = junctionTableName,
-                IsSelfReferential = relation.IsSelfReferential
+                junctionTableId = junctionTable.TableId;
             }
-        }, cancellationToken);
 
-        return insertedRelation;
+            var relation = new RelationMetadata
+            {
+                RelationId = relationId,
+                ProjectId = request.ProjectId,
+                LogicalName = request.LogicalName,
+                SourceTableId = request.SourceTableId,
+                SourceColumnId = request.SourceColumnId,
+                TargetTableId = request.TargetTableId,
+                TargetColumnId = request.TargetColumnId,
+                SourceTableName = sourceTable.LogicalName,
+                SourceColumnName = sourceColumn.LogicalName,
+                TargetTableName = targetTable.LogicalName,
+                TargetColumnName = targetColumn.LogicalName,
+                RelationType = request.RelationType,
+                OnDelete = request.OnDelete,
+                MaxHierarchyDepth = request.MaxHierarchyDepth,
+                JunctionTableId = junctionTableId,
+                JunctionTableName = junctionTableName,
+                // Whether the relation is checked on write is the caller's to say: these were pinned
+                // to true here, so the request's values were discarded and every relation enforced
+                // regardless.
+                EnforceOnWrite = enforceOnWrite,
+                VirtualCascade = request.VirtualCascade,
+                IsActive = true
+            };
+
+            // For non-ManyToMany, create the physical FK. Referential integrity is enforced by the
+            // database — app-layer validation runs ahead of it to translate a caller's mistake into a
+            // 4xx, not to replace the backstop. The option below exists for deployments that manage
+            // constraints out of band, not as the recommended shape.
+            //
+            // A relation that resolves to non-enforcing gets no physical constraint either. Without
+            // this clause EnforceOnWrite would only turn off the layer that answers politely: the
+            // database would still reject the write, so the option would appear to do nothing. It reads
+            // the resolved value rather than the request, so a project default reaches both layers or
+            // neither — the same switch that is otherwise only half thrown.
+            if (request.RelationType != RelationType.ManyToMany
+                && _options.CreatePhysicalForeignKeys
+                && enforceOnWrite)
+            {
+                var constraintName = $"fk_{sourceTable.PhysicalName}_{sourceColumn.PhysicalName}";
+                var addFkSql = DdlBuilder.BuildAddForeignKey(new ForeignKeyDefinition
+                {
+                    ConstraintName = constraintName,
+                    SourceTablePhysicalName = sourceTable.PhysicalName,
+                    SourceColumnPhysicalName = sourceColumn.PhysicalName,
+                    TargetTablePhysicalName = targetTable.PhysicalName,
+                    TargetColumnPhysicalName = targetColumn.PhysicalName,
+                    OnDelete = request.OnDelete
+                });
+                await connection.ExecuteAsync(new CommandDefinition(addFkSql, transaction: transaction, cancellationToken: cancellationToken));
+            }
+
+            // Insert metadata and increment version
+            var insertedRelation = await _repository.InsertRelationAsync(relation, transaction, cancellationToken);
+            await _repository.IncrementVersionAsync(request.SourceTableId, transaction, cancellationToken);
+
+            var newVersion = await _repository.GetCurrentVersionAsync(request.SourceTableId, transaction, cancellationToken);
+
+            // Log change
+            await _changeLogger.LogChangeAsync(new SchemaChangeEntry
+            {
+                TableId = request.SourceTableId,
+                Operation = SchemaOperation.CreateRelation,
+                SchemaVersion = newVersion,
+                Changes = new
+                {
+                    relation.LogicalName,
+                    SourceTable = sourceTable.LogicalName,
+                    TargetTable = targetTable.LogicalName,
+                    JunctionTable = junctionTableName,
+                    IsSelfReferential = relation.IsSelfReferential
+                }
+            }, transaction, cancellationToken);
+
+            return insertedRelation;
+        }, cancellationToken);
     }
 
     /// <summary>
@@ -1320,6 +1365,8 @@ public sealed class PostgresSchemaManager : ISchemaManager
         string junctionTableName,
         TableMetadata sourceTable,
         TableMetadata targetTable,
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
         CancellationToken cancellationToken)
     {
         // Find the _id columns from source and target tables
@@ -1361,20 +1408,26 @@ public sealed class PostgresSchemaManager : ISchemaManager
             }
         };
 
-        var junctionTable = await CreateTableAsync(junctionTableRequest, cancellationToken);
+        LogicalNameValidator.ValidateEntityName(junctionTableRequest.LogicalName, "Table");
+        await EnsureTableNameFreeAsync(projectId, junctionTableName, cancellationToken);
+
+        // The junction table is made on the caller's transaction, so nobody can see it -- and nothing is
+        // left of it -- unless the relation that needs it is made.
+        var junctionTable = await ApplyTableAsync(PlanTable(junctionTableRequest, Guid.NewGuid()), connection, transaction, cancellationToken);
 
         // Create unique composite index on (source_id, target_id) to prevent duplicates
         var junctionSourceCol = junctionTable.Columns.First(c => c.LogicalName == $"{sourceTable.LogicalName}_id");
         var junctionTargetCol = junctionTable.Columns.First(c => c.LogicalName == $"{targetTable.LogicalName}_id");
 
-        await CreateIndexAsync(new CreateIndexRequest
+        var pairIndex = new CreateIndexRequest
         {
             TableId = junctionTable.TableId,
             LogicalName = $"ux_{junctionTableName}_pair",
             ColumnIds = [junctionSourceCol.ColumnId, junctionTargetCol.ColumnId],
             IsUnique = true,
             IndexType = IndexType.BTree
-        }, cancellationToken);
+        };
+        await CreateIndexInAsync(pairIndex, junctionTable, ResolveIndexColumns(pairIndex, junctionTable), connection, transaction, cancellationToken);
 
         return junctionTable;
     }
@@ -1411,7 +1464,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
             _options.LockTimeout,
             cancellationToken);
 
-        var currentVersion = await _repository.GetCurrentVersionAsync(relation.SourceTableId, cancellationToken);
+        var currentVersion = await _repository.GetCurrentVersionAsync(relation.SourceTableId, cancellationToken: cancellationToken);
 
         // Execute DDL
         var constraintName = $"fk_{sourceTable.PhysicalName}_{sourceColumn.PhysicalName}";
@@ -1420,8 +1473,8 @@ public sealed class PostgresSchemaManager : ISchemaManager
         await connection.ExecuteAsync(new CommandDefinition(dropFkSql, cancellationToken: cancellationToken));
 
         // Soft delete metadata
-        await _repository.SoftDeleteRelationAsync(relationId, cancellationToken);
-        await _repository.IncrementVersionAsync(relation.SourceTableId, cancellationToken);
+        await _repository.SoftDeleteRelationAsync(relationId, cancellationToken: cancellationToken);
+        await _repository.IncrementVersionAsync(relation.SourceTableId, cancellationToken: cancellationToken);
 
         // Log change
         await _changeLogger.LogChangeAsync(new SchemaChangeEntry
@@ -1434,7 +1487,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
                 relation.LogicalName,
                 RelationId = relationId
             }
-        }, cancellationToken);
+        }, cancellationToken: cancellationToken);
     }
 
     #endregion

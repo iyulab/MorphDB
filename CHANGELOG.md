@@ -66,13 +66,21 @@
   no metadata. A deadlock victim's statement changes nothing, so it is now sent again (a few times, with a short wait) — the
   retry PostgreSQL documents for it. Other failures are thrown as before.
 
-- **A table creation that fails after its physical table is built no longer leaves a table nothing describes.** The physical
-  table is created first and its metadata is written afterwards; any failure in between (a deadlock victim, a failing change
-  log) left the table in the database with no metadata, and the same name could not be created again. The creation now takes the
-  table it built down again (and soft-deletes any metadata it had written) before the failure is thrown.
+- **A schema change that fails halfway no longer leaves a table, column, index or foreign key that nothing describes.** Creating
+  a table, adding a column, creating an index and creating a relation (with the junction table of a many-to-many one) built
+  the physical object first and wrote its description afterwards, as separate commits. A failure in between — a deadlock
+  victim, a failing change log — left the object in the database with nothing describing it, and the same request then failed
+  because the name was already there; a process that died in between left it for good. Each of these changes is now one
+  transaction — the physical statements, the description, the version it moves the table to and the change-log entry — so it
+  happens whole or not at all, and a deadlock victim runs the whole change again.
 
 ### Changed
 
+- **`IMetadataRepository` and `IChangeLogger` take an optional transaction.** The repository's write methods and
+  `IChangeLogger.LogChangeAsync` gain an optional `NpgsqlTransaction? transaction` parameter that comes before the
+  cancellation token, and `IMetadataRepository` gains `InvalidateCache()`, which a caller that passed a transaction calls
+  once it has committed. A custom implementation of either interface must follow; a call that passed the cancellation token
+  by position now names it (`cancellationToken: token`).
 - `Polly` 8.9.0, `HotChocolate` 16.7.3, `StackExchange.Redis` 3.4.31 and `ModelContextProtocol.AspNetCore` 2.3.1.
 
 ## 0.34.0

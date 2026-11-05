@@ -1,3 +1,5 @@
+using Npgsql;
+
 namespace MorphDB.Npgsql.Services;
 
 /// <summary>
@@ -6,10 +8,12 @@ namespace MorphDB.Npgsql.Services;
 public interface IChangeLogger
 {
     /// <summary>
-    /// Logs a schema change operation.
+    /// Logs a schema change operation. Given a <paramref name="transaction"/>, the entry is written in it —
+    /// it stands or falls with the change it describes.
     /// </summary>
     Task LogChangeAsync(
         SchemaChangeEntry entry,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -82,7 +86,7 @@ public static class ChangeLoggerViewExtensions
             TableId = viewId, // Using TableId field for ViewId
             Operation = SchemaOperation.CreateView,
             Changes = new { viewName }
-        }, cancellationToken);
+        }, cancellationToken: cancellationToken);
     }
 
     public static Task LogViewUpdatedAsync(
@@ -96,7 +100,7 @@ public static class ChangeLoggerViewExtensions
             TableId = viewId,
             Operation = SchemaOperation.UpdateView,
             Changes = new { viewName }
-        }, cancellationToken);
+        }, cancellationToken: cancellationToken);
     }
 
     public static Task LogViewDeletedAsync(
@@ -110,7 +114,7 @@ public static class ChangeLoggerViewExtensions
             TableId = viewId,
             Operation = SchemaOperation.DeleteView,
             Changes = new { viewName }
-        }, cancellationToken);
+        }, cancellationToken: cancellationToken);
     }
 
     public static Task LogViewRefreshedAsync(
@@ -123,6 +127,6 @@ public static class ChangeLoggerViewExtensions
             TableId = viewId,
             Operation = SchemaOperation.RefreshView,
             Changes = new { refreshedAt = DateTimeOffset.UtcNow }
-        }, cancellationToken);
+        }, cancellationToken: cancellationToken);
     }
 }

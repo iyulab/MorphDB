@@ -31,10 +31,37 @@ public sealed class MetadataRepository : IMetadataRepository
         _cache = cache;
     }
 
+    /// <summary>
+    /// The connection a write runs on: the transaction's own when it is given, so the write is one of the
+    /// statements that commit or roll back together; otherwise a connection opened for this one write.
+    /// </summary>
+    private async ValueTask<ScopedConnection> LeaseSystemAsync(NpgsqlTransaction? transaction, CancellationToken cancellationToken) =>
+        transaction is null
+            ? new ScopedConnection(await _connections.OpenSystemAsync(cancellationToken).ConfigureAwait(false), null, ownsConnection: true)
+            : new ScopedConnection(
+                transaction.Connection ?? throw new InvalidOperationException("The transaction has already ended."),
+                transaction,
+                ownsConnection: false);
+
+    /// <summary>
+    /// A write made inside a transaction is seen by nobody else until it commits, so it does not empty the
+    /// cache yet: a read in between would fill it again with what is still the old definition. Whoever
+    /// commits calls <see cref="InvalidateCache"/>.
+    /// </summary>
+    private void InvalidateUnlessIn(NpgsqlTransaction? transaction)
+    {
+        if (transaction is null)
+            _cache.Invalidate();
+    }
+
+    /// <inheritdoc />
+    public void InvalidateCache() => _cache.Invalidate();
+
     #region Table Operations
 
     public async Task<TableMetadata> InsertTableAsync(
         TableMetadata table,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default)
     {
         const string sql = """
@@ -46,7 +73,8 @@ public sealed class MetadataRepository : IMetadataRepository
                       descriptor, is_active, created_at, updated_at
             """;
 
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
+        await using var lease = await LeaseSystemAsync(transaction, cancellationToken);
+        var connection = lease.Connection;
         var result = await MetadataConstraintTranslation.AsDuplicateNameAsync(
             "Table",
             table.LogicalName,
@@ -58,9 +86,10 @@ public sealed class MetadataRepository : IMetadataRepository
                 table.PhysicalName,
                 table.SchemaVersion,
                 Descriptor = table.Descriptor?.RootElement.GetRawText()
-            }));
+            }, transaction),
+            retryDeadlocks: transaction is null);
 
-        _cache.Invalidate();
+        InvalidateUnlessIn(transaction);
         return MapToTableMetadata(result);
     }
 
@@ -181,6 +210,7 @@ public sealed class MetadataRepository : IMetadataRepository
         Guid tableId,
         string? logicalName,
         int newVersion,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default)
     {
         const string sql = """
@@ -191,9 +221,10 @@ public sealed class MetadataRepository : IMetadataRepository
             WHERE table_id = @TableId
             """;
 
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-        await connection.ExecuteAsync(sql, new { TableId = tableId, LogicalName = logicalName, NewVersion = newVersion });
-        _cache.Invalidate();
+        await using var lease = await LeaseSystemAsync(transaction, cancellationToken);
+        var connection = lease.Connection;
+        await connection.ExecuteAsync(sql, new { TableId = tableId, LogicalName = logicalName, NewVersion = newVersion }, transaction);
+        InvalidateUnlessIn(transaction);
     }
 
     /// <summary>
@@ -212,6 +243,7 @@ public sealed class MetadataRepository : IMetadataRepository
     /// </summary>
     public async Task SoftDeleteTableAsync(
         Guid tableId,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default)
     {
         const string sql = """
@@ -232,9 +264,10 @@ public sealed class MetadataRepository : IMetadataRepository
             WHERE (source_table_id = @TableId OR target_table_id = @TableId) AND is_active = true;
             """;
 
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-        await connection.ExecuteAsync(sql, new { TableId = tableId });
-        _cache.Invalidate();
+        await using var lease = await LeaseSystemAsync(transaction, cancellationToken);
+        var connection = lease.Connection;
+        await connection.ExecuteAsync(sql, new { TableId = tableId }, transaction);
+        InvalidateUnlessIn(transaction);
     }
 
     #endregion
@@ -243,6 +276,7 @@ public sealed class MetadataRepository : IMetadataRepository
 
     public async Task<ColumnMetadata> InsertColumnAsync(
         ColumnMetadata column,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default)
     {
         const string sql = """
@@ -262,7 +296,8 @@ public sealed class MetadataRepository : IMetadataRepository
                       lookup_config, rollup_config, formula_config, computed_config, is_active
             """;
 
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
+        await using var lease = await LeaseSystemAsync(transaction, cancellationToken);
+        var connection = lease.Connection;
         var result = await MetadataConstraintTranslation.AsDuplicateNameAsync(
             "Column",
             column.LogicalName,
@@ -286,9 +321,10 @@ public sealed class MetadataRepository : IMetadataRepository
                 RollupConfig = SerializeConfig(column.RollupConfig),
                 FormulaConfig = SerializeConfig(column.FormulaConfig),
                 ComputedConfig = SerializeConfig(column.ComputedConfig)
-            }));
+            }, transaction),
+            retryDeadlocks: transaction is null);
 
-        _cache.Invalidate();
+        InvalidateUnlessIn(transaction);
         return MapToColumnMetadata(result);
     }
 
@@ -344,6 +380,7 @@ public sealed class MetadataRepository : IMetadataRepository
         Guid columnId,
         string? logicalName,
         string? defaultValue,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default)
     {
         const string sql = """
@@ -353,9 +390,10 @@ public sealed class MetadataRepository : IMetadataRepository
             WHERE column_id = @ColumnId
             """;
 
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-        await connection.ExecuteAsync(sql, new { ColumnId = columnId, LogicalName = logicalName, DefaultValue = defaultValue });
-        _cache.Invalidate();
+        await using var lease = await LeaseSystemAsync(transaction, cancellationToken);
+        var connection = lease.Connection;
+        await connection.ExecuteAsync(sql, new { ColumnId = columnId, LogicalName = logicalName, DefaultValue = defaultValue }, transaction);
+        InvalidateUnlessIn(transaction);
     }
 
     public async Task UpdateColumnMetadataAsync(
@@ -365,6 +403,7 @@ public sealed class MetadataRepository : IMetadataRepository
         bool? isNullable,
         bool? isUnique,
         string? checkExpression,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default)
     {
         const string sql = """
@@ -377,7 +416,8 @@ public sealed class MetadataRepository : IMetadataRepository
             WHERE column_id = @ColumnId
             """;
 
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
+        await using var lease = await LeaseSystemAsync(transaction, cancellationToken);
+        var connection = lease.Connection;
         await connection.ExecuteAsync(sql, new
         {
             ColumnId = columnId,
@@ -387,12 +427,13 @@ public sealed class MetadataRepository : IMetadataRepository
             IsUnique = isUnique,
             CheckExpression = checkExpression,
             CheckExpressionProvided = checkExpression is not null || dataType is not null
-        });
-        _cache.Invalidate();
+        }, transaction);
+        InvalidateUnlessIn(transaction);
     }
 
     public async Task SoftDeleteColumnAsync(
         Guid columnId,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default)
     {
         const string sql = """
@@ -401,9 +442,10 @@ public sealed class MetadataRepository : IMetadataRepository
             WHERE column_id = @ColumnId
             """;
 
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-        await connection.ExecuteAsync(sql, new { ColumnId = columnId });
-        _cache.Invalidate();
+        await using var lease = await LeaseSystemAsync(transaction, cancellationToken);
+        var connection = lease.Connection;
+        await connection.ExecuteAsync(sql, new { ColumnId = columnId }, transaction);
+        InvalidateUnlessIn(transaction);
     }
 
     #endregion
@@ -412,6 +454,7 @@ public sealed class MetadataRepository : IMetadataRepository
 
     public async Task<IndexMetadata> InsertIndexAsync(
         IndexMetadata index,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default)
     {
         var columnsJson = JsonSerializer.Serialize(index.Columns.Select(c => new
@@ -431,7 +474,8 @@ public sealed class MetadataRepository : IMetadataRepository
             RETURNING index_id, table_id, logical_name, physical_name, columns, index_type, is_unique, where_clause, descriptor, is_active, created_at
             """;
 
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
+        await using var lease = await LeaseSystemAsync(transaction, cancellationToken);
+        var connection = lease.Connection;
         var result = await MetadataConstraintTranslation.AsDuplicateNameAsync(
             "Index",
             index.LogicalName,
@@ -446,9 +490,10 @@ public sealed class MetadataRepository : IMetadataRepository
                 index.IsUnique,
                 index.WhereClause,
                 Descriptor = index.Descriptor?.RootElement.GetRawText()
-            }));
+            }, transaction),
+            retryDeadlocks: transaction is null);
 
-        _cache.Invalidate();
+        InvalidateUnlessIn(transaction);
         return MapToIndexMetadata(result);
     }
 
@@ -485,6 +530,7 @@ public sealed class MetadataRepository : IMetadataRepository
 
     public async Task SoftDeleteIndexAsync(
         Guid indexId,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default)
     {
         const string sql = """
@@ -493,9 +539,10 @@ public sealed class MetadataRepository : IMetadataRepository
             WHERE index_id = @IndexId
             """;
 
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-        await connection.ExecuteAsync(sql, new { IndexId = indexId });
-        _cache.Invalidate();
+        await using var lease = await LeaseSystemAsync(transaction, cancellationToken);
+        var connection = lease.Connection;
+        await connection.ExecuteAsync(sql, new { IndexId = indexId }, transaction);
+        InvalidateUnlessIn(transaction);
     }
 
     #endregion
@@ -504,6 +551,7 @@ public sealed class MetadataRepository : IMetadataRepository
 
     public async Task<RelationMetadata> InsertRelationAsync(
         RelationMetadata relation,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default)
     {
         const string sql = """
@@ -514,7 +562,8 @@ public sealed class MetadataRepository : IMetadataRepository
             RETURNING relation_id, project_id, logical_name, source_table_id, source_column_id, target_table_id, target_column_id, relation_type, on_delete, on_update, descriptor, is_active, enforce_on_write, virtual_cascade, created_at
             """;
 
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
+        await using var lease = await LeaseSystemAsync(transaction, cancellationToken);
+        var connection = lease.Connection;
         var result = await connection.QuerySingleAsync<RelationRow>(sql, new
         {
             relation.RelationId,
@@ -530,9 +579,9 @@ public sealed class MetadataRepository : IMetadataRepository
             Descriptor = relation.Descriptor?.RootElement.GetRawText(),
             relation.EnforceOnWrite,
             relation.VirtualCascade
-        });
+        }, transaction);
 
-        _cache.Invalidate();
+        InvalidateUnlessIn(transaction);
         return MapToRelationMetadata(result);
     }
 
@@ -572,6 +621,7 @@ public sealed class MetadataRepository : IMetadataRepository
 
     public async Task SoftDeleteRelationAsync(
         Guid relationId,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default)
     {
         const string sql = """
@@ -580,9 +630,10 @@ public sealed class MetadataRepository : IMetadataRepository
             WHERE relation_id = @RelationId
             """;
 
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-        await connection.ExecuteAsync(sql, new { RelationId = relationId });
-        _cache.Invalidate();
+        await using var lease = await LeaseSystemAsync(transaction, cancellationToken);
+        var connection = lease.Connection;
+        await connection.ExecuteAsync(sql, new { RelationId = relationId }, transaction);
+        InvalidateUnlessIn(transaction);
     }
 
     #endregion
@@ -591,6 +642,7 @@ public sealed class MetadataRepository : IMetadataRepository
 
     public async Task<int> GetCurrentVersionAsync(
         Guid tableId,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default)
     {
         const string sql = """
@@ -599,12 +651,14 @@ public sealed class MetadataRepository : IMetadataRepository
             WHERE table_id = @TableId
             """;
 
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-        return await connection.ExecuteScalarAsync<int>(sql, new { TableId = tableId });
+        await using var lease = await LeaseSystemAsync(transaction, cancellationToken);
+        var connection = lease.Connection;
+        return await connection.ExecuteScalarAsync<int>(sql, new { TableId = tableId }, transaction);
     }
 
     public async Task IncrementVersionAsync(
         Guid tableId,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default)
     {
         const string sql = """
@@ -613,9 +667,10 @@ public sealed class MetadataRepository : IMetadataRepository
             WHERE table_id = @TableId
             """;
 
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-        await connection.ExecuteAsync(sql, new { TableId = tableId });
-        _cache.Invalidate();
+        await using var lease = await LeaseSystemAsync(transaction, cancellationToken);
+        var connection = lease.Connection;
+        await connection.ExecuteAsync(sql, new { TableId = tableId }, transaction);
+        InvalidateUnlessIn(transaction);
     }
 
     #endregion

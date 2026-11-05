@@ -64,16 +64,4 @@ public class TableCreationRollbackTests
             new ProjectRepository(_fixture.Connections, new PostgresSchemaNameResolver()),
             new SchemaManagerOptions());
     }
-
-    private sealed class ThrowingChangeLogger : IChangeLogger
-    {
-        public Task LogChangeAsync(SchemaChangeEntry entry, CancellationToken cancellationToken = default) =>
-            throw new InvalidOperationException("change log is down");
-
-        public Task<IReadOnlyList<SchemaChangeEntry>> GetHistoryAsync(Guid tableId, int limit = 100, CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<SchemaChangeEntry>>([]);
-
-        public Task<IReadOnlyList<SchemaChangeEntry>> GetChangelogAsync(Guid projectId, int limit = 100, int offset = 0, CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<SchemaChangeEntry>>([]);
-    }
 }

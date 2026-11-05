@@ -23,11 +23,16 @@ internal static class MetadataConstraintTranslation
     public static async Task<T> AsDuplicateNameAsync<T>(
         string entityType,
         string logicalName,
-        Func<Task<T>> insert)
+        Func<Task<T>> insert,
+        bool retryDeadlocks = true)
     {
         try
         {
-            return await DeadlockRetry.RunAsync(insert).ConfigureAwait(false);
+            // Inside a transaction a deadlock victim is the whole transaction, not this statement: sending the
+            // statement again would run in a transaction PostgreSQL has already abandoned.
+            return retryDeadlocks
+                ? await DeadlockRetry.RunAsync(insert).ConfigureAwait(false)
+                : await insert().ConfigureAwait(false);
         }
         catch (PostgresException pg) when (pg.SqlState == PostgresErrorCodes.UniqueViolation)
         {
