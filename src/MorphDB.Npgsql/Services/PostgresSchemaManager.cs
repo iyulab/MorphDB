@@ -443,6 +443,13 @@ public sealed class PostgresSchemaManager : ISchemaManager
         var table = await _repository.GetTableByIdAsync(request.TableId, cancellationToken: cancellationToken)
             ?? throw new TableNotFoundException(request.TableId.ToString());
 
+        // Acquire advisory lock. The version is checked under it: of two requests that saw the same version
+        // the one that gets the lock second finds it moved, and is refused rather than applied on top.
+        await using var lockHandle = await _lockManager.AcquireDdlLockAsync(
+            $"table:{request.TableId}",
+            _options.LockTimeout,
+            cancellationToken);
+
         // Optimistic concurrency check
         var currentVersion = await _repository.GetCurrentVersionAsync(request.TableId, cancellationToken: cancellationToken);
         if (currentVersion != request.ExpectedVersion)
@@ -560,7 +567,9 @@ public sealed class PostgresSchemaManager : ISchemaManager
             throw new DuplicateNameException("Column", request.LogicalName);
         }
 
-        // Optimistic concurrency check
+        // Optimistic concurrency check. Unlike an update, it is not repeated under the lock below: two columns
+        // added at the same moment are both wanted, and a caller that read the version just before it
+        // asked (as the REST layer does) must not be refused for the other's addition.
         var currentVersion = await _repository.GetCurrentVersionAsync(request.TableId, cancellationToken: cancellationToken);
         if (currentVersion != request.ExpectedVersion)
         {
@@ -719,6 +728,13 @@ public sealed class PostgresSchemaManager : ISchemaManager
                 throw new DuplicateNameException("Column", request.LogicalName);
             }
         }
+
+        // Acquire advisory lock. The version is checked under it: of two requests that saw the same version
+        // the one that gets the lock second finds it moved, and is refused rather than applied on top.
+        await using var lockHandle = await _lockManager.AcquireDdlLockAsync(
+            $"table:{column.TableId}",
+            _options.LockTimeout,
+            cancellationToken);
 
         // Optimistic concurrency check
         var currentVersion = await _repository.GetCurrentVersionAsync(column.TableId, cancellationToken: cancellationToken);
@@ -920,18 +936,19 @@ public sealed class PostgresSchemaManager : ISchemaManager
             throw new DuplicateNameException("Column", request.NewLogicalName);
         }
 
+        // Acquire advisory lock. The version is checked under it: of two requests that saw the same version
+        // the one that gets the lock second finds it moved, and is refused rather than applied on top.
+        await using var lockHandle = await _lockManager.AcquireDdlLockAsync(
+            $"table:{column.TableId}",
+            _options.LockTimeout,
+            cancellationToken);
+
         // Optimistic concurrency check
         var currentVersion = await _repository.GetCurrentVersionAsync(column.TableId, cancellationToken: cancellationToken);
         if (currentVersion != request.ExpectedVersion)
         {
             throw new SchemaVersionConflictException(request.ExpectedVersion, currentVersion);
         }
-
-        // Acquire advisory lock
-        await using var lockHandle = await _lockManager.AcquireDdlLockAsync(
-            $"table:{column.TableId}",
-            _options.LockTimeout,
-            cancellationToken);
 
         // A stored column's physical name follows its logical one. A system or virtual column keeps
         // the physical name it has: only its logical name changes, in metadata.

@@ -78,6 +78,13 @@
   view itself. Each of these changes is now one transaction — the physical statements, the description, the version it moves the table to and the change-log entry —
   so it happens whole or not at all, and a deadlock victim runs the whole change again.
 
+- **Two requests that saw the same schema version are no longer both applied.** Updating a table or a column and renaming a
+  column checked the `version` the caller sent before taking the table's schema lock (an update took none at all), so two
+  requests carrying the same version both passed, and the second was applied on top of the first — a rename could
+  overwrite another, and a second column rename ended in `500` because the physical name it meant to change was gone. The
+  version is now checked while holding the lock: the request that gets it second finds the version moved and is refused
+  with `409`. Adding a column still checks before the lock, as two columns added at the same moment are both wanted.
+
 ### Changed
 
 - **`IMetadataRepository`, `IViewMetadataRepository` and `IChangeLogger` take an optional transaction.** The repositories'
