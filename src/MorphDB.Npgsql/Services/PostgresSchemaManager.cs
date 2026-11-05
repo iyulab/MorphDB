@@ -327,29 +327,60 @@ public sealed class PostgresSchemaManager : ISchemaManager
             throw;
         }
 
-        // Insert metadata (after DDL success)
-        var insertedTable = await _repository.InsertTableAsync(tableMetadata, cancellationToken);
-        foreach (var column in columns)
+        // The physical table is committed; its metadata follows as separate statements, so a failure
+        // from here on would leave a table nobody can see -- and its name could not be created again.
+        // Whatever fails, the table this call just built is taken down again before the failure is thrown.
+        try
         {
-            await _repository.InsertColumnAsync(column, cancellationToken);
-        }
-
-        // Log change
-        await _changeLogger.LogChangeAsync(new SchemaChangeEntry
-        {
-            TableId = tableId,
-            Operation = SchemaOperation.CreateTable,
-            SchemaVersion = 1,
-            Changes = new
+            // Insert metadata (after DDL success)
+            var insertedTable = await _repository.InsertTableAsync(tableMetadata, cancellationToken);
+            foreach (var column in columns)
             {
-                LogicalName = request.LogicalName,
-                ColumnCount = columns.Count
+                await _repository.InsertColumnAsync(column, cancellationToken);
             }
-        }, cancellationToken);
 
-        // The inserted row read back carries everything the table was created with (its system
-        // column options are restored from the descriptor); only the columns are inserted separately.
-        return insertedTable with { Columns = columns };
+            // Log change
+            await _changeLogger.LogChangeAsync(new SchemaChangeEntry
+            {
+                TableId = tableId,
+                Operation = SchemaOperation.CreateTable,
+                SchemaVersion = 1,
+                Changes = new
+                {
+                    LogicalName = request.LogicalName,
+                    ColumnCount = columns.Count
+                }
+            }, cancellationToken);
+
+            // The inserted row read back carries everything the table was created with (its system
+            // column options are restored from the descriptor); only the columns are inserted separately.
+            return insertedTable with { Columns = columns };
+        }
+        catch
+        {
+            await TakeDownUnregisteredTableAsync(tableId, physicalTableName);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Removes the physical table a failed <see cref="CreateTableAsync"/> built, and any metadata it had
+    /// already written, so the name can be created again. Best effort: the failure that got us here is the
+    /// one the caller must see, so a failure of this clean-up does not replace it. Runs to completion even
+    /// when the request was cancelled.
+    /// </summary>
+    private async Task TakeDownUnregisteredTableAsync(Guid tableId, string physicalTableName)
+    {
+        try
+        {
+            await using var connection = await _connections.OpenSystemAsync(CancellationToken.None);
+            await connection.ExecuteAsync(new CommandDefinition(DdlBuilder.BuildDropTable(physicalTableName), cancellationToken: CancellationToken.None));
+            await _repository.SoftDeleteTableAsync(tableId, CancellationToken.None);
+        }
+        catch (Exception)
+        {
+            // The original failure is rethrown by the caller; there is nothing more to do here.
+        }
     }
 
     public async Task<TableMetadata?> GetTableAsync(

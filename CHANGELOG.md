@@ -66,6 +66,11 @@
   no metadata. A deadlock victim's statement changes nothing, so it is now sent again (a few times, with a short wait) — the
   retry PostgreSQL documents for it. Other failures are thrown as before.
 
+- **A table creation that fails after its physical table is built no longer leaves a table nothing describes.** The physical
+  table is created first and its metadata is written afterwards; any failure in between (a deadlock victim, a failing change
+  log) left the table in the database with no metadata, and the same name could not be created again. The creation now takes the
+  table it built down again (and soft-deletes any metadata it had written) before the failure is thrown.
+
 ### Changed
 
 - `Polly` 8.9.0, `HotChocolate` 16.7.3, `StackExchange.Redis` 3.4.31 and `ModelContextProtocol.AspNetCore` 2.3.1.
