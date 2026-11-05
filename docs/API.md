@@ -95,6 +95,12 @@ POST   /api/schema/tables/{name}/indexes       # Create index
 DELETE /api/schema/indexes/{id}                # Delete index
 ```
 
+**A schema change happens whole or not at all.** Creating, changing or deleting a table, a column, an index,
+a relation or a view builds or changes the physical object and writes what describes it (and the version
+and the change-log entry) in one transaction. A request that fails — a refusal, an error, or the service
+going down before the change commits — leaves the schema as it was, so the same request can be sent again;
+there is no state in which a column exists that nothing describes, or a description of one that is gone.
+
 **A table can carry its creator's notes.** `metadata` on `POST /api/schema/tables` is a map of
 strings MorphDB stores with the table, returns as `metadata` on every table response, and never
 reads — which writer owns the table, what produced it:
