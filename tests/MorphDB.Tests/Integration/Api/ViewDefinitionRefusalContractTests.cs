@@ -26,7 +26,7 @@ public class ViewDefinitionRefusalContractTests
 
     [Theory]
     [InlineData("{o}.no_such_column - {c}.at", "an expression naming a column no table has")]
-    [InlineData("{c}.\"at\" - {o}.\"at\"", "quoted identifiers, which the translator does not read")]
+    [InlineData("{c}.\"at\" - {o}.\"at\"", "a table-qualified quoted identifier, whose qualifier the translator reads as a separate name")]
     public async Task A_view_expression_that_names_what_the_view_does_not_read_is_a_400_not_a_500(string expressionTemplate, string because)
     {
         var (orders, customers) = await SeedTablesAsync();
@@ -59,6 +59,27 @@ public class ViewDefinitionRefusalContractTests
         JsonDocument.Parse(text).RootElement.GetProperty("code").GetString().Should().Be("INVALID_EXPRESSION");
         (await _client.GetAsync($"/api/views/{view}/data", Ct)).StatusCode.Should().Be(HttpStatusCode.OK,
             "a refused replacement leaves the view as it was");
+    }
+
+    /// <summary>
+    /// Two more definition mistakes that used to pass for fine or surface as a 500: a filter value that is
+    /// not of its column's type (PostgreSQL refuses it when the view is created), and a negative limit
+    /// (PostgreSQL creates the view and fails every read of it).
+    /// </summary>
+    [Theory]
+    [InlineData("\"filters\": [ { \"field\": \"at\", \"operator\": \"eq\", \"value\": \"abc\" } ]", "a filter value that is not of its column's type")]
+    [InlineData("\"limit\": -5", "a negative limit")]
+    public async Task A_view_definition_with_a_filter_value_or_limit_it_cannot_honour_is_a_400(string clause, string because)
+    {
+        var (orders, _) = await SeedTablesAsync();
+
+        var response = await _client.PostAsync("/api/views", new StringContent($$"""
+            { "name": "{{$"bad_{Guid.NewGuid():N}"[..20]}}", "baseTable": "{{orders}}", "columns": [ { "source": "at", "alias": "at" } ], {{clause}} }
+            """, Encoding.UTF8, "application/json"), Ct);
+        var text = await response.Content.ReadAsStringAsync(Ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest, $"{because}: {text}");
+        PhysicalNameGuard.FindPhysicalNames(text).Should().BeEmpty("the refusal must not carry a physical name");
     }
 
     private Task<HttpResponseMessage> CreateViewAsync(string view, string orders, string customers, string expression) =>

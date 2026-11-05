@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using MorphDB.Core.Abstractions;
+using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
 using MorphDB.Npgsql.Ddl;
 using MorphDB.Npgsql.Infrastructure;
@@ -442,6 +443,12 @@ public sealed class ViewQueryBuilder
 
     private static void ValidateInlineExpressions(ViewDefinition definition)
     {
+        if (definition.Limit is < 0)
+        {
+            // PostgreSQL creates a view over LIMIT -5 and only fails when the view is read.
+            throw new ValidationException("limit", "must not be negative.");
+        }
+
         foreach (var join in definition.Joins)
         {
             InlineExpressionValidator.Validate(join.Condition, "Join condition");

@@ -421,42 +421,13 @@ public sealed class PostgresViewManager : IViewManager
         return cause;
     }
 
-    /// <summary>
-    /// Runs the DDL that creates or replaces a view. A definition PostgreSQL cannot resolve -- a name that
-    /// is no column of the base table or of a joined table, a quoted identifier the translator does not
-    /// read, a mistyped operator -- is the caller's mistake, so it answers <c>400 INVALID_EXPRESSION</c>
-    /// like every other expression the request carries, not an opaque 500. The message names the kind of
-    /// refusal and never PostgreSQL's own text: that text can carry a physical name, and internal names
-    /// are not contract.
-    /// </summary>
-    private static async Task AsInvalidDefinitionAsync(Func<Task> build)
-    {
-        try
-        {
-            await build().ConfigureAwait(false);
-        }
-        catch (PostgresException pg) when (DescribeDefinitionMistake(pg) is not null)
-        {
-            throw new SchemaException(
-                "INVALID_EXPRESSION",
-                $"The view's definition is not valid ({DescribeDefinitionMistake(pg)}): every name in a join condition or "
-                + "column expression must be a column of the base table or of a joined table, written as the table's own "
-                + "reads name it -- unquoted, and qualified by the table's name when it belongs to a joined table.",
-                pg);
-        }
-    }
-
-    private static string? DescribeDefinitionMistake(PostgresException pg) => pg.SqlState switch
-    {
-        PostgresErrorCodes.UndefinedTable => "an unknown table",
-        PostgresErrorCodes.UndefinedColumn => "an unknown column",
-        PostgresErrorCodes.AmbiguousColumn => "an ambiguous column",
-        PostgresErrorCodes.SyntaxError => "a syntax error",
-        PostgresErrorCodes.UndefinedFunction => "an operator or function that does not take these types",
-        PostgresErrorCodes.DatatypeMismatch => "a type mismatch",
-        PostgresErrorCodes.GroupingError => "a column that is neither grouped nor aggregated",
-        _ => null,
-    };
+    /// <summary>Runs the DDL that creates or replaces a view; a definition mistake is a 400 (see <see cref="DefinitionRefusal"/>).</summary>
+    private static Task AsInvalidDefinitionAsync(Func<Task> build) =>
+        DefinitionRefusal.AsInvalidExpressionAsync(
+            "The view's definition",
+            "every name in a join condition or column expression must be a column of the base table or of a joined table, "
+            + "written as the table's own reads name it, and as table.column -- both parts unquoted -- when it belongs to a joined table.",
+            build);
 
     /// <summary>
     /// Creates a materialized view — in place of the one it has, when <paramref name="replace"/> —

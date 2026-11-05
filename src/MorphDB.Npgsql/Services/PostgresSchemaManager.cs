@@ -1037,9 +1037,13 @@ public sealed class PostgresSchemaManager : ISchemaManager
             Columns = indexColumns,
             IndexType = request.IndexType,
             IsUnique = request.IsUnique,
-            WhereClause = request.WhereClause
+            WhereClause = TranslateIndexPredicate(request.WhereClause, table)
         });
-        await connection.ExecuteAsync(new CommandDefinition(createIndexSql, cancellationToken: cancellationToken));
+        await DefinitionRefusal.AsInvalidExpressionAsync(
+            "The index definition",
+            "a predicate may use only the table's own columns, written as the table's own reads name them -- unquoted -- "
+            + "and only functions PostgreSQL marks immutable.",
+            () => connection.ExecuteAsync(new CommandDefinition(createIndexSql, cancellationToken: cancellationToken)));
 
         // Insert metadata and increment version
         var insertedIndex = await _repository.InsertIndexAsync(index, cancellationToken);
@@ -1063,6 +1067,19 @@ public sealed class PostgresSchemaManager : ISchemaManager
 
         return insertedIndex;
     }
+
+    /// <summary>
+    /// An index predicate is written in the table's own column names, like a view expression or a policy;
+    /// the DDL needs the names the table is stored under. A name that is no column of the table is left as
+    /// written (it may be a keyword or a function), and PostgreSQL then refuses the definition.
+    /// </summary>
+    private static string? TranslateIndexPredicate(string? predicate, TableMetadata table) =>
+        string.IsNullOrWhiteSpace(predicate)
+            ? predicate
+            : SqlIdentifierRewriter.Rewrite(predicate, token =>
+                table.Columns.FirstOrDefault(c => c.LogicalName == token) is { } column
+                    ? DdlBuilder.QuoteIdentifier(column.PhysicalName)
+                    : token.StartsWith('_') ? DdlBuilder.QuoteIdentifier(token) : null);
 
     public async Task DeleteIndexAsync(
         Guid indexId,

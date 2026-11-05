@@ -31,10 +31,16 @@
   requests in a batch are not supported). The same goes for any other member that is not a request member of the format, such
   as a misspelt `dependOn`; instance annotations (names holding `@`) are still accepted.
 - **A view whose join condition or column expression names something the view does not read is refused with `400
-  INVALID_EXPRESSION` instead of an opaque `500`.** Creating or changing a view with a column no table has, a quoted
-  identifier (names are written unquoted, as the table's own reads name them), a syntax error or operands an operator does
-  not take used to surface PostgreSQL's error as `500`. The answer now names the kind of refusal — never the database's
-  own text, which can carry a physical name — and a refused change leaves the view as it was.
+  INVALID_EXPRESSION` instead of an opaque `500`.** Creating or changing a view with a column no table has, a
+  table-qualified quoted identifier (`table."column"` — write it `table.column`), a syntax error or operands an operator does
+  not take, or a filter value that is not of its column's type, used to surface PostgreSQL's error as `500`. The answer now
+  names the kind of refusal — never the database's own text, which can carry a physical name — and a refused change leaves
+  the view as it was. A negative `limit` is refused too (it used to create a view that failed every read).
+- **An index `where` written in the table's own column names now works, and one PostgreSQL cannot accept is refused with `400
+  INVALID_EXPRESSION`.** The predicate was passed to the database as written, so the documented form (`age >= 0`) named a
+  column the stored table does not have and every such request ended in `500`. Column names are now translated to the stored
+  names the way a view expression or a policy is, so a partial index (including a partial unique one) applies its predicate;
+  an unknown column or function, a volatile function or a value of the wrong type answers `400` naming the kind of refusal.
 
 ### Changed
 
