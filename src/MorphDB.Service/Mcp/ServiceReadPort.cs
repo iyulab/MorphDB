@@ -18,7 +18,8 @@ internal sealed class ServiceReadPort(
     ISchemaManager schemaManager,
     IMorphDataService dataService,
     IMetadataRepository metadataRepository,
-    IAggregationService aggregationService) : IMorphReadPort
+    IAggregationService aggregationService,
+    IViewManager viewManager) : IMorphReadPort
 {
     public async ValueTask<IReadOnlyList<McpTableSummary>> ListTablesAsync(CancellationToken cancellationToken)
     {
@@ -108,6 +109,52 @@ internal sealed class ServiceReadPort(
                 },
                 cancellationToken);
             return new McpRecordPage(read.Rows, read.HasNext, read.Number, read.Size);
+        }
+        catch (Exception e) when (e is ArgumentException or NotFoundException)
+        {
+            throw new MorphReadRefusedException(e.Message, e);
+        }
+    }
+
+    public async ValueTask<IReadOnlyList<McpViewSummary>> ListViewsAsync(CancellationToken cancellationToken)
+    {
+        var projectId = await ProjectAsync(cancellationToken);
+        var views = await viewManager.ListViewsAsync(projectId, cancellationToken);
+        return
+        [
+            .. views.Select(v => new McpViewSummary(
+                v.LogicalName,
+                v.Definition.BaseTable,
+                [.. v.Columns.Select(c => new McpViewColumn(c.LogicalName, c.DataType.ToString()))],
+                v.IsMaterialized,
+                v.IsMaterialized ? v.LastRefreshedAt : null,
+                v.IsMaterialized && v.IsStale)),
+        ];
+    }
+
+    public async ValueTask<McpViewPage> ReadViewAsync(McpViewQuery query, CancellationToken cancellationToken)
+    {
+        var projectId = await ProjectAsync(cancellationToken);
+        var skip = (long)(query.Page - 1) * query.PageSize;
+        if (skip > int.MaxValue)
+        {
+            throw new MorphReadRefusedException($"Page {query.Page} is beyond what a view read can reach; narrow it with a filter.");
+        }
+
+        try
+        {
+            var read = await viewManager.QueryViewAsync(
+                ViewReads.Request(projectId, query.View, query.Select, query.Filter?.ToArray(), query.OrderBy, (int)skip, query.PageSize),
+                cancellationToken);
+            var materialized = read.Metadata?.IsMaterialized ?? false;
+            return new McpViewPage(
+                read.Data,
+                read.HasMore,
+                query.Page,
+                query.PageSize,
+                materialized,
+                materialized ? read.Metadata!.LastRefreshedAt : null,
+                materialized && read.Metadata!.IsStale);
         }
         catch (Exception e) when (e is ArgumentException or NotFoundException)
         {

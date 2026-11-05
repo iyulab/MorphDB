@@ -13,7 +13,7 @@ namespace MorphDB.Mcp;
 internal sealed class MorphDbMcpTools(IMorphReadPort port, IOptions<MorphDbMcpOptions> options)
 {
     /// <summary>The names the door offers, so a test can hold the list to this.</summary>
-    internal static readonly IReadOnlyList<string> ToolNames = ["describe_tables", "describe_table", "query_records", "get_record", "aggregate"];
+    internal static readonly IReadOnlyList<string> ToolNames = ["describe_tables", "describe_table", "query_records", "get_record", "aggregate", "describe_views", "read_view"];
 
     [McpServerTool(Name = "describe_tables", Title = "List the project's tables", ReadOnly = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
     [Description("Lists the tables of the project this request is scoped to, with how many columns each declares. Read-only; runs as the authenticated caller.")]
@@ -61,6 +61,25 @@ internal sealed class MorphDbMcpTools(IMorphReadPort port, IOptions<MorphDbMcpOp
         CancellationToken cancellationToken = default) =>
         await Guard(() => port.AggregateAsync(
             new McpAggregateQuery(table, aggregates, groupBy, filter, Math.Clamp(maxGroups, 1, Math.Max(options.Value.MaxPageSize, 1))),
+            cancellationToken));
+
+    [McpServerTool(Name = "describe_views", Title = "List the project's views", ReadOnly = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
+    [Description("Lists the views of the project this request is scoped to: each one's name, the table it is built over, the columns it exposes, and whether it is a materialized view (a stored copy, as of when it was last refreshed). Read-only; runs as the authenticated caller.")]
+    public async Task<McpViewList> DescribeViews(CancellationToken cancellationToken) =>
+        new(await Guard(() => port.ListViewsAsync(cancellationToken)));
+
+    [McpServerTool(Name = "read_view", Title = "Read a view's rows", ReadOnly = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true)]
+    [Description("Reads one page of a view's rows as the authenticated caller, who sees only the rows their row-level rules allow on the tables the view reads. Read-only. The page is capped; hasNext says whether more follow. A materialized view is a stored copy: the result says so and when it was last refreshed.")]
+    public async Task<McpViewPage> ReadView(
+        [Description("The view's name; describe_views lists them.")] string view,
+        [Description("Comma-separated columns to return; all when omitted.")] string? select = null,
+        [Description("Conditions, each 'column:operator:value'; all must hold.")] string[]? filter = null,
+        [Description("Columns to order by, each 'column:asc' or 'column:desc', comma-separated.")] string? orderBy = null,
+        [Description("1-based page number.")] int page = 1,
+        [Description("Rows per page; capped by the door.")] int pageSize = 50,
+        CancellationToken cancellationToken = default) =>
+        await Guard(() => port.ReadViewAsync(
+            new McpViewQuery(view, select, filter, orderBy, Math.Max(page, 1), Math.Clamp(pageSize, 1, Math.Max(options.Value.MaxPageSize, 1))),
             cancellationToken));
 
     // A refusal the caller can act on is the tool's error, in the refusal's own words — anything else is not shown to them.

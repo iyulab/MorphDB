@@ -1504,6 +1504,8 @@ start-up. Streamable HTTP, stateless.
 | `get_record` | One record by its `_id` — a record the caller's row-level rules hide is reported as not found |
 | `aggregate` | `count`, `countDistinct`, `sum`, `avg`, `min`, `max` over a table's rows — `aggregates` (`function`, `column`, `alias`), `groupBy`, `filter` (`column:op:value`, applied before grouping), `maxGroups` (capped at `MaxPageSize`) — as `POST /api/data/{table}/aggregate`, counted over the rows the caller may see |
 | `query_records` | One page of a table's rows — `select`, `filter` (`column:op:value`), `orderBy`, `search`, `page`, `pageSize` as on `GET /api/data/{table}` |
+| `describe_views` | The project's views — each one's name, base table and columns, and whether it is a materialized view (a stored copy) and when that copy was last refreshed |
+| `read_view` | One page of a view's rows — `select`, `filter` (`column:op:value`), `orderBy`, `page`, `pageSize` as on `GET /api/views/{name}/data`, read through the row-level rules of the tables the view reads. The result says whether the view is materialized and when it was last refreshed, so a stored copy is not taken for the live rows |
 
 There is no tool that writes. A page is capped at `MaxPageSize`; `hasNext` says whether more follow. A request the REST
 API would refuse (an unknown table, a filter it does not accept, no project) is the tool's error, in the same words.

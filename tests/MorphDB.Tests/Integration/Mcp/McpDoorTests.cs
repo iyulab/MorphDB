@@ -149,7 +149,7 @@ public class McpDoorTests
 
         var tools = await client.ListToolsAsync(cancellationToken: TestContext.Current.CancellationToken);
 
-        tools.Select(t => t.Name).Order().Should().Equal("aggregate", "describe_table", "describe_tables", "get_record", "query_records");
+        tools.Select(t => t.Name).Order().Should().Equal("aggregate", "describe_table", "describe_tables", "describe_views", "get_record", "query_records", "read_view");
         tools.Should().OnlyContain(t => t.ProtocolTool.Annotations!.ReadOnlyHint == true && t.ProtocolTool.Annotations.DestructiveHint != true);
     }
 
@@ -295,5 +295,99 @@ public class McpDoorTests
             cancellationToken: TestContext.Current.CancellationToken);
 
         result.IsError.Should().BeTrue();
+    }
+
+    private async Task<string> ViewOverAsync(string table, bool materialized = false)
+    {
+        var view = $"mcpv_{Guid.NewGuid():N}"[..28];
+        (await RestAs(MasterSecret).PostAsJsonAsync("/api/views", new CreateViewApiRequest { Name = view, BaseTable = table, Materialized = materialized }, TestContext.Current.CancellationToken))
+            .EnsureSuccessStatusCode();
+        return view;
+    }
+
+    // A view is a way to read the rows of the tables under it: through the door it must show a person only what the
+    // rules on those tables show them, and the same rows the REST endpoint gives them.
+    [Fact]
+    public async Task A_view_is_read_through_the_callers_rules_and_gives_the_rows_the_rest_api_gives()
+    {
+        var table = await RowLevelTableAsync();
+        var view = await ViewOverAsync(table);
+        var ct = TestContext.Current.CancellationToken;
+        await using var alice = await McpAs(Token("alice"));
+        await using var bob = await McpAs(Token("bob"));
+        await using var nobody = await McpAs(Token("erin"));
+        var call = new Dictionary<string, object?> { ["view"] = view };
+
+        Owners(await alice.CallToolAsync("read_view", call, cancellationToken: ct)).Should().Equal("alice", "alice");
+        Owners(await bob.CallToolAsync("read_view", call, cancellationToken: ct)).Should().Equal("bob");
+        Owners(await nobody.CallToolAsync("read_view", call, cancellationToken: ct)).Should().BeEmpty("a token is no master");
+
+        var viaRest = await RestAs(Token("bob")).GetFromJsonAsync<ViewQueryApiResponse>($"/api/views/{view}/data", ct);
+        viaRest!.Data.Should().HaveCount(1);
+    }
+
+    // An agent that cannot find out what views exist cannot read one; and a stored copy must not pass for the live rows.
+    [Fact]
+    public async Task Views_are_listed_with_their_columns_and_a_stored_copy_says_when_it_was_refreshed()
+    {
+        var table = await RowLevelTableAsync();
+        var plain = await ViewOverAsync(table);
+        var ct = TestContext.Current.CancellationToken;
+        var master = RestAs(MasterSecret);
+        var copyTable = $"mcp_copy_{Guid.NewGuid():N}"[..28];
+        (await master.PostAsJsonAsync("/api/schema/tables", new CreateTableApiRequest
+        {
+            Name = copyTable,
+            Columns = [new CreateColumnApiRequest { Name = "owner", Type = "text", Nullable = false }],
+        }, ct)).EnsureSuccessStatusCode();
+        (await master.PostAsJsonAsync($"/api/data/{copyTable}", new Dictionary<string, object?> { ["owner"] = "carol" }, ct)).EnsureSuccessStatusCode();
+        var stored = await ViewOverAsync(copyTable, materialized: true);
+        (await master.PostAsync($"/api/views/{stored}/refresh", null, ct)).EnsureSuccessStatusCode();
+        await using var client = await McpAs(Token("alice"));
+
+        var listed = (await client.CallToolAsync("describe_views", cancellationToken: ct)).StructuredContent!.Value.GetProperty("views").EnumerateArray()
+            .ToDictionary(v => v.GetProperty("name").GetString()!);
+        var live = await client.CallToolAsync("read_view", new Dictionary<string, object?> { ["view"] = plain }, cancellationToken: ct);
+        var copy = await client.CallToolAsync("read_view", new Dictionary<string, object?> { ["view"] = stored }, cancellationToken: ct);
+
+        listed[plain].GetProperty("baseTable").GetString().Should().Be(table);
+        listed[plain].GetProperty("columns").EnumerateArray().Select(c => c.GetProperty("name").GetString()).Should().Contain("owner");
+        listed[plain].GetProperty("materialized").GetBoolean().Should().BeFalse();
+        listed[stored].GetProperty("materialized").GetBoolean().Should().BeTrue();
+        listed[stored].GetProperty("lastRefreshedAt").ValueKind.Should().Be(JsonValueKind.String);
+        live.StructuredContent!.Value.GetProperty("materialized").GetBoolean().Should().BeFalse();
+        copy.StructuredContent!.Value.GetProperty("materialized").GetBoolean().Should().BeTrue();
+        copy.StructuredContent!.Value.GetProperty("lastRefreshedAt").ValueKind.Should().Be(JsonValueKind.String);
+    }
+
+    [Fact]
+    public async Task A_view_page_is_capped_by_the_door_and_says_when_more_follow()
+    {
+        var table = await RowLevelTableAsync();
+        var view = await ViewOverAsync(table);
+        await using var master = await McpAs(MasterSecret, maxPageSize: 1);
+
+        var result = await master.CallToolAsync("read_view", new Dictionary<string, object?> { ["view"] = view, ["pageSize"] = 50 }, cancellationToken: TestContext.Current.CancellationToken);
+
+        var page = result.StructuredContent!.Value;
+        page.GetProperty("rows").GetArrayLength().Should().Be(1);
+        page.GetProperty("pageSize").GetInt32().Should().Be(1);
+        page.GetProperty("hasNext").GetBoolean().Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task A_view_the_project_does_not_have_and_a_filter_the_rules_do_not_accept_are_the_tools_errors()
+    {
+        var table = await RowLevelTableAsync();
+        var view = await ViewOverAsync(table);
+        var ct = TestContext.Current.CancellationToken;
+        await using var client = await McpAs(Token("alice"));
+
+        var missing = await client.CallToolAsync("read_view", new Dictionary<string, object?> { ["view"] = "no_such_view" }, cancellationToken: ct);
+        var badFilter = await client.CallToolAsync("read_view", new Dictionary<string, object?> { ["view"] = view, ["filter"] = BadFilter }, cancellationToken: ct);
+
+        missing.IsError.Should().BeTrue();
+        Text(missing).Should().Contain("no_such_view");
+        badFilter.IsError.Should().BeTrue();
     }
 }

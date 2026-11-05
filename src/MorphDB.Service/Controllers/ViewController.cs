@@ -349,16 +349,7 @@ public sealed class ViewController : ControllerBase
                 return BadRequest(new ErrorResponse { Error = "BadRequest", Message = "'skip' and 'take' are not negative.", Code = "INVALID_ARGUMENT" });
             }
 
-            var queryRequest = new ViewQueryRequest
-            {
-                ProjectId = projectId,
-                ViewName = name,
-                Columns = ParseColumns(query.Select),
-                Filters = ParseFilters(query.Filter),
-                OrderBy = ParseOrderBy(query.OrderBy),
-                Skip = query.Skip,
-                Take = query.Take ?? 50
-            };
+            var queryRequest = ViewReads.Request(projectId, name, query.Select, query.Filter, query.OrderBy, query.Skip, query.Take ?? 50);
 
             var result = await _viewManager.QueryViewAsync(queryRequest, cancellationToken);
 
@@ -497,65 +488,6 @@ public sealed class ViewController : ControllerBase
             RefreshSchedule = request.RefreshSchedule,
             Description = request.Description
         };
-    }
-
-    private static List<string>? ParseColumns(string? select)
-    {
-        if (string.IsNullOrWhiteSpace(select))
-            return null;
-
-        return select.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
-    }
-
-    /// <summary>
-    /// The query's conditions, read by the table read's own parser: one condition per <c>filter</c>
-    /// parameter, a malformed one refused rather than dropped.
-    /// </summary>
-    private static List<ViewFilterSpec>? ParseFilters(string[]? filters)
-    {
-        if (!FilterExpressions.Any(filters))
-            return null;
-
-        return [.. filters!.Select(expression =>
-        {
-            var (column, op, value) = FilterExpressions.Parse(expression);
-            return new ViewFilterSpec { Field = column, Operator = op, Value = value, LogicalOp = LogicalOperator.And };
-        })];
-    }
-
-    private static List<ViewOrderSpec>? ParseOrderBy(string? orderBy)
-    {
-        if (string.IsNullOrWhiteSpace(orderBy))
-            return null;
-
-        var orders = new List<ViewOrderSpec>();
-        var parts = orderBy.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-        foreach (var part in parts)
-        {
-            var colonIndex = part.IndexOf(':');
-            if (colonIndex > 0)
-            {
-                var column = part[..colonIndex];
-                var direction = part[(colonIndex + 1)..].ToLowerInvariant();
-
-                orders.Add(new ViewOrderSpec
-                {
-                    Column = column,
-                    Descending = direction == "desc"
-                });
-            }
-            else
-            {
-                orders.Add(new ViewOrderSpec
-                {
-                    Column = part,
-                    Descending = false
-                });
-            }
-        }
-
-        return orders.Count > 0 ? orders : null;
     }
 
     private static AggregationFunction? ParseAggregation(string aggregation)

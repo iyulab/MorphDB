@@ -7,12 +7,13 @@
 - **A service that enforces no credential says so as it starts.** With no `Security__MasterSecret` injected the service
   has always answered every caller that can reach it; it now logs one warning at start-up saying so, so an open service
   nobody meant to leave open shows in the first lines of its log.
-- **A read-only MCP door.** A service can answer Model Context Protocol clients with five
-  tools — `describe_tables`, `describe_table`, `query_records`, `get_record` and `aggregate` — and nothing that writes. It runs inside the service,
+- **A read-only MCP door.** A service can answer Model Context Protocol clients with seven
+  tools — `describe_tables`, `describe_table`, `query_records`, `get_record`, `aggregate`, `describe_views` and `read_view` — and nothing that writes. It runs inside the service,
   behind its own credential check, project scoping and row-level security (a person's token sees what that person sees
   over REST), is off unless `MorphDB__Mcp__Enabled` is set, and the service refuses to start with it on while no master
   secret is injected. The row-list rules (filters, ordering, search, paging) moved into one place that the REST list and
-  the tool both use. See `docs/API.md`.
+  the tool both use, and so do the view-data rules (select, filter, ordering) for `read_view`, which reads a view through the row-level
+  rules of the tables it reads and says when a materialized view was last refreshed. See `docs/API.md`.
 
 - **OData `$filter` reads `and`, `or`, `not`, parentheses and `in`.** The filter was one comparison or one function:
   `qty ge 2 and qty le 3`, `a eq 1 or b eq 2`, `(a eq 1 or a eq 2) and b eq 3` and `a in (1, 2)` were refused with

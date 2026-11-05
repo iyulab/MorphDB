@@ -26,6 +26,14 @@ public interface IMorphReadPort
     /// <summary>One page of a table's rows, under the caller's own row-level rules.</summary>
     /// <exception cref="MorphReadRefusedException">The request names no usable project, the table is unknown, or the filter, ordering or search is not accepted.</exception>
     ValueTask<McpRecordPage> QueryRecordsAsync(McpRecordQuery query, CancellationToken cancellationToken);
+
+    /// <summary>The views of the request's project, with the columns each exposes.</summary>
+    /// <exception cref="MorphReadRefusedException">The request names no usable project.</exception>
+    ValueTask<IReadOnlyList<McpViewSummary>> ListViewsAsync(CancellationToken cancellationToken);
+
+    /// <summary>One page of a view's rows, read through the caller's own row-level rules on the tables the view reads.</summary>
+    /// <exception cref="MorphReadRefusedException">The request names no usable project, the view is unknown, or the filter, ordering or selection is not accepted.</exception>
+    ValueTask<McpViewPage> ReadViewAsync(McpViewQuery query, CancellationToken cancellationToken);
 }
 
 /// <summary>The read cannot be made as asked; the message says why, in words the caller can act on.</summary>
@@ -104,3 +112,40 @@ public sealed record McpAggregateQuery(string Table, IReadOnlyList<McpAggregate>
 /// <param name="TotalGroups">How many groups there are before the cap, when known.</param>
 /// <param name="MaxGroups">The cap applied.</param>
 public sealed record McpAggregation(IReadOnlyList<IDictionary<string, object?>> Groups, long? TotalGroups, int MaxGroups);
+
+/// <summary>A column a view exposes.</summary>
+/// <param name="Name">The column's name in the view.</param>
+/// <param name="Type">Its data type.</param>
+public sealed record McpViewColumn(string Name, string Type);
+
+/// <summary>A view of the project.</summary>
+/// <param name="Name">The view's name.</param>
+/// <param name="BaseTable">The table it is built over.</param>
+/// <param name="Columns">The columns it exposes.</param>
+/// <param name="Materialized">Whether it is a stored copy that is refreshed on its own terms rather than computed on every read.</param>
+/// <param name="LastRefreshedAt">When a materialized view was last refreshed; none for a view that is computed on every read.</param>
+/// <param name="Stale">Whether a materialized view's tables have changed since its last refresh.</param>
+public sealed record McpViewSummary(string Name, string BaseTable, IReadOnlyList<McpViewColumn> Columns, bool Materialized, DateTimeOffset? LastRefreshedAt, bool Stale);
+
+/// <summary>The views of a project, as an object — a tool's structured result is one.</summary>
+/// <param name="Views">The views.</param>
+public sealed record McpViewList(IReadOnlyList<McpViewSummary> Views);
+
+/// <summary>A read of one page of a view, by the view-data endpoint's rules.</summary>
+/// <param name="View">The view.</param>
+/// <param name="Select">Comma-separated columns to return; all when empty.</param>
+/// <param name="Filter">Conditions, one <c>column:op:value</c> each; all apply.</param>
+/// <param name="OrderBy">Columns to order by, <c>column:asc</c> or <c>column:desc</c>.</param>
+/// <param name="Page">1-based page number.</param>
+/// <param name="PageSize">Rows per page; the door caps it.</param>
+public sealed record McpViewQuery(string View, string? Select, IReadOnlyList<string>? Filter, string? OrderBy, int Page, int PageSize);
+
+/// <summary>One page of a view's rows.</summary>
+/// <param name="Rows">The rows, each by column name.</param>
+/// <param name="HasNext">Whether another page follows.</param>
+/// <param name="Page">The page number.</param>
+/// <param name="PageSize">The page size applied.</param>
+/// <param name="Materialized">Whether the view is a stored copy; when it is, the rows are as of <paramref name="LastRefreshedAt"/> and not necessarily as the tables stand now.</param>
+/// <param name="LastRefreshedAt">When a materialized view was last refreshed.</param>
+/// <param name="Stale">Whether a materialized view's tables have changed since its last refresh.</param>
+public sealed record McpViewPage(IReadOnlyList<IDictionary<string, object?>> Rows, bool HasNext, int Page, int PageSize, bool Materialized, DateTimeOffset? LastRefreshedAt, bool Stale);
