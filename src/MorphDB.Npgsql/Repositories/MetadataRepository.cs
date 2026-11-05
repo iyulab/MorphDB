@@ -223,7 +223,11 @@ public sealed class MetadataRepository : IMetadataRepository
 
         await using var lease = await LeaseSystemAsync(transaction, cancellationToken);
         var connection = lease.Connection;
-        await connection.ExecuteAsync(sql, new { TableId = tableId, LogicalName = logicalName, NewVersion = newVersion }, transaction);
+        await MetadataConstraintTranslation.AsDuplicateNameAsync(
+            "Table",
+            logicalName ?? string.Empty,
+            () => connection.ExecuteAsync(sql, new { TableId = tableId, LogicalName = logicalName, NewVersion = newVersion }, transaction),
+            retryDeadlocks: transaction is null);
         InvalidateUnlessIn(transaction);
     }
 

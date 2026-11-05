@@ -115,12 +115,80 @@ public class SchemaDuplicateNameTests
         thrown.Message.Should().NotContain("fk_");
     }
 
+    [Fact]
+    public async Task Of_two_requests_to_create_the_same_view_the_second_is_a_duplicate_name()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var projectId = Guid.NewGuid();
+        var table = await CreateTableAsync(projectId, ct);
+        var request = ViewRequest(projectId, table, "dup_view_" + Suffix());
+
+        var (first, second) = await SchemaRace.RunAsync(
+            _fixture.Connections, logger => ViewManager(logger).CreateViewAsync(request, ct), () => ViewManager().CreateViewAsync(request, ct), ct);
+
+        first.Should().BeNull();
+        AssertDuplicate(second, "View", request.Name);
+    }
+
+    [Fact]
+    public async Task A_view_renamed_to_the_name_of_another_is_a_duplicate_name()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var projectId = Guid.NewGuid();
+        var table = await CreateTableAsync(projectId, ct);
+        var taken = await ViewManager().CreateViewAsync(ViewRequest(projectId, table, "taken_" + Suffix()), ct);
+        var other = await ViewManager().CreateViewAsync(ViewRequest(projectId, table, "other_" + Suffix()), ct);
+
+        var act = () => ViewManager().UpdateViewAsync(new UpdateViewRequest { ViewId = other.ViewId, Name = taken.LogicalName }, ct);
+
+        AssertDuplicate((await act.Should().ThrowAsync<Exception>()).Which, "View", taken.LogicalName);
+    }
+
+    [Fact]
+    public async Task A_table_renamed_to_the_name_a_creation_is_taking_is_a_duplicate_name()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var projectId = Guid.NewGuid();
+        var existing = await CreateTableAsync(projectId, ct);
+        var name = "contested_" + Suffix();
+        var creation = new CreateTableRequest
+        {
+            ProjectId = projectId,
+            LogicalName = name,
+            Columns = [new CreateColumnRequest { LogicalName = "qty", DataType = MorphDataType.Integer, IsNullable = true }],
+        };
+
+        var (first, second) = await SchemaRace.RunAsync(
+            _fixture.Connections,
+            logger => SchemaManager(logger).CreateTableAsync(creation, ct),
+            () => SchemaManager().UpdateTableAsync(new UpdateTableRequest { TableId = existing.TableId, LogicalName = name, ExpectedVersion = existing.SchemaVersion }, ct),
+            ct);
+
+        first.Should().BeNull();
+        AssertDuplicate(second, "Table", name);
+    }
+
     private static void AssertDuplicate(Exception? thrown, string entityType, string name)
     {
         var duplicate = thrown.Should().BeOfType<DuplicateNameException>("the name is taken, whoever took it first").Which;
         duplicate.EntityType.Should().Be(entityType);
         duplicate.Name.Should().Be(name);
     }
+
+    private static CreateViewRequest ViewRequest(Guid projectId, TableMetadata table, string name) => new()
+    {
+        ProjectId = projectId,
+        Name = name,
+        Definition = new ViewDefinition { BaseTable = table.LogicalName, Columns = [new ViewColumnSpec { Source = "qty", Alias = "qty" }] },
+    };
+
+    private PostgresViewManager ViewManager(IChangeLogger? changeLogger = null) => new(
+        _fixture.Connections,
+        new ViewMetadataRepository(_fixture.Connections),
+        new MetadataRepository(_fixture.Connections),
+        new PostgresAdvisoryLockManager(_fixture.Connections, new AdvisoryLockOptions()),
+        new Sha256NameHasher(),
+        changeLogger ?? new ChangeLogger(_fixture.Connections));
 
     private static string Suffix() => Guid.NewGuid().ToString("N")[..8];
 

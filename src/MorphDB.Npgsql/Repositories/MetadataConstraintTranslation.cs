@@ -44,15 +44,23 @@ internal static class MetadataConstraintTranslation
     public static async Task AsDuplicateNameAsync(
         string entityType,
         string logicalName,
-        Func<Task> insert)
+        Func<Task> insert,
+        bool retryDeadlocks = true)
     {
         try
         {
-            await DeadlockRetry.RunAsync(async () =>
+            if (retryDeadlocks)
+            {
+                await DeadlockRetry.RunAsync(async () =>
+                {
+                    await insert().ConfigureAwait(false);
+                    return true;
+                }).ConfigureAwait(false);
+            }
+            else
             {
                 await insert().ConfigureAwait(false);
-                return true;
-            }).ConfigureAwait(false);
+            }
         }
         catch (PostgresException pg) when (pg.SqlState == PostgresErrorCodes.UniqueViolation)
         {

@@ -92,7 +92,8 @@
   retried after a timeout — met the first attempt's physical object and was answered with the database's message
   (`DDL_EXECUTION_FAILED`, naming a physical table or column): adding a column, creating a table and creating an index now
   take the lock for the table (a table being created, for its name) and check the name under it, so the second request is
-  told the name is taken.
+  told the name is taken. Creating a view, renaming a view to another view's name and renaming a table to a name a creation is
+  taking at that moment were answered with the database's uniqueness error (`500`) and are now the same `409`.
 
 ### Changed
 

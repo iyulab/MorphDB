@@ -49,6 +49,17 @@ public sealed class PostgresViewManager : IViewManager
     {
         LogicalNameValidator.ValidateEntityName(request.Name, "View");
 
+        var viewId = Guid.NewGuid();
+        var physicalName = _nameHasher.GenerateViewName(request.ProjectId, request.Name);
+
+        // Acquire advisory lock for DDL. It is held by name: the new view's id is known to nobody else, so a
+        // lock on it would serialize nothing, and two requests for one name would build the same physical
+        // view. The second waits here for the first and then finds the name taken.
+        await using var lockHandle = await _lockManager.AcquireDdlLockAsync(
+            $"view-name:{request.ProjectId:N}:{request.Name}",
+            _options.LockTimeout,
+            cancellationToken);
+
         // Check if view already exists
         var existing = await _viewRepository.GetViewByNameAsync(
             request.ProjectId, request.Name, cancellationToken);
@@ -56,15 +67,6 @@ public sealed class PostgresViewManager : IViewManager
         {
             throw new DuplicateNameException("View", request.Name);
         }
-
-        var viewId = Guid.NewGuid();
-        var physicalName = _nameHasher.GenerateViewName(request.ProjectId, request.Name);
-
-        // Acquire advisory lock for DDL
-        await using var lockHandle = await _lockManager.AcquireDdlLockAsync(
-            $"view:{viewId}",
-            _options.LockTimeout,
-            cancellationToken);
 
         // Build the SELECT statement from view definition
         var queryBuilder = new ViewQueryBuilder(_metadataRepository, request.ProjectId);
@@ -162,6 +164,15 @@ public sealed class PostgresViewManager : IViewManager
             $"view:{request.ViewId}",
             _options.LockTimeout,
             cancellationToken);
+
+        // A name another view has: said before anything is built, and again by the database's own uniqueness
+        // if a view is being created under it at this moment.
+        if (request.Name is not null && request.Name != view.LogicalName
+            && await _viewRepository.GetViewByNameAsync(view.ProjectId, request.Name, cancellationToken) is { } taken
+            && taken.ViewId != request.ViewId)
+        {
+            throw new DuplicateNameException("View", request.Name);
+        }
 
         // If definition changed, recreate the view
         var definition = request.Definition;

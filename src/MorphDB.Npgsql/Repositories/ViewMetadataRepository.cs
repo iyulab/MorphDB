@@ -198,7 +198,11 @@ public sealed class ViewMetadataRepository : IViewMetadataRepository
 
         await using var lease = await LeaseSystemAsync(transaction, cancellationToken);
         var connection = lease.Connection;
-        await connection.ExecuteAsync(sql, parameters, transaction);
+        await MetadataConstraintTranslation.AsDuplicateNameAsync(
+            "View",
+            logicalName ?? string.Empty,
+            () => connection.ExecuteAsync(sql, parameters, transaction),
+            retryDeadlocks: transaction is null);
     }
 
     public async Task UpdateLastRefreshAsync(
