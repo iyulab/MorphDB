@@ -61,15 +61,18 @@ public sealed class PostgresSchemaManager : ISchemaManager
         CancellationToken cancellationToken = default)
     {
         LogicalNameValidator.ValidateEntityName(request.LogicalName, "Table");
-        await EnsureTableNameFreeAsync(request.ProjectId, request.LogicalName, cancellationToken);
 
         var tableId = Guid.NewGuid();
 
-        // Acquire advisory lock for DDL
+        // Acquire advisory lock for DDL. It is held by name: the new table's id is known to nobody else, so a
+        // lock on it would serialize nothing, and two requests for one name would build the same physical
+        // table. The second waits here for the first and then finds the name taken.
         await using var lockHandle = await _lockManager.AcquireDdlLockAsync(
-            $"table:{tableId}",
+            $"table-name:{request.ProjectId:N}:{request.LogicalName}",
             _options.LockTimeout,
             cancellationToken);
+
+        await EnsureTableNameFreeAsync(request.ProjectId, request.LogicalName, cancellationToken);
 
         var plan = PlanTable(request, tableId);
         return await InUnitAsync(
@@ -581,6 +584,16 @@ public sealed class PostgresSchemaManager : ISchemaManager
             $"table:{request.TableId}",
             _options.LockTimeout,
             cancellationToken);
+
+        // What the first read saw may be out of date: a request ahead of this one for the same table commits
+        // before the lock is let go. The name is checked again against the table as it is now, so a retry
+        // that overlaps its own first attempt is told the name is taken rather than what PostgreSQL said.
+        table = await _repository.GetTableByIdAsync(request.TableId, includeColumns: true, cancellationToken)
+            ?? throw new TableNotFoundException(request.TableId.ToString());
+        if (table.Columns.Any(c => c.LogicalName.Equals(request.LogicalName, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new DuplicateNameException("Column", request.LogicalName);
+        }
 
         // A policy that already uses the new name for a function or a keyword would read it as this
         // column once it exists — whatever kind of column it is. Held until the column is in
@@ -1113,6 +1126,13 @@ public sealed class PostgresSchemaManager : ISchemaManager
             _options.LockTimeout,
             cancellationToken);
 
+        // The index's physical name follows its logical one, so a name that is taken would only be met as
+        // PostgreSQL's own refusal. Checked under the lock, it also catches a request still in flight.
+        if ((await _repository.GetIndexesByTableIdAsync(request.TableId, cancellationToken)).Any(i => i.LogicalName == request.LogicalName))
+        {
+            throw new DuplicateNameException("Index", request.LogicalName);
+        }
+
         return await InUnitAsync(
             (connection, transaction) => CreateIndexInAsync(request, table, indexColumns, connection, transaction, cancellationToken),
             cancellationToken);
@@ -1308,6 +1328,19 @@ public sealed class PostgresSchemaManager : ISchemaManager
                 $"table:{secondTable}",
                 _options.LockTimeout,
                 cancellationToken);
+
+        // The foreign key's name follows its table and column, so a column carries one: a second enforced
+        // relation on it would meet PostgreSQL's refusal of the name. Said here, under the locks, in the
+        // caller's own words.
+        if (request.RelationType != RelationType.ManyToMany && _options.CreatePhysicalForeignKeys && enforceOnWrite
+            && (await _repository.GetRelationsByTableIdAsync(request.SourceTableId, cancellationToken)).Any(r =>
+                r.SourceColumnId == request.SourceColumnId && r.RelationType != RelationType.ManyToMany && r.EnforceOnWrite))
+        {
+            throw new SchemaException(
+                "DDL_EXECUTION_FAILED",
+                $"Column '{sourceColumn.LogicalName}' of table '{sourceTable.LogicalName}' already has an enforced relation: " +
+                "delete it before creating another on the same column.");
+        }
 
         var relationId = Guid.NewGuid();
 

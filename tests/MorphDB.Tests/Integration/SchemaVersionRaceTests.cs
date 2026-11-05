@@ -72,40 +72,11 @@ public class SchemaVersionRaceTests
         second.Should().BeOfType<SchemaVersionConflictException>();
     }
 
-    /// <summary>
-    /// Starts <paramref name="first"/> and holds it open -- change made, not yet committed -- starts
-    /// <paramref name="second"/> behind it, gives it time to get as far as it can, then lets the first finish.
-    /// </summary>
-    private async Task<(Exception? First, Exception? Second)> RaceAsync(
+    private Task<(Exception? First, Exception? Second)> RaceAsync(
         Func<PostgresSchemaManager, Task> first,
         Func<PostgresSchemaManager, Task> second,
-        CancellationToken ct)
-    {
-        var reached = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        var firstTask = first(SchemaManager(new GatedChangeLogger(new ChangeLogger(_fixture.Connections), reached, gate.Task)));
-        await reached.Task.WaitAsync(TimeSpan.FromSeconds(30), ct);
-
-        var secondTask = second(SchemaManager());
-        await Task.Delay(1500, ct);
-        gate.SetResult();
-
-        return (await CaptureAsync(firstTask), await CaptureAsync(secondTask));
-    }
-
-    private static async Task<Exception?> CaptureAsync(Task task)
-    {
-        try
-        {
-            await task;
-            return null;
-        }
-        catch (Exception ex)
-        {
-            return ex;
-        }
-    }
+        CancellationToken ct) =>
+        SchemaRace.RunAsync(_fixture.Connections, logger => first(SchemaManager(logger)), () => second(SchemaManager()), ct);
 
     private static string Suffix() => Guid.NewGuid().ToString("N")[..8];
 

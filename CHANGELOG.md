@@ -85,6 +85,15 @@
   version is now checked while holding the lock: the request that gets it second finds the version moved and is refused
   with `409`. Adding a column still checks before the lock, as two columns added at the same moment are both wanted.
 
+- **A name that is taken is answered as `409 DUPLICATE_NAME`, whoever took it and however recently.** Creating an index under a
+  name the table already has ended in `500`, and so did a second relation on a column that already carried an enforced one
+  (PostgreSQL's refusal of a physical name, which is not part of the contract; the relation is now refused with
+  `DDL_EXECUTION_FAILED` and a message about the column). A request that overlapped its own first attempt — a client that
+  retried after a timeout — met the first attempt's physical object and was answered with the database's message
+  (`DDL_EXECUTION_FAILED`, naming a physical table or column): adding a column, creating a table and creating an index now
+  take the lock for the table (a table being created, for its name) and check the name under it, so the second request is
+  told the name is taken.
+
 ### Changed
 
 - **`IMetadataRepository`, `IViewMetadataRepository` and `IChangeLogger` take an optional transaction.** The repositories'
