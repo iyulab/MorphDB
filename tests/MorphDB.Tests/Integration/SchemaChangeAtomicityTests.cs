@@ -249,6 +249,105 @@ public class SchemaChangeAtomicityTests
         (await RelationsNamedAsync(table.PhysicalName, "r", ct)).Should().Be(0);
     }
 
+    [Fact]
+    public async Task A_column_whose_type_change_cannot_be_logged_keeps_its_type_and_can_be_changed_again()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var table = await CreateTableAsync(SchemaManager(), Guid.NewGuid(), ct);
+        var qty = table.Columns.Single(c => c.LogicalName == "qty");
+        var typeBefore = await PhysicalTypeAsync(table.PhysicalName, qty.PhysicalName, ct);
+        var version = await Repository().GetCurrentVersionAsync(table.TableId, cancellationToken: ct);
+        var request = new UpdateColumnRequest
+        {
+            ColumnId = qty.ColumnId,
+            DataType = MorphDataType.Decimal,
+            ForceCast = true,
+            ExpectedVersion = version,
+        };
+
+        var act = () => SchemaManager(new ThrowingChangeLogger(SchemaOperation.UpdateColumn)).UpdateColumnAsync(request, ct);
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("change log is down");
+
+        (await PhysicalTypeAsync(table.PhysicalName, qty.PhysicalName, ct)).Should().Be(typeBefore, "a change that did not happen leaves the column's type alone");
+        (await Repository().GetColumnByIdAsync(qty.ColumnId, ct))!.DataType.Should().Be(MorphDataType.Integer, "and so does its description");
+        (await Repository().GetCurrentVersionAsync(table.TableId, cancellationToken: ct)).Should().Be(version);
+
+        var changed = await SchemaManager().UpdateColumnAsync(request, ct);
+        changed.DataType.Should().Be(MorphDataType.Decimal);
+        (await PhysicalTypeAsync(table.PhysicalName, qty.PhysicalName, ct)).Should().NotBe(typeBefore);
+    }
+
+    [Fact]
+    public async Task A_column_whose_new_logical_name_cannot_be_logged_keeps_its_name_and_can_be_renamed_again()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var table = await CreateTableAsync(SchemaManager(), Guid.NewGuid(), ct);
+        var qty = table.Columns.Single(c => c.LogicalName == "qty");
+        var request = new UpdateColumnRequest
+        {
+            ColumnId = qty.ColumnId,
+            LogicalName = "amount",
+            ExpectedVersion = await Repository().GetCurrentVersionAsync(table.TableId, cancellationToken: ct),
+        };
+
+        var act = () => SchemaManager(new ThrowingChangeLogger(SchemaOperation.UpdateColumn)).UpdateColumnAsync(request, ct);
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("change log is down");
+
+        (await Repository().GetColumnByIdAsync(qty.ColumnId, ct))!.LogicalName.Should().Be("qty", "a rename that did not happen is not in the description");
+
+        var renamed = await SchemaManager().UpdateColumnAsync(request, ct);
+        renamed.LogicalName.Should().Be("amount");
+    }
+
+    [Fact]
+    public async Task A_column_whose_rename_cannot_be_logged_keeps_its_physical_name_and_can_be_renamed_again()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var table = await CreateTableAsync(SchemaManager(), Guid.NewGuid(), ct);
+        var qty = table.Columns.Single(c => c.LogicalName == "qty");
+        var renamedPhysical = _hasher.GenerateColumnName(table.TableId, "amount");
+        var request = new RenameColumnRequest
+        {
+            ColumnId = qty.ColumnId,
+            NewLogicalName = "amount",
+            ExpectedVersion = await Repository().GetCurrentVersionAsync(table.TableId, cancellationToken: ct),
+        };
+
+        var act = () => SchemaManager(new ThrowingChangeLogger(SchemaOperation.RenameColumn)).RenameColumnAsync(request, ct);
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("change log is down");
+
+        (await PhysicalColumnsAsync(table.PhysicalName, qty.PhysicalName, ct)).Should().Be(1, "a rename that did not happen leaves the column under its name");
+        (await PhysicalColumnsAsync(table.PhysicalName, renamedPhysical, ct)).Should().Be(0);
+        (await Repository().GetColumnByIdAsync(qty.ColumnId, ct))!.LogicalName.Should().Be("qty");
+
+        var renamed = await SchemaManager().RenameColumnAsync(request, ct);
+        renamed.LogicalName.Should().Be("amount");
+        (await PhysicalColumnsAsync(table.PhysicalName, renamedPhysical, ct)).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task A_table_whose_rename_cannot_be_logged_keeps_its_name_and_can_be_renamed_again()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var table = await CreateTableAsync(SchemaManager(), Guid.NewGuid(), ct);
+        var request = new UpdateTableRequest
+        {
+            TableId = table.TableId,
+            LogicalName = "renamed_" + Guid.NewGuid().ToString("N")[..8],
+            ExpectedVersion = await Repository().GetCurrentVersionAsync(table.TableId, cancellationToken: ct),
+        };
+
+        var act = () => SchemaManager(new ThrowingChangeLogger(SchemaOperation.UpdateTable)).UpdateTableAsync(request, ct);
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("change log is down");
+
+        var after = await Repository().GetTableByIdAsync(table.TableId, cancellationToken: ct);
+        after!.LogicalName.Should().Be(table.LogicalName, "a rename that did not happen is not in the description");
+        after.SchemaVersion.Should().Be(request.ExpectedVersion);
+
+        var renamed = await SchemaManager().UpdateTableAsync(request, ct);
+        renamed.LogicalName.Should().Be(request.LogicalName);
+    }
+
     private static async Task<TableMetadata> CreateTableAsync(
         PostgresSchemaManager schema, Guid projectId, CancellationToken ct, CreateColumnRequest? extra = null)
     {
@@ -282,6 +381,15 @@ public class SchemaChangeAtomicityTests
             "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace " +
             "WHERE c.relkind = @Kind AND c.relname = @Name",
             new { Kind = kind, Name = physicalName });
+    }
+
+    private async Task<string?> PhysicalTypeAsync(string physicalTable, string physicalColumn, CancellationToken ct)
+    {
+        await using var connection = await _fixture.DataSource.OpenConnectionAsync(ct);
+        return await connection.ExecuteScalarAsync<string?>(
+            "SELECT format_type(a.atttypid, a.atttypmod) FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid " +
+            "WHERE c.relname = @Table AND a.attname = @Column AND NOT a.attisdropped",
+            new { Table = physicalTable, Column = physicalColumn });
     }
 
     private async Task<long> ConstraintsNamedAsync(string name, CancellationToken ct)

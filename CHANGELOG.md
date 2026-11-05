@@ -72,8 +72,9 @@
   commits. A failure in between — a deadlock victim, a failing change log — left the object in the database with nothing
   describing it, and the same request then failed because the name was already there; a process that died in between left it
   for good. Deleting a table, column, index or relation dropped the physical object first the same way, so a failure after it
-  left a description of something that no longer existed, and every read that met it ended in `500`. Each of these changes is
-  now one transaction — the physical statements, the description, the version it moves the table to and the change-log entry —
+  left a description of something that no longer existed, and every read that met it ended in `500`; changing a column's type,
+  renaming a column and renaming a table were several commits too, and one that failed after the first left the column
+  changed with its description not. Each of these changes is now one transaction — the physical statements, the description, the version it moves the table to and the change-log entry —
   so it happens whole or not at all, and a deadlock victim runs the whole change again.
 
 ### Changed

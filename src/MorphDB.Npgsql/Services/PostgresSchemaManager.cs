@@ -474,20 +474,25 @@ public sealed class PostgresSchemaManager : ISchemaManager
         }
 
         var newVersion = currentVersion + 1;
-        await _repository.UpdateTableAsync(request.TableId, request.LogicalName, newVersion, cancellationToken: cancellationToken);
 
-        // Log change
-        await _changeLogger.LogChangeAsync(new SchemaChangeEntry
+        // The new name and the log entry are one change.
+        await InUnitAsync(async (_, transaction) =>
         {
-            TableId = request.TableId,
-            Operation = SchemaOperation.UpdateTable,
-            SchemaVersion = newVersion,
-            Changes = new
+            await _repository.UpdateTableAsync(request.TableId, request.LogicalName, newVersion, transaction, cancellationToken);
+
+            // Log change
+            await _changeLogger.LogChangeAsync(new SchemaChangeEntry
             {
-                OldLogicalName = table.LogicalName,
-                NewLogicalName = request.LogicalName ?? table.LogicalName
-            }
-        }, cancellationToken: cancellationToken);
+                TableId = request.TableId,
+                Operation = SchemaOperation.UpdateTable,
+                SchemaVersion = newVersion,
+                Changes = new
+                {
+                    OldLogicalName = table.LogicalName,
+                    NewLogicalName = request.LogicalName ?? table.LogicalName
+                }
+            }, transaction, cancellationToken);
+        }, cancellationToken);
 
         return (await _repository.GetTableByIdAsync(request.TableId, includeColumns: true, cancellationToken))!;
     }
@@ -732,156 +737,177 @@ public sealed class PostgresSchemaManager : ISchemaManager
             throw new SchemaVersionConflictException(request.ExpectedVersion, currentVersion);
         }
 
-        // Update simple metadata (logical name, default value). The physical column keeps its name
-        // here, so a new logical name is a change to metadata alone — and to every policy that
-        // names the column.
-        if (request.LogicalName is not null && request.LogicalName != column.LogicalName)
-        {
-            var renamedTable = await _repository.GetTableByIdAsync(column.TableId, includeColumns: true, cancellationToken)
-                ?? throw new TableNotFoundException(column.TableId.ToString());
-
-            await RenameColumnWithPoliciesAsync(
-                renamedTable, column, request.LogicalName, newPhysicalName: null, request.DefaultValue, cancellationToken);
-        }
-        else
-        {
-            await _repository.UpdateColumnAsync(request.ColumnId, request.LogicalName, request.DefaultValue, cancellationToken: cancellationToken);
-        }
-
-        // Apply DDL changes for type/constraint modifications
+        var renamesLogically = request.LogicalName is not null && request.LogicalName != column.LogicalName;
         var hasDdlChanges = request.DataType.HasValue || request.IsNullable.HasValue ||
                             request.IsUnique.HasValue || request.CheckExpression is not null;
 
-        if (hasDdlChanges)
+        TableMetadata? table = null;
+        if (renamesLogically || hasDdlChanges)
         {
-            var table = await _repository.GetTableByIdAsync(column.TableId, includeColumns: true, cancellationToken)
+            table = await _repository.GetTableByIdAsync(column.TableId, includeColumns: true, cancellationToken)
                 ?? throw new TableNotFoundException(column.TableId.ToString());
-
-            // The same declaration gate a new column passes: a blank expression clears the check.
-            if (!string.IsNullOrWhiteSpace(request.CheckExpression))
-            {
-                Infrastructure.CheckGrammar.EnsureSupported(request.CheckExpression);
-                Infrastructure.CheckGrammar.EnsureFieldsExist(
-                    request.CheckExpression, table.Columns.Select(c => c.LogicalName).Append(request.LogicalName ?? column.LogicalName));
-            }
-
-            await ApplyColumnDdlChangesAsync(table, column, request, cancellationToken);
-
-            // Update metadata for type/constraint changes
-            string? newDataType = request.DataType?.ToString();
-            string? newNativeType = request.DataType.HasValue
-                ? TypeMapper.ToNativeType(request.DataType.Value) : null;
-
-            await _repository.UpdateColumnMetadataAsync(
-                request.ColumnId, newDataType, newNativeType,
-                request.IsNullable, request.IsUnique,
-                request.CheckExpression, cancellationToken: cancellationToken);
         }
 
-        await _repository.IncrementVersionAsync(column.TableId, cancellationToken: cancellationToken);
-
-        // Log change
-        await _changeLogger.LogChangeAsync(new SchemaChangeEntry
+        // The same declaration gate a new column passes: a blank expression clears the check.
+        if (hasDdlChanges && !string.IsNullOrWhiteSpace(request.CheckExpression))
         {
-            TableId = column.TableId,
-            Operation = SchemaOperation.UpdateColumn,
-            SchemaVersion = currentVersion + 1,
-            Changes = new
-            {
-                ColumnId = request.ColumnId,
-                OldLogicalName = column.LogicalName,
-                NewLogicalName = request.LogicalName ?? column.LogicalName,
-                OldDataType = column.DataType.ToString(),
-                NewDataType = request.DataType?.ToString(),
-                OldIsNullable = column.IsNullable,
-                NewIsNullable = request.IsNullable,
-                OldIsUnique = column.IsUnique,
-                NewIsUnique = request.IsUnique,
-                NewCheckExpression = request.CheckExpression
-            }
-        }, cancellationToken: cancellationToken);
+            Infrastructure.CheckGrammar.EnsureSupported(request.CheckExpression);
+            Infrastructure.CheckGrammar.EnsureFieldsExist(
+                request.CheckExpression,
+                table!.Columns.Where(c => c.ColumnId != column.ColumnId).Select(c => c.LogicalName).Append(request.LogicalName ?? column.LogicalName));
+        }
 
-        return (await _repository.GetColumnByIdAsync(request.ColumnId, cancellationToken))!;
-    }
+        // Whoever writes a policy reads the table's stored policies under this lock and writes them
+        // back; without it, a policy written while the column is renamed could keep the old name. Held
+        // until the rename is committed, on a connection of its own.
+        await using var policyConnection = renamesLogically ? await _connections.OpenSystemAsync(cancellationToken) : null;
+        await using var policyLock = policyConnection is null
+            ? null
+            : await NativePolicyProjector.LockAsync(policyConnection, table!, cancellationToken);
 
-    /// <summary>
-    /// Applies physical DDL changes for column type/constraint modifications.
-    /// </summary>
-    private async Task ApplyColumnDdlChangesAsync(
-        TableMetadata table,
-        ColumnMetadata column,
-        UpdateColumnRequest request,
-        CancellationToken cancellationToken)
-    {
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-
+        // The name, the physical change, the description, the version and the log entry are one change: a
+        // column whose update cannot be written down is as it was.
+        PostgresException? ddlFailure = null;
         try
         {
-            // Type change: ALTER COLUMN TYPE
-            if (request.DataType.HasValue && request.DataType.Value != column.DataType)
+            await InUnitAsync(async (connection, transaction) =>
             {
-                var newNativeType = TypeMapper.ToNativeType(request.DataType.Value);
-                if (!TypeMapper.IsTypeCastSafe(column.DataType, request.DataType.Value) && !request.ForceCast)
+                // Update simple metadata (logical name, default value). The physical column keeps its name
+                // here, so a new logical name is a change to metadata alone — and to every policy that
+                // names the column.
+                if (renamesLogically)
                 {
-                    throw new SchemaException("UNSAFE_TYPE_CAST",
-                        $"Cannot safely convert column '{column.LogicalName}' from {column.DataType} to {request.DataType.Value}. " +
-                        "Data loss may occur. Set ForceCast=true to attempt the conversion, or create a new column and migrate data manually.");
-                }
-
-                var alterTypeSql = DdlBuilder.BuildAlterColumnType(
-                    table.PhysicalName, column.PhysicalName, newNativeType);
-                await connection.ExecuteAsync(new CommandDefinition(
-                    alterTypeSql, transaction: transaction, cancellationToken: cancellationToken));
-            }
-
-            // Unique constraint change
-            if (request.IsUnique.HasValue && request.IsUnique.Value != column.IsUnique)
-            {
-                var constraintName = $"uq_{table.PhysicalName}_{column.PhysicalName}";
-                if (request.IsUnique.Value)
-                {
-                    var addUniqueSql = DdlBuilder.BuildAddUniqueConstraint(
-                        table.PhysicalName, constraintName, column.PhysicalName,
-                        overActiveRowsOnly: table.SoftDeleteEnabled);
-                    await connection.ExecuteAsync(new CommandDefinition(
-                        addUniqueSql, transaction: transaction, cancellationToken: cancellationToken));
+                    await RenameColumnWithPoliciesAsync(
+                        connection, transaction, table!, column, request.LogicalName!, newPhysicalName: null, request.DefaultValue, cancellationToken);
                 }
                 else
                 {
-                    var dropUniqueSql = DdlBuilder.BuildDropUniqueConstraint(
-                        table.PhysicalName, constraintName);
-                    await connection.ExecuteAsync(new CommandDefinition(
-                        dropUniqueSql, transaction: transaction, cancellationToken: cancellationToken));
+                    await _repository.UpdateColumnAsync(request.ColumnId, request.LogicalName, request.DefaultValue, transaction, cancellationToken);
                 }
-            }
 
-            await transaction.CommitAsync(cancellationToken);
+                // Apply DDL changes for type/constraint modifications
+                if (hasDdlChanges)
+                {
+                    try
+                    {
+                        await ApplyColumnDdlChangesAsync(connection, transaction, table!, column, request, cancellationToken);
+                    }
+                    catch (PostgresException ex) when (ex.SqlState is not (PostgresErrorCodes.DeadlockDetected or PostgresErrorCodes.SerializationFailure))
+                    {
+                        ddlFailure = ex;
+                        throw;
+                    }
+
+                    // Update metadata for type/constraint changes
+                    string? newDataType = request.DataType?.ToString();
+                    string? newNativeType = request.DataType.HasValue
+                        ? TypeMapper.ToNativeType(request.DataType.Value) : null;
+
+                    await _repository.UpdateColumnMetadataAsync(
+                        request.ColumnId, newDataType, newNativeType,
+                        request.IsNullable, request.IsUnique,
+                        request.CheckExpression, transaction, cancellationToken);
+                }
+
+                await _repository.IncrementVersionAsync(column.TableId, transaction, cancellationToken);
+
+                // Log change
+                await _changeLogger.LogChangeAsync(new SchemaChangeEntry
+                {
+                    TableId = column.TableId,
+                    Operation = SchemaOperation.UpdateColumn,
+                    SchemaVersion = currentVersion + 1,
+                    Changes = new
+                    {
+                        ColumnId = request.ColumnId,
+                        OldLogicalName = column.LogicalName,
+                        NewLogicalName = request.LogicalName ?? column.LogicalName,
+                        OldDataType = column.DataType.ToString(),
+                        NewDataType = request.DataType?.ToString(),
+                        OldIsNullable = column.IsNullable,
+                        NewIsNullable = request.IsNullable,
+                        OldIsUnique = column.IsUnique,
+                        NewIsUnique = request.IsUnique,
+                        NewCheckExpression = request.CheckExpression
+                    }
+                }, transaction, cancellationToken);
+            }, cancellationToken);
         }
-        catch (PostgresException ex)
+        catch (PostgresException ex) when (ReferenceEquals(ex, ddlFailure))
         {
-            await transaction.RollbackAsync(cancellationToken);
-
+            // The change has been rolled back, so the policies can be read again — on a connection of their own.
             // PostgreSQL will not change the type of a column a policy reads: the policy was
             // checked against the type it had. Which policy that is, is the caller's to know.
-            if (ex.SqlState == PostgresErrorCodes.FeatureNotSupported
-                && await RowLevelSecurityRefusal.ForColumnAsync(connection, table, column, "given another type", cancellationToken) is { } refusal)
+            if (ex.SqlState == PostgresErrorCodes.FeatureNotSupported)
             {
-                throw refusal;
+                await using var connection = await _connections.OpenSystemAsync(cancellationToken);
+                if (await RowLevelSecurityRefusal.ForColumnAsync(connection, table!, column, "given another type", cancellationToken) is { } refusal)
+                {
+                    throw refusal;
+                }
             }
 
             throw new SchemaException("DDL_EXECUTION_FAILED",
                 $"Column modification DDL failed: {ex.MessageText}", ex);
         }
-        catch (ValidationException)
+
+        if (renamesLogically)
         {
-            await transaction.RollbackAsync(cancellationToken);
-            throw;
+            _metadataCache?.Invalidate(table!.ProjectId);
         }
-        catch
+
+        return (await _repository.GetColumnByIdAsync(request.ColumnId, cancellationToken))!;
+    }
+
+    /// <summary>
+    /// Applies physical DDL changes for column type/constraint modifications, on the transaction of the
+    /// change they belong to. What PostgreSQL refuses is the caller's to translate once that change has
+    /// been rolled back.
+    /// </summary>
+    private static async Task ApplyColumnDdlChangesAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        TableMetadata table,
+        ColumnMetadata column,
+        UpdateColumnRequest request,
+        CancellationToken cancellationToken)
+    {
+        // Type change: ALTER COLUMN TYPE
+        if (request.DataType.HasValue && request.DataType.Value != column.DataType)
         {
-            await transaction.RollbackAsync(cancellationToken);
-            throw;
+            var newNativeType = TypeMapper.ToNativeType(request.DataType.Value);
+            if (!TypeMapper.IsTypeCastSafe(column.DataType, request.DataType.Value) && !request.ForceCast)
+            {
+                throw new SchemaException("UNSAFE_TYPE_CAST",
+                    $"Cannot safely convert column '{column.LogicalName}' from {column.DataType} to {request.DataType.Value}. " +
+                    "Data loss may occur. Set ForceCast=true to attempt the conversion, or create a new column and migrate data manually.");
+            }
+
+            var alterTypeSql = DdlBuilder.BuildAlterColumnType(
+                table.PhysicalName, column.PhysicalName, newNativeType);
+            await connection.ExecuteAsync(new CommandDefinition(
+                alterTypeSql, transaction: transaction, cancellationToken: cancellationToken));
+        }
+
+        // Unique constraint change
+        if (request.IsUnique.HasValue && request.IsUnique.Value != column.IsUnique)
+        {
+            var constraintName = $"uq_{table.PhysicalName}_{column.PhysicalName}";
+            if (request.IsUnique.Value)
+            {
+                var addUniqueSql = DdlBuilder.BuildAddUniqueConstraint(
+                    table.PhysicalName, constraintName, column.PhysicalName,
+                    overActiveRowsOnly: table.SoftDeleteEnabled);
+                await connection.ExecuteAsync(new CommandDefinition(
+                    addUniqueSql, transaction: transaction, cancellationToken: cancellationToken));
+            }
+            else
+            {
+                var dropUniqueSql = DdlBuilder.BuildDropUniqueConstraint(
+                    table.PhysicalName, constraintName);
+                await connection.ExecuteAsync(new CommandDefinition(
+                    dropUniqueSql, transaction: transaction, cancellationToken: cancellationToken));
+            }
         }
     }
 
@@ -923,24 +949,38 @@ public sealed class PostgresSchemaManager : ISchemaManager
             ? _nameHasher.GenerateColumnName(column.TableId, request.NewLogicalName)
             : null;
 
-        await RenameColumnWithPoliciesAsync(
-            table, column, request.NewLogicalName, newPhysicalName, defaultValue: null, cancellationToken);
+        // Whoever writes a policy reads the table's stored policies under this lock and writes them
+        // back; without it, a policy written while the column is renamed could keep the old name. Held
+        // until the rename is committed, on a connection of its own.
+        await using var policyConnection = await _connections.OpenSystemAsync(cancellationToken);
+        await using var policyLock = await NativePolicyProjector.LockAsync(policyConnection, table, cancellationToken);
 
-        await _repository.IncrementVersionAsync(column.TableId, cancellationToken: cancellationToken);
-
-        // Log change
-        await _changeLogger.LogChangeAsync(new SchemaChangeEntry
+        // The rename, the version and the log entry are one change.
+        await InUnitAsync(async (connection, transaction) =>
         {
-            TableId = column.TableId,
-            Operation = SchemaOperation.RenameColumn,
-            SchemaVersion = currentVersion + 1,
-            Changes = new
+            await RenameColumnWithPoliciesAsync(
+                connection, transaction, table, column, request.NewLogicalName, newPhysicalName, defaultValue: null, cancellationToken);
+
+            await _repository.IncrementVersionAsync(column.TableId, transaction, cancellationToken);
+
+            // Log change
+            await _changeLogger.LogChangeAsync(new SchemaChangeEntry
             {
-                ColumnId = request.ColumnId,
-                OldLogicalName = column.LogicalName,
-                NewLogicalName = request.NewLogicalName
-            }
-        }, cancellationToken: cancellationToken);
+                TableId = column.TableId,
+                Operation = SchemaOperation.RenameColumn,
+                SchemaVersion = currentVersion + 1,
+                Changes = new
+                {
+                    ColumnId = request.ColumnId,
+                    OldLogicalName = column.LogicalName,
+                    NewLogicalName = request.NewLogicalName
+                }
+            }, transaction, cancellationToken);
+        }, cancellationToken);
+
+        // Written on a connection of its own, not through the repository: the cached definitions are
+        // emptied here, once the rename is committed.
+        _metadataCache?.Invalidate(table.ProjectId);
 
         return (await _repository.GetColumnByIdAsync(request.ColumnId, cancellationToken))!;
     }
@@ -948,10 +988,13 @@ public sealed class PostgresSchemaManager : ISchemaManager
     /// <summary>
     /// Gives a column its new logical name — and, when <paramref name="newPhysicalName"/> is given,
     /// renames the physical column to it — and follows the change in every row-level security
-    /// policy of the table, in one transaction. A policy is written in logical column names, so a
-    /// rename that left it behind would leave a policy nothing can translate any more.
+    /// policy of the table, on the transaction given. A policy is written in logical column names, so a
+    /// rename that left it behind would leave a policy nothing can translate any more. The caller holds
+    /// the table's policy lock (<see cref="NativePolicyProjector.LockAsync"/>) until it has committed.
     /// </summary>
-    private async Task RenameColumnWithPoliciesAsync(
+    private static async Task RenameColumnWithPoliciesAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
         TableMetadata table,
         ColumnMetadata column,
         string newLogicalName,
@@ -959,13 +1002,6 @@ public sealed class PostgresSchemaManager : ISchemaManager
         string? defaultValue,
         CancellationToken cancellationToken)
     {
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-
-        // Whoever writes a policy reads the table's stored policies under this lock and writes them
-        // back; without it, a policy written while the column is renamed could keep the old name.
-        await using var policyLock = await NativePolicyProjector.LockAsync(connection, table, cancellationToken);
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-
         if (newPhysicalName is not null)
         {
             var renameSql = DdlBuilder.BuildRenameColumn(table.PhysicalName, column.PhysicalName, newPhysicalName);
@@ -986,12 +1022,6 @@ public sealed class PostgresSchemaManager : ISchemaManager
 
         await NativePolicyProjector.RenameColumnInStoredAsync(
             connection, transaction, table, column.LogicalName, newLogicalName, cancellationToken);
-
-        await transaction.CommitAsync(cancellationToken);
-
-        // Written on a connection of its own, not through the repository: the cached definitions are
-        // emptied here, once the rename is committed.
-        _metadataCache?.Invalidate(table.ProjectId);
     }
 
     public async Task DeleteColumnAsync(
