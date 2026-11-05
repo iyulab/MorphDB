@@ -2,6 +2,7 @@ using System.Text.Json;
 using Dapper;
 using MorphDB.Core.Models;
 using MorphDB.Npgsql.Infrastructure;
+using Npgsql;
 
 namespace MorphDB.Npgsql.Repositories;
 
@@ -17,8 +18,21 @@ public sealed class ViewMetadataRepository : IViewMetadataRepository
         _connections = connections;
     }
 
+    /// <summary>
+    /// The connection a write runs on: the transaction's own when it is given, so the write is one of the
+    /// statements that commit or roll back together; otherwise a connection opened for this one write.
+    /// </summary>
+    private async ValueTask<ScopedConnection> LeaseSystemAsync(NpgsqlTransaction? transaction, CancellationToken cancellationToken) =>
+        transaction is null
+            ? new ScopedConnection(await _connections.OpenSystemAsync(cancellationToken).ConfigureAwait(false), null, ownsConnection: true)
+            : new ScopedConnection(
+                transaction.Connection ?? throw new InvalidOperationException("The transaction has already ended."),
+                transaction,
+                ownsConnection: false);
+
     public async Task<ViewMetadata> InsertViewAsync(
         ViewMetadata view,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default)
     {
         const string sql = """
@@ -33,7 +47,8 @@ public sealed class ViewMetadataRepository : IViewMetadataRepository
                       is_stale, descriptor, is_active, created_at, updated_at
             """;
 
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
+        await using var lease = await LeaseSystemAsync(transaction, cancellationToken);
+        var connection = lease.Connection;
         var result = await MetadataConstraintTranslation.AsDuplicateNameAsync(
             "View",
             view.LogicalName,
@@ -48,7 +63,8 @@ public sealed class ViewMetadataRepository : IViewMetadataRepository
                 RefreshPolicy = view.RefreshPolicy.ToString(),
                 view.RefreshSchedule,
                 Descriptor = view.Descriptor?.RootElement.GetRawText()
-            }));
+            }, transaction),
+            retryDeadlocks: transaction is null);
 
         return MapToViewMetadata(result);
     }
@@ -135,6 +151,7 @@ public sealed class ViewMetadataRepository : IViewMetadataRepository
         MaterializedViewRefreshPolicy? refreshPolicy,
         string? refreshSchedule,
         string? description,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default)
     {
         var updates = new List<string>();
@@ -179,8 +196,9 @@ public sealed class ViewMetadataRepository : IViewMetadataRepository
             WHERE view_id = @ViewId AND is_active = true
             """;
 
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-        await connection.ExecuteAsync(sql, parameters);
+        await using var lease = await LeaseSystemAsync(transaction, cancellationToken);
+        var connection = lease.Connection;
+        await connection.ExecuteAsync(sql, parameters, transaction);
     }
 
     public async Task UpdateLastRefreshAsync(
@@ -218,6 +236,7 @@ public sealed class ViewMetadataRepository : IViewMetadataRepository
 
     public async Task SoftDeleteViewAsync(
         Guid viewId,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default)
     {
         const string sql = """
@@ -227,12 +246,14 @@ public sealed class ViewMetadataRepository : IViewMetadataRepository
             WHERE view_id = @ViewId
             """;
 
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-        await connection.ExecuteAsync(sql, new { ViewId = viewId });
+        await using var lease = await LeaseSystemAsync(transaction, cancellationToken);
+        var connection = lease.Connection;
+        await connection.ExecuteAsync(sql, new { ViewId = viewId }, transaction);
     }
 
     public async Task<ViewColumnMetadata> InsertViewColumnAsync(
         ViewColumnMetadata column,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default)
     {
         const string sql = """
@@ -243,7 +264,8 @@ public sealed class ViewMetadataRepository : IViewMetadataRepository
             RETURNING column_id, view_id, logical_name, data_type, is_computed, expression, ordinal_position
             """;
 
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
+        await using var lease = await LeaseSystemAsync(transaction, cancellationToken);
+        var connection = lease.Connection;
         var result = await connection.QuerySingleAsync<ViewColumnRow>(sql, new
         {
             column.ColumnId,
@@ -253,7 +275,7 @@ public sealed class ViewMetadataRepository : IViewMetadataRepository
             column.IsComputed,
             column.Expression,
             column.OrdinalPosition
-        });
+        }, transaction);
 
         return MapToViewColumnMetadata(result);
     }

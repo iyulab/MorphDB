@@ -348,6 +348,94 @@ public class SchemaChangeAtomicityTests
         renamed.LogicalName.Should().Be(request.LogicalName);
     }
 
+    [Theory]
+    [InlineData(false, "v")]
+    [InlineData(true, "m")]
+    public async Task A_view_whose_creation_cannot_be_logged_is_not_built_and_can_be_built_again(bool materialized, string kind)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var projectId = Guid.NewGuid();
+        var table = await CreateTableAsync(SchemaManager(), projectId, ct);
+        var name = "view_" + Guid.NewGuid().ToString("N")[..8];
+        var request = new CreateViewRequest
+        {
+            ProjectId = projectId,
+            Name = name,
+            IsMaterialized = materialized,
+            Definition = new ViewDefinition { BaseTable = table.LogicalName, Columns = [new ViewColumnSpec { Source = "qty", Alias = "qty" }] },
+        };
+
+        var act = () => ViewManager(new ThrowingChangeLogger(SchemaOperation.CreateView)).CreateViewAsync(request, ct);
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("change log is down");
+
+        (await RelationsNamedAsync(_hasher.GenerateViewName(projectId, name), kind, ct))
+            .Should().Be(0, "the view a failed change built is taken back with it");
+        (await new ViewMetadataRepository(_fixture.Connections).GetViewByNameAsync(projectId, name, ct)).Should().BeNull();
+
+        var built = await ViewManager().CreateViewAsync(request, ct);
+        built.LogicalName.Should().Be(name);
+    }
+
+    [Fact]
+    public async Task A_view_whose_new_definition_cannot_be_logged_keeps_its_definition_and_can_be_changed_again()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var projectId = Guid.NewGuid();
+        var table = await CreateTableAsync(SchemaManager(), projectId, ct, extra: new CreateColumnRequest
+        {
+            LogicalName = "note",
+            DataType = MorphDataType.Text,
+            IsNullable = true,
+        });
+        var view = await ViewManager().CreateViewAsync(new CreateViewRequest
+        {
+            ProjectId = projectId,
+            Name = "view_" + Guid.NewGuid().ToString("N")[..8],
+            Definition = new ViewDefinition { BaseTable = table.LogicalName, Columns = [new ViewColumnSpec { Source = "qty", Alias = "qty" }] },
+        }, ct);
+        var before = await ViewDefinitionAsync(view.PhysicalName, ct);
+        var request = new UpdateViewRequest
+        {
+            ViewId = view.ViewId,
+            Definition = new ViewDefinition
+            {
+                BaseTable = table.LogicalName,
+                Columns = [new ViewColumnSpec { Source = "qty", Alias = "qty" }, new ViewColumnSpec { Source = "note", Alias = "note" }],
+            },
+        };
+
+        var act = () => ViewManager(new ThrowingChangeLogger(SchemaOperation.UpdateView)).UpdateViewAsync(request, ct);
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("change log is down");
+
+        (await ViewDefinitionAsync(view.PhysicalName, ct)).Should().Be(before, "a change that did not happen leaves the view as it was");
+
+        await ViewManager().UpdateViewAsync(request, ct);
+        (await ViewDefinitionAsync(view.PhysicalName, ct)).Should().NotBe(before);
+    }
+
+    [Fact]
+    public async Task A_view_whose_deletion_cannot_be_logged_is_still_there_and_can_be_deleted_again()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var projectId = Guid.NewGuid();
+        var table = await CreateTableAsync(SchemaManager(), projectId, ct);
+        var view = await ViewManager().CreateViewAsync(new CreateViewRequest
+        {
+            ProjectId = projectId,
+            Name = "view_" + Guid.NewGuid().ToString("N")[..8],
+            Definition = new ViewDefinition { BaseTable = table.LogicalName, Columns = [new ViewColumnSpec { Source = "qty", Alias = "qty" }] },
+        }, ct);
+
+        var act = () => ViewManager(new ThrowingChangeLogger(SchemaOperation.DeleteView)).DeleteViewAsync(view.ViewId, ct);
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("change log is down");
+
+        (await RelationsNamedAsync(view.PhysicalName, "v", ct)).Should().Be(1, "a deletion that did not happen leaves the view where it was");
+        (await new ViewMetadataRepository(_fixture.Connections).GetViewByIdAsync(view.ViewId, ct)).Should().NotBeNull("and its description with it");
+
+        await ViewManager().DeleteViewAsync(view.ViewId, ct);
+        (await RelationsNamedAsync(view.PhysicalName, "v", ct)).Should().Be(0);
+    }
+
     private static async Task<TableMetadata> CreateTableAsync(
         PostgresSchemaManager schema, Guid projectId, CancellationToken ct, CreateColumnRequest? extra = null)
     {
@@ -382,6 +470,21 @@ public class SchemaChangeAtomicityTests
             "WHERE c.relkind = @Kind AND c.relname = @Name",
             new { Kind = kind, Name = physicalName });
     }
+
+    private async Task<string?> ViewDefinitionAsync(string physicalView, CancellationToken ct)
+    {
+        await using var connection = await _fixture.DataSource.OpenConnectionAsync(ct);
+        return await connection.ExecuteScalarAsync<string?>(
+            "SELECT pg_get_viewdef(c.oid) FROM pg_class c WHERE c.relname = @Name AND c.relkind = 'v'", new { Name = physicalView });
+    }
+
+    private PostgresViewManager ViewManager(IChangeLogger? changeLogger = null) => new(
+        _fixture.Connections,
+        new ViewMetadataRepository(_fixture.Connections),
+        Repository(),
+        new PostgresAdvisoryLockManager(_fixture.Connections, new AdvisoryLockOptions()),
+        _hasher,
+        changeLogger ?? new ChangeLogger(_fixture.Connections));
 
     private async Task<string?> PhysicalTypeAsync(string physicalTable, string physicalColumn, CancellationToken ct)
     {

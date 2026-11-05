@@ -368,24 +368,14 @@ public sealed class PostgresSchemaManager : ISchemaManager
     }
 
     /// <summary>
-    /// Runs a schema change -- the physical statements and the writes that describe them -- as one
-    /// transaction. A schema change that leaves one without the other is a column, index or table that
-    /// nothing describes or a description of something that is not there, and the same request could then
-    /// never be made again. A deadlock victim is the whole transaction, nothing of it survived, so the
-    /// whole change is run again.
+    /// Runs a schema change as one transaction (<see cref="SchemaUnit"/>) and, once it has committed,
+    /// empties what is kept in memory.
     /// </summary>
     private async Task<T> InUnitAsync<T>(
         Func<NpgsqlConnection, NpgsqlTransaction, Task<T>> change,
         CancellationToken cancellationToken)
     {
-        var result = await DeadlockRetry.RunAsync(async () =>
-        {
-            await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-            await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-            var value = await change(connection, transaction);
-            await transaction.CommitAsync(cancellationToken);
-            return value;
-        });
+        var result = await SchemaUnit.RunAsync(_connections, change, cancellationToken);
 
         // Committed: only now can anyone else see the change, so only now is what is kept in memory out of date.
         _repository.InvalidateCache();

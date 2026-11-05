@@ -74,16 +74,17 @@
   for good. Deleting a table, column, index or relation dropped the physical object first the same way, so a failure after it
   left a description of something that no longer existed, and every read that met it ended in `500`; changing a column's type,
   renaming a column and renaming a table were several commits too, and one that failed after the first left the column
-  changed with its description not. Each of these changes is now one transaction — the physical statements, the description, the version it moves the table to and the change-log entry —
+  changed with its description not; creating, redefining and deleting a view (plain or materialized) did the same with the
+  view itself. Each of these changes is now one transaction — the physical statements, the description, the version it moves the table to and the change-log entry —
   so it happens whole or not at all, and a deadlock victim runs the whole change again.
 
 ### Changed
 
-- **`IMetadataRepository` and `IChangeLogger` take an optional transaction.** The repository's write methods and
-  `IChangeLogger.LogChangeAsync` gain an optional `NpgsqlTransaction? transaction` parameter that comes before the
-  cancellation token, and `IMetadataRepository` gains `InvalidateCache()`, which a caller that passed a transaction calls
-  once it has committed. A custom implementation of either interface must follow; a call that passed the cancellation token
-  by position now names it (`cancellationToken: token`).
+- **`IMetadataRepository`, `IViewMetadataRepository` and `IChangeLogger` take an optional transaction.** The repositories'
+  write methods and `IChangeLogger.LogChangeAsync` (and its view helpers) gain an optional `NpgsqlTransaction? transaction`
+  parameter that comes before the cancellation token, and `IMetadataRepository` gains `InvalidateCache()`, which a caller
+  that passed a transaction calls once it has committed. A custom implementation of any of them must follow; a call that
+  passed the cancellation token by position now names it (`cancellationToken: token`).
 - `Polly` 8.9.0, `HotChocolate` 16.7.3, `StackExchange.Redis` 3.4.31 and `ModelContextProtocol.AspNetCore` 2.3.1.
 
 ## 0.34.0

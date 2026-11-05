@@ -1,4 +1,5 @@
 using MorphDB.Core.Models;
+using Npgsql;
 
 namespace MorphDB.Npgsql.Repositories;
 
@@ -12,6 +13,7 @@ public interface IViewMetadataRepository
     /// </summary>
     Task<ViewMetadata> InsertViewAsync(
         ViewMetadata view,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -46,6 +48,7 @@ public interface IViewMetadataRepository
         MaterializedViewRefreshPolicy? refreshPolicy,
         string? refreshSchedule,
         string? description,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -69,6 +72,7 @@ public interface IViewMetadataRepository
     /// </summary>
     Task SoftDeleteViewAsync(
         Guid viewId,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -76,6 +80,7 @@ public interface IViewMetadataRepository
     /// </summary>
     Task<ViewColumnMetadata> InsertViewColumnAsync(
         ViewColumnMetadata column,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

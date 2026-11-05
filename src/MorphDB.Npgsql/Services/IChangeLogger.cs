@@ -79,6 +79,7 @@ public static class ChangeLoggerViewExtensions
         this IChangeLogger logger,
         Guid viewId,
         string viewName,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default)
     {
         return logger.LogChangeAsync(new SchemaChangeEntry
@@ -86,13 +87,14 @@ public static class ChangeLoggerViewExtensions
             TableId = viewId, // Using TableId field for ViewId
             Operation = SchemaOperation.CreateView,
             Changes = new { viewName }
-        }, cancellationToken: cancellationToken);
+        }, transaction, cancellationToken);
     }
 
     public static Task LogViewUpdatedAsync(
         this IChangeLogger logger,
         Guid viewId,
         string? viewName,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default)
     {
         return logger.LogChangeAsync(new SchemaChangeEntry
@@ -100,13 +102,14 @@ public static class ChangeLoggerViewExtensions
             TableId = viewId,
             Operation = SchemaOperation.UpdateView,
             Changes = new { viewName }
-        }, cancellationToken: cancellationToken);
+        }, transaction, cancellationToken);
     }
 
     public static Task LogViewDeletedAsync(
         this IChangeLogger logger,
         Guid viewId,
         string viewName,
+        NpgsqlTransaction? transaction = null,
         CancellationToken cancellationToken = default)
     {
         return logger.LogChangeAsync(new SchemaChangeEntry
@@ -114,7 +117,7 @@ public static class ChangeLoggerViewExtensions
             TableId = viewId,
             Operation = SchemaOperation.DeleteView,
             Changes = new { viewName }
-        }, cancellationToken: cancellationToken);
+        }, transaction, cancellationToken);
     }
 
     public static Task LogViewRefreshedAsync(

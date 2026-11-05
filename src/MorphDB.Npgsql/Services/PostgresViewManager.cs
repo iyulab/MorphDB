@@ -71,21 +71,6 @@ public sealed class PostgresViewManager : IViewManager
         var definition = await queryBuilder.WithColumnsAsync(request.Definition, cancellationToken);
         var selectStatement = await queryBuilder.BuildSelectStatementAsync(definition, cancellationToken);
 
-        // Create the view in PostgreSQL
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-        await AsInvalidDefinitionAsync(async () =>
-        {
-            if (request.IsMaterialized)
-            {
-                await BuildMaterializedViewAsync(
-                    connection, request.Name, physicalName, selectStatement, definition, replace: false, cancellationToken);
-            }
-            else
-            {
-                await connection.ExecuteAsync(DdlBuilder.BuildCreateView(physicalName, selectStatement));
-            }
-        });
-
         // Build view columns metadata from definition
         var columns = BuildViewColumns(viewId, definition);
 
@@ -107,18 +92,37 @@ public sealed class PostgresViewManager : IViewManager
             Columns = columns
         };
 
-        var savedView = await _viewRepository.InsertViewAsync(viewMetadata, cancellationToken);
-
-        // Save column metadata
-        foreach (var column in columns)
+        // The view in PostgreSQL, its description, its columns and the log entry are one change: a view
+        // whose description cannot be written is not built.
+        return await SchemaUnit.RunAsync(_connections, async (connection, transaction) =>
         {
-            await _viewRepository.InsertViewColumnAsync(column, cancellationToken);
-        }
+            await AsInvalidDefinitionAsync(async () =>
+            {
+                if (request.IsMaterialized)
+                {
+                    await BuildMaterializedViewAsync(
+                        connection, transaction, request.Name, physicalName, selectStatement, definition, replace: false, cancellationToken);
+                }
+                else
+                {
+                    await connection.ExecuteAsync(new CommandDefinition(
+                        DdlBuilder.BuildCreateView(physicalName, selectStatement), transaction: transaction, cancellationToken: cancellationToken));
+                }
+            });
 
-        // Log the change
-        await _changeLogger.LogViewCreatedAsync(viewId, request.Name, cancellationToken);
+            var savedView = await _viewRepository.InsertViewAsync(viewMetadata, transaction, cancellationToken);
 
-        return savedView with { Columns = columns };
+            // Save column metadata
+            foreach (var column in columns)
+            {
+                await _viewRepository.InsertViewColumnAsync(column, transaction, cancellationToken);
+            }
+
+            // Log the change
+            await _changeLogger.LogViewCreatedAsync(viewId, request.Name, transaction, cancellationToken);
+
+            return savedView with { Columns = columns };
+        }, cancellationToken);
     }
 
     public async Task<ViewMetadata?> GetViewAsync(
@@ -161,41 +165,51 @@ public sealed class PostgresViewManager : IViewManager
 
         // If definition changed, recreate the view
         var definition = request.Definition;
+        string? selectStatement = null;
         if (request.Definition != null)
         {
             var queryBuilder = new ViewQueryBuilder(_metadataRepository, view.ProjectId);
             definition = await queryBuilder.WithColumnsAsync(request.Definition, cancellationToken);
-            var selectStatement = await queryBuilder.BuildSelectStatementAsync(definition, cancellationToken);
-
-            await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-
-            await AsInvalidDefinitionAsync(async () =>
-            {
-                if (view.IsMaterialized)
-                {
-                    // Drop and recreate materialized view (no CREATE OR REPLACE for mat views)
-                    await BuildMaterializedViewAsync(
-                        connection, view.LogicalName, view.PhysicalName, selectStatement, definition, replace: true, cancellationToken);
-                }
-                else
-                {
-                    await connection.ExecuteAsync(DdlBuilder.BuildCreateOrReplaceView(view.PhysicalName, selectStatement));
-                }
-            });
+            selectStatement = await queryBuilder.BuildSelectStatementAsync(definition, cancellationToken);
         }
 
-        // Update metadata
-        await _viewRepository.UpdateViewAsync(
-            request.ViewId,
-            request.Name,
-            definition,
-            request.RefreshPolicy,
-            request.RefreshSchedule,
-            request.Description,
-            cancellationToken);
+        // The view in PostgreSQL, its description and the log entry are one change: a view whose new
+        // definition cannot be written down is as it was.
+        await SchemaUnit.RunAsync(_connections, async (connection, transaction) =>
+        {
+            if (selectStatement is not null)
+            {
+                await AsInvalidDefinitionAsync(async () =>
+                {
+                    if (view.IsMaterialized)
+                    {
+                        // Drop and recreate materialized view (no CREATE OR REPLACE for mat views)
+                        await BuildMaterializedViewAsync(
+                            connection, transaction, view.LogicalName, view.PhysicalName, selectStatement, definition!, replace: true, cancellationToken);
+                    }
+                    else
+                    {
+                        await connection.ExecuteAsync(new CommandDefinition(
+                            DdlBuilder.BuildCreateOrReplaceView(view.PhysicalName, selectStatement), transaction: transaction, cancellationToken: cancellationToken));
+                    }
+                });
+            }
 
-        // Log the change
-        await _changeLogger.LogViewUpdatedAsync(request.ViewId, request.Name, cancellationToken);
+            // Update metadata
+            await _viewRepository.UpdateViewAsync(
+                request.ViewId,
+                request.Name,
+                definition,
+                request.RefreshPolicy,
+                request.RefreshSchedule,
+                request.Description,
+                transaction,
+                cancellationToken);
+
+            // Log the change
+            await _changeLogger.LogViewUpdatedAsync(request.ViewId, request.Name, transaction, cancellationToken);
+            return true;
+        }, cancellationToken);
 
         return (await _viewRepository.GetViewByIdAsync(request.ViewId, cancellationToken))!;
     }
@@ -216,22 +230,23 @@ public sealed class PostgresViewManager : IViewManager
             _options.LockTimeout,
             cancellationToken);
 
-        // Drop the view from PostgreSQL
-        await using var connection = await _connections.OpenSystemAsync(cancellationToken);
-        if (view.IsMaterialized)
+        // The drop, the soft deletion and the log entry are one change: a view whose deletion cannot be
+        // written down is still there.
+        await SchemaUnit.RunAsync(_connections, async (connection, transaction) =>
         {
-            await connection.ExecuteAsync(DdlBuilder.BuildDropMaterializedView(view.PhysicalName));
-        }
-        else
-        {
-            await connection.ExecuteAsync(DdlBuilder.BuildDropView(view.PhysicalName));
-        }
+            // Drop the view from PostgreSQL
+            var dropSql = view.IsMaterialized
+                ? DdlBuilder.BuildDropMaterializedView(view.PhysicalName)
+                : DdlBuilder.BuildDropView(view.PhysicalName);
+            await connection.ExecuteAsync(new CommandDefinition(dropSql, transaction: transaction, cancellationToken: cancellationToken));
 
-        // Soft delete metadata
-        await _viewRepository.SoftDeleteViewAsync(viewId, cancellationToken);
+            // Soft delete metadata
+            await _viewRepository.SoftDeleteViewAsync(viewId, transaction, cancellationToken);
 
-        // Log the change
-        await _changeLogger.LogViewDeletedAsync(viewId, view.LogicalName, cancellationToken);
+            // Log the change
+            await _changeLogger.LogViewDeletedAsync(viewId, view.LogicalName, transaction, cancellationToken);
+            return true;
+        }, cancellationToken);
     }
 
     public async Task RefreshMaterializedViewAsync(
@@ -434,7 +449,7 @@ public sealed class PostgresViewManager : IViewManager
     /// and fills it, unless it reads a table that has a row-level security policy.
     /// </summary>
     /// <remarks>
-    /// One transaction: the view is created empty, PostgreSQL is asked what it reads, and only then
+    /// On the transaction given: the view is created empty, PostgreSQL is asked what it reads, and only then
     /// is it filled. A refused view copies no row and leaves nothing behind, and the view it would
     /// have replaced is still there. Creating it also locks the tables it reads against the DDL
     /// that gives a table a policy until this transaction ends, so of a view and a policy created
@@ -442,6 +457,7 @@ public sealed class PostgresViewManager : IViewManager
     /// </remarks>
     private static async Task BuildMaterializedViewAsync(
         NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
         string logicalName,
         string physicalName,
         string selectStatement,
@@ -449,8 +465,6 @@ public sealed class PostgresViewManager : IViewManager
         bool replace,
         CancellationToken cancellationToken)
     {
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-
         async Task ExecuteAsync(string statement) => await connection.ExecuteAsync(
             new CommandDefinition(statement, transaction: transaction, cancellationToken: cancellationToken));
 
@@ -472,8 +486,6 @@ public sealed class PostgresViewManager : IViewManager
         {
             await ExecuteAsync(DdlBuilder.BuildMaterializedViewUniqueIndex($"ux_{physicalName}", physicalName, indexColumns));
         }
-
-        await transaction.CommitAsync(cancellationToken);
     }
 
     private static string BuildViewQuerySql(ViewMetadata view, ViewQueryRequest request, UntypedParameters parameters)
