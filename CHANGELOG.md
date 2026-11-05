@@ -30,6 +30,11 @@
   refused with `400` before any request runs, and the message names the request and the member (`if` says that conditional
   requests in a batch are not supported). The same goes for any other member that is not a request member of the format, such
   as a misspelt `dependOn`; instance annotations (names holding `@`) are still accepted.
+- **A view whose join condition or column expression names something the view does not read is refused with `400
+  INVALID_EXPRESSION` instead of an opaque `500`.** Creating or changing a view with a column no table has, a quoted
+  identifier (names are written unquoted, as the table's own reads name them), a syntax error or operands an operator does
+  not take used to surface PostgreSQL's error as `500`. The answer now names the kind of refusal — never the database's
+  own text, which can carry a physical name — and a refused change leaves the view as it was.
 
 ### Changed
 
