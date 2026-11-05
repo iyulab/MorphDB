@@ -72,6 +72,40 @@ public class ConcurrentSchemaChangeTests
         }
     }
 
+    [Fact]
+    public async Task Many_tables_created_at_the_same_moment_all_exist_with_their_physical_tables()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var projectId = Guid.NewGuid();
+        var schema = SchemaManager();
+        var repository = new MetadataRepository(_fixture.Connections);
+        var names = Enumerable.Range(0, 24).Select(i => $"burst_{i}_{Guid.NewGuid().ToString("N")[..6]}").ToList();
+
+        var creations = names.Select((name, i) => Task.Run(() => schema.CreateTableAsync(new CreateTableRequest
+        {
+            ProjectId = projectId,
+            LogicalName = name,
+            Columns =
+            [
+                new CreateColumnRequest { LogicalName = "qty", DataType = MorphDataType.Integer, IsNullable = true, IsIndexed = i % 2 == 0 },
+                new CreateColumnRequest { LogicalName = "label", DataType = MorphDataType.Text, IsNullable = true, IsUnique = i % 3 == 0 },
+            ],
+        }, ct), ct)).ToList();
+
+        var all = Task.WhenAll(creations);
+        var finished = await Task.WhenAny(all, Task.Delay(TimeSpan.FromSeconds(120), ct));
+        finished.Should().BeSameAs(all, "no creation may stall on another");
+        var created = await all;
+
+        created.Select(t => t.LogicalName).Should().BeEquivalentTo(names);
+        var listed = await repository.ListTablesAsync(projectId, includeColumns: true, ct);
+        listed.Should().HaveCount(names.Count);
+        foreach (var table in listed)
+        {
+            (await PhysicalColumnsAsync(table.PhysicalName, ct)).Should().BeEquivalentTo(table.Columns.Select(c => c.PhysicalName));
+        }
+    }
+
     private static async Task AddColumnAsync(PostgresSchemaManager schema, MetadataRepository repository, Guid tableId, string name, CancellationToken ct)
     {
         for (var attempt = 0; attempt < 100; attempt++)
