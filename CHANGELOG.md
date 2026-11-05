@@ -42,6 +42,13 @@
   names the way a view expression or a policy is, so a partial index (including a partial unique one) applies its predicate;
   an unknown column or function, a volatile function or a value of the wrong type answers `400` naming the kind of refusal.
 
+- **A `check` is held to the declaration gate the docs promise on every path.** The docs say a check is accepted only when the
+  evaluator can enforce it, but the gate read the expression's shape only: a table or column could be declared with a `check`
+  on a field the table does not have, which the evaluator skips — a constraint that constrains nothing, silently — and changing
+  a column's `check` was not gated at all (`qty >>> 0` was accepted). Creating a table, adding a column and changing a column
+  now refuse an expression outside the grammar or one that reads a field the table does not have, with `400 INVALID_ARGUMENT`
+  naming the field; a blank expression still clears the check.
+
 ### Changed
 
 - `Polly` 8.9.0, `HotChocolate` 16.7.3, `StackExchange.Redis` 3.4.31 and `ModelContextProtocol.AspNetCore` 2.3.1.

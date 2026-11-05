@@ -31,6 +31,58 @@ public static partial class CheckGrammar
         }
     }
 
+    /// <summary>
+    /// Rejects an expression that reads a field the table does not have. The grammar alone cannot tell a
+    /// typo from a field: the evaluator skips a comparison whose field has no value, so a misspelt name
+    /// would be stored and never constrain anything. Names that start with an underscore are system
+    /// columns, which a record's payload does not carry; they are left alone.
+    /// </summary>
+    public static void EnsureFieldsExist(string expression, IEnumerable<string> columnNames)
+    {
+        var known = new HashSet<string>(columnNames, StringComparer.OrdinalIgnoreCase);
+        var unknown = Fields(expression).Where(f => !f.StartsWith('_') && !known.Contains(f)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (unknown.Count > 0)
+        {
+            throw new ArgumentException(
+                $"CHECK expression '{expression}' names {(unknown.Count == 1 ? "a field" : "fields")} the table does not have: "
+                + string.Join(", ", unknown.Select(f => $"'{f}'")) + ".");
+        }
+    }
+
+    /// <summary>The field names a supported expression reads, in order of appearance.</summary>
+    public static IReadOnlyList<string> Fields(string expression)
+    {
+        expression = expression.Trim();
+        while (expression.StartsWith('(') && expression.EndsWith(')') && IsBalanced(expression[1..^1]))
+        {
+            expression = expression[1..^1].Trim();
+        }
+
+        var orParts = SplitByLogicalOperator(expression, "OR");
+        if (orParts.Count > 1)
+        {
+            return [.. orParts.SelectMany(Fields)];
+        }
+
+        var andParts = SplitByLogicalOperator(expression, "AND");
+        if (andParts.Count > 1)
+        {
+            return [.. andParts.SelectMany(Fields)];
+        }
+
+        if (SimplePattern().Match(expression) is { Success: true } simple)
+        {
+            return [simple.Groups["field"].Value];
+        }
+
+        if (CrossFieldPattern().Match(expression) is { Success: true } cross)
+        {
+            return [cross.Groups["field1"].Value, cross.Groups["field2"].Value];
+        }
+
+        return MatchesPattern().Match(expression) is { Success: true } matches ? [matches.Groups["field"].Value] : [];
+    }
+
     public static bool IsSupported(string expression)
     {
         if (string.IsNullOrWhiteSpace(expression))

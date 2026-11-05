@@ -232,6 +232,7 @@ public sealed class PostgresSchemaManager : ISchemaManager
             if (definition.CheckExpression is not null)
             {
                 Infrastructure.CheckGrammar.EnsureSupported(definition.CheckExpression);
+                Infrastructure.CheckGrammar.EnsureFieldsExist(definition.CheckExpression, columns.Select(c => c.LogicalName));
             }
         }
 
@@ -556,6 +557,8 @@ public sealed class PostgresSchemaManager : ISchemaManager
             if (columnDef.CheckExpression is not null)
             {
                 Infrastructure.CheckGrammar.EnsureSupported(columnDef.CheckExpression);
+                Infrastructure.CheckGrammar.EnsureFieldsExist(
+                    columnDef.CheckExpression, table.Columns.Select(c => c.LogicalName).Append(request.LogicalName));
             }
 
             await using var connection = await _connections.OpenSystemAsync(cancellationToken);
@@ -692,6 +695,14 @@ public sealed class PostgresSchemaManager : ISchemaManager
         {
             var table = await _repository.GetTableByIdAsync(column.TableId, includeColumns: true, cancellationToken)
                 ?? throw new TableNotFoundException(column.TableId.ToString());
+
+            // The same declaration gate a new column passes: a blank expression clears the check.
+            if (!string.IsNullOrWhiteSpace(request.CheckExpression))
+            {
+                Infrastructure.CheckGrammar.EnsureSupported(request.CheckExpression);
+                Infrastructure.CheckGrammar.EnsureFieldsExist(
+                    request.CheckExpression, table.Columns.Select(c => c.LogicalName).Append(request.LogicalName ?? column.LogicalName));
+            }
 
             await ApplyColumnDdlChangesAsync(table, column, request, cancellationToken);
 
