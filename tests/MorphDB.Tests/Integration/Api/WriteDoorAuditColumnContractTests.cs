@@ -162,6 +162,56 @@ public class WriteDoorAuditColumnContractTests
         failures.Should().BeEmpty(string.Join("\n", failures));
     }
 
+    /// <summary>
+    /// A delete on a table with soft delete and audit fields on marks the row and records who deleted it
+    /// (<c>_deleted_by</c>) — the same person whichever door the delete came through.
+    /// </summary>
+    [Fact]
+    public async Task A_person_who_deletes_a_row_through_any_door_is_the_one_recorded_as_having_deleted_it()
+    {
+        var master = As(MasterSecret);
+        var deletes = new (string Name, Func<HttpClient, string, Guid, Task> Send)[]
+        {
+            ("rest delete", (p, t, id) => Ok(p.DeleteAsync($"/api/data/{t}/{id}", Ct))),
+            ("delete by filter", (p, t, id) => Ok(p.DeleteAsync($"/api/batch/data/{t}?filter=code:eq:k", Ct))),
+            ("batch operations delete", (p, t, id) => Ok(p.PostAsJsonAsync("/api/batch/data",
+                new { operations = new[] { new { method = "DELETE", table = t, id } } }, Ct))),
+        };
+
+        var failures = new List<string>();
+        foreach (var (door, send) in deletes)
+        {
+            var table = $"doordel_{Guid.NewGuid():N}"[..30];
+            (await master.PostAsJsonAsync("/api/schema/tables", new CreateTableApiRequest
+            {
+                Name = table,
+                SystemColumns = new SystemColumnOptionsApiRequest { AuditFields = true, SoftDelete = true },
+                Columns =
+                [
+                    new CreateColumnApiRequest { Name = "code", Type = "text", Nullable = false, Unique = true },
+                    new CreateColumnApiRequest { Name = "label", Type = "text", Nullable = false },
+                ],
+            }, Ct)).EnsureSuccessStatusCode();
+
+            await Ok(master.PostAsJsonAsync($"/api/data/{table}", new { code = "k", label = "orig" }, Ct));
+            var id = (await ReadAsync(master, table)).Id;
+            var deleter = Guid.NewGuid();
+            await send(As(Token(deleter)), table, id);
+
+            using var doc = JsonDocument.Parse(await master.GetStringAsync($"/api/data/{table}?filter=code:eq:k&includeDeleted=true", Ct));
+            var data = doc.RootElement.GetProperty("data");
+            if (data.GetArrayLength() != 1)
+            { failures.Add($"{door}: the row is not there with includeDeleted"); continue; }
+            var row = data[0].GetProperty("data");
+            if (!row.TryGetProperty("_deleted_at", out var at) || at.ValueKind == JsonValueKind.Null)
+                failures.Add($"{door}: the row was not marked deleted");
+            else if (!row.TryGetProperty("_deleted_by", out var by) || by.ValueKind != JsonValueKind.String || by.GetGuid() != deleter)
+                failures.Add($"{door}: _deleted_by is {(row.TryGetProperty("_deleted_by", out var x) ? x.ToString() : "absent")}, expected the deleter {deleter}");
+        }
+
+        failures.Should().BeEmpty(string.Join("\n", failures));
+    }
+
     private sealed record OwnerRow(Guid Id, string Label, Guid? Owner);
 
     private static async Task<OwnerRow> ReadOwnerAsync(HttpClient client, string table)
