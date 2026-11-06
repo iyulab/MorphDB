@@ -70,6 +70,14 @@ public static class SystemColumns
     public const string ProjectId = "project_id";
 
     /// <summary>
+    /// Whether a system column records a person: who created, last changed or deleted a row, or owns it. The
+    /// subject of a person's token is an opaque string, so these columns hold text; a table made before that held a
+    /// <c>uuid</c> in each, and these are the only system columns whose type may be changed (to text) to catch up.
+    /// </summary>
+    public static bool RecordsAPerson(string columnName) =>
+        columnName is CreatedBy or UpdatedBy or DeletedBy or OwnerId;
+
+    /// <summary>
     /// Checks if a column name is a system column.
     /// </summary>
     public static bool IsSystemColumn(string columnName) =>

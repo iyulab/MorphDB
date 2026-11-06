@@ -141,6 +141,14 @@
 
 ### Changed
 
+- **The columns that record a person are text.** `_created_by`, `_updated_by`, `_deleted_by` and `_owner_id` held a `uuid`, so a
+  person's token whose subject was not a UUID — an e-mail address, a number, `provider|id` — could not write to a table with
+  audit fields or ownership, and a policy comparing `_owner_id` with `{{user_id}}` could not work for it. New tables make them
+  `text`, holding the subject as the token names it (breaking: GraphQL and the column listing report them as text, not UUID).
+  A table made before keeps its `uuid` columns until each is retyped with `PATCH /api/schema/tables/{table}/columns/{column}`
+  and `{ "type": "text" }` — the one change a system column takes, which keeps the ids already recorded; a policy that reads
+  the column must be dropped and written again around it. See `docs/SYSTEM_COLUMNS.md`.
+
 - **`IMetadataRepository`, `IViewMetadataRepository` and `IChangeLogger` take an optional transaction.** The repositories'
   write methods and `IChangeLogger.LogChangeAsync` (and its view helpers) gain an optional `NpgsqlTransaction? transaction`
   parameter that comes before the cancellation token, and `IMetadataRepository` gains `InvalidateCache()`, which a caller

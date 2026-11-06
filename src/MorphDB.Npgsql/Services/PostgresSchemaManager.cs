@@ -142,11 +142,11 @@ public sealed class PostgresSchemaManager : ISchemaManager
 
         if (sysOpts.AuditFieldsEnabled)
         {
-            var createdByColumn = CreateSystemColumn(tableId, SystemColumns.CreatedBy, MorphDataType.Uuid, ordinal++, isNullable: true);
+            var createdByColumn = CreateSystemColumn(tableId, SystemColumns.CreatedBy, MorphDataType.Text, ordinal++, isNullable: true);
             columns.Add(createdByColumn);
             columnDefinitions.Add(ColumnDefinition.FromMetadata(createdByColumn));
 
-            var updatedByColumn = CreateSystemColumn(tableId, SystemColumns.UpdatedBy, MorphDataType.Uuid, ordinal++, isNullable: true);
+            var updatedByColumn = CreateSystemColumn(tableId, SystemColumns.UpdatedBy, MorphDataType.Text, ordinal++, isNullable: true);
             columns.Add(updatedByColumn);
             columnDefinitions.Add(ColumnDefinition.FromMetadata(updatedByColumn));
         }
@@ -158,14 +158,14 @@ public sealed class PostgresSchemaManager : ISchemaManager
             columns.Add(deletedAtColumn);
             columnDefinitions.Add(ColumnDefinition.FromMetadata(deletedAtColumn));
 
-            var deletedByColumn = CreateSystemColumn(tableId, SystemColumns.DeletedBy, MorphDataType.Uuid, ordinal++, isNullable: true);
+            var deletedByColumn = CreateSystemColumn(tableId, SystemColumns.DeletedBy, MorphDataType.Text, ordinal++, isNullable: true);
             columns.Add(deletedByColumn);
             columnDefinitions.Add(ColumnDefinition.FromMetadata(deletedByColumn));
         }
 
         if (sysOpts.OwnershipEnabled)
         {
-            var ownerColumn = CreateSystemColumn(tableId, SystemColumns.OwnerId, MorphDataType.Uuid, ordinal++, isNullable: true);
+            var ownerColumn = CreateSystemColumn(tableId, SystemColumns.OwnerId, MorphDataType.Text, ordinal++, isNullable: true);
             columns.Add(ownerColumn);
             columnDefinitions.Add(ColumnDefinition.FromMetadata(ownerColumn));
         }
@@ -714,6 +714,13 @@ public sealed class PostgresSchemaManager : ISchemaManager
         }, cancellationToken);
     }
 
+    private static bool IsPersonColumnCatchingUp(ColumnMetadata column, UpdateColumnRequest request) =>
+        SystemColumns.RecordsAPerson(column.LogicalName)
+        && column.DataType == MorphDataType.Uuid
+        && request.DataType == MorphDataType.Text
+        && request.IsNullable is null
+        && request.IsUnique is null;
+
     public async Task<ColumnMetadata> UpdateColumnAsync(
         UpdateColumnRequest request,
         CancellationToken cancellationToken = default)
@@ -721,9 +728,12 @@ public sealed class PostgresSchemaManager : ISchemaManager
         var column = await _repository.GetColumnByIdAsync(request.ColumnId, cancellationToken)
             ?? throw new ColumnNotFoundException("unknown", request.ColumnId.ToString());
 
-        // System columns cannot have type/constraint changes
+        // System columns cannot have type/constraint changes. The one change they take is the one that lets a table made
+        // before a person's id could be any string catch up with a table made now: a column that records a person,
+        // holding a uuid, becomes text — nothing else about it changes.
         if (column.IsSystemColumn &&
-            (request.DataType.HasValue || request.IsNullable.HasValue || request.IsUnique.HasValue))
+            (request.DataType.HasValue || request.IsNullable.HasValue || request.IsUnique.HasValue) &&
+            !IsPersonColumnCatchingUp(column, request))
         {
             throw new SchemaException("SYSTEM_COLUMN", "System columns cannot be modified");
         }

@@ -80,8 +80,8 @@ On by default; can be explicitly disabled at table creation.
 | Column | Type | Description | Enforcement |
 |--------|------|-------------|-------------|
 | `_version` | Integer | Optimistic-lock version | Physical (column) + virtual (validation logic) |
-| `_created_by` | UUID | Creator id | Virtual (injected by the system layer) |
-| `_updated_by` | UUID | Last modifier id | Virtual (injected by the system layer) |
+| `_created_by` | Text | Creator — the subject of the caller's token, as it names them | Virtual (injected by the system layer) |
+| `_updated_by` | Text | Last modifier — the same | Virtual (injected by the system layer) |
 
 **Rationale**:
 - `_version`: essential for concurrent-modification detection; the column is physical, the
@@ -89,6 +89,24 @@ On by default; can be explicitly disabled at table creation.
   Every write that changes an existing row raises it by one — an update by id, an update by filter,
   and an upsert (or seed) that finds its key; it is 1 only on the insert. `_updated_at` moves with it.
 - User audit: the user context exists only at the API layer
+- The four columns that record a person (`_created_by`, `_updated_by`, `_deleted_by`, `_owner_id`) are **text**, because
+  the subject of an access token is an opaque string — a UUID for some issuers, an e-mail address, a number or
+  `provider|id` for others — and `{{user_id}}` is that same string, so the owner column and a policy compare without a cast.
+
+#### Tables made before these columns were text
+
+A table made by an earlier version holds a `uuid` in each of these columns, which refuses a subject that is not a UUID.
+Each column catches up with an ordinary column update, and this is the only change a system column takes:
+
+```http
+PATCH /api/schema/tables/{table}/columns/_created_by
+{ "type": "text", "version": 3 }
+```
+
+Repeat it for each of the four that the table has (the version moves on after each). The ids already recorded are kept, as
+their text form. A row-level security policy that reads the column has to be dropped and written again around the change:
+PostgreSQL will not retype a column a policy reads, and the update is refused naming the policy. Views and other
+objects that depend on the column are likewise the caller's to move.
 
 ---
 
@@ -101,7 +119,7 @@ Enabled explicitly, per table, where the capability is needed.
 | Column | Type | Description |
 |--------|------|-------------|
 | `_deleted_at` | Timestamp | Deletion time (NULL means active) |
-| `_deleted_by` | UUID | Deleter id |
+| `_deleted_by` | Text | Deleter — the subject of the caller's token |
 
 - Every read gets the filter automatically (`_deleted_at IS NULL`): a list and its total, a filter,
   a single record (a marked row read by id is `404`), an aggregate, a hierarchy walk and an export —
@@ -116,7 +134,7 @@ Enabled explicitly, per table, where the capability is needed.
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `_owner_id` | UUID | Record owner |
+| `_owner_id` | Text | Record owner — the creator's token subject, the same string `{{user_id}}` gives a policy |
 
 - The basis for row-level access control
 - Supports automatic owner-based filtering
