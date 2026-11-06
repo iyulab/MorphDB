@@ -176,6 +176,15 @@ public class WriteDoorAuditColumnContractTests
             ("delete by filter", (p, t, id) => Ok(p.DeleteAsync($"/api/batch/data/{t}?filter=code:eq:k", Ct))),
             ("batch operations delete", (p, t, id) => Ok(p.PostAsJsonAsync("/api/batch/data",
                 new { operations = new[] { new { method = "DELETE", table = t, id } } }, Ct))),
+            ("graphql delete", async (p, t, id) =>
+            {
+                var said = await (await p.PostAsJsonAsync("/graphql", new
+                {
+                    query = "mutation($table: String!, $id: UUID!) { deleteRecord(table: $table, id: $id) { success } }",
+                    variables = new { table = t, id },
+                }, Ct)).Content.ReadAsStringAsync(Ct);
+                said.Should().NotContain("\"errors\"").And.NotContain("\"success\":false");
+            }),
         };
 
         var failures = new List<string>();
