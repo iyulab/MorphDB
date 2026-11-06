@@ -32,6 +32,10 @@
   changed kept their old `_updated_at` and `_version` (and `_updated_by`), so a reader comparing against them saw no change.
   The statement now sets `_updated_at` to the time of the update, raises `_version` by one and, with audit fields on, sets
   `_updated_by` to the caller.
+- **An update by filter now checks the change against the table's CHECK constraints.** `PATCH /api/batch/data/{table}` ran
+  its own statement past the write pipeline, so a value that breaks a column's `check` (`qty` set to `-1` under `qty >= 0`)
+  was written to every row the filter matched, while every other door refused it. The change is now checked before any row
+  is touched and refused the same way. Required, unique and reference constraints were already kept by the database.
 - **A `$batch` request carrying a member the service does not understand is refused instead of run without it.** A JSON batch
   request with an `if` condition (OData JSON Format 4.01 §19.1) used to run unconditionally, because the member was dropped
   while reading the body — a `DELETE` meant to run only when an earlier request failed ran regardless. Such a batch is now

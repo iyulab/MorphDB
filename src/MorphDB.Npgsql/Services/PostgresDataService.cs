@@ -190,6 +190,26 @@ public sealed class PostgresDataService : IMorphDataService
         // UPDATE door never silently dropped fields (pinned by ErrorSurfaceContractTests).
         var (setColumns, values) = PrepareUpdateParameters(data, table.Columns);
 
+        // The change meets the table's CHECK constraints before any row is touched. They are kept by the
+        // write pipeline, not by the database, so a statement of this door's own never met them: a bulk
+        // update set `qty` to -1 under `qty >= 0` and every row it matched took it. Required, unique and
+        // reference constraints are physical and refuse in the statement itself, so only the CHECKs run
+        // here. A CHECK that compares the changed column with one the request does not carry is judged
+        // by the request alone — the rows differ, and the single update has the same reach without the row.
+        var checkOnly = new WriteOptions
+        {
+            ValidateRequired = false,
+            ValidateForeignKeys = false,
+            ValidateUnique = false,
+            ValidateCheck = true,
+            ApplyDefaults = false,
+            ApplyTimestamps = false,
+            ApplyVersion = false,
+            ApplyAuditFields = false,
+        };
+        var checkResult = await _writePipeline.ValidateAsync(projectId, table, data, WriteOperationType.Update, checkOnly, cancellationToken);
+        UnwrapOrThrow(checkResult, tableName);
+
         // Get physical WHERE clause SQL from the query
         var (whereSql, whereParams) = await whereClause.GetPhysicalWhereClauseAsync(cancellationToken);
 
