@@ -24,6 +24,10 @@
 
 ### Fixed
 
+- **A batch item the caller can act on keeps its message instead of reading as a fault of the service.** The per-item failure text of `POST /api/batch/data` and of a seed
+  listed the kinds of failure it would show and replaced everything else with `An unexpected error occurred`, so a row-level
+  policy that refused an upsert, a conflict or a missing project read as a fault of the service. The item now takes the same
+  classification every other door uses: whatever answers `4xx` there keeps its message here; what answers `5xx` is still replaced.
 - **An upsert that lands on an existing row moves its `_version` on instead of sending it back to 1.** The four upserts
   (`PUT /api/batch/data/{table}`, an `UPSERT` operation in `POST /api/batch/data`, a seed that finds its key, and the GraphQL
   `upsertRecord`) copied the `_version` an insert would give, so a row read at version 3 stood at version 1 afterwards and a
