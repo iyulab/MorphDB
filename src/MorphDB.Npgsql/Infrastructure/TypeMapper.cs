@@ -142,6 +142,12 @@ public static class TypeMapper
         {
             MorphDataType.Json or MorphDataType.Array or MorphDataType.MultiSelect or MorphDataType.Attachment
                 => JsonSerializer.Serialize(value),
+            // A person's id arrives as text -- the subject of a token, an in-process caller's value -- and
+            // binds as text, which PostgreSQL refuses for a uuid column: every write by a token's subject
+            // to a table with audit fields failed with a type error that named no column. Read it as the
+            // uuid it is, and refuse by name (FormatException) one that is not.
+            MorphDataType.Uuid or MorphDataType.CreatedBy or MorphDataType.ModifiedBy when value is string text
+                => Guid.Parse(text, System.Globalization.CultureInfo.InvariantCulture),
             _ => value
         };
     }

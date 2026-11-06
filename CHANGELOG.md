@@ -32,6 +32,9 @@
   changed kept their old `_updated_at` and `_version` (and `_updated_by`), so a reader comparing against them saw no change.
   The statement now sets `_updated_at` to the time of the update, raises `_version` by one and, with audit fields on, sets
   `_updated_by` to the caller.
+- **A person's token can write to a table with audit fields on.** The subject of a token reached `_created_by` and `_updated_by`
+  as text, which PostgreSQL refuses for a uuid column, so every insert or update by such a caller answered `400` with a type
+  error that named no column. The id is now read as the uuid it is; one that is not a uuid is refused by naming the field.
 - **An update by filter now checks the change against the table's CHECK constraints.** `PATCH /api/batch/data/{table}` ran
   its own statement past the write pipeline, so a value that breaks a column's `check` (`qty` set to `-1` under `qty >= 0`)
   was written to every row the filter matched, while every other door refused it. The change is now checked before any row
