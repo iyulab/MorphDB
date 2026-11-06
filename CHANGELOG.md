@@ -24,6 +24,16 @@
 
 ### Fixed
 
+- **A webhook can no longer be registered by any caller, pointed at any address, or redirected.** `/api/webhooks` required
+  no particular secret, so on a service that enforced credentials any issued secret or person's token could make the
+  service send signed row data to an address it chose, with headers it chose, and read the receiver's response back from the
+  delivery history. Now (1) **only the master secret** manages webhooks while credentials are enforced — registering,
+  changing, deleting, regenerating a secret, and reading webhooks, deliveries and the dead-letter queue (`403`); (2) the
+  `url` must be an absolute `http` or `https` URL without credentials (`400 INVALID_WEBHOOK_URL`); (3) `Webhooks__AllowedHosts__<n>`
+  may name the hosts a deployment delivers to, checked at registration and again at delivery (unset allows any host, as
+  before); (4) a delivery does not follow redirects. A client that managed webhooks with an issued secret must use the
+  master secret.
+
 - **The OpenAPI document and the Swagger UI no longer answer without a secret on a service that enforces one.** They were
   registered ahead of the authentication step, so `/swagger/...` was served to anyone while `/health` and `/metrics` were
   documented as the only unauthenticated routes. They now follow authentication like every other route; a service with no

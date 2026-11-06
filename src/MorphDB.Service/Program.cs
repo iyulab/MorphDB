@@ -158,6 +158,9 @@ try
     // Add real-time services (SignalR + PostgreSQL LISTEN/NOTIFY)
     builder.Services.AddMorphDbRealtime();
 
+    // Where webhooks may deliver (Webhooks__AllowedHosts); empty allows any host.
+    builder.Services.Configure<WebhookDestinationOptions>(builder.Configuration.GetSection(WebhookDestinationOptions.SectionName));
+
     // Add webhook delivery services
     builder.Services.AddWebhookDelivery(options =>
     {

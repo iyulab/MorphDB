@@ -28,7 +28,10 @@ public static class WebhookServiceExtensions
             client.Timeout = options.HttpTimeout;
             client.DefaultRequestHeaders.Add("User-Agent", "MorphDB-Webhook/1.0");
             client.DefaultRequestHeaders.Add("Accept", "application/json");
-        });
+        })
+        // A destination was checked as an address; following a redirect would send the signed request somewhere
+        // nobody checked. A redirect is an unsuccessful delivery.
+        .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
 
         // Changes recorded in the outbox become deliveries; the processor sends them.
         services.TryAddSingleton<OutboxSignal>();

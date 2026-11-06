@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Models;
 using MorphDB.Service.Filters;
@@ -27,23 +28,27 @@ internal static partial class WebhookControllerLogs
 [Route("api/webhooks")]
 [Produces("application/json")]
 [RequireProject]
+[RequireMasterSecret("Only the master secret may manage webhooks: a webhook sends this service's data to an address the registrant chooses, and its headers and delivery history can carry the receiver's credentials and responses.")]
 public sealed class WebhookController : ControllerBase
 {
     private readonly IWebhookManager _webhookManager;
     private readonly ISchemaManager _schemaManager;
     private readonly ILogger<WebhookController> _logger;
     private readonly IProjectContextAccessor _projectContext;
+    private readonly WebhookDestinationOptions _destinations;
 
     public WebhookController(
         IWebhookManager webhookManager,
         ISchemaManager schemaManager,
         ILogger<WebhookController> logger,
-        IProjectContextAccessor projectContext)
+        IProjectContextAccessor projectContext,
+        IOptions<WebhookDestinationOptions> destinations)
     {
         _webhookManager = webhookManager;
         _schemaManager = schemaManager;
         _logger = logger;
         _projectContext = projectContext;
+        _destinations = destinations.Value;
     }
 
     private Guid GetProjectId() => _projectContext.ProjectId;
@@ -59,6 +64,11 @@ public sealed class WebhookController : ControllerBase
         [FromBody] CreateWebhookApiRequest request,
         CancellationToken cancellationToken)
     {
+        if (!WebhookDestination.TryValidate(request.Url, _destinations, out var refusal))
+        {
+            return BadRequest(InvalidUrlResponse(refusal));
+        }
+
         var projectId = GetProjectId();
 
         // Validate table exists
@@ -152,6 +162,11 @@ public sealed class WebhookController : ControllerBase
         [FromBody] UpdateWebhookApiRequest request,
         CancellationToken cancellationToken)
     {
+        if (request.Url is not null && !WebhookDestination.TryValidate(request.Url, _destinations, out var refusal))
+        {
+            return BadRequest(InvalidUrlResponse(refusal));
+        }
+
         var projectId = GetProjectId();
         var existing = await _webhookManager.GetWebhookAsync(webhookId, cancellationToken);
         if (existing is null || existing.ProjectId != projectId)
@@ -267,6 +282,16 @@ public sealed class WebhookController : ControllerBase
 
         var deliveries = await _webhookManager.GetDeliveryHistoryAsync(webhookId, limit, offset, cancellationToken);
         return Ok(deliveries.Select(MapToDeliveryResponse));
+    }
+
+    private static ErrorResponse InvalidUrlResponse(string reason)
+    {
+        return new ErrorResponse
+        {
+            Error = "InvalidWebhookUrl",
+            Message = reason,
+            Code = "INVALID_WEBHOOK_URL"
+        };
     }
 
     private static ErrorResponse InvalidFilterResponse()

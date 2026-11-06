@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Options;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Models;
 
@@ -17,6 +18,7 @@ public sealed class WebhookDeliveryService : IWebhookDeliveryService
     private readonly IWebhookManager _webhookManager;
     private readonly WebhookSignatureService _signatureService;
     private readonly ILogger<WebhookDeliveryService> _logger;
+    private readonly WebhookDestinationOptions _destinations;
 
     private const string SignatureHeader = "X-MorphDB-Signature";
     private const string TimestampHeader = "X-MorphDB-Timestamp";
@@ -27,8 +29,10 @@ public sealed class WebhookDeliveryService : IWebhookDeliveryService
         HttpClient httpClient,
         IWebhookManager webhookManager,
         WebhookSignatureService signatureService,
-        ILogger<WebhookDeliveryService> logger)
+        ILogger<WebhookDeliveryService> logger,
+        IOptions<WebhookDestinationOptions> destinations)
     {
+        _destinations = destinations.Value;
         _httpClient = httpClient;
         _webhookManager = webhookManager;
         _signatureService = signatureService;
@@ -66,6 +70,19 @@ public sealed class WebhookDeliveryService : IWebhookDeliveryService
         CancellationToken cancellationToken = default)
     {
         var stopwatch = Stopwatch.StartNew();
+
+        // Checked again here, not only when the webhook was registered: a destination allowed then is not owed a
+        // delivery after the deployment has narrowed the hosts it sends to.
+        if (!WebhookDestination.TryValidate(webhook.Url, _destinations, out var refusal))
+        {
+            stopwatch.Stop();
+            return new DeliveryResult
+            {
+                Success = false,
+                ErrorMessage = $"Destination refused: {refusal}",
+                Duration = stopwatch.Elapsed
+            };
+        }
 
         try
         {
