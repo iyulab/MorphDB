@@ -32,6 +32,9 @@
   changed kept their old `_updated_at` and `_version` (and `_updated_by`), so a reader comparing against them saw no change.
   The statement now sets `_updated_at` to the time of the update, raises `_version` by one and, with audit fields on, sets
   `_updated_by` to the caller.
+- **An upsert that finds its row no longer moves it to the end of its siblings.** On a hierarchical table an upsert numbered the
+  row as if it were new (`_sort_order` = the next position under its parent) and then wrote that over the row it matched, so
+  every upsert sent its row to the end of the line. A position the request names is still written; one it does not is left alone.
 - **An upsert by another person no longer takes over the row it lands on.** On a table with ownership on, an upsert that matched
   an existing row copied the caller's id into `_owner_id`, so whoever upserted became the row's owner — and every row-level
   policy that reads the owner followed. The owner is given when the row is created and an upsert leaves it alone (a seed and

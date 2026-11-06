@@ -412,8 +412,17 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
 
             // On a soft-delete table uniqueness covers the unmarked rows only, so the conflict target
             // is that partial index: a value a marked row held is written as a new row.
+            // The position among siblings is numbered for a row that is being created; a request that did not
+            // name one must not move the row it finds to the end of the line.
+            var generated = new List<string>();
+            if (!(context.OriginalData.TryGetValue(SystemColumns.SortOrder, out var named) && named is not null)
+                && table.Columns.FirstOrDefault(c => c.LogicalName == SystemColumns.SortOrder) is { } sortOrder)
+            {
+                generated.Add(sortOrder.PhysicalName);
+            }
+
             var sql = DmlBuilder.BuildUpsert(table.PhysicalName, columns, parameters, conflictColumns,
-                table.SoftDeleteEnabled ? Ddl.DdlBuilder.ActiveRowsPredicate : null);
+                table.SoftDeleteEnabled ? Ddl.DdlBuilder.ActiveRowsPredicate : null, generated);
 
             await using var conn = await _connections.LeaseAsync(context.CancellationToken);
             var result = await conn.Connection.QuerySingleAsync<dynamic>(

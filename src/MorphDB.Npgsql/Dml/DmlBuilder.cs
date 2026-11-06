@@ -176,13 +176,18 @@ public static class DmlBuilder
     /// The rows the conflict target's uniqueness covers, when it is a partial unique index — on a
     /// soft-delete table, the rows no delete has marked — so PostgreSQL infers that index.
     /// </param>
+    /// <param name="insertOnlyColumnNames">
+    /// Columns this statement gives a new row but leaves alone on one it finds — values the system made up
+    /// for the insert, such as the next position among siblings, as opposed to ones the caller named.
+    /// </param>
     /// <returns>UPSERT SQL with RETURNING *.</returns>
     public static string BuildUpsert(
         string tableName,
         IEnumerable<string> columnNames,
         IEnumerable<string> parameterNames,
         IEnumerable<string> keyColumnNames,
-        string? conflictPredicate = null)
+        string? conflictPredicate = null,
+        IEnumerable<string>? insertOnlyColumnNames = null)
     {
         var columns = columnNames.ToList();
         var parameters = parameterNames.ToList();
@@ -200,7 +205,7 @@ public static class DmlBuilder
         // Non-key columns for update -- less the ones a row is given once, when it is created: an
         // upsert that lands on an existing row updates that row, it does not give it a new identity.
         // Setting them from EXCLUDED replaced the row's _id with the one generated for the insert.
-        var updateColumns = columns.Except(keyColumns).Except(InsertOnlyColumns).ToList();
+        var updateColumns = columns.Except(keyColumns).Except(InsertOnlyColumns).Except(insertOnlyColumnNames ?? []).ToList();
 
         var sb = new StringBuilder();
         sb.Append("INSERT INTO ");
