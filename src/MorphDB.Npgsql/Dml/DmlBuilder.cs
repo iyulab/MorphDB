@@ -159,6 +159,10 @@ public static class DmlBuilder
         Core.Models.SystemColumns.Id,
         Core.Models.SystemColumns.CreatedAt,
         Core.Models.SystemColumns.CreatedBy,
+        // Whose row it is is decided when the row is made. An upsert by someone else that lands on it
+        // is an edit: copying the caller's id from EXCLUDED handed the row, and every policy that reads
+        // its owner, to whoever upserted.
+        Core.Models.SystemColumns.OwnerId,
     ];
 
     /// <summary>

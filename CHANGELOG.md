@@ -32,6 +32,10 @@
   changed kept their old `_updated_at` and `_version` (and `_updated_by`), so a reader comparing against them saw no change.
   The statement now sets `_updated_at` to the time of the update, raises `_version` by one and, with audit fields on, sets
   `_updated_by` to the caller.
+- **An upsert by another person no longer takes over the row it lands on.** On a table with ownership on, an upsert that matched
+  an existing row copied the caller's id into `_owner_id`, so whoever upserted became the row's owner — and every row-level
+  policy that reads the owner followed. The owner is given when the row is created and an upsert leaves it alone (a seed and
+  the GraphQL `upsertRecord` reach the same statement).
 - **A person's token can write to a table with audit fields on.** The subject of a token reached `_created_by` and `_updated_by`
   as text, which PostgreSQL refuses for a uuid column, so every insert or update by such a caller answered `400` with a type
   error that named no column. The id is now read as the uuid it is; one that is not a uuid is refused by naming the field.

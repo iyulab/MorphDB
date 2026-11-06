@@ -121,6 +121,57 @@ public class WriteDoorAuditColumnContractTests
         failures.Should().BeEmpty(string.Join("\n", failures));
     }
 
+    /// <summary>
+    /// A table with ownership on gives a row its creator as owner (<c>_owner_id</c>) and the owner does not
+    /// change when someone else edits it — an upsert that lands on the row is an edit, not a new row.
+    /// </summary>
+    [Fact]
+    public async Task The_person_who_created_a_row_stays_its_owner_when_another_person_changes_it_through_any_door()
+    {
+        var master = As(MasterSecret);
+        var failures = new List<string>();
+        foreach (var (door, send) in Doors())
+        {
+            var table = $"doorown_{Guid.NewGuid():N}"[..30];
+            (await master.PostAsJsonAsync("/api/schema/tables", new CreateTableApiRequest
+            {
+                Name = table,
+                SystemColumns = new SystemColumnOptionsApiRequest { Ownership = true },
+                Columns =
+                [
+                    new CreateColumnApiRequest { Name = "code", Type = "text", Nullable = false, Unique = true },
+                    new CreateColumnApiRequest { Name = "label", Type = "text", Nullable = false },
+                ],
+            }, Ct)).EnsureSuccessStatusCode();
+
+            var creator = Guid.NewGuid();
+            var editor = Guid.NewGuid();
+            await Ok(As(Token(creator)).PostAsJsonAsync($"/api/data/{table}", new { code = "k", label = "orig" }, Ct));
+            var created = await ReadOwnerAsync(master, table);
+            if (created.Owner != creator)
+                failures.Add($"{door}: the creator {creator} is not the owner after the insert ({created.Owner})");
+
+            await send(As(Token(editor)), table, created.Id);
+            var after = await ReadOwnerAsync(master, table);
+            if (after.Label != "changed")
+                failures.Add($"{door}: the change was not written");
+            if (after.Owner != creator)
+                failures.Add($"{door}: _owner_id is {after.Owner?.ToString() ?? "null"} after another person's change, expected the creator {creator}");
+        }
+
+        failures.Should().BeEmpty(string.Join("\n", failures));
+    }
+
+    private sealed record OwnerRow(Guid Id, string Label, Guid? Owner);
+
+    private static async Task<OwnerRow> ReadOwnerAsync(HttpClient client, string table)
+    {
+        using var doc = JsonDocument.Parse(await client.GetStringAsync($"/api/data/{table}?filter=code:eq:k", Ct));
+        var d = doc.RootElement.GetProperty("data")[0].GetProperty("data");
+        Guid? owner = d.TryGetProperty("_owner_id", out var v) && v.ValueKind == JsonValueKind.String ? v.GetGuid() : null;
+        return new OwnerRow(d.GetProperty("_id").GetGuid(), d.GetProperty("label").GetString()!, owner);
+    }
+
     private sealed record Row(Guid Id, string Label, Guid? CreatedBy, Guid? UpdatedBy);
 
     private static async Task<Row> ReadAsync(HttpClient client, string table)
