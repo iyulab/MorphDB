@@ -86,6 +86,8 @@ On by default; can be explicitly disabled at table creation.
 **Rationale**:
 - `_version`: essential for concurrent-modification detection; the column is physical, the
   validation lives in the system layer
+  Every write that changes an existing row raises it by one — an update by id, an update by filter,
+  and an upsert (or seed) that finds its key; it is 1 only on the insert. `_updated_at` moves with it.
 - User audit: the user context exists only at the API layer
 
 ---

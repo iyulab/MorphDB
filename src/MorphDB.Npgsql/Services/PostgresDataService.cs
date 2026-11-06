@@ -211,6 +211,11 @@ public sealed class PostgresDataService : IMorphDataService
             whereSql = $"({whereSql}) AND {SystemColumns.DeletedAt} IS NULL";
         }
 
+        if (setColumns.Count > 0)
+        {
+            setColumns = WithSystemColumns(table, setColumns, valuesDict);
+        }
+
         var sql = DmlBuilder.BuildBatchUpdate(table.PhysicalName, setColumns, whereSql);
 
         await using var lease = await _connections.LeaseAsync(cancellationToken);
@@ -229,6 +234,38 @@ public sealed class PostgresDataService : IMorphDataService
             // reference needs) is the caller's mistake as on a single write.
             throw Pipeline.PostgresWriteRefusal.Translate(pg, table);
         }
+    }
+
+    /// <summary>
+    /// The system columns a single update applies (TimestampApplier, VersionApplier, AuditFieldApplier),
+    /// written into the one statement a bulk update runs: <c>_updated_at</c> moves to now, <c>_version</c>
+    /// moves one on, <c>_updated_by</c> is the caller. A value the request itself gave for one of them
+    /// is replaced, as the pipeline replaces it. Without this the rows changed but kept the version and
+    /// time a reader compares against.
+    /// </summary>
+    private List<(string ColumnName, string ParameterName)> WithSystemColumns(
+        TableMetadata table,
+        List<(string ColumnName, string ParameterName)> setColumns,
+        IDictionary<string, object?> values)
+    {
+        ColumnMetadata? Find(string logical) => table.Columns.FirstOrDefault(c => c.LogicalName == logical);
+        var system = new List<(string ColumnName, string ParameterName)>();
+
+        if (table.TimestampsEnabled && Find(SystemColumns.UpdatedAt) is { } updatedAt)
+            system.Add((updatedAt.PhysicalName, "now()"));
+
+        if (table.VersioningEnabled && Find(SystemColumns.Version) is { } version)
+            system.Add((version.PhysicalName, $"{version.PhysicalName} + 1"));
+
+        var actor = _securityContext?.ContextOrNull?.UserId;
+        if (table.AuditFieldsEnabled && actor is not null && Find(SystemColumns.UpdatedBy) is { } updatedBy)
+        {
+            system.Add((updatedBy.PhysicalName, "@__updatedBy"));
+            values["__updatedBy"] = TypeMapper.ToDbValue(actor, updatedBy.DataType);
+        }
+
+        var replaced = system.Select(s => s.ColumnName).ToHashSet();
+        return [.. setColumns.Where(s => !replaced.Contains(s.ColumnName)), .. system];
     }
 
     /// <inheritdoc />

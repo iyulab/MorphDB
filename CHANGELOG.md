@@ -24,6 +24,14 @@
 
 ### Fixed
 
+- **An upsert that lands on an existing row moves its `_version` on instead of sending it back to 1.** The four upserts
+  (`PUT /api/batch/data/{table}`, an `UPSERT` operation in `POST /api/batch/data`, a seed that finds its key, and the GraphQL
+  `upsertRecord`) copied the `_version` an insert would give, so a row read at version 3 stood at version 1 afterwards and a
+  version compared against before the upsert could match a different state. They now raise it by one, as `PATCH` does.
+- **An update by filter (`PATCH /api/batch/data/{table}`) now applies the system columns a single update applies.** The rows it
+  changed kept their old `_updated_at` and `_version` (and `_updated_by`), so a reader comparing against them saw no change.
+  The statement now sets `_updated_at` to the time of the update, raises `_version` by one and, with audit fields on, sets
+  `_updated_by` to the caller.
 - **A `$batch` request carrying a member the service does not understand is refused instead of run without it.** A JSON batch
   request with an `if` condition (OData JSON Format 4.01 §19.1) used to run unconditionally, because the member was dropped
   while reading the body — a `DELETE` meant to run only when an earlier request failed ran regardless. Such a batch is now

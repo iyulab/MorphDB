@@ -218,7 +218,12 @@ public static class DmlBuilder
 
         if (updateColumns.Count > 0)
         {
-            sb.Append(string.Join(", ", updateColumns.Select(c => QuoteIdentifier(c) + " = EXCLUDED." + QuoteIdentifier(c))));
+            // A row the upsert lands on moves one version on from the one it holds. EXCLUDED._version is
+            // the value an insert would give (1): copying it sent the row's optimistic-lock version back to
+            // the start, so a version read before the upsert could match a different state afterwards.
+            sb.Append(string.Join(", ", updateColumns.Select(c => c == Core.Models.SystemColumns.Version
+                ? QuoteIdentifier(c) + " = " + QuoteIdentifier(tableName) + "." + QuoteIdentifier(c) + " + 1"
+                : QuoteIdentifier(c) + " = EXCLUDED." + QuoteIdentifier(c))));
         }
         else
         {
