@@ -312,12 +312,6 @@ try
     app.UseExceptionHandler();
     app.UseRequestTracking(); // Graceful shutdown request tracking (Phase 24)
 
-    // The OpenAPI document is the service's machine-readable contract; a deployed image serves it
-    // like any other read-only surface. Gating it behind Development made the deployed contract a
-    // 404 while the code carried it all along.
-    app.UseSwagger();
-    app.UseSwaggerUI();
-
     if (app.Environment.IsDevelopment())
     {
         app.UseCors("Development"); // Enable CORS for development
@@ -332,6 +326,15 @@ try
     app.UseSecurityContext();
     app.UseCredentialAuthentication(); // Secrets when one is injected, tokens when an issuer is set; before
                                        // rate limiting and audit logging so a denial is still counted and recorded
+
+    // The OpenAPI document is the service's machine-readable contract; a deployed image serves it
+    // like any other read-only surface. Gating it behind Development made the deployed contract a
+    // 404 while the code carried it all along. It sits after authentication on purpose: registered
+    // ahead of it, these routes answered without a secret while the exemption list (health and
+    // metrics only) claimed to be the whole unauthenticated surface.
+    app.UseSwagger();
+    app.UseSwaggerUI();
+
     app.UseRateLimiting(); // Rate limiting after auth
     app.UseAuditLogging(); // Audit logging captures all requests including rate-limited ones
 
@@ -361,9 +364,9 @@ try
 
     app.MapMorphHub(); // SignalR hub at /hubs/morph
 
-    // One line of posture on every start: nothing here authenticates, by design. Access control is
-    // the deployment's job — bind privately, or front with an authenticating proxy.
-    Log.Warning("MorphDB serves every endpoint to any caller that can reach it (no authentication). Bind it privately or front it with an authenticating proxy.");
+    // The posture line for a service that enforces nothing is OpenServiceLog.Open, said once above and
+    // only while no master secret is injected. A second, unconditional line here told a service that
+    // did enforce a credential that it served every caller.
 
     app.Run();
 }

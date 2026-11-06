@@ -135,6 +135,34 @@ public class SecretEnforcementTests
             "distributed; neither reads project data");
     }
 
+    // The list above pins what the middleware exempts; it cannot see a route served ahead of the
+    // middleware. The OpenAPI document and its UI are such routes: registered before authentication
+    // they answered without a secret while the exemption list still read "health and metrics only".
+    // The master secret reaching the document first, so the refusal below is the boundary and not a
+    // route that was never there.
+    [Theory]
+    [InlineData("/swagger/v1/swagger.json")]
+    [InlineData("/swagger/index.html")]
+    public async Task The_machine_readable_contract_needs_a_secret_like_everything_else(string route)
+    {
+        var served = await EnforcedClient(MasterSecret).GetAsync(route, TestContext.Current.CancellationToken);
+        served.StatusCode.Should().Be(HttpStatusCode.OK, "the route exists for a caller holding the secret");
+
+        var refused = await EnforcedClient().GetAsync(route, TestContext.Current.CancellationToken);
+        refused.StatusCode.Should().Be(HttpStatusCode.Unauthorized,
+            "the exemption list is the entire unauthenticated surface; a route served ahead of the middleware is an unlisted member of it");
+    }
+
+    // Moving the contract behind authentication must not take it away from a deployment that enforces
+    // nothing: there it is served as it always was.
+    [Fact]
+    public async Task Without_an_injected_master_secret_the_contract_is_served_to_anyone()
+    {
+        var response = await _fixture.Api.Client.GetAsync("/swagger/v1/swagger.json", TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
     [Fact]
     public void The_exemption_list_does_not_grow_unnoticed()
     {

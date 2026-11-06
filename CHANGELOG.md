@@ -24,6 +24,14 @@
 
 ### Fixed
 
+- **The OpenAPI document and the Swagger UI no longer answer without a secret on a service that enforces one.** They were
+  registered ahead of the authentication step, so `/swagger/...` was served to anyone while `/health` and `/metrics` were
+  documented as the only unauthenticated routes. They now follow authentication like every other route; a service with no
+  master secret serves them as before. A browser cannot send the header, so open the document with a client that does.
+- **A service that enforces a secret no longer logs that it serves every caller.** A second, unconditional start-up warning
+  ("serves every endpoint to any caller that can reach it") was written even when a master secret was injected; the one
+  warning for a service that really enforces nothing is unchanged.
+
 - **A batch item the caller can act on keeps its message instead of reading as a fault of the service.** The per-item failure text of `POST /api/batch/data` and of a seed
   listed the kinds of failure it would show and replaced everything else with `An unexpected error occurred`, so a row-level
   policy that refused an upsert, a conflict or a missing project read as a fault of the service. The item now takes the same

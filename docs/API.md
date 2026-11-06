@@ -1487,6 +1487,24 @@ row-level security**, so a table a token reads should carry a policy. Starting t
 `Security__Tokens__Issuer` but no master secret fails at start-up, as does an issuer without an
 audience.
 
+### What the service trusts
+
+- **With no master secret the service authenticates nothing.** It says so once in the log as it starts, and the MCP door
+  refuses to start. Put such a service on a network only its callers reach.
+- **With one injected, only `/health` and `/metrics` answer without a credential** — they read and write no project data.
+  The OpenAPI document and the Swagger UI are served after authentication like every other route, so a browser cannot
+  open them on a service that enforces a secret; fetch the document with a client that sends the header.
+- **`X-Project-Id` chooses a project; it does not grant access to it.** The master secret, an unconfined secret and every
+  person's token can name any project. Only a secret issued with a `projectId` is held to that project.
+- **A token authenticates a person, not a project.** Row-level security is the only thing that narrows what a token
+  reads, so a table with no policy shows every row to every valid token, in every project it names.
+- **Client addresses come from the TCP peer, unless you name your proxies.** `X-Forwarded-For` and `X-Forwarded-Proto`
+  are ignored until `TrustedProxies__KnownProxies__<n>` (addresses) or `TrustedProxies__KnownNetworks__<n>` (CIDR ranges)
+  lists the reverse proxy in front of the service; an empty list trusts nobody, not even loopback. Rate limiting counts a
+  request that names no project by this address.
+- **Secrets and tokens travel as bearer values.** Terminate TLS in front of the service, or keep it on a network only
+  its callers reach.
+
 ## MCP door (read-only)
 
 A service can answer [Model Context Protocol](https://modelcontextprotocol.io) clients, so an agent can read a project's
