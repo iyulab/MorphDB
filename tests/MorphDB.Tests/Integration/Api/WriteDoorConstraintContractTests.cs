@@ -119,6 +119,12 @@ public class WriteDoorConstraintContractTests
             new { data = row, keyColumns = ByCode }, Ct))),
         ("csv import", (t, row) => ImportAsync(t, "csv", "text/csv", Csv(row))),
         ("json import", (t, row) => ImportAsync(t, "json", "application/json", JsonSerializer.Serialize(new[] { row }))),
+        ("ndjson import", (t, row) => ImportAsync(t, "ndjson", "application/x-ndjson", JsonSerializer.Serialize(row) + "\n")),
+        ("odata post", async (t, row) =>
+        {
+            var set = string.Concat(t.Split('_').Select(p => p.Length > 0 ? char.ToUpperInvariant(p[0]) + p[1..].ToLowerInvariant() : p));
+            return await HttpOutcomeAsync(await _client.PostAsJsonAsync($"/odata/{set}", row, Ct));
+        }),
         ("graphql", async (t, row) =>
         {
             var response = await _client.PostAsJsonAsync("/graphql", new
