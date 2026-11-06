@@ -176,9 +176,12 @@ public static class DmlBuilder
     /// The rows the conflict target's uniqueness covers, when it is a partial unique index — on a
     /// soft-delete table, the rows no delete has marked — so PostgreSQL infers that index.
     /// </param>
-    /// <param name="insertOnlyColumnNames">
-    /// Columns this statement gives a new row but leaves alone on one it finds — values the system made up
-    /// for the insert, such as the next position among siblings, as opposed to ones the caller named.
+    /// <param name="updateColumnNames">
+    /// The columns a row this statement finds is updated in: the ones the caller named and the system columns a
+    /// write sets, as opposed to everything the insert carries — the id, the position among siblings, a default
+    /// and whatever else is made up for a row that does not exist yet. Listing what an update changes means a
+    /// value made up for the insert cannot leak onto an existing row because nobody remembered to exclude it.
+    /// Omitted, every inserted column but the keys and the ones a row keeps from its creation.
     /// </param>
     /// <returns>UPSERT SQL with RETURNING *.</returns>
     public static string BuildUpsert(
@@ -187,7 +190,7 @@ public static class DmlBuilder
         IEnumerable<string> parameterNames,
         IEnumerable<string> keyColumnNames,
         string? conflictPredicate = null,
-        IEnumerable<string>? insertOnlyColumnNames = null)
+        IEnumerable<string>? updateColumnNames = null)
     {
         var columns = columnNames.ToList();
         var parameters = parameterNames.ToList();
@@ -205,7 +208,9 @@ public static class DmlBuilder
         // Non-key columns for update -- less the ones a row is given once, when it is created: an
         // upsert that lands on an existing row updates that row, it does not give it a new identity.
         // Setting them from EXCLUDED replaced the row's _id with the one generated for the insert.
-        var updateColumns = columns.Except(keyColumns).Except(InsertOnlyColumns).Except(insertOnlyColumnNames ?? []).ToList();
+        // And, when the caller lists what an update changes, no more than that.
+        var allowed = updateColumnNames?.ToHashSet();
+        var updateColumns = columns.Except(keyColumns).Except(InsertOnlyColumns).Where(c => allowed is null || allowed.Contains(c)).ToList();
 
         var sb = new StringBuilder();
         sb.Append("INSERT INTO ");

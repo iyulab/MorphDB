@@ -124,6 +124,13 @@
   parameter that comes before the cancellation token, and `IMetadataRepository` gains `InvalidateCache()`, which a caller
   that passed a transaction calls once it has committed. A custom implementation of any of them must follow; a call that
   passed the cancellation token by position now names it (`cancellationToken: token`).
+- **An upsert changes the row it finds only in what the request names and in the system columns a write sets.** The statement used
+  to list the columns an insert carries that an existing row must keep (its id, its creator and owner, the next position) and copy
+  every other one, so each new kind of value an insert is given needed someone to remember to list it — and four of them were
+  found missing. It now lists what is updated (the request's own columns, `_updated_at`, `_updated_by`, `_version`, `_row_state`,
+  `_row_errors`), so a value made up for a row that does not exist yet cannot reach one that does. No behaviour changes for the
+  four upsert doors; `DmlBuilder.BuildUpsert`'s last parameter is now `updateColumnNames` (the columns an existing row is updated in)
+  in place of `insertOnlyColumnNames`, and a caller of that method must follow.
 - `Polly` 8.9.0, `HotChocolate` 16.7.3, `StackExchange.Redis` 3.4.31 and `ModelContextProtocol.AspNetCore` 2.3.1.
 
 ## 0.34.0

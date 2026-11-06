@@ -364,6 +364,16 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
         }
     }
 
+    /// <summary>The system columns a write that changes a row sets: when it changed, who changed it, its version, and its draft state.</summary>
+    private static readonly HashSet<string> WriteSetColumns =
+    [
+        SystemColumns.UpdatedAt,
+        SystemColumns.UpdatedBy,
+        SystemColumns.Version,
+        SystemColumns.RowState,
+        SystemColumns.RowErrors,
+    ];
+
     private async Task<WriteResult> ExecuteUpsertAsync(IWriteContext context)
     {
         var table = context.Table;
@@ -410,19 +420,20 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             // Prepare insert parameters
             var (columns, parameters, values) = PrepareInsertParameters(dataWithProject, table.Columns);
 
+            // A row the upsert finds is changed in what the request names, and in the system columns a write sets.
+            // Everything else the insert carries is for a row that does not exist yet — its id, its owner, its
+            // default, its next position among siblings — and is not copied onto the one that does. The position
+            // is the one system column a request names by leaving it null, so only a value counts for it.
+            var updating = table.Columns
+                .Where(c => WriteSetColumns.Contains(c.LogicalName)
+                    || (context.OriginalData.TryGetValue(c.LogicalName, out var said) && (said is not null || c.LogicalName != SystemColumns.SortOrder)))
+                .Select(c => c.PhysicalName)
+                .ToList();
+
             // On a soft-delete table uniqueness covers the unmarked rows only, so the conflict target
             // is that partial index: a value a marked row held is written as a new row.
-            // The position among siblings is numbered for a row that is being created; a request that did not
-            // name one must not move the row it finds to the end of the line.
-            var generated = new List<string>();
-            if (!(context.OriginalData.TryGetValue(SystemColumns.SortOrder, out var named) && named is not null)
-                && table.Columns.FirstOrDefault(c => c.LogicalName == SystemColumns.SortOrder) is { } sortOrder)
-            {
-                generated.Add(sortOrder.PhysicalName);
-            }
-
             var sql = DmlBuilder.BuildUpsert(table.PhysicalName, columns, parameters, conflictColumns,
-                table.SoftDeleteEnabled ? Ddl.DdlBuilder.ActiveRowsPredicate : null, generated);
+                table.SoftDeleteEnabled ? Ddl.DdlBuilder.ActiveRowsPredicate : null, updating);
 
             await using var conn = await _connections.LeaseAsync(context.CancellationToken);
             var result = await conn.Connection.QuerySingleAsync<dynamic>(

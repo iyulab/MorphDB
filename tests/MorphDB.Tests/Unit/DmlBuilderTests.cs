@@ -183,6 +183,35 @@ public class DmlBuilderTests
     }
 
     [Fact]
+    public void BuildUpsert_WithAnUpdateList_ChangesTheRowItFindsOnlyInThoseColumns()
+    {
+        // The insert carries a value made up for a row that does not exist yet (a position, a default);
+        // an existing row is changed in what the caller listed and nothing else the insert happens to carry.
+        var columns = new[] { "code", "label", "qty", "_sort_order", "_updated_at" };
+        var parameters = new[] { "@p0", "@p1", "@p2", "@p3", "@p4" };
+
+        var sql = DmlBuilder.BuildUpsert("t_items", columns, parameters, ["code"], updateColumnNames: ["label", "_updated_at"]);
+
+        sql.Should().Contain("\"label\" = EXCLUDED.\"label\"");
+        sql.Should().Contain("\"_updated_at\" = EXCLUDED.\"_updated_at\"");
+        sql.Should().NotContain("\"qty\" = EXCLUDED");
+        sql.Should().NotContain("\"_sort_order\" = EXCLUDED");
+    }
+
+    [Fact]
+    public void BuildUpsert_WithAnUpdateList_StillNeverChangesAKeyOrWhatARowKeepsFromItsCreation()
+    {
+        var columns = new[] { "code", "label", "_id", "_created_by", "_owner_id" };
+        var parameters = new[] { "@p0", "@p1", "@p2", "@p3", "@p4" };
+
+        var sql = DmlBuilder.BuildUpsert("t_items", columns, parameters, ["code"], updateColumnNames: columns);
+
+        sql.Should().Contain("\"label\" = EXCLUDED.\"label\"");
+        sql.Should().NotContain("\"code\" = EXCLUDED").And.NotContain("\"_id\" = EXCLUDED")
+            .And.NotContain("\"_created_by\" = EXCLUDED").And.NotContain("\"_owner_id\" = EXCLUDED");
+    }
+
+    [Fact]
     public void BuildUpsert_WithAllColumnsAsKeys_ShouldGenerateNoOpUpdate()
     {
         // Arrange
