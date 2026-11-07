@@ -207,6 +207,30 @@ public class AuditColumnsTakeAnySubjectTests
         row.GetProperty("_owner_id").GetString().Should().Be(creator.ToString());
     }
 
+    // The one thing a table made before cannot do on its own: PostgreSQL will not retype a column a policy reads. The
+    // update is refused naming the policy, nothing moves, and once the policy is dropped the column catches up and the
+    // policy is written again around it (docs/SYSTEM_COLUMNS.md).
+    [Fact]
+    public async Task A_policy_that_reads_the_owner_column_holds_it_as_it_is_until_the_policy_is_dropped()
+    {
+        var master = As(MasterSecret);
+        var (table, _) = await TableAsBuiltBeforeAsync(master);
+        var policy = await master.PostAsJsonAsync("/api/security/policies",
+            new { name = "own_rows", tableName = table, policyType = "Select", expression = "_owner_id = {{user_id}}" }, Ct);
+        policy.IsSuccessStatusCode.Should().BeTrue(await policy.Content.ReadAsStringAsync(Ct));
+        var policyId = JsonDocument.Parse(await policy.Content.ReadAsStringAsync(Ct)).RootElement.GetProperty("id").GetGuid();
+
+        var refused = await master.PatchAsJsonAsync($"/api/schema/tables/{table}/columns/_owner_id", new { type = "text", version = await VersionAsync(master, table) }, Ct);
+
+        refused.IsSuccessStatusCode.Should().BeFalse("a policy reads the column");
+        var body = await refused.Content.ReadAsStringAsync(Ct);
+        body.Should().Contain("COLUMN_USED_BY_POLICY").And.Contain("own_rows");
+
+        (await master.DeleteAsync($"/api/security/policies/{policyId}", Ct)).EnsureSuccessStatusCode();
+        var caughtUp = await master.PatchAsJsonAsync($"/api/schema/tables/{table}/columns/_owner_id", new { type = "text", version = await VersionAsync(master, table) }, Ct);
+        caughtUp.IsSuccessStatusCode.Should().BeTrue(await caughtUp.Content.ReadAsStringAsync(Ct));
+    }
+
     [Theory]
     [InlineData("_id", "text")]
     [InlineData("_version", "text")]
