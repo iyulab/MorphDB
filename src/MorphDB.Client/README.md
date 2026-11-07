@@ -54,6 +54,19 @@ var adults = await client.Data.QueryAsync("users", new QueryRequest
     PageSize = 10
 });
 
+// Write only if nobody else has: pass the version you read, and a row that has moved past it
+// is left untouched (MorphDBPreconditionFailedException, a 412) instead of overwritten
+var row = await client.Data.GetByIdAsync("users", user.Id);
+try
+{
+    await client.Data.UpdateAsync("users", user.Id,
+        new Dictionary<string, object?> { ["age"] = 31 }, expectedVersion: row!.Version!.Value);
+}
+catch (MorphDBPreconditionFailedException)
+{
+    // someone changed the row after you read it — read it again and decide
+}
+
 // Real-time subscriptions — changes arrive one at a time, in order, and the next one waits
 // for the callback's task, so the callback can await its own work
 await client.Realtime.SubscribeAsync("users", async change =>
@@ -72,7 +85,7 @@ await client.Realtime.SubscribeAsync("users", change =>
 - **Schema Management**: Create, alter, and drop tables dynamically
 - **Relations**: Declare links between tables, enforced on write or declared only
 - **Indexes**: Create composite indexes over named columns; read them back with the table
-- **Data Operations**: CRUD operations with filtering, pagination, and ordering
+- **Data Operations**: CRUD operations with filtering, pagination, and ordering; updates and deletes can name the row version they expect (optimistic concurrency)
 - **Hierarchy**: Walk a table whose rows point at a parent — ancestors, descendants, subtree, path, siblings — and check for cycles
 - **Real-time Subscriptions**: WebSocket-based change notifications
 - **Bulk Operations**: Import/export data in CSV, JSON, and XLSX formats

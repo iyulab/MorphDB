@@ -77,21 +77,17 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
 
         try
         {
-            var whereClause = DmlBuilder.BuildIdWhereClause(idColumn.PhysicalName);
+            var parameters = new Dictionary<string, object?> { ["id"] = context.RecordId.Value };
+            var whereClause = HeldToExpectedVersion(DmlBuilder.BuildIdWhereClause(idColumn.PhysicalName), context, parameters);
             var sql = DmlBuilder.BuildDelete(table.PhysicalName, whereClause);
 
             await using var conn = await _connections.LeaseAsync(context.CancellationToken);
             var affectedRows = await conn.Connection.ExecuteAsync(
-                new CommandDefinition(sql, new { id = context.RecordId.Value }, transaction: conn.Transaction, cancellationToken: context.CancellationToken));
+                new CommandDefinition(sql, parameters, transaction: conn.Transaction, cancellationToken: context.CancellationToken));
 
             if (affectedRows == 0)
             {
-                return WriteResult.Failed(new ValidationError
-                {
-                    Field = "id",
-                    Code = ValidationErrorCodes.NotFound,
-                    Message = $"Record with id '{context.RecordId}' not found"
-                });
+                return await NoRowWrittenAsync(conn, context, table, idColumn);
             }
 
             scope.SetRowCount(affectedRows);
@@ -327,7 +323,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             var (setColumns, values) = PrepareUpdateParameters(context.Data, table.Columns);
             ((IDictionary<string, object?>)values)["id"] = context.RecordId.Value;
 
-            var whereClause = ActiveRowById(table, idColumn);
+            var whereClause = HeldToExpectedVersion(ActiveRowById(table, idColumn), context, (IDictionary<string, object?>)values);
             var sql = DmlBuilder.BuildUpdate(table.PhysicalName, setColumns, whereClause);
 
             await using var conn = await _connections.LeaseAsync(context.CancellationToken);
@@ -336,12 +332,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
 
             if (result is null)
             {
-                return WriteResult.Failed(new ValidationError
-                {
-                    Field = "id",
-                    Code = ValidationErrorCodes.NotFound,
-                    Message = $"Record with id '{context.RecordId}' not found"
-                });
+                return await NoRowWrittenAsync(conn, context, table, idColumn);
             }
 
             var mapped = Infrastructure.RowMapper.MapToLogicalDictionary(result, table.Columns);
@@ -501,7 +492,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
             var (setColumns, values) = PrepareUpdateParameters(context.Data, table.Columns);
             ((IDictionary<string, object?>)values)["id"] = context.RecordId.Value;
 
-            var whereClause = ActiveRowById(table, idColumn);
+            var whereClause = HeldToExpectedVersion(ActiveRowById(table, idColumn), context, (IDictionary<string, object?>)values);
             var sql = DmlBuilder.BuildUpdate(table.PhysicalName, setColumns, whereClause);
 
             await using var conn = await _connections.LeaseAsync(context.CancellationToken);
@@ -510,12 +501,7 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
 
             if (result is null)
             {
-                return WriteResult.Failed(new ValidationError
-                {
-                    Field = "id",
-                    Code = ValidationErrorCodes.NotFound,
-                    Message = $"Record with id '{context.RecordId}' not found"
-                });
+                return await NoRowWrittenAsync(conn, context, table, idColumn);
             }
 
             var mapped = Infrastructure.RowMapper.MapToLogicalDictionary(result, table.Columns);
@@ -676,6 +662,65 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
         table.SoftDeleteEnabled
             ? $"{DmlBuilder.BuildIdWhereClause(idColumn.PhysicalName)} AND {SystemColumns.DeletedAt} IS NULL"
             : DmlBuilder.BuildIdWhereClause(idColumn.PhysicalName);
+
+    /// <summary>
+    /// Holds a write by id to the version its caller named (<see cref="WriteOptions.ExpectedVersion"/>): the
+    /// statement itself carries <c>AND _version = @expectedVersion</c>, so the compare and the write are one
+    /// statement — a check made before the write would let a second writer in between, which is the lost update
+    /// the caller asked to be protected from. Without an expected version, or on a table that keeps none, the
+    /// clause is returned unchanged.
+    /// </summary>
+    private static string HeldToExpectedVersion(string whereClause, IWriteContext context, IDictionary<string, object?> parameters)
+    {
+        if (context.Options.ExpectedVersion is not { } expected || !context.Table.VersioningEnabled)
+        {
+            return whereClause;
+        }
+
+        var version = context.Table.Columns.FirstOrDefault(c => c.LogicalName == SystemColumns.Version);
+        if (version is null)
+        {
+            return whereClause;
+        }
+
+        parameters["expectedVersion"] = expected;
+        return $"{whereClause} AND {DmlBuilder.QuoteIdentifier(version.PhysicalName)} = @expectedVersion";
+    }
+
+    /// <summary>
+    /// What a write by id answers when it changed no row: not found — unless the caller named a version, in which
+    /// case the row may be there and have moved on, and then the answer is a version conflict, not "no such row".
+    /// </summary>
+    private static async Task<WriteResult> NoRowWrittenAsync(
+        ScopedConnection conn, IWriteContext context, TableMetadata table, ColumnMetadata idColumn)
+    {
+        if (context.Options.ExpectedVersion is { } expected && table.VersioningEnabled)
+        {
+            var exists = await conn.Connection.ExecuteScalarAsync<int?>(
+                new CommandDefinition(
+                    $"SELECT 1 FROM {DmlBuilder.QuoteIdentifier(table.PhysicalName)} WHERE {ActiveRowById(table, idColumn)}",
+                    new { id = context.RecordId },
+                    transaction: conn.Transaction,
+                    cancellationToken: context.CancellationToken));
+            if (exists is not null)
+            {
+                return WriteResult.Failed(new ValidationError
+                {
+                    Field = SystemColumns.Version,
+                    Code = ValidationErrorCodes.VersionConflict,
+                    Message = $"Version conflict: expected {expected}, but the record has been changed since.",
+                    AttemptedValue = expected
+                });
+            }
+        }
+
+        return WriteResult.Failed(new ValidationError
+        {
+            Field = "id",
+            Code = ValidationErrorCodes.NotFound,
+            Message = $"Record with id '{context.RecordId}' not found"
+        });
+    }
 
     #endregion
 }

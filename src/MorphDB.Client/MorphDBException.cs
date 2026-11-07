@@ -127,6 +127,20 @@ public class MorphDBConflictException : MorphDBApiException
 }
 
 /// <summary>
+/// Exception when a write named the version it expects and the row has moved past it — the server answered
+/// <c>412 Precondition Failed</c> and changed nothing. Read the row again and decide whether to apply the change to
+/// its new state.
+/// </summary>
+public class MorphDBPreconditionFailedException : MorphDBApiException
+{
+    /// <summary>
+    /// Creates a new precondition-failed exception.
+    /// </summary>
+    public MorphDBPreconditionFailedException(string message, string? responseBody = null, string? errorCode = null)
+        : base(message, HttpStatusCode.PreconditionFailed, errorCode ?? "PRECONDITION_FAILED", responseBody) { }
+}
+
+/// <summary>
 /// Exception for connection errors.
 /// </summary>
 public class MorphDBConnectionException : MorphDBException

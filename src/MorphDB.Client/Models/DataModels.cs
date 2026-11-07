@@ -277,6 +277,17 @@ public sealed class DataRecord
     /// Last update timestamp.
     /// </summary>
     public DateTimeOffset UpdatedAt { get; init; }
+
+    /// <summary>
+    /// The row's version (<c>_version</c>), or null when the table keeps none or the read left the column out.
+    /// It is the number an update or delete names (<c>expectedVersion</c>) to write only if the row is still at it.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public long? Version =>
+        Data.TryGetValue("_version", out var value) && value is not null
+        && long.TryParse(Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var version)
+            ? version
+            : null;
 }
 
 /// <summary>

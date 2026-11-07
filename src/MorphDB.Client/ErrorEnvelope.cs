@@ -36,6 +36,8 @@ internal static class ErrorEnvelope
                 message ?? "Access denied", body, code),
             HttpStatusCode.Conflict => new MorphDBConflictException(
                 message ?? "Resource conflict", body, code),
+            HttpStatusCode.PreconditionFailed => new MorphDBPreconditionFailedException(
+                message ?? "The row has changed since the version the request named", body, code),
             _ => new MorphDBApiException(
                 message ?? $"API request failed: {response.ReasonPhrase}", response.StatusCode, code, body),
         };

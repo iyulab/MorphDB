@@ -132,6 +132,7 @@ public sealed class DataController : ControllerBase
             });
         }
 
+        WriteEntityTag(record);
         return Ok(new DataRecordResponse
         {
             Id = id,
@@ -303,8 +304,10 @@ public sealed class DataController : ControllerBase
     /// Update an existing record.
     /// </summary>
     [HttpPatch("{table}/{id:guid}")]
+    [AcceptsIfMatch]
     [ProducesResponseType(typeof(DataRecordResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status412PreconditionFailed)]
     public async Task<IActionResult> Update(
         string table,
         Guid id,
@@ -339,11 +342,19 @@ public sealed class DataController : ControllerBase
             });
         }
 
-        var updateOptions = ignoreUnknown
-            ? WriteOptions.Default with { AllowUnknownFields = true }
-            : null;
+        if (!TryReadPrecondition(tableMetadata, out var precondition, out var refusal))
+        {
+            return refusal;
+        }
+
+        var updateOptions = Preconditions.OptionsFor(precondition, ignoreUnknown);
         var writeResult = await _writePipeline.UpdateAsync(
             projectId, tableMetadata, id, data, existing, updateOptions, cancellationToken);
+
+        if (ErrorHandling.WriteFailure.IsVersionConflict(writeResult))
+        {
+            return PreconditionFailed(writeResult);
+        }
 
         if (ErrorHandling.WriteFailure.IsNotFound(writeResult))
         {
@@ -365,6 +376,7 @@ public sealed class DataController : ControllerBase
             });
         }
 
+        WriteEntityTag(writeResult.Data);
         return Ok(new DataRecordResponse
         {
             Id = id,
@@ -380,8 +392,10 @@ public sealed class DataController : ControllerBase
     /// Delete a record by ID.
     /// </summary>
     [HttpDelete("{table}/{id:guid}")]
+    [AcceptsIfMatch]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status412PreconditionFailed)]
     public async Task<IActionResult> Delete(
         string table,
         Guid id,
@@ -402,8 +416,26 @@ public sealed class DataController : ControllerBase
             });
         }
 
+        if (!TryReadPrecondition(tableMetadata, out var precondition, out var refusal))
+        {
+            // A row that is not there is a 404 whatever the header says (RFC 9110 §13.2.1).
+            return await _dataService.GetByIdAsync(projectId, table, id, cancellationToken) is null
+                ? NotFound(new ErrorResponse
+                {
+                    Error = "NotFound",
+                    Message = $"Record with ID '{id}' not found in table '{table}'",
+                    Code = "RECORD_NOT_FOUND"
+                })
+                : refusal;
+        }
+
         var writeResult = await _writePipeline.DeleteAsync(
-            projectId, tableMetadata, id, cancellationToken: cancellationToken);
+            projectId, tableMetadata, id, options: Preconditions.OptionsFor(precondition, ignoreUnknown: false), cancellationToken: cancellationToken);
+
+        if (ErrorHandling.WriteFailure.IsVersionConflict(writeResult))
+        {
+            return PreconditionFailed(writeResult);
+        }
 
         if (!writeResult.Success)
         {
@@ -421,6 +453,41 @@ public sealed class DataController : ControllerBase
     #endregion
 
     #region Helper Methods
+
+    /// <summary>Reads the request's <c>If-Match</c> (see <see cref="Preconditions"/>), or says how to answer instead.</summary>
+    private bool TryReadPrecondition(TableMetadata table, out IfMatch precondition, out IActionResult refusal)
+    {
+        refusal = null!;
+        if (Preconditions.Read(Request, table, out precondition) is not { } problem)
+        {
+            return true;
+        }
+
+        refusal = StatusCode(problem.Status, new ErrorResponse
+        {
+            Error = problem.Status == StatusCodes.Status400BadRequest ? "BadRequest" : "PreconditionFailed",
+            Message = problem.Message,
+            Code = problem.Code
+        });
+        return false;
+    }
+
+    private ObjectResult PreconditionFailed(WriteResult result) =>
+        StatusCode(Preconditions.FailedStatus, new ErrorResponse
+        {
+            Error = "PreconditionFailed",
+            Message = string.Join("; ", result.Errors.Select(e => e.Message)),
+            Code = Preconditions.FailedCode
+        });
+
+    /// <summary>Names a row's version on the response as its entity tag, when the row carries one.</summary>
+    private void WriteEntityTag(IDictionary<string, object?>? row)
+    {
+        if (EntityTags.ForRow(row) is { } tag)
+        {
+            Response.Headers.ETag = tag;
+        }
+    }
 
     /// <summary>
     /// A node of the filter tree onto the query, joined to what precedes it by AND, or by OR when

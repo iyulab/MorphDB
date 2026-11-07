@@ -96,6 +96,11 @@ public class ODataWriteUnknownInputContractTests
         var failures = new List<string>();
         foreach (var (door, build) in Doors())
         {
+            // The single-entity PATCH and DELETE evaluate If-Match against the entity's ETag — their contract is
+            // ODataRowEntityTagContractTests; the create has no row to compare with.
+            if (header == "If-Match" && door is "odata patch" or "odata delete")
+                continue;
+
             var (set, table, id) = await TableWithOneRowAsync();
             var before = await SnapshotAsync(table);
 

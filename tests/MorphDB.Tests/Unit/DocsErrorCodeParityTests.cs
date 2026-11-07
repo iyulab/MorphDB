@@ -41,6 +41,8 @@ public class DocsErrorCodeParityTests
         // wire whether the handler or an action's catch answers
         "INVALID_NAME", "RESERVED_NAME", "SYSTEM_COLUMN", "UNSAFE_TYPE_CAST", "INVALID_OPERATION",
         "DDL_EXECUTION_FAILED", "INDEX_NOT_FOUND", "RELATION_NOT_FOUND",
+        // A single-row update or delete whose If-Match names a version the row has moved past (Preconditions.FailedCode)
+        "PRECONDITION_FAILED",
         // Write pipeline funnel (WriteFailure.CodeFor)
         "UNKNOWN_COLUMN",
         // Controllers' inline envelopes

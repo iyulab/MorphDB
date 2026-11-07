@@ -26,8 +26,9 @@ public class RejectConditionalHeadersAttribute : ActionFilterAttribute
 
     /// <summary>What a refusal of a conditional header on a write says; <paramref name="where"/> names whose header it is.</summary>
     internal static string Refusal(string header, string where = "") =>
-        $"The '{header}' header{where} is not supported on a write: a row carries no entity tag and no door " +
-        "checks a precondition, so it would be ignored and the write would go through. Send the request without it.";
+        $"The '{header}' header{where} is not supported on this write: only a single-row update or delete sent as its own request " +
+        "evaluates 'If-Match' (against the row's entity tag), and no door evaluates the other conditional headers, so it would be " +
+        "ignored and the write would go through. Send the request without it.";
 
     /// <inheritdoc />
     public override void OnActionExecuting(ActionExecutingContext context)
@@ -40,8 +41,15 @@ public class RejectConditionalHeadersAttribute : ActionFilterAttribute
             return;
         }
 
+        // The routes that evaluate If-Match declare it ([AcceptsIfMatch]) and take it; nothing else is declared.
+        var evaluatesIfMatch = context.ActionDescriptor.EndpointMetadata.OfType<AcceptsIfMatchAttribute>().Any();
         foreach (var header in ConditionalHeaders)
         {
+            if (evaluatesIfMatch && string.Equals(header, "If-Match", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             if (request.Headers.ContainsKey(header))
             {
                 context.Result = Refuse(Refusal(header));

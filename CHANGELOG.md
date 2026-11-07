@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Added
+
+- **Row-level optimistic concurrency, on the wire.** A row of a versioned table has an entity tag — its `_version` as a
+  strong tag (`"3"`). A single-row read (`GET /api/data/{table}/{id}`, `GET /odata/{set}({id})`) and the answer of a
+  single-row update carry it as `ETag` (and OData as `@odata.etag`); the single-row `PATCH` and `DELETE` of both doors take
+  it back as `If-Match` and write only if the row is still at that version — otherwise `412 PRECONDITION_FAILED` and
+  nothing is written. The compare and the write are one statement, so two writers holding the same tag cannot both win.
+  A weak or foreign tag never matches (RFC 9110 §13.1.1 compares `If-Match` strongly); `*` needs only that the row exists;
+  several tags, or a version tag on a table that keeps no version, are `400`. A request without the header is unchanged.
+  See "Optimistic concurrency" in `docs/API.md`.
+- `MorphDB.Client`: `DataClient.UpdateAsync` / `DeleteAsync` overloads that take `long expectedVersion` (sent as
+  `If-Match`), `MorphDBPreconditionFailedException` for the `412`, and `DataRecord.Version`.
+
 ### Docs
 
 - `docs/API.md` "Verifying a delivery": the four headers a webhook delivery carries, the signed text
@@ -22,7 +35,8 @@
 
 - **Breaking**: the data, batch, bulk and transaction routes refuse input they do not take. A query parameter a route
   does not declare is a `400 INVALID_ARGUMENT` naming it — as the reads already answered — and the conditional headers
-  `If-Match`, `If-None-Match` and `If-Unmodified-Since` are refused on a request that changes something. Both used to be
+  `If-Match`, `If-None-Match` and `If-Unmodified-Since` are refused on a request that changes something (`If-Match` is
+  evaluated, not refused, by the single-row update and delete — see Added). Both used to be
   dropped without a word, so a write sent with `?expectedVersion=3` or `If-Match` went through with its precondition
   never checked. A caller that sends a stray parameter (a cache-buster, a retired option) has to stop. The OData writes
   are held to the same rules in their own terms: a system query option other than `$format` is refused on a `POST`, `PATCH`

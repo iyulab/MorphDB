@@ -759,11 +759,13 @@ held to the same rules as the request on its own.
 
 A write (`POST`, `PATCH`, `DELETE`) takes no system option but `$format`: `DELETE Customers(<id>)?$filter=…` is
 refused with `400 INVALID_ARGUMENT` instead of deleting the entity the key names whatever the filter says. The
-conditional headers `If-Match`, `If-None-Match` and `If-Unmodified-Since` are refused on a write too — an entity
-carries no entity tag, so the header would be ignored and the write would go through as if the precondition had held.
-A write inside a `$batch` is held to the same rules by its own URL, and a `$batch` whose write request lists a
-conditional header in its `headers` is refused whole — like one that carries an `if` condition — rather than run without
-it.
+conditional headers `If-None-Match` and `If-Unmodified-Since` are refused on a write too — no door evaluates them, so the
+header would be ignored and the write would go through as if the precondition had held. `If-Match` is evaluated on
+`PATCH` and `DELETE` of one entity (see [Optimistic concurrency](#optimistic-concurrency--etag-and-if-match)): a single
+entity read, and the answer of a `PATCH`, carry the entity's `ETag` header and `@odata.etag` annotation. A write inside a
+`$batch` is held to the same rules by its own URL, and a `$batch` whose write request lists a conditional header
+(`If-Match` included — a batch item evaluates no precondition) in its `headers` is refused whole — like one that
+carries an `if` condition — rather than run without it.
 
 Errors are OData error objects (`{"error": {"code", "message"}}`) carrying the codes of the
 [error table](#errors). A collection travels in `value`; one entity — read by key, or answered by a create or an update — is
@@ -1060,9 +1062,39 @@ Behaviour is selected per request with query parameters:
 A route takes the query parameters it declares and no others. A parameter it does not know —
 `?expectedVersion=3`, a misspelled `?fliter=`, a stale option — is a `400 INVALID_ARGUMENT` naming it and
 listing the supported ones, on the data, batch, bulk and transaction routes alike; the write is not made. The
-conditional headers `If-Match`, `If-None-Match` and `If-Unmodified-Since` are refused the same way on a request that
-changes something: a row carries no entity tag and no door compares a version the request names, so the header would
-be ignored and the write would go through as if the precondition had held.
+conditional headers `If-None-Match` and `If-Unmodified-Since` are refused the same way on a request that changes
+something: no door evaluates them, so the header would be ignored and the write would go through as if the
+precondition had held. `If-Match` is evaluated by the single-row update and delete, described next.
+
+### Optimistic concurrency — `ETag` and `If-Match`
+
+A row of a table that keeps a version (`_version`, on by default) has an **entity tag**: its version as a strong tag,
+`"3"`. It changes with every write to the row. A single-row read (`GET /api/data/{table}/{id}`,
+`GET /odata/{set}({id})`) and the answer of a single-row update carry it in the `ETag` header — and, on OData, in
+`@odata.etag`. To write only if nobody else has, send it back:
+
+```http
+PATCH /api/data/orders/6f1c0e0a-3b6a-4a41-8a3e-0c1d2e3f4a5b
+If-Match: "3"
+```
+
+| `If-Match` | Answer |
+|---|---|
+| the row's current tag (`"3"`) | the write is made; the answer carries the new tag (`"4"`) |
+| a tag the row has moved past | `412 PRECONDITION_FAILED` — nothing is written |
+| `*` | the row exists, so the write is made (it opts out of the check) |
+| a weak tag (`W/"3"`) or a tag that is not a version of this row | `412` — `If-Match` is compared strongly (RFC 9110 §13.1.1), so these never match |
+| several tags, or not an entity tag at all | `400 INVALID_ARGUMENT` — a row has one version at a time |
+| a version tag on a table that keeps no version | `400 INVALID_ARGUMENT` — there is no tag to compare, so the header is refused, not ignored |
+| absent | the write is unconditional, as before |
+
+The row is compared and written in **one statement** (`… AND "_version" = @expected`), so two writers holding the same tag
+cannot both win. A row that is not there is `404` whatever the header says (RFC 9110 §13.2.1). The tag names the row's
+state, not one rendering of it: a read with `$select` shows fewer columns under the same tag. Only the single-row `PATCH`
+and `DELETE` evaluate `If-Match`; every other write route — and a request inside an OData `$batch` — refuses it with `400`.
+The .NET client takes the version as `expectedVersion` on `UpdateAsync` / `DeleteAsync` and throws
+`MorphDBPreconditionFailedException` on a `412`; `DataRecord.Version` is the number to pass.
+
 
 The validation and auto-apply behaviours below are pipeline policy (what the server enforces),
 not request-body switches.
@@ -1097,7 +1129,7 @@ the CHECK on any row it matches.
 | Option | Default | Description |
 |--------|---------|-------------|
 | `deferValidation` | `false` | Defer validation until after bulk insert |
-| `expectedVersion` | `null` | Expected version for optimistic locking — set by code that calls the pipeline, not selectable on a request (`?expectedVersion=` is refused, see above) |
+| `expectedVersion` | `null` | Expected version for optimistic locking — a request names it with `If-Match: "<version>"` on the single-row update or delete (see [Optimistic concurrency](#optimistic-concurrency--etag-and-if-match)); `?expectedVersion=` is refused, see above |
 
 ### Preset Configurations
 
@@ -1937,6 +1969,7 @@ both.
 | 409 | `SCHEMA_VERSION_CONFLICT` | An optimistic schema update lost the race |
 | 409 | `LOCK_ACQUISITION_FAILED` | A concurrent schema operation holds the lock — retry |
 | 410 | `EXPORT_EXPIRED` | Downloading an export whose `expiresAt` has passed — its file is no longer kept; request the export again |
+| 412 | `PRECONDITION_FAILED` | A single-row update or delete named an `If-Match` entity tag the row has moved past (or one that can never match — a weak tag) — nothing was written; read the row again. See [Optimistic concurrency](#optimistic-concurrency--etag-and-if-match) |
 | 429 | `RATE_LIMIT_EXCEEDED` | The project has used its request quota for the current window — only answered when [rate limiting](#rate-limiting) is turned on. `Retry-After` says how many seconds until the window resets |
 | 500 | `INTERNAL_ERROR` | Our defect, logged on the server — never your request's fault |
 | 503 | `SECRETS_NOT_CONFIGURED` | A secret-management route was called on a service that has no master secret injected — there is no caller it could tell apart, so it declines rather than issuing credentials to anyone who reaches the port |

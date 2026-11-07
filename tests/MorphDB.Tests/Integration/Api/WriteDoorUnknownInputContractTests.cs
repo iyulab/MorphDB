@@ -133,6 +133,11 @@ public class WriteDoorUnknownInputContractTests
         var failures = new List<string>();
         foreach (var (door, build) in Doors())
         {
+            // The single-row update and delete evaluate If-Match against the row's entity tag — their contract is
+            // RowEntityTagContractTests; every other door still has no precondition to evaluate.
+            if (header == "If-Match" && door is "rest patch" or "rest delete")
+                continue;
+
             var (table, id) = await TableWithOneRowAsync();
             var before = await SnapshotAsync(table);
 

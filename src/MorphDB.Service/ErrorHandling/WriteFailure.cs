@@ -21,6 +21,13 @@ internal static class WriteFailure
     public static bool IsNotFound(WriteResult result) =>
         result.Errors.Any(e => e.Code == ValidationErrorCodes.NotFound);
 
+    /// <summary>
+    /// Whether the write was refused because the row is no longer at the version the caller named
+    /// (<c>If-Match</c>): a failed precondition, answered <c>412</c>, not a validation failure.
+    /// </summary>
+    public static bool IsVersionConflict(WriteResult result) =>
+        result.Errors.Any(e => e.Code == ValidationErrorCodes.VersionConflict);
+
     public static string CodeFor(WriteResult result) =>
         result.Errors.Count > 0 && result.Errors.All(e => e.Code == ValidationErrorCodes.UnknownColumn)
             ? ValidationErrorCodes.UnknownColumn

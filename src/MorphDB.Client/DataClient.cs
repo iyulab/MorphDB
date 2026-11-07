@@ -79,17 +79,40 @@ public sealed class DataClient
     /// <summary>
     /// Updates an existing record.
     /// </summary>
-    public async Task<DataRecord> UpdateAsync(
+    public Task<DataRecord> UpdateAsync(
         string tableName,
         Guid id,
         IDictionary<string, object?> data,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        UpdateCoreAsync(tableName, id, data, expectedVersion: null, cancellationToken);
+
+    /// <summary>
+    /// Updates an existing record only if it is still at <paramref name="expectedVersion"/> — the version the caller
+    /// read (<see cref="DataRecord.Version"/>). A row that has moved past it is left untouched and the call throws
+    /// <see cref="MorphDBPreconditionFailedException"/>: no other writer's change is overwritten. Sent as the row's
+    /// entity tag in <c>If-Match</c> (RFC 9110).
+    /// </summary>
+    public Task<DataRecord> UpdateAsync(
+        string tableName,
+        Guid id,
+        IDictionary<string, object?> data,
+        long expectedVersion,
+        CancellationToken cancellationToken = default) =>
+        UpdateCoreAsync(tableName, id, data, expectedVersion, cancellationToken);
+
+    private async Task<DataRecord> UpdateCoreAsync(
+        string tableName,
+        Guid id,
+        IDictionary<string, object?> data,
+        long? expectedVersion,
+        CancellationToken cancellationToken)
     {
-        var response = await _httpClient.PatchAsJsonAsync(
-            $"/api/data/{Uri.EscapeDataString(tableName)}/{id}",
-            data,
-            MorphDBJsonContext.Default.IDictionaryStringObject,
-            cancellationToken);
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/api/data/{Uri.EscapeDataString(tableName)}/{id}")
+        {
+            Content = JsonContent.Create(data, MorphDBJsonContext.Default.IDictionaryStringObject),
+        };
+        AddIfMatch(request, expectedVersion);
+        var response = await _httpClient.SendAsync(request, cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.DataRecord, cancellationToken)
             ?? throw new MorphDBException("Failed to deserialize record response");
@@ -98,15 +121,38 @@ public sealed class DataClient
     /// <summary>
     /// Deletes a record.
     /// </summary>
-    public async Task DeleteAsync(
+    public Task DeleteAsync(
         string tableName,
         Guid id,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        DeleteCoreAsync(tableName, id, expectedVersion: null, cancellationToken);
+
+    /// <summary>
+    /// Deletes a record only if it is still at <paramref name="expectedVersion"/>; a row that has moved past it is
+    /// kept and the call throws <see cref="MorphDBPreconditionFailedException"/>.
+    /// </summary>
+    public Task DeleteAsync(
+        string tableName,
+        Guid id,
+        long expectedVersion,
+        CancellationToken cancellationToken = default) =>
+        DeleteCoreAsync(tableName, id, expectedVersion, cancellationToken);
+
+    private async Task DeleteCoreAsync(string tableName, Guid id, long? expectedVersion, CancellationToken cancellationToken)
     {
-        var response = await _httpClient.DeleteAsync(
-            $"/api/data/{Uri.EscapeDataString(tableName)}/{id}",
-            cancellationToken);
+        using var request = new HttpRequestMessage(HttpMethod.Delete, $"/api/data/{Uri.EscapeDataString(tableName)}/{id}");
+        AddIfMatch(request, expectedVersion);
+        var response = await _httpClient.SendAsync(request, cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
+    }
+
+    /// <summary>The row's entity tag is its version as a strong tag (<c>"3"</c>); <c>If-Match</c> must name it exactly.</summary>
+    private static void AddIfMatch(HttpRequestMessage request, long? expectedVersion)
+    {
+        if (expectedVersion is { } version)
+        {
+            request.Headers.TryAddWithoutValidation("If-Match", string.Create(System.Globalization.CultureInfo.InvariantCulture, $"\"{version}\""));
+        }
     }
 
     /// <summary>

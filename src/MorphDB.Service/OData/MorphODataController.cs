@@ -276,6 +276,7 @@ public sealed partial class MorphODataController : ControllerBase
     /// PATCH /odata/{entitySet}({key})
     /// </summary>
     [HttpPatch("{entitySet}({key})")]
+    [AcceptsIfMatch]
     public async Task<IActionResult> UpdateEntity(
         string entitySet,
         Guid key,
@@ -312,8 +313,25 @@ public sealed partial class MorphODataController : ControllerBase
             var existing = await _dataService.GetByIdAsync(projectId, tableName, key, cancellationToken);
             var data = JsonElementToDictionary(body);
 
+            // A row that is not there is a 404 whatever the header says (RFC 9110 §13.2.1) — and the precondition
+            // check in the write would read the missing row as "version 0", a conflict, if it got that far.
+            if (existing is null)
+            {
+                return EntityNotFound(entitySet, key);
+            }
+
+            if (Preconditions.Read(Request, tableMetadata, out var precondition) is { } problem)
+            {
+                return PreconditionRefused(problem);
+            }
+
             var writeResult = await _writePipeline.UpdateAsync(
-                projectId, tableMetadata, key, data, existing, cancellationToken: cancellationToken);
+                projectId, tableMetadata, key, data, existing, Preconditions.OptionsFor(precondition, ignoreUnknown: false), cancellationToken);
+
+            if (ErrorHandling.WriteFailure.IsVersionConflict(writeResult))
+            {
+                return PreconditionRefused(Preconditions.Failed(string.Join("; ", writeResult.Errors.Select(e => e.Message))));
+            }
 
             if (ErrorHandling.WriteFailure.IsNotFound(writeResult))
             {
@@ -351,14 +369,26 @@ public sealed partial class MorphODataController : ControllerBase
             body[name] = value;
         }
 
+        // The entity's ETag (OData 4.01 §11.4.1.1): the header and the annotation carry the same strong tag.
+        if (EntityTags.ForRow(entity) is { } tag)
+        {
+            body["@odata.etag"] = tag;
+            Response.Headers.ETag = tag;
+        }
+
         return body;
     }
+
+    /// <summary>A failed or unreadable precondition on the OData wire: the REST code, OData's error body.</summary>
+    private ObjectResult PreconditionRefused(PreconditionProblem problem) =>
+        StatusCode(problem.Status, ODataError.Of(problem.Code, problem.Message));
 
     /// <summary>
     /// Deletes an entity.
     /// DELETE /odata/{entitySet}({key})
     /// </summary>
     [HttpDelete("{entitySet}({key})")]
+    [AcceptsIfMatch]
     public async Task<IActionResult> DeleteEntity(
         string entitySet,
         Guid key,
@@ -390,8 +420,21 @@ public sealed partial class MorphODataController : ControllerBase
                 return TableNotFound(tableName);
             }
 
+            if (Preconditions.Read(Request, tableMetadata, out var precondition) is { } problem)
+            {
+                // A row that is not there is a 404 whatever the header says (RFC 9110 §13.2.1).
+                return await _dataService.GetByIdAsync(projectId, tableName, key, cancellationToken) is null
+                    ? EntityNotFound(entitySet, key)
+                    : PreconditionRefused(problem);
+            }
+
             var writeResult = await _writePipeline.DeleteAsync(
-                projectId, tableMetadata, key, cancellationToken: cancellationToken);
+                projectId, tableMetadata, key, options: Preconditions.OptionsFor(precondition, ignoreUnknown: false), cancellationToken: cancellationToken);
+
+            if (ErrorHandling.WriteFailure.IsVersionConflict(writeResult))
+            {
+                return PreconditionRefused(Preconditions.Failed(string.Join("; ", writeResult.Errors.Select(e => e.Message))));
+            }
 
             if (ErrorHandling.WriteFailure.IsNotFound(writeResult))
             {
