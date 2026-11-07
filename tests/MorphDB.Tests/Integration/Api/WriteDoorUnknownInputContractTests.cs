@@ -96,6 +96,10 @@ public class WriteDoorUnknownInputContractTests
             {
                 Content = new StringContent("code,label\nnew,n\n", Encoding.UTF8, "text/csv"),
             }),
+            ("transaction", (t, _, q) => Json(HttpMethod.Post, With("/api/batch/transaction", q),
+                new { operations = new[] { new { method = "INSERT", table = t, data = new { code = "new", label = "n" } } } })),
+            ("row-state finalize", (t, id, q) => new HttpRequestMessage(HttpMethod.Patch, With($"/api/data/{t}/{id}/finalize", q))),
+            ("batch finalize", (t, id, q) => Json(HttpMethod.Post, With($"/api/data/{t}/finalize", q), new { recordIds = new[] { id } })),
         ];
     }
 
@@ -196,9 +200,8 @@ public class WriteDoorUnknownInputContractTests
     public void The_controllers_that_change_rows_carry_the_filter_so_an_action_added_later_is_held_too()
     {
         // The matrix above sends through the routes that exist today. The filter sits on the controller, and this
-        // keeps it there: a controller that lost it would silently take any parameter again. The transaction and
-        // finalize routes are held by it without a row in the matrix, and the view routes (define, refresh, drop, read) by
-        // ReadInputsContractTests; the OData routes answer their own system
+        // keeps it there: a controller that lost it would silently take any parameter again. The view routes
+        // (define, refresh, drop, read) are held by ReadInputsContractTests; the OData routes answer their own system
         // options (ODataSystemOptions) and are not held by this filter.
         Type[] controllers = [typeof(DataController), typeof(BatchController), typeof(BulkController), typeof(TransactionController), typeof(ViewController)];
 

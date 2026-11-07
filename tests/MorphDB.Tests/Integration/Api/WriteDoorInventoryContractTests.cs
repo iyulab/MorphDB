@@ -45,9 +45,9 @@ public class WriteDoorInventoryContractTests
         ["POST odata/{entitySet}"] = Matrix + "WriteDoorConstraint (odata post) · ODataWriteUnknownInput (refused input)",
         ["DELETE odata/{entitySet}({key})"] = OwnTestsOnly + "ODataApiTests · ODataWriteUnknownInput (refused input)",
         ["POST odata/$batch"] = OwnTestsOnly + "ODataApiTests · ODataWriteUnknownInput (batch items)",
-        ["POST api/batch/transaction"] = OwnTestsOnly + "TransactionWriteContractTests · TransactionUpsertContractTests",
-        ["PATCH api/data/{table}/{id}/finalize"] = OwnTestsOnly + "TransactionApiTests (row-state finalize)",
-        ["POST api/data/{table}/finalize"] = OwnTestsOnly + "TransactionApiTests (row-state finalize)",
+        ["POST api/batch/transaction"] = OwnTestsOnly + "TransactionWriteContractTests · TransactionUpsertContractTests · WriteDoorUnknownInput (refused input)",
+        ["PATCH api/data/{table}/{id}/finalize"] = OwnTestsOnly + "TransactionApiTests (row-state finalize) · WriteDoorUnknownInput (refused input)",
+        ["POST api/data/{table}/finalize"] = OwnTestsOnly + "TransactionApiTests (row-state finalize) · WriteDoorUnknownInput (refused input)",
     };
 
     private static bool ChangesRows(string method, string route) =>
