@@ -475,6 +475,60 @@ public class SecretEnforcementTests
         (await master.GetAsync($"/api/projects/{other.Id}", ct)).StatusCode.Should().Be(HttpStatusCode.OK, "nothing the probe sent changed the project");
     }
 
+    // (10) The exemption list pins what the middleware lets through and the checks above name routes by hand;
+    // neither sees a route the service maps that answers a caller with no credential at all. This walks every
+    // endpoint the host maps and addresses each with every method it answers, holding the one sentence the
+    // docs make -- every route but the probes needs a secret -- to the routes as the host registers them,
+    // rather than to the ones someone remembered to list.
+    [Fact]
+    public async Task Every_mapped_route_but_the_probes_refuses_a_request_that_presents_no_credential()
+    {
+        var client = EnforcedClient();
+        var ct = TestContext.Current.CancellationToken;
+
+        var endpoints = _fixture.Api.WithMasterSecret(MasterSecret).Services
+            .GetRequiredService<EndpointDataSource>().Endpoints
+            .OfType<RouteEndpoint>()
+            .ToList();
+        endpoints.Should().NotBeEmpty("the service maps its routes through the endpoint data source");
+
+        var answered = new List<string>();
+        var probed = 0;
+        foreach (var endpoint in endpoints)
+        {
+            var path = "/" + string.Concat(endpoint.RoutePattern.PathSegments.Select(segment =>
+                "/" + string.Concat(segment.Parts.Select(part => part switch
+                {
+                    RoutePatternLiteralPart literal => literal.Content,
+                    RoutePatternParameterPart => Guid.NewGuid().ToString(),
+                    _ => string.Empty,
+                })))).TrimStart('/');
+            if (ExpectedExemptPrefixes.Any(prefix => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            foreach (var method in endpoint.Metadata.GetMetadata<IHttpMethodMetadata>()?.HttpMethods ?? ["GET"])
+            {
+                using var request = new HttpRequestMessage(new HttpMethod(method), path);
+                if (method is "POST" or "PUT" or "PATCH")
+                {
+                    request.Content = JsonContent.Create(new { name = "no_credential_probe" });
+                }
+
+                var response = await client.SendAsync(request, ct);
+                probed++;
+                if (response.StatusCode != HttpStatusCode.Unauthorized)
+                {
+                    answered.Add($"{method} {endpoint.RoutePattern.RawText} -> {(int)response.StatusCode}");
+                }
+            }
+        }
+
+        probed.Should().BeGreaterThan(100, "the service maps well over a hundred route and method pairs; a walk that found few is not walking the host");
+        answered.Should().BeEmpty("a route that answers a caller with no credential is an unlisted member of the unauthenticated surface");
+    }
+
     private static bool TakesProjectFromPath(RoutePattern pattern) =>
         pattern.Parameters.Any(p => p.Name == "projectId")
         || (pattern.RawText?.StartsWith("api/projects/", StringComparison.OrdinalIgnoreCase) == true
