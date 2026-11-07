@@ -75,11 +75,16 @@ public class WriteDoorPolicyContractTests
             new { records = new[] { new { code = "k", label, owner } }, keyColumns = ByCode }, Ct)),
     ];
 
-    /// <summary>The kinds of policy that say whose rows a person may change; each reads the row's own <c>owner</c>.</summary>
+    /// <summary>
+    /// The kinds of policy that say whose rows a person may change; each reads the row's own <c>owner</c>. A read
+    /// policy is one of them: a row a person cannot see is a row they cannot change, and the row they can see they
+    /// can change, because nothing else on the table says otherwise.
+    /// </summary>
     public static IEnumerable<object[]> Policies() =>
     [
         ["Update"],
         ["All"],
+        ["Select"],
     ];
 
     private async Task<(HttpClient Master, string Table)> TableWithPolicyAsync(string policyType)
@@ -131,6 +136,14 @@ public class WriteDoorPolicyContractTests
                 failures.Add($"{door}: refusing the stranger answered {(int)response.StatusCode}: {said}");
             if (said.Contains("unexpected error", StringComparison.OrdinalIgnoreCase))
                 failures.Add($"{door}: a refusal the caller can act on is reported as an unexpected error: {said}");
+
+            // The doors that land on a row by a conflict cannot answer "not found" for a row the stranger may not change —
+            // they would have created it — so they say what blocked them: the table's policy.
+            if (door.Contains("upsert", StringComparison.Ordinal) || door == "seed")
+            {
+                if (!said.Contains("Row-level security", StringComparison.Ordinal))
+                    failures.Add($"{door}: the refusal does not say a row-level policy blocked it: {said}");
+            }
         }
 
         failures.Should().BeEmpty($"under a {policyType} policy:\n" + string.Join("\n", failures));
