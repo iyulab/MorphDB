@@ -195,7 +195,7 @@ public sealed class PostgresDataService : IMorphDataService
         // update set `qty` to -1 under `qty >= 0` and every row it matched took it. Required, unique and
         // reference constraints are physical and refuse in the statement itself, so only the CHECKs run
         // here. A CHECK that compares the changed column with one the request does not carry is judged
-        // by the request alone — the rows differ, and the single update has the same reach without the row.
+        // against that column of each row the statement matches (below), the way a single update judges it.
         var checkOnly = new WriteOptions
         {
             ValidateRequired = false,
@@ -231,6 +231,8 @@ public sealed class PostgresDataService : IMorphDataService
             whereSql = $"({whereSql}) AND {SystemColumns.DeletedAt} IS NULL";
         }
 
+        await RefuseRowsThatWouldBreakACheckAsync(table, data, whereSql, whereParams, tableName, cancellationToken);
+
         if (setColumns.Count > 0)
         {
             setColumns = WithSystemColumns(table, setColumns, valuesDict);
@@ -253,6 +255,44 @@ public sealed class PostgresDataService : IMorphDataService
             // not admit. A physical constraint (a NULL into a required column, a duplicate, a key a
             // reference needs) is the caller's mistake as on a single write.
             throw Pipeline.PostgresWriteRefusal.Translate(pg, table);
+        }
+    }
+
+
+    /// <summary>
+    /// A CHECK that compares a changed column with one the change does not name is judged on each row the statement
+    /// would update, with that column read from the row: <c>hi &gt;= lo</c> with only <c>hi</c> set has no answer
+    /// from the request alone, and the rows differ. The columns the CHECKs read are all that is selected — the
+    /// matching rows are streamed, and the first one the change would break refuses the whole statement before
+    /// any row is touched. Nothing is read when no CHECK is split between the change and the rows.
+    /// </summary>
+    private async Task RefuseRowsThatWouldBreakACheckAsync(
+        TableMetadata table,
+        IDictionary<string, object?> data,
+        string whereSql,
+        IDictionary<string, object?> whereParams,
+        string tableName,
+        CancellationToken cancellationToken)
+    {
+        var needed = Pipeline.Validators.CheckValidator.StoredColumnsNeeded(table, data);
+        if (needed.Count == 0)
+        {
+            return;
+        }
+
+        var checks = Pipeline.Validators.CheckValidator.ChecksTouchedBy(table, data);
+        var sql = $"SELECT {string.Join(", ", needed.Select(c => c.PhysicalName))} FROM {table.PhysicalName} WHERE {whereSql}";
+
+        await using var lease = await _connections.LeaseAsync(cancellationToken);
+        await foreach (var row in lease.Connection.QueryUnbufferedAsync<dynamic>(sql, new DynamicParameters(whereParams), lease.Transaction)
+            .WithCancellation(cancellationToken))
+        {
+            Dictionary<string, object?> stored = Infrastructure.RowMapper.MapToLogicalDictionary(row, table.Columns);
+            var violation = Pipeline.Validators.CheckValidator.Violations(checks, data, stored).FirstOrDefault();
+            if (violation is not null)
+            {
+                throw new ValidationException($"Write to table '{tableName}' failed: {violation.Message}");
+            }
         }
     }
 

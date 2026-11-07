@@ -1076,6 +1076,11 @@ not request-body switches.
 | `validateUnique` | `true` | Validate unique constraints |
 | `validateCheck` | `true` | Validate CHECK constraints (supports AND/OR expressions) |
 
+A CHECK is judged on the row a change leaves behind, not on the request alone: `hi >= lo` with only `hi` in the request
+compares it with the `lo` the row stores, and a change to `lo` is held by the CHECK on `hi`. A CHECK none of whose columns
+the request names is not asked again. An update by filter is refused whole, before any row is touched, when it would break
+the CHECK on any row it matches.
+
 ### Auto-Apply Options
 
 | Option | Default | Description |

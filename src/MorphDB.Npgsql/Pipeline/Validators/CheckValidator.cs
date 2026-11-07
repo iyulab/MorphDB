@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Dapper;
 using MorphDB.Core.Models;
 using MorphDB.Core.Pipeline;
 using MorphDB.Npgsql.Infrastructure;
@@ -13,9 +14,23 @@ namespace MorphDB.Npgsql.Pipeline.Validators;
 /// </summary>
 public sealed partial class CheckValidator : IValidator
 {
+    private readonly MorphConnectionFactory? _connections;
+
+    /// <param name="connections">
+    /// Where a stored row is read from when a change names only some of the columns a CHECK compares. Without it
+    /// (a unit test of the evaluator) the CHECK is judged by the request alone.
+    /// </param>
+    public CheckValidator(MorphConnectionFactory? connections = null)
+    {
+        _connections = connections;
+    }
+
     public int Order => PipelineOrder.CheckValidator;
 
-    public bool ReadsStoredRows(IWriteContext context) => false;
+    public bool ReadsStoredRows(IWriteContext context) =>
+        context.ExistingData is null && _connections is not null
+        && context.OperationType is WriteOperationType.Update or WriteOperationType.Upsert
+        && StoredColumnsNeeded(context.Table, context.Data).Count > 0;
 
     public bool ShouldExecute(IWriteContext context)
     {
@@ -23,43 +38,139 @@ public sealed partial class CheckValidator : IValidator
             && context.OperationType is WriteOperationType.Insert or WriteOperationType.Update or WriteOperationType.Upsert;
     }
 
-    public Task ExecuteAsync(IWriteContext context)
+    public async Task ExecuteAsync(IWriteContext context)
     {
-        var columnsWithCheck = context.Table.Columns
-            .Where(c => !string.IsNullOrEmpty(c.CheckExpression) && c.IsActive)
-            .ToList();
+        var isChange = context.OperationType is WriteOperationType.Update or WriteOperationType.Upsert;
 
-        foreach (var column in columnsWithCheck)
+        // A change is judged on the row it leaves behind: what the request names over what the row stores. A CHECK
+        // that compares the changed column with one the request does not carry (hi >= lo, and only hi changes) is
+        // otherwise a comparison with nothing, and passes. A CHECK none of whose columns the request names is
+        // unchanged by it, and is not asked again — nor is the stored row read for it.
+        var checks = isChange ? ChecksTouchedBy(context.Table, context.Data) : CheckedColumns(context.Table).ToList();
+        if (checks.Count == 0)
+            return;
+
+        var stored = isChange ? context.ExistingData ?? await ReadStoredRowAsync(context) : null;
+
+        foreach (var violation in Violations(checks, context.Data, stored))
         {
-            // Get the value for this column
-            if (!context.Data.TryGetValue(column.LogicalName, out var value))
-            {
-                // For updates, use existing value if not in payload
-                if (context.ExistingData?.TryGetValue(column.LogicalName, out value) != true)
-                {
-                    continue;
-                }
-            }
+            ((WriteContext)context).AddError(violation.Field, ValidationErrorCodes.CheckViolation, violation.Message, violation.Value);
+        }
+    }
+
+    /// <summary>A CHECK a change would leave broken: the column that carries it, what it says, and the value it stands on.</summary>
+    internal sealed record CheckViolation(string Field, string Message, object? Value);
+
+    /// <summary>
+    /// The CHECKs that <paramref name="change"/> leaves broken, judged on the row it makes: the stored values
+    /// (<paramref name="stored"/>, when there is one) under the ones the change names.
+    /// </summary>
+    internal static IEnumerable<CheckViolation> Violations(
+        IEnumerable<ColumnMetadata> checks,
+        IDictionary<string, object?> change,
+        IDictionary<string, object?>? stored)
+    {
+        IDictionary<string, object?> row = change;
+        if (stored is not null)
+        {
+            row = new Dictionary<string, object?>(stored, StringComparer.OrdinalIgnoreCase);
+            foreach (var (field, named) in change)
+                row[field] = named;
+        }
+
+        foreach (var column in checks)
+        {
+            if (!row.TryGetValue(column.LogicalName, out var value))
+                continue;
 
             // REST binding delivers values as JsonElement; the in-memory comparisons below
             // (`is string`, MATCHES) do not match a JsonElement and would silently bypass the
             // constraint. Unwrap to a CLR value so string/regex CHECKs are actually enforced.
             value = JsonValueConverter.ToClrValue(value);
 
-            // Evaluate the check expression
-            var isValid = EvaluateCheckExpression(column.CheckExpression!, column.LogicalName, value, context.Data);
-
-            if (!isValid)
+            if (!EvaluateCheckExpression(column.CheckExpression!, column.LogicalName, value, row))
             {
-                ((WriteContext)context).AddError(
+                yield return new CheckViolation(
                     column.LogicalName,
-                    ValidationErrorCodes.CheckViolation,
-                    $"Value '{value}' violates check constraint: {column.CheckExpression}",
+                    change.ContainsKey(column.LogicalName)
+                        ? $"Value '{value}' violates check constraint: {column.CheckExpression}"
+                        : $"The row would violate check constraint '{column.CheckExpression}': '{column.LogicalName}' is {value} and this change leaves it so.",
                     value);
             }
         }
+    }
 
-        return Task.CompletedTask;
+    private static IEnumerable<ColumnMetadata> CheckedColumns(TableMetadata table) =>
+        table.Columns.Where(c => !string.IsNullOrEmpty(c.CheckExpression) && c.IsActive);
+
+    /// <summary>The columns a CHECK reads: its own and every one its expression names.</summary>
+    private static IEnumerable<string> ReferencedFields(ColumnMetadata column) =>
+        CheckGrammar.Fields(column.CheckExpression!).Append(column.LogicalName);
+
+    /// <summary>The CHECKs of <paramref name="table"/> that read at least one column <paramref name="change"/> names.</summary>
+    internal static List<ColumnMetadata> ChecksTouchedBy(TableMetadata table, IDictionary<string, object?> change) =>
+        [.. CheckedColumns(table).Where(c => ReferencedFields(c).Any(change.ContainsKey))];
+
+    /// <summary>
+    /// The columns, not named by <paramref name="change"/>, that the CHECKs <paramref name="change"/> touches read:
+    /// what has to be taken from the stored row to judge them. Empty when no CHECK is split between the change and the row.
+    /// </summary>
+    internal static IReadOnlyList<ColumnMetadata> StoredColumnsNeeded(TableMetadata table, IDictionary<string, object?> change)
+    {
+        var logical = ChecksTouchedBy(table, change)
+            .SelectMany(ReferencedFields)
+            .Where(f => !change.ContainsKey(f))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        return [.. table.Columns.Where(c => logical.Contains(c.LogicalName, StringComparer.OrdinalIgnoreCase))];
+    }
+
+    /// <summary>
+    /// The row the change lands on, as the pipeline's own data shape, or null when it cannot be read (no connection,
+    /// no id or key, no such row — an insert-shaped upsert, or a row the caller's policy does not show), in which case
+    /// the CHECK is judged by the request alone, as an insert's is.
+    /// </summary>
+    private async Task<IDictionary<string, object?>?> ReadStoredRowAsync(IWriteContext context)
+    {
+        if (_connections is null || StoredColumnsNeeded(context.Table, context.Data).Count == 0)
+            return null;
+
+        var table = context.Table;
+        var parameters = new DynamicParameters();
+        string where;
+        if (context.OperationType == WriteOperationType.Update)
+        {
+            var pk = table.Columns.FirstOrDefault(c => c.IsPrimaryKey);
+            if (pk is null || !context.RecordId.HasValue)
+                return null;
+
+            parameters.Add("id", context.RecordId.Value);
+            where = $"{pk.PhysicalName} = @id" + (table.SoftDeleteEnabled ? " AND _deleted_at IS NULL" : string.Empty);
+        }
+        else
+        {
+            var keyNames = context.KeyColumns is { Count: > 0 } named
+                ? named
+                : [table.Columns.First(c => c.IsPrimaryKey).LogicalName];
+            var conditions = new List<string>();
+            for (var i = 0; i < keyNames.Count; i++)
+            {
+                var key = table.Columns.FirstOrDefault(c => c.LogicalName.Equals(keyNames[i], StringComparison.OrdinalIgnoreCase));
+                if (key is null || !context.Data.TryGetValue(key.LogicalName, out var keyValue) || keyValue is null)
+                    return null;
+
+                parameters.Add($"k{i}", TypeMapper.ToDbValue(keyValue, key.DataType));
+                conditions.Add($"{key.PhysicalName} = @k{i}");
+            }
+
+            where = string.Join(" AND ", conditions);
+        }
+
+        await using var conn = await _connections.LeaseAsync(context.CancellationToken);
+        var row = await conn.Connection.QuerySingleOrDefaultAsync<dynamic>(
+            new CommandDefinition($"SELECT * FROM {table.PhysicalName} WHERE {where}", parameters, transaction: conn.Transaction, cancellationToken: context.CancellationToken));
+
+        return row is null ? null : RowMapper.MapToLogicalDictionary(row, table.Columns);
     }
 
     /// <summary>

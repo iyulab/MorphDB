@@ -104,7 +104,7 @@ public sealed class PostgresFixture : IAsyncLifetime
             new RequiredValidator(),
             new UniqueValidator(Connections),
             new ForeignKeyValidator(Connections, metadataRepository),
-            new CheckValidator()
+            new CheckValidator(Connections)
         ];
         ITransformer[] transformers =
         [

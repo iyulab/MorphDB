@@ -8,6 +8,16 @@
   (`"{timestamp}.{body}"`, keyed with the secret's UTF-8 bytes), a receiver in Python and a worked example whose signature
   a test pins.
 
+### Fixed
+
+- A CHECK that compares two columns (`hi >= lo`) was not enforced on a change that names only one of them. The comparison
+  read the column the request did not carry from the request alone, found nothing, and passed — so `PATCH` `{ "hi": 3 }`
+  stored a row with `lo` 5 under that CHECK, through every door (REST update, upsert, seed, batch operations, update by
+  filter, GraphQL, OData). A change is now judged on the row it leaves behind: the stored values under the ones the request
+  names. Only a CHECK that reads a column the change names, and not all of its columns, costs a read of the stored row (one
+  row by id or key; for an update by filter, the columns the CHECK reads of each matching row, streamed). A statement that
+  would break the CHECK on any matching row is refused whole, before any row is touched.
+
 ### Changed
 
 - **Breaking**: the data, batch, bulk and transaction routes refuse input they do not take. A query parameter a route
