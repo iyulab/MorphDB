@@ -29,7 +29,7 @@ env:
   DOTNET_NOLOGO: true
 
 jobs:
-  publish:
+  pack:
     # A CI run for a pull request, or one that did not pass, releases nothing.
     if: >-
       github.event_name == 'workflow_dispatch' ||
@@ -38,8 +38,11 @@ jobs:
     timeout-minutes: 30
 
     permissions:
-      contents: write   # needed to push the release tag
-      packages: write
+      contents: read
+
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      any: ${{ steps.unpublished.outputs.any }}
 
     steps:
       # The commit CI passed, not whatever the branch points at by now.
@@ -109,14 +112,78 @@ jobs:
         with:
           version: ${{ steps.version.outputs.version }}
 
-      # Everything from here writes something that cannot be taken back, so a manual run never gets
-      # here. --skip-duplicate stays as idempotence for a run that resumes a partial release.
-      - name: Push to NuGet.org
+      # The hand-over to the publish job below. Only the packages go in this artifact, and nothing
+      # else: the central workflow refuses an artifact that holds any other file. A manual run is a
+      # dry run and hands nothing over.
+      - name: Upload the packages
         if: github.event_name == 'workflow_run' && steps.unpublished.outputs.any == 'true'
-        run: dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+        uses: actions/upload-artifact@v7
+        with:
+          name: nuget-packages
+          path: |
+            nupkgs/*.nupkg
+            nupkgs/*.snupkg
+          retention-days: 1
+          if-no-files-found: error
 
+      - name: Upload the release notes
+        if: github.event_name == 'workflow_run'
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-notes
+          path: ${{ runner.temp }}/release-notes.md
+          retention-days: 1
+          if-no-files-found: error
+
+  # nuget.org is written by the organization's central publishing workflow, which holds the only
+  # trust policy on nuget.org: this repository holds no NuGet key. The call waits for the push and
+  # fails when it does not succeed, so the tag and the release below never describe a version that
+  # is not out. The central workflow checks this repository, this workflow file and the package ids
+  # against its allowlist, and refuses a pull request run.
+  publish:
+    needs: pack
+    if: github.event_name == 'workflow_run' && needs.pack.outputs.any == 'true'
+    uses: iyulab/nuget-publish/.github/workflows/request.yml@de1e58c8bcefaf88f497fcb58899a1c6e84f4e29 # main
+    permissions: {}
+    secrets: inherit
+
+  release:
+    needs: [pack, publish]
+    # A version nuget.org already has skips the publish job, and the record below is still made
+    # (each step leaves what exists alone); a failed publish records nothing.
+    if: >-
+      !cancelled() && github.event_name == 'workflow_run' && needs.pack.result == 'success' &&
+      (needs.publish.result == 'success' || needs.publish.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      contents: write   # needed to push the release tag
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Download the packages
+        if: needs.pack.outputs.any == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: nuget-packages
+          path: nupkgs
+
+      - name: Download the release notes
+        uses: actions/download-artifact@v8
+        with:
+          name: release-notes
+          path: ${{ runner.temp }}
+
+      # --skip-duplicate stays as idempotence for a run that resumes a partial release. GitHub
+      # Packages rejects snupkg, so only the .nupkg glob is pushed here.
       - name: Push to GitHub Packages
-        if: github.event_name == 'workflow_run' && steps.unpublished.outputs.any == 'true'
+        if: needs.pack.outputs.any == 'true'
         run: dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.GITHUB_TOKEN }} --source https://nuget.pkg.github.com/iyulab/index.json --skip-duplicate
 
       # Without this the repository has no record of what was released: packages and images carried
@@ -124,9 +191,8 @@ jobs:
       # a version to pin found one that was several minor releases old. Only this workflow tags —
       # release-docker.yml runs on the same trigger and would race for the same name.
       - name: Tag the released version
-        if: github.event_name == 'workflow_run'
         run: |
-          TAG="v${{ steps.version.outputs.version }}"
+          TAG="v${{ needs.pack.outputs.version }}"
           if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
             echo "$TAG already exists, leaving it alone."
             exit 0
@@ -141,15 +207,14 @@ jobs:
       # the releases here are complete only because someone remembered every time. This removes
       # the remembering. Same workflow-ownership rule as the tag: only this one publishes.
       - name: Publish the GitHub Release
-        if: github.event_name == 'workflow_run'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="v${{ steps.version.outputs.version }}"
+          TAG="v${{ needs.pack.outputs.version }}"
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG already exists, leaving it alone."
             exit 0
           fi
           gh release create "$TAG" \
-            --title "MorphDB ${{ steps.version.outputs.version }}" \
+            --title "MorphDB ${{ needs.pack.outputs.version }}" \
             --notes-file "$RUNNER_TEMP/release-notes.md"
