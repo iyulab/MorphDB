@@ -878,7 +878,10 @@ public sealed class MetadataRepository : IMetadataRepository
             .Select(elem =>
             {
                 var physicalName = elem.GetProperty("physical_name").GetString()!;
-                // Support backward compatibility: use physical_name if logical_name is not present
+                // Support backward compatibility: use physical_name if logical_name is not present.
+                // TODO(remove-legacy-read): the writer has emitted logical_name since v0.2.1, so only an index row
+                // written before that lacks it. Remove this fallback (read logical_name as required) once the upgrade
+                // path rewrites such entries or a stated minimum database version starts after v0.2.1.
                 var logicalName = elem.TryGetProperty("logical_name", out var ln)
                     ? ln.GetString() ?? physicalName
                     : physicalName;
