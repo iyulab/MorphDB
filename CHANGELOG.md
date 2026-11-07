@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.35.0
+
+A minor that closes two security holes in 0.34.0 and earlier and adds a read-only MCP door. On a service that enforces
+credentials, any issued secret or person's token could register a webhook pointed at an address it chose — the service then
+sent signed row data there and showed the receiver's response in the delivery history — and the OpenAPI document and the
+Swagger UI answered without a secret. Webhooks are now managed by the master secret alone, checked against an optional
+host allow-list, and a delivery follows no redirect; the API documents sit behind authentication like every other route.
+It also fixes writes that failed or answered the wrong thing: a person's token could not write to a table with audit
+fields on, an upsert sent a row's `_version` back to 1, and a schema change that failed halfway left objects nothing
+described. Breaking: webhook management is master-only, and the columns that record a person (`_created_by`,
+`_updated_by`, `_deleted_by`, `_owner_id`) are `text`, not `uuid` — a table made before keeps `uuid` until each column is
+retyped (see the entry under Changed and `docs/SYSTEM_COLUMNS.md`).
+
 ### Added
 
 - **A service that enforces no credential says so as it starts.** With no `Security__MasterSecret` injected the service

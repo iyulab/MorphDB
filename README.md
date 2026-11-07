@@ -12,6 +12,7 @@ MorphDB provides runtime schema flexibility while preserving full RDBMS power—
 
 - **Dynamic Schema** - Create/modify tables and columns at runtime
 - **Multi-Protocol** - REST, GraphQL, OData, WebSocket, Webhook
+- **Read-only MCP door** - AI clients read tables and views as the person they act for (off by default; see [API](docs/API.md))
 - **Real-time** - Live data sync via SignalR
 - **Type Safety** - Native SQL types with logical name mapping
 
@@ -42,7 +43,7 @@ MorphDB: [Developer] → [Logical Schema] → [Physical DB]
 ### Docker (Recommended)
 
 ```bash
-docker pull ghcr.io/iyulab/morphdb:0.34.0
+docker pull ghcr.io/iyulab/morphdb:0.35.0
 ```
 
 One number covers everything: a release publishes the git tag `vX.Y.Z`, the image `X.Y.Z`, and the
@@ -85,7 +86,7 @@ Run with PostgreSQL using docker-compose:
 # docker-compose.yml
 services:
   morphdb:
-    image: ghcr.io/iyulab/morphdb:0.34.0
+    image: ghcr.io/iyulab/morphdb:0.35.0
     ports:
       # Bound to loopback on purpose: this quick-start injects no master secret, so nothing here
       # authenticates. To serve other machines, either set Security__MasterSecret (see
