@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Changed
+
+- Dependencies: the OpenTelemetry ASP.NET Core and HTTP client instrumentation packages move to 1.20.2 (patch; the
+  rest of the family stays on 1.20.1, which is its latest).
+
 ## 0.35.0
 
 A minor that closes two security holes in 0.34.0 and earlier and adds a read-only MCP door. On a service that enforces
