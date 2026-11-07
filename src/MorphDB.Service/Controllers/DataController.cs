@@ -35,6 +35,7 @@ internal static partial class DataControllerLogs
 [ApiController]
 [Route("api/data")]
 [RequireProject]
+[RejectUnknownInput]
 public sealed class DataController : ControllerBase
 {
     private readonly IMorphDataService _dataService;
@@ -76,11 +77,6 @@ public sealed class DataController : ControllerBase
         try
         {
             var projectId = GetProjectId();
-
-            if (QueryParameterCheck.Unknown<DataQueryParameters>(Request.Query.Keys) is { } unknown)
-            {
-                return BadRequest(new ErrorResponse { Error = "BadRequest", Message = unknown, Code = "INVALID_ARGUMENT" });
-            }
 
             var read = await DataReads.QueryAsync(_dataService, _metadataRepository, projectId, table, query, cancellationToken);
 

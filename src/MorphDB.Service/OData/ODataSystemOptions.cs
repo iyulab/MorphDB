@@ -62,6 +62,35 @@ internal static class ODataSystemOptions
         return null;
     }
 
+    /// <summary>
+    /// What is wrong with the query options of a request that changes an entity, or null when nothing is: a write
+    /// takes no system option (<c>$format</c> aside). A <c>$filter</c> on a DELETE would otherwise read as «delete
+    /// what matches» and be answered by deleting the entity the key names, whatever the filter says.
+    /// </summary>
+    /// <param name="query">The request's query options, by name.</param>
+    public static string? WriteProblem(IEnumerable<KeyValuePair<string, StringValues>> query)
+    {
+        foreach (var (name, values) in query)
+        {
+            if (!name.StartsWith('$'))
+            {
+                continue;
+            }
+
+            if (name != "$format")
+            {
+                return $"The query option '{name}' is not served on a write: a write takes no system query option.";
+            }
+
+            if (!IsJson(values.ToString()))
+            {
+                return $"'$format' is json — this service writes no other format; '{values}' is not.";
+            }
+        }
+
+        return null;
+    }
+
     private static bool IsJson(string format)
     {
         var media = format.Split(';', 2)[0].Trim();

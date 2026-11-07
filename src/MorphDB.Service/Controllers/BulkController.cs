@@ -20,6 +20,7 @@ namespace MorphDB.Service.Controllers;
 [ApiController]
 [Route("api/bulk")]
 [RequireProject]
+[RejectUnknownInput]
 public sealed class BulkController : ControllerBase
 {
     private readonly IBulkOperationService _bulkService;

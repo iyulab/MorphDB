@@ -13,6 +13,7 @@ namespace MorphDB.Service.Controllers;
 [ApiController]
 [Route("api")]
 [RequireProject]
+[RejectUnknownInput]
 public sealed class TransactionController : ControllerBase
 {
     private readonly ITransactionService _transactionService;

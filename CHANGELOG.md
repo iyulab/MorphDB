@@ -10,6 +10,14 @@
 
 ### Changed
 
+- **Breaking**: the data, batch, bulk and transaction routes refuse input they do not take. A query parameter a route
+  does not declare is a `400 INVALID_ARGUMENT` naming it — as the reads already answered — and the conditional headers
+  `If-Match`, `If-None-Match` and `If-Unmodified-Since` are refused on a request that changes something. Both used to be
+  dropped without a word, so a write sent with `?expectedVersion=3` or `If-Match` went through with its precondition
+  never checked. A caller that sends a stray parameter (a cache-buster, a retired option) has to stop. The OData writes
+  are held to the same rules in their own terms: a system query option other than `$format` is refused on a `POST`, `PATCH`
+  or `DELETE` (a `$filter` on a `DELETE` used to be ignored and the entity the key names was deleted), in a `$batch` item
+  as on its own, and so are the conditional headers; a custom option (no `$`) is still the request's own.
 - Dependencies: the OpenTelemetry ASP.NET Core and HTTP client instrumentation packages move to 1.20.2 (patch; the
   rest of the family stays on 1.20.1, which is its latest).
 

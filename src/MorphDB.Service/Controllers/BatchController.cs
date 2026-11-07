@@ -13,6 +13,7 @@ namespace MorphDB.Service.Controllers;
 [ApiController]
 [Route("api/batch")]
 [RequireProject]
+[RejectUnknownInput]
 public sealed class BatchController : ControllerBase
 {
     private readonly IMorphDataService _dataService;

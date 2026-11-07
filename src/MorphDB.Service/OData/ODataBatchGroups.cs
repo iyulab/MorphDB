@@ -1,3 +1,4 @@
+using MorphDB.Service.Filters;
 namespace MorphDB.Service.OData;
 
 /// <summary>
@@ -24,6 +25,14 @@ internal static class ODataBatchGroups
             if (!ids.Add(request.Id))
             {
                 return $"The id '{request.Id}' is given to more than one request of the batch.";
+            }
+
+            // A conditional header on a write would be read by no door, so the write would run unconditionally:
+            // the batch is refused for it as it is for an 'if' condition.
+            if (!request.Method.Equals("GET", StringComparison.OrdinalIgnoreCase)
+                && request.Headers?.Keys.FirstOrDefault(RejectConditionalHeadersAttribute.IsConditional) is { } conditional)
+            {
+                return $"Request '{request.Id}': " + RejectConditionalHeadersAttribute.Refusal(conditional, " of the request");
             }
 
             if (UnsupportedMember(request) is { } member)

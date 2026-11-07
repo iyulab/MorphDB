@@ -757,6 +757,14 @@ are left alone: a custom option (`debug=1`) and a parameter alias (`@name=…`).
 numbers and `$count` is `true` or `false`; `$top=0` is no rows (and `$count=true` still counts). A batch request is
 held to the same rules as the request on its own.
 
+A write (`POST`, `PATCH`, `DELETE`) takes no system option but `$format`: `DELETE Customers(<id>)?$filter=…` is
+refused with `400 INVALID_ARGUMENT` instead of deleting the entity the key names whatever the filter says. The
+conditional headers `If-Match`, `If-None-Match` and `If-Unmodified-Since` are refused on a write too — an entity
+carries no entity tag, so the header would be ignored and the write would go through as if the precondition had held.
+A write inside a `$batch` is held to the same rules by its own URL, and a `$batch` whose write request lists a
+conditional header in its `headers` is refused whole — like one that carries an `if` condition — rather than run without
+it.
+
 Errors are OData error objects (`{"error": {"code", "message"}}`) carrying the codes of the
 [error table](#errors). A collection travels in `value`; one entity — read by key, or answered by a create or an update — is
 the entity object itself, its properties beside `@odata.context` (`…/$metadata#Customers/$entity`),
@@ -1049,6 +1057,13 @@ Behaviour is selected per request with query parameters:
 | `?mode=draft` | Skips validation and stores the row with `_row_state = 'draft'` (requires row state enabled on the table) |
 | `?ignoreUnknown=true` | Fields naming no declared column are dropped instead of failing the write. Without it, an unknown field is a `400 UNKNOWN_COLUMN` naming the field — a typo must not become silent data loss |
 
+A route takes the query parameters it declares and no others. A parameter it does not know —
+`?expectedVersion=3`, a misspelled `?fliter=`, a stale option — is a `400 INVALID_ARGUMENT` naming it and
+listing the supported ones, on the data, batch, bulk and transaction routes alike; the write is not made. The
+conditional headers `If-Match`, `If-None-Match` and `If-Unmodified-Since` are refused the same way on a request that
+changes something: a row carries no entity tag and no door compares a version the request names, so the header would
+be ignored and the write would go through as if the precondition had held.
+
 The validation and auto-apply behaviours below are pipeline policy (what the server enforces),
 not request-body switches.
 
@@ -1077,7 +1092,7 @@ not request-body switches.
 | Option | Default | Description |
 |--------|---------|-------------|
 | `deferValidation` | `false` | Defer validation until after bulk insert |
-| `expectedVersion` | `null` | Expected version for optimistic locking |
+| `expectedVersion` | `null` | Expected version for optimistic locking — set by code that calls the pipeline, not selectable on a request (`?expectedVersion=` is refused, see above) |
 
 ### Preset Configurations
 

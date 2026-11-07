@@ -20,6 +20,7 @@ namespace MorphDB.Service.OData;
 [Route("odata")]
 [ApiController]
 [RequireProject]
+[RejectConditionalHeaders]
 [TypeFilter(typeof(ODataErrorFilter))]
 public sealed partial class MorphODataController : ControllerBase
 {
@@ -222,6 +223,19 @@ public sealed partial class MorphODataController : ControllerBase
         [FromBody] JsonElement body,
         CancellationToken cancellationToken)
     {
+        if (ODataSystemOptions.WriteProblem(Request.Query) is { } problem)
+        {
+            return BadRequest(ODataError.Of("INVALID_ARGUMENT", problem));
+        }
+
+        return await CreateEntityAsync(entitySet, body, cancellationToken);
+    }
+
+    private async Task<IActionResult> CreateEntityAsync(
+        string entitySet,
+        JsonElement body,
+        CancellationToken cancellationToken)
+    {
         try
         {
             var projectId = _projectAccessor.ProjectId;
@@ -266,6 +280,20 @@ public sealed partial class MorphODataController : ControllerBase
         string entitySet,
         Guid key,
         [FromBody] JsonElement body,
+        CancellationToken cancellationToken)
+    {
+        if (ODataSystemOptions.WriteProblem(Request.Query) is { } problem)
+        {
+            return BadRequest(ODataError.Of("INVALID_ARGUMENT", problem));
+        }
+
+        return await UpdateEntityAsync(entitySet, key, body, cancellationToken);
+    }
+
+    private async Task<IActionResult> UpdateEntityAsync(
+        string entitySet,
+        Guid key,
+        JsonElement body,
         CancellationToken cancellationToken)
     {
         try
@@ -332,6 +360,19 @@ public sealed partial class MorphODataController : ControllerBase
     /// </summary>
     [HttpDelete("{entitySet}({key})")]
     public async Task<IActionResult> DeleteEntity(
+        string entitySet,
+        Guid key,
+        CancellationToken cancellationToken)
+    {
+        if (ODataSystemOptions.WriteProblem(Request.Query) is { } problem)
+        {
+            return BadRequest(ODataError.Of("INVALID_ARGUMENT", problem));
+        }
+
+        return await DeleteEntityAsync(entitySet, key, cancellationToken);
+    }
+
+    private async Task<IActionResult> DeleteEntityAsync(
         string entitySet,
         Guid key,
         CancellationToken cancellationToken)
@@ -487,6 +528,13 @@ public sealed partial class MorphODataController : ControllerBase
                 return Item(request.Id, StatusCodes.Status400BadRequest, ODataError.Of("INVALID_ARGUMENT", $"Request '{request.Id}': {optionsProblem}"));
             }
 
+            // A write takes no system option, in a batch as on its own.
+            if (!request.Method.Equals("GET", StringComparison.OrdinalIgnoreCase)
+                && ODataSystemOptions.WriteProblem(target.Options) is { } writeProblem)
+            {
+                return Item(request.Id, StatusCodes.Status400BadRequest, ODataError.Of("INVALID_ARGUMENT", $"Request '{request.Id}': {writeProblem}"));
+            }
+
             var body = request.Body ?? JsonSerializer.SerializeToElement(new Dictionary<string, object?>());
             var result = (request.Method.ToUpperInvariant(), target.Key) switch
             {
@@ -494,9 +542,9 @@ public sealed partial class MorphODataController : ControllerBase
                     target.IntQuery("$top"), target.IntQuery("$skip"), target.Query("$select"),
                     string.Equals(target.Query("$count"), "true", StringComparison.OrdinalIgnoreCase), cancellationToken),
                 ("GET", { } key) => await ReadEntityAsync(target.EntitySet, key, target.Query("$select"), cancellationToken),
-                ("POST", null) => await CreateEntity(target.EntitySet, body, cancellationToken),
-                ("PATCH", { } key) => await UpdateEntity(target.EntitySet, key, body, cancellationToken),
-                ("DELETE", { } key) => await DeleteEntity(target.EntitySet, key, cancellationToken),
+                ("POST", null) => await CreateEntityAsync(target.EntitySet, body, cancellationToken),
+                ("PATCH", { } key) => await UpdateEntityAsync(target.EntitySet, key, body, cancellationToken),
+                ("DELETE", { } key) => await DeleteEntityAsync(target.EntitySet, key, cancellationToken),
                 _ => StatusCode(StatusCodes.Status405MethodNotAllowed, ODataError.Of("METHOD_NOT_ALLOWED",
                     $"Request '{request.Id}': {request.Method.ToUpperInvariant()} is not served on {(target.Key is null ? "an entity set" : "an entity")}. " +
                     "An entity set takes GET and POST; an entity GET, PATCH and DELETE.")),

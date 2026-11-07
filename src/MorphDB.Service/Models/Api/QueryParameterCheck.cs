@@ -3,21 +3,32 @@ using System.Reflection;
 namespace MorphDB.Service.Models.Api;
 
 /// <summary>
-/// The query parameters a read takes are the members of its parameter record, and a request that carries another is
-/// refused naming it — the way a query body already refuses a member it does not know. A parameter spelled wrongly
-/// (<c>fliter</c>, <c>filters</c>) narrows nothing, so the caller would be answered every row with a <c>200</c>.
+/// The query parameters a door takes are the ones it declares — the members of its parameter record, or its simple
+/// parameters — and a request that carries another is refused naming it, the way a query body already refuses a
+/// member it does not know. A parameter spelled wrongly (<c>fliter</c>, <c>filters</c>) narrows nothing, so the
+/// caller would be answered every row with a <c>200</c>.
 /// </summary>
 internal static class QueryParameterCheck
 {
     /// <summary>The first parameter of <paramref name="query"/> that <typeparamref name="T"/> does not have, as a refusal; else null.</summary>
-    public static string? Unknown<T>(IEnumerable<string> query)
+    public static string? Unknown<T>(IEnumerable<string> query) => Unknown(query, Names<T>.Listed);
+
+    /// <summary>The first parameter of <paramref name="query"/> that is not among <paramref name="known"/>, as a refusal; else null.</summary>
+    public static string? Unknown(IEnumerable<string> query, IReadOnlyCollection<string> known) => Unknown(query, known, known);
+
+    /// <summary>
+    /// As above, where <paramref name="known"/> is every spelling that passes and <paramref name="listed"/> the names a
+    /// refusal offers instead (a parameter may be read under more than one spelling).
+    /// </summary>
+    public static string? Unknown(IEnumerable<string> query, IReadOnlyCollection<string> known, IReadOnlyCollection<string> listed)
     {
-        var known = Names<T>.All;
         foreach (var name in query)
         {
-            if (!known.Contains(name))
+            if (!known.Contains(name, StringComparer.OrdinalIgnoreCase))
             {
-                return $"Unknown query parameter '{name}'. Supported parameters: {string.Join(", ", Names<T>.Listed)}.";
+                return listed.Count == 0
+                    ? $"Unknown query parameter '{name}'. This route takes no query parameters."
+                    : $"Unknown query parameter '{name}'. Supported parameters: {string.Join(", ", listed)}.";
             }
         }
 
@@ -31,7 +42,5 @@ internal static class QueryParameterCheck
             .. typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .Select(p => char.ToLowerInvariant(p.Name[0]) + p.Name[1..]),
         ];
-
-        public static readonly HashSet<string> All = new(Listed, StringComparer.OrdinalIgnoreCase);
     }
 }
