@@ -1,5 +1,3 @@
-using System.Reflection;
-
 namespace MorphDB.Service.Models.Api;
 
 /// <summary>
@@ -10,9 +8,6 @@ namespace MorphDB.Service.Models.Api;
 /// </summary>
 internal static class QueryParameterCheck
 {
-    /// <summary>The first parameter of <paramref name="query"/> that <typeparamref name="T"/> does not have, as a refusal; else null.</summary>
-    public static string? Unknown<T>(IEnumerable<string> query) => Unknown(query, Names<T>.Listed);
-
     /// <summary>The first parameter of <paramref name="query"/> that is not among <paramref name="known"/>, as a refusal; else null.</summary>
     public static string? Unknown(IEnumerable<string> query, IReadOnlyCollection<string> known) => Unknown(query, known, known);
 
@@ -33,14 +28,5 @@ internal static class QueryParameterCheck
         }
 
         return null;
-    }
-
-    private static class Names<T>
-    {
-        public static readonly string[] Listed =
-        [
-            .. typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance)
-                .Select(p => char.ToLowerInvariant(p.Name[0]) + p.Name[1..]),
-        ];
     }
 }

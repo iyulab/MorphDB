@@ -197,9 +197,10 @@ public class WriteDoorUnknownInputContractTests
     {
         // The matrix above sends through the routes that exist today. The filter sits on the controller, and this
         // keeps it there: a controller that lost it would silently take any parameter again. The transaction and
-        // finalize routes are held by it without a row in the matrix; the OData routes answer their own system
+        // finalize routes are held by it without a row in the matrix, and the view routes (define, refresh, drop, read) by
+        // ReadInputsContractTests; the OData routes answer their own system
         // options (ODataSystemOptions) and are not held by this filter.
-        Type[] controllers = [typeof(DataController), typeof(BatchController), typeof(BulkController), typeof(TransactionController)];
+        Type[] controllers = [typeof(DataController), typeof(BatchController), typeof(BulkController), typeof(TransactionController), typeof(ViewController)];
 
         controllers.Where(c => c.GetCustomAttribute<RejectUnknownInputAttribute>() is null)
             .Should().BeEmpty("every controller that changes rows has to refuse the input it does not take");

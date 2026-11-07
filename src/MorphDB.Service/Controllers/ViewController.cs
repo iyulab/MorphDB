@@ -30,6 +30,7 @@ internal static partial class ViewControllerLogs
 [Route("api/views")]
 [Produces("application/json")]
 [RequireProject]
+[RejectUnknownInput]
 public sealed class ViewController : ControllerBase
 {
     private readonly IViewManager _viewManager;
@@ -338,11 +339,6 @@ public sealed class ViewController : ControllerBase
         try
         {
             var projectId = GetProjectId();
-
-            if (QueryParameterCheck.Unknown<ViewQueryApiParameters>(Request.Query.Keys) is { } unknown)
-            {
-                return BadRequest(new ErrorResponse { Error = "BadRequest", Message = unknown, Code = "INVALID_ARGUMENT" });
-            }
 
             if (query.Skip < 0 || query.Take < 0)
             {

@@ -95,6 +95,30 @@ public class ReadInputsContractTests
         rows[0].GetProperty("qty").GetInt32().Should().Be(6);
     }
 
+    [Fact]
+    public async Task Every_view_route_refuses_input_it_does_not_take_and_changes_nothing()
+    {
+        // The view data read refused a stray query parameter on its own; the filter now holds the whole controller,
+        // so the routes that define, refresh and drop a view answer a stray parameter or a conditional header the
+        // same way instead of dropping it.
+        var (table, view) = await SeedAsync();
+        var extra = $"v2_{table}"[..30];
+
+        using var create = await _client.PostAsJsonAsync($"/api/views?expectedVersion=1", new CreateViewApiRequest { Name = extra, BaseTable = table }, Ct);
+        using var refresh = await _client.PostAsync($"/api/views/{view}/refresh?cascade=1", null, Ct);
+        var dropRequest = new HttpRequestMessage(HttpMethod.Delete, $"/api/views/{view}");
+        dropRequest.Headers.TryAddWithoutValidation("If-Match", "\"1\"");
+        using var drop = await _client.SendAsync(dropRequest, Ct);
+        using var read = await _client.GetAsync($"/api/views/{view}/data?nope=1", Ct);
+
+        create.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        refresh.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        drop.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        read.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await _client.GetAsync($"/api/views/{extra}", Ct)).StatusCode.Should().Be(HttpStatusCode.NotFound, "the refused create made no view");
+        (await _client.GetAsync($"/api/views/{view}", Ct)).StatusCode.Should().Be(HttpStatusCode.OK, "the refused drop kept the view");
+    }
+
     private static string EntitySet(string table) =>
         string.Concat(table.Split('_').Select(p => p.Length > 0 ? char.ToUpperInvariant(p[0]) + p[1..].ToLowerInvariant() : p));
 

@@ -33,7 +33,7 @@
 
 ### Changed
 
-- **Breaking**: the data, batch, bulk and transaction routes refuse input they do not take. A query parameter a route
+- **Breaking**: the data, batch, bulk, transaction and view routes refuse input they do not take. A query parameter a route
   does not declare is a `400 INVALID_ARGUMENT` naming it — as the reads already answered — and the conditional headers
   `If-Match`, `If-None-Match` and `If-Unmodified-Since` are refused on a request that changes something (`If-Match` is
   evaluated, not refused, by the single-row update and delete — see Added). Both used to be
