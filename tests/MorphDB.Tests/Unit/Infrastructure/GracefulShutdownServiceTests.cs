@@ -136,6 +136,10 @@ public sealed class GracefulShutdownServiceTests : IDisposable
         var requestId = Guid.NewGuid().ToString();
         _service.TryRegisterRequest(requestId);
 
+        // The watch starts before the delay does: started after it, the stop could return a hair under the
+        // delay when the machine is busy, and the assertion below would fail without the service being wrong.
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
         // Complete the request after a short delay
         var completionTask = Task.Run(async () =>
         {
@@ -143,7 +147,6 @@ public sealed class GracefulShutdownServiceTests : IDisposable
             _service.CompleteRequest(requestId);
         }, TestContext.Current.CancellationToken);
 
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         await _service.StopAsync(CancellationToken.None);
         stopwatch.Stop();
 
