@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Docs
+
+- `docs/API.md` "Verifying a delivery": the four headers a webhook delivery carries, the signed text
+  (`"{timestamp}.{body}"`, keyed with the secret's UTF-8 bytes), a receiver in Python and a worked example whose signature
+  a test pins.
+
 ### Changed
 
 - Dependencies: the OpenTelemetry ASP.NET Core and HTTP client instrumentation packages move to 1.20.2 (patch; the

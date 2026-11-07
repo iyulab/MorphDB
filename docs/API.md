@@ -991,6 +991,39 @@ client of this API, but it is still this API naming its own fields:
 }
 ```
 
+### Verifying a delivery
+
+A delivery is a `POST` with the JSON payload above as its body and four headers of ours:
+
+| Header | Value |
+|---|---|
+| `X-MorphDB-Signature` | `v1=` and the lower-case hex of an HMAC-SHA256 (below) |
+| `X-MorphDB-Timestamp` | Unix time in seconds at which this attempt was signed |
+| `X-MorphDB-Delivery-Id` | the delivery's id, the same on every attempt at it |
+| `X-MorphDB-Event` | `insert`, `update` or `delete` |
+
+The signature is the HMAC-SHA256 of the text `"{timestamp}.{body}"` — the timestamp header's value, a dot, and the
+request body exactly as received — with the webhook's secret as the key, taken as the UTF-8 bytes of the secret string the
+service returned when it was created or regenerated (not hex-decoded). Check it over the raw body: a body parsed and
+serialized again is a different text and does not verify. Compare in constant time, and refuse a timestamp more than a few
+minutes (five is a sound default) from your clock, so a captured delivery cannot be sent again later. Each attempt is signed
+with its own timestamp; an attempt at the same delivery is recognised by `X-MorphDB-Delivery-Id`. A response with a `2xx`
+status is a success.
+
+```python
+import hashlib, hmac, time
+
+def verify(secret: str, signature: str, timestamp: str, body: bytes, tolerance: int = 300) -> bool:
+    if abs(time.time() - int(timestamp)) > tolerance:
+        return False
+    signed = timestamp.encode() + b"." + body
+    expected = "v1=" + hmac.new(secret.encode(), signed, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(signature, expected)
+```
+
+With secret `whsec_example`, timestamp `1700000000` and body `{"event":"insert","table":"orders"}`, the signature is
+`v1=4eafcb866b2e705fbae6c9ca0945996ff0d1483f9dc47d82c2747afc884bc6fc`.
+
 ---
 
 ## Write Options

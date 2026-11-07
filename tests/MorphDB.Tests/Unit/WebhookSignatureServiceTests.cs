@@ -236,4 +236,26 @@ public class WebhookSignatureServiceTests
         // Assert
         action.Should().NotThrow();
     }
+    /// <summary>
+    /// The worked example in docs/API.md ("Verifying a delivery"). A receiver written from that page signs
+    /// <c>"{timestamp}.{body}"</c> with the secret's UTF-8 bytes; if this vector stops holding, the page is wrong.
+    /// The expected value was computed outside this code base (Python's hmac over the same string).
+    /// </summary>
+    [Fact]
+    public void ComputeSignature_MatchesTheWorkedExampleInTheApiDocument()
+    {
+        var signature = _sut.ComputeSignature("whsec_example", 1700000000L, "{\"event\":\"insert\",\"table\":\"orders\"}");
+
+        signature.Should().Be("v1=4eafcb866b2e705fbae6c9ca0945996ff0d1483f9dc47d82c2747afc884bc6fc");
+    }
+
+    [Fact]
+    public void ComputeSignature_SignsTheBodyAsSent_SoARewrittenBodyDoesNotVerify()
+    {
+        var sent = "{\"event\":\"insert\",\"table\":\"orders\"}";
+        var reserialized = "{ \"event\": \"insert\", \"table\": \"orders\" }";
+
+        _sut.ComputeSignature("whsec_example", 1700000000L, reserialized)
+            .Should().NotBe(_sut.ComputeSignature("whsec_example", 1700000000L, sent));
+    }
 }
