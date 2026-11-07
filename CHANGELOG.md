@@ -23,6 +23,10 @@
 
 ### Fixed
 
+- A project row left in the removed `Suspended` state (status 2) is now turned back into an active one when the server starts.
+  The state was removed because it did nothing, but a row written while it existed kept the number, which matches no status
+  today: the audit retention sweep selects active projects only, so such a project's audit history was never trimmed, and the
+  API reported its status as a bare number. The rewrite is idempotent and touches no other status.
 - A CHECK that compares two columns (`hi >= lo`) was not enforced on a change that names only one of them. The comparison
   read the column the request did not carry from the request alone, found nothing, and passed — so `PATCH` `{ "hi": 3 }`
   stored a row with `lo` 5 under that CHECK, through every door (REST update, upsert, seed, batch operations, update by

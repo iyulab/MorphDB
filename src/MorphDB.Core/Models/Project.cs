@@ -126,7 +126,9 @@ public enum ProjectStatus
     // 2 was Suspended, a subscription state this layer has no business holding. It also did nothing:
     // requests resolve a schema name from the project id by formatting it, without ever reading the
     // project row, so a suspended project kept serving reads and writes. The number is left unused
-    // rather than reassigned, because rows written before the removal still carry it.
+    // rather than reassigned, so it can never mean something else. Rows written before the removal
+    // are rewritten to Active at startup (GlobalSchemaMigrations.BuildPostBootstrapDdl); that
+    // statement can be dropped once no database that ran a version with Suspended remains.
 
     /// <summary>
     /// Project is being archived.

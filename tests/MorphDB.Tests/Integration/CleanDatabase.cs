@@ -75,6 +75,18 @@ public sealed class CleanDatabase : IAsyncDisposable
         return await ReadStringsAsync(command);
     }
 
+    public async Task<int> ReadStatusAsync(string projectSlug)
+    {
+        await using var connection = new NpgsqlConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = new NpgsqlCommand(
+            "SELECT status FROM morphdb._morph_projects WHERE slug = @slug",
+            connection);
+        command.Parameters.AddWithValue("slug", projectSlug);
+
+        return (int)(await command.ExecuteScalarAsync())!;
+    }
+
     public async Task<List<string>> ReadIndexesAsync(string table, string schema = "morphdb")
     {
         await using var connection = new NpgsqlConnection(ConnectionString);

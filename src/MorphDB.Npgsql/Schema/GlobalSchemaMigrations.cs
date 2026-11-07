@@ -193,6 +193,15 @@ public static class GlobalSchemaMigrations
     /// Repairs that read the control plane the canonical DDL has just ensured, so they run after it.
     /// </summary>
     public static string BuildPostBootstrapDdl() => """
+        -- Status 2 was Suspended, a state that was removed because it did nothing: requests never read
+        -- the project row, so a suspended project kept serving reads and writes. A row written while
+        -- the state existed still carries the number, and it matches no member of the status enum
+        -- today. Anything that selects projects by status passes over such a row -- the audit
+        -- retention sweep asks for Active projects only, so its history would grow without bound --
+        -- and the API would report the status as a bare number. Active is what the project always
+        -- was in effect. Idempotent: a second run finds no row carrying the number.
+        UPDATE morphdb._morph_projects SET status = 1 WHERE status = 2;
+
         -- One delivery per change per webhook, however many instances heard of the change.
         CREATE UNIQUE INDEX IF NOT EXISTS idx_morph_webhook_deliveries_change
             ON morphdb._morph_webhook_deliveries(webhook_id, change_key) WHERE change_key IS NOT NULL;

@@ -321,6 +321,30 @@ public class GlobalSchemaMigrationTests
         (await db.ReadColumnsAsync("_morph_export_jobs")).Should().Contain("requested_by");
     }
 
+    /// <summary>
+    /// A project suspended while that state existed still carries its number. Nothing in the enum
+    /// matches it, and the audit retention sweep lists Active projects only, so such a project's
+    /// history would never be trimmed.
+    /// </summary>
+    [Fact]
+    public async Task Bootstrapping_turns_a_project_left_in_the_removed_suspended_state_back_into_an_active_one()
+    {
+        await using var db = await CleanDatabase.EmptyAsync("morphdb_legacy_suspended_project");
+        await EnsureGlobalSchemaAsync(db);
+        await db.ExecuteAsync(
+            """
+            INSERT INTO morphdb._morph_projects (name, slug, system_schema, data_schema, status)
+            VALUES ('was suspended', 'was-suspended', 'p_00000001_sys', 'p_00000001_dat', 2),
+                   ('archived', 'archived', 'p_00000002_sys', 'p_00000002_dat', 4);
+            """);
+
+        await EnsureGlobalSchemaAsync(db);
+        await EnsureGlobalSchemaAsync(db);
+
+        (await db.ReadStatusAsync("was-suspended")).Should().Be(1);
+        (await db.ReadStatusAsync("archived")).Should().Be(4, "only the removed state is rewritten");
+    }
+
     [Fact]
     public async Task Bootstrapping_a_brand_new_database_is_unaffected_by_the_migration()
     {
