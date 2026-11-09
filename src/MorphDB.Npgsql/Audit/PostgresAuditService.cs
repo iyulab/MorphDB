@@ -470,6 +470,11 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
 
                 await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
+                // One transaction per project's group: the group is stored whole or not at all. Without it an
+                // entry that fails halfway leaves the entries before it stored, and the drop counter would count
+                // them as lost; it also commits once instead of once per entry.
+                await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+
                 var sql = $"""
                     INSERT INTO {QuoteIdentifier(schemaNames.SystemSchema)}."_audit_logs"
                     ("category", "action", "severity", "actor_id", "actor_type", "acted_by", "resource_type", "resource_id",
@@ -505,8 +510,10 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
                         metadata = maskedMetadata is not null ? JsonSerializer.Serialize(maskedMetadata) : null,
                         errorMessage = evt.ErrorMessage,
                         timestamp = evt.Timestamp
-                    });
+                    }, transaction);
                 }
+
+                await transaction.CommitAsync(cancellationToken);
 
                 LogBatchWritten(_logger, events.Count, projectId);
             }

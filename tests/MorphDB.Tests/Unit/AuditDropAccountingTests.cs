@@ -1,5 +1,3 @@
-using System.Collections.Concurrent;
-using System.Diagnostics.Metrics;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
@@ -8,6 +6,7 @@ using MorphDB.Core.Audit;
 using MorphDB.Npgsql.Audit;
 using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Security;
+using MorphDB.Tests.Fixtures;
 using Npgsql;
 
 namespace MorphDB.Tests.Unit;
@@ -157,37 +156,4 @@ public sealed class AuditDropAccountingTests
     }
 
     private static AuditEvent NewEvent(Guid? project = null) => new() { ProjectId = project ?? Guid.NewGuid(), Action = "test" };
-
-    /// <summary>Totals of <c>morphdb.audit.dropped</c> by reason, from the moment it is created.</summary>
-    private sealed class DropCounts : IDisposable
-    {
-        private readonly MeterListener _listener = new();
-        private readonly ConcurrentDictionary<string, long> _byReason = new();
-
-        public DropCounts()
-        {
-            _listener.InstrumentPublished = (instrument, listener) =>
-            {
-                if (instrument.Meter.Name == AuditMetrics.MeterName && instrument.Name == AuditMetrics.DroppedCounterName)
-                {
-                    listener.EnableMeasurementEvents(instrument);
-                }
-            };
-            _listener.SetMeasurementEventCallback<long>((_, measurement, tags, _) =>
-            {
-                foreach (var tag in tags)
-                {
-                    if (tag.Key == AuditMetrics.ReasonTag && tag.Value is string reason)
-                    {
-                        _byReason.AddOrUpdate(reason, measurement, (_, total) => total + measurement);
-                    }
-                }
-            });
-            _listener.Start();
-        }
-
-        public long Of(string reason) => _byReason.GetValueOrDefault(reason);
-
-        public void Dispose() => _listener.Dispose();
-    }
 }
