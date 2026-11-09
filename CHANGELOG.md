@@ -79,7 +79,7 @@
   dropped and every row the caller may see came back. It is now the tool's error (`isError`), naming the argument and
   listing the ones the tool takes, and no rows are returned.
 - Dependencies: the OpenTelemetry ASP.NET Core and HTTP client instrumentation packages move to 1.20.2 (patch; the
-  rest of the family stays on 1.20.1, which is its latest). `ModelContextProtocol.AspNetCore` moves to 2.4.0.
+  rest of the family stays on 1.20.1, which is its latest). `ModelContextProtocol.AspNetCore` moves to 2.4.0 and `Polly` to 8.9.1.
 
 ## 0.35.0
 
