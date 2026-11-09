@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Fixed
+
+- **The OData door no longer answers a system option it did not read with every row.** OData 4.01 (§5.1) has a service take
+  a system option with or without its `$`, in any case; `top=0`, `filter=…` and `orderby=…` were treated as custom options
+  and ignored, so a request that meant to narrow the answer got the whole table with a `200`. They are now the options they
+  name (`top=0` is no rows); an unserved one written that way (`search=…`, `expand=…`) is refused like its `$` form; and a
+  system option given twice is refused. A batch request reads the same names the same way.
+- **An OData write that names `expectedVersion` is refused.** It is the REST doors' name for a precondition and no OData
+  option, so it was read as a custom option and ignored: a `PATCH` or `DELETE` that carried it wrote without the
+  precondition (the row was changed or removed whatever its version). The OData door takes the version as `If-Match` (the
+  row's entity tag); the `400` says so.
+
 ## 0.36.0
 
 A minor that closes a hole in 0.35.0 and earlier and makes the REST and MCP doors strict about what they are sent. A CHECK

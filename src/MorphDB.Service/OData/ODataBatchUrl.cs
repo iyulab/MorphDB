@@ -52,7 +52,8 @@ internal sealed class ODataBatchUrl
             path = path["odata/".Length..];
         }
 
-        var query = queryAt < 0 ? [] : QueryHelpers.ParseQuery(text[queryAt..]);
+        // A system option is read by its canonical name, whichever way the URL spells it (OData 4.01 §5.1).
+        var query = queryAt < 0 ? [] : ODataSystemOptions.Canonicalize(QueryHelpers.ParseQuery(text[queryAt..]));
 
         var open = path.IndexOf('(', StringComparison.Ordinal);
         var entitySet = open < 0 ? path : path[..open];

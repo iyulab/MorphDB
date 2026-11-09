@@ -21,6 +21,7 @@ namespace MorphDB.Service.OData;
 [ApiController]
 [RequireProject]
 [RejectConditionalHeaders]
+[CanonicalSystemOptions]
 [TypeFilter(typeof(ODataErrorFilter))]
 public sealed partial class MorphODataController : ControllerBase
 {
