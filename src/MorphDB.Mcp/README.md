@@ -17,3 +17,5 @@ app.MapMorphDbMcp();   // maps nothing when the door is off
 ```
 
 A request names its project with the `X-Project-Id` header, as on the REST API — never with a tool argument.
+
+A tool answers only the arguments it declares: an argument it does not take is the tool's error naming it, not a silently ignored input.

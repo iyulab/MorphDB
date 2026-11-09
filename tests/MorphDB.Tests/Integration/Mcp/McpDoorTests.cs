@@ -153,6 +153,64 @@ public class McpDoorTests
         tools.Should().OnlyContain(t => t.ProtocolTool.Annotations!.ReadOnlyHint == true && t.ProtocolTool.Annotations.DestructiveHint != true);
     }
 
+    private static readonly string[] OwnerIsBob = ["owner:eq:bob"];
+    private static readonly string[] OwnerIsAlice = ["owner:eq:alice"];
+
+    // A model's usual mistake is a name: `filters` for `filter`. Unread, it narrows nothing and the answer is every row.
+    [Fact]
+    public async Task A_misspelled_argument_is_refused_and_no_rows_come_back()
+    {
+        var table = await RowLevelTableAsync();
+        await using var master = await McpAs(MasterSecret);
+        var ct = TestContext.Current.CancellationToken;
+
+        var typo = await master.CallToolAsync("query_records",
+            new Dictionary<string, object?> { ["table"] = table, ["filters"] = OwnerIsBob }, cancellationToken: ct);
+
+        typo.IsError.Should().BeTrue("the call asked for a narrowing the tool did not apply");
+        Text(typo).Should().Contain("Unknown argument 'filters'").And.Contain("query_records")
+            .And.Contain("filter", "the refusal lists the arguments the tool takes so the call can be sent again");
+        typo.StructuredContent.Should().BeNull("a refused call returns no rows");
+    }
+
+    [Fact]
+    public async Task Every_tool_refuses_an_argument_it_does_not_declare()
+    {
+        await using var master = await McpAs(MasterSecret);
+        var ct = TestContext.Current.CancellationToken;
+        var failures = new List<string>();
+
+        foreach (var tool in MorphDB.Mcp.MorphDbMcpTools.ToolNames)
+        {
+            var result = await master.CallToolAsync(tool, new Dictionary<string, object?> { ["stray"] = 1 }, cancellationToken: ct);
+            if (result.IsError != true || !Text(result).Contains("Unknown argument 'stray'", StringComparison.Ordinal))
+                failures.Add($"{tool}: {(result.IsError == true ? Text(result) : "answered as if the argument had not been sent")}");
+        }
+
+        failures.Should().BeEmpty(string.Join("\n", failures));
+    }
+
+    [Fact]
+    public async Task The_arguments_a_tool_declares_still_pass()
+    {
+        var table = await RowLevelTableAsync();
+        await using var master = await McpAs(MasterSecret);
+        var ct = TestContext.Current.CancellationToken;
+
+        var result = await master.CallToolAsync("query_records", new Dictionary<string, object?>
+        {
+            ["table"] = table,
+            ["select"] = "owner,note",
+            ["filter"] = OwnerIsAlice,
+            ["orderBy"] = "owner:asc",
+            ["search"] = "alice",
+            ["page"] = 1,
+            ["pageSize"] = 10,
+        }, cancellationToken: ct);
+
+        Owners(result).Should().Equal("alice", "alice");
+    }
+
     // The proposition that matters: a person asking through the door sees what the same person sees through REST.
     [Fact]
     public async Task A_tool_call_runs_as_the_person_the_token_names_so_row_level_security_holds()

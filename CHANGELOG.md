@@ -74,6 +74,10 @@
   `400 INVALID_ARGUMENT` naming it and listing the ones it takes (reads too), and the three conditional headers are refused on
   a request that changes something: no route outside the single-row update and delete evaluates them, so they used to be
   ignored and the write went through. The routing table is checked, so a route added later is held without being listed.
+- **The MCP door refuses an argument a tool does not declare.** A tool call carrying one — a model's usual mistake is a
+  name, `filters` for `filter` — used to be answered as if the argument had not been sent, so the misspelled narrowing was
+  dropped and every row the caller may see came back. It is now the tool's error (`isError`), naming the argument and
+  listing the ones the tool takes, and no rows are returned.
 - Dependencies: the OpenTelemetry ASP.NET Core and HTTP client instrumentation packages move to 1.20.2 (patch; the
   rest of the family stays on 1.20.1, which is its latest). `ModelContextProtocol.AspNetCore` moves to 2.4.0.
 

@@ -1632,6 +1632,10 @@ start-up. Streamable HTTP, stateless.
 There is no tool that writes. A page is capped at `MaxPageSize`; `hasNext` says whether more follow. A request the REST
 API would refuse (an unknown table, a filter it does not accept, no project) is the tool's error, in the same words.
 
+A tool answers only the arguments it declares. An argument it does not take — `filters` for `filter` — is the tool's error
+(`isError`), naming the argument and listing the ones the tool takes, and no rows come back: left unread, it would narrow
+nothing and the answer would be every row the caller may see.
+
 ## Rate limiting
 
 Off unless configured. Turned on, it is a **quota per project**: every request that names a project

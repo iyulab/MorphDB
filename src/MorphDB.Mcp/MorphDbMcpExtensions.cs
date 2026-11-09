@@ -45,7 +45,8 @@ public static class MorphDbMcpExtensions
 
         services.AddMcpServer()
             .WithHttpTransport(http => http.Stateless = true)
-            .WithTools<MorphDbMcpTools>();
+            .WithTools<MorphDbMcpTools>()
+            .WithRequestFilters(filters => filters.AddCallToolFilter(UnknownArguments.Refuse));
         return services;
     }
 
