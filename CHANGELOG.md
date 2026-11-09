@@ -32,10 +32,12 @@
 
 ### Fixed
 
-- **A batch of audit entries is stored whole or not at all.** The writer inserted a project's queued entries one statement
-  at a time, each committing by itself, so an entry the database refused left the entries before it stored while the lost-entry
-  counter counted the whole batch. The entries of one project's batch now go in one transaction: a refused entry rolls the
-  batch back, `write_failed` counts exactly the entries that were not stored, and the batch commits once instead of once per entry.
+- **A batch of audit entries is stored whole or not at all, and the writer keeps up with more requests.** The writer inserted
+  a project's queued entries one statement at a time, each committing by itself and each costing a round trip, so an entry the
+  database refused left the entries before it stored while the lost-entry counter counted the whole batch, and under heavy
+  read load the queue overflowed because the writer could not keep pace. The entries of one project's batch now go in a
+  single `INSERT … SELECT FROM unnest(…)`: a refused entry stores none of the batch, `write_failed` counts exactly the entries
+  that were not stored, and the batch costs one round trip and one execution instead of one hundred.
 - Stopping the service while the audit writer was between two batches wrote the batch it had just finished a second time,
   so its entries were stored twice. The final flush now starts from an empty batch.
 - The warning "Audit event queue is full, dropping oldest events" was never logged: a full queue discards its oldest entry

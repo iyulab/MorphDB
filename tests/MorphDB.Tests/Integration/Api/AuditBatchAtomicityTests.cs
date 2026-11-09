@@ -62,6 +62,78 @@ public class AuditBatchAtomicityTests
         (await CountAuditEntriesAsync(projectId)).Should().Be(before + 3);
     }
 
+    [Fact]
+    public async Task Every_field_of_a_stored_entry_lands_in_its_own_column()
+    {
+        var projectId = await CreateProjectAsync();
+        await SettleAsync(projectId);
+        var tag = Guid.NewGuid().ToString("N")[..12];
+        var when = new DateTimeOffset(2026, 11, 9, 3, 4, 5, 678, TimeSpan.Zero);
+
+        // One entry with every field set and one with none, in the same group — the columns are written
+        // as arrays, so a field filed under the wrong array would show here and nowhere else.
+        var audit = _fixture.Api.Services.GetRequiredService<IAuditService>();
+        await audit.LogBatchAsync(
+        [
+            new AuditEvent
+            {
+                ProjectId = projectId,
+                Category = AuditCategory.Data,
+                Action = $"full-{tag}",
+                Severity = AuditSeverity.Warning,
+                ActorId = "actor-1",
+                ActorType = "user",
+                ActedBy = "agent-1",
+                ResourceType = "table",
+                ResourceId = "res-1",
+                HttpMethod = "PATCH",
+                RequestPath = "/api/data/things/1",
+                StatusCode = 412,
+                IpAddress = "203.0.113.9",
+                UserAgent = "fidelity-test/1.0",
+                DurationMs = 1234567890123,
+                Metadata = new Dictionary<string, object?> { ["note"] = "kept", ["count"] = 3 },
+                ErrorMessage = "precondition failed",
+                Timestamp = when,
+            },
+            new AuditEvent { ProjectId = projectId, Action = $"bare-{tag}" },
+        ], TestContext.Current.CancellationToken);
+
+        await WaitUntilAsync(async () => await RowAsync(projectId, $"bare-{tag}") is not null);
+        var full = (await RowAsync(projectId, $"full-{tag}"))!.Value;
+        var bare = (await RowAsync(projectId, $"bare-{tag}"))!.Value;
+
+        full.GetProperty("category").GetInt32().Should().Be((int)AuditCategory.Data);
+        full.GetProperty("severity").GetInt32().Should().Be((int)AuditSeverity.Warning);
+        full.GetProperty("actor_id").GetString().Should().Be("actor-1");
+        full.GetProperty("actor_type").GetString().Should().Be("user");
+        full.GetProperty("acted_by").GetString().Should().Be("agent-1");
+        full.GetProperty("resource_type").GetString().Should().Be("table");
+        full.GetProperty("resource_id").GetString().Should().Be("res-1");
+        full.GetProperty("http_method").GetString().Should().Be("PATCH");
+        full.GetProperty("request_path").GetString().Should().Be("/api/data/things/1");
+        full.GetProperty("status_code").GetInt32().Should().Be(412);
+        full.GetProperty("ip_address").GetString().Should().Be("203.0.113.9");
+        full.GetProperty("user_agent").GetString().Should().Be("fidelity-test/1.0");
+        full.GetProperty("duration_ms").GetInt64().Should().Be(1234567890123);
+        full.GetProperty("metadata").GetProperty("note").GetString().Should().Be("kept");
+        full.GetProperty("metadata").GetProperty("count").GetInt32().Should().Be(3);
+        full.GetProperty("error_message").GetString().Should().Be("precondition failed");
+        full.GetProperty("timestamp").GetDateTimeOffset().Should().Be(when);
+
+        bare.GetProperty("category").GetInt32().Should().Be((int)AuditCategory.Auth, "the default category is 0");
+        bare.GetProperty("severity").GetInt32().Should().Be((int)AuditSeverity.Info);
+        foreach (var nullable in new[]
+                 {
+                     "actor_id", "actor_type", "acted_by", "resource_type", "resource_id", "http_method", "request_path",
+                     "status_code", "ip_address", "user_agent", "duration_ms", "metadata", "error_message",
+                 })
+        {
+            bare.GetProperty(nullable).ValueKind.Should().Be(System.Text.Json.JsonValueKind.Null,
+                $"an entry that never set {nullable} stores no value for it");
+        }
+    }
+
     private async Task LogAsync(Guid projectId, params string[] actions)
     {
         var audit = _fixture.Api.Services.GetRequiredService<IAuditService>();
@@ -121,6 +193,18 @@ public class AuditBatchAtomicityTests
         {
             await Task.Delay(50, TestContext.Current.CancellationToken);
         }
+    }
+
+    private async Task<System.Text.Json.JsonElement?> RowAsync(Guid projectId, string action)
+    {
+        using var scope = _fixture.Api.Services.CreateScope();
+        var names = await scope.ServiceProvider.GetRequiredService<IProjectRepository>()
+            .GetSchemaNamesAsync(projectId, TestContext.Current.CancellationToken);
+        await using var connection = new NpgsqlConnection(_fixture.Postgres.ConnectionString);
+        var json = await connection.ExecuteScalarAsync<string?>(
+            $"""SELECT to_jsonb(t)::text FROM "{names!.Value.SystemSchema}"."_audit_logs" t WHERE "action" = @action""",
+            new { action });
+        return json is null ? null : System.Text.Json.JsonDocument.Parse(json).RootElement.Clone();
     }
 
     private async Task<int> CountAuditEntriesAsync(Guid projectId)

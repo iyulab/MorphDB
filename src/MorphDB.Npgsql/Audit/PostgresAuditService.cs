@@ -7,6 +7,8 @@ using MorphDB.Core.Abstractions;
 using MorphDB.Core.Audit;
 using MorphDB.Core.Exceptions;
 using MorphDB.Npgsql.Infrastructure;
+using Npgsql;
+using NpgsqlTypes;
 
 namespace MorphDB.Npgsql.Audit;
 
@@ -470,50 +472,11 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
 
                 await using var connection = await _connections.OpenSystemAsync(cancellationToken);
 
-                // One transaction per project's group: the group is stored whole or not at all. Without it an
-                // entry that fails halfway leaves the entries before it stored, and the drop counter would count
-                // them as lost; it also commits once instead of once per entry.
-                await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-
-                var sql = $"""
-                    INSERT INTO {QuoteIdentifier(schemaNames.SystemSchema)}."_audit_logs"
-                    ("category", "action", "severity", "actor_id", "actor_type", "acted_by", "resource_type", "resource_id",
-                     "http_method", "request_path", "status_code", "ip_address", "user_agent",
-                     "duration_ms", "metadata", "error_message", "timestamp")
-                    VALUES
-                    (@category, @action, @severity, @actorId, @actorType, @actedBy, @resourceType, @resourceId,
-                     @httpMethod, @requestPath, @statusCode, @ipAddress, @userAgent,
-                     @durationMs, @metadata::jsonb, @errorMessage, @timestamp)
-                    """;
-
-                foreach (var evt in events)
-                {
-                    // Apply PII masking to metadata before storage
-                    var maskedMetadata = _piiMaskingService.MaskMetadata(evt.Metadata);
-
-                    await connection.ExecuteAsync(sql, new
-                    {
-                        category = (int)evt.Category,
-                        action = evt.Action,
-                        severity = (int)evt.Severity,
-                        actorId = evt.ActorId,
-                        actorType = evt.ActorType,
-                        actedBy = evt.ActedBy,
-                        resourceType = evt.ResourceType,
-                        resourceId = evt.ResourceId,
-                        httpMethod = evt.HttpMethod,
-                        requestPath = evt.RequestPath,
-                        statusCode = evt.StatusCode,
-                        ipAddress = evt.IpAddress,
-                        userAgent = evt.UserAgent,
-                        durationMs = evt.DurationMs,
-                        metadata = maskedMetadata is not null ? JsonSerializer.Serialize(maskedMetadata) : null,
-                        errorMessage = evt.ErrorMessage,
-                        timestamp = evt.Timestamp
-                    }, transaction);
-                }
-
-                await transaction.CommitAsync(cancellationToken);
+                // The whole group is one statement, so it is stored whole or not at all — an entry the database
+                // refuses leaves none of its neighbours behind, and the drop counter counts what was not stored.
+                // One round trip and one execution for the group, not one of each per entry.
+                await using var command = BuildInsert(connection, schemaNames.SystemSchema, events);
+                await command.ExecuteNonQueryAsync(cancellationToken);
 
                 LogBatchWritten(_logger, events.Count, projectId);
             }
@@ -524,6 +487,96 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
             }
         }
     }
+
+    /// <summary>
+    /// One <c>INSERT … SELECT FROM unnest(…)</c> for a group of entries: a column of values per field, so the
+    /// statement does not grow with the group and the server plans it once.
+    /// </summary>
+    private NpgsqlCommand BuildInsert(NpgsqlConnection connection, string systemSchema, List<AuditEvent> events)
+    {
+        var count = events.Count;
+        var category = new short[count];
+        var action = new string[count];
+        var severity = new short[count];
+        var actorId = new string?[count];
+        var actorType = new string?[count];
+        var actedBy = new string?[count];
+        var resourceType = new string?[count];
+        var resourceId = new string?[count];
+        var httpMethod = new string?[count];
+        var requestPath = new string?[count];
+        var statusCode = new int?[count];
+        var ipAddress = new string?[count];
+        var userAgent = new string?[count];
+        var durationMs = new long?[count];
+        var metadata = new string?[count];
+        var errorMessage = new string?[count];
+        var timestamp = new DateTimeOffset[count];
+
+        for (var i = 0; i < count; i++)
+        {
+            var evt = events[i];
+
+            // Apply PII masking to metadata before storage
+            var maskedMetadata = _piiMaskingService.MaskMetadata(evt.Metadata);
+
+            category[i] = (short)evt.Category;
+            action[i] = evt.Action;
+            severity[i] = (short)evt.Severity;
+            actorId[i] = evt.ActorId;
+            actorType[i] = evt.ActorType;
+            actedBy[i] = evt.ActedBy;
+            resourceType[i] = evt.ResourceType;
+            resourceId[i] = evt.ResourceId;
+            httpMethod[i] = evt.HttpMethod;
+            requestPath[i] = evt.RequestPath;
+            statusCode[i] = evt.StatusCode;
+            ipAddress[i] = evt.IpAddress;
+            userAgent[i] = evt.UserAgent;
+            durationMs[i] = evt.DurationMs;
+            metadata[i] = maskedMetadata is not null ? JsonSerializer.Serialize(maskedMetadata) : null;
+            errorMessage[i] = evt.ErrorMessage;
+            timestamp[i] = evt.Timestamp;
+        }
+
+        var command = new NpgsqlCommand($"""
+            INSERT INTO {QuoteIdentifier(systemSchema)}."_audit_logs"
+            ("category", "action", "severity", "actor_id", "actor_type", "acted_by", "resource_type", "resource_id",
+             "http_method", "request_path", "status_code", "ip_address", "user_agent",
+             "duration_ms", "metadata", "error_message", "timestamp")
+            SELECT "category", "action", "severity", "actor_id", "actor_type", "acted_by", "resource_type", "resource_id",
+                   "http_method", "request_path", "status_code", "ip_address", "user_agent",
+                   "duration_ms", "metadata"::jsonb, "error_message", "timestamp"
+            FROM unnest(@category, @action, @severity, @actorId, @actorType, @actedBy, @resourceType, @resourceId,
+                        @httpMethod, @requestPath, @statusCode, @ipAddress, @userAgent,
+                        @durationMs, @metadata, @errorMessage, @timestamp)
+                 AS t("category", "action", "severity", "actor_id", "actor_type", "acted_by", "resource_type", "resource_id",
+                      "http_method", "request_path", "status_code", "ip_address", "user_agent",
+                      "duration_ms", "metadata", "error_message", "timestamp")
+            """, connection);
+
+        command.Parameters.Add(Column("category", NpgsqlDbType.Smallint, category));
+        command.Parameters.Add(Column("action", NpgsqlDbType.Text, action));
+        command.Parameters.Add(Column("severity", NpgsqlDbType.Smallint, severity));
+        command.Parameters.Add(Column("actorId", NpgsqlDbType.Text, actorId));
+        command.Parameters.Add(Column("actorType", NpgsqlDbType.Text, actorType));
+        command.Parameters.Add(Column("actedBy", NpgsqlDbType.Text, actedBy));
+        command.Parameters.Add(Column("resourceType", NpgsqlDbType.Text, resourceType));
+        command.Parameters.Add(Column("resourceId", NpgsqlDbType.Text, resourceId));
+        command.Parameters.Add(Column("httpMethod", NpgsqlDbType.Text, httpMethod));
+        command.Parameters.Add(Column("requestPath", NpgsqlDbType.Text, requestPath));
+        command.Parameters.Add(Column("statusCode", NpgsqlDbType.Integer, statusCode));
+        command.Parameters.Add(Column("ipAddress", NpgsqlDbType.Text, ipAddress));
+        command.Parameters.Add(Column("userAgent", NpgsqlDbType.Text, userAgent));
+        command.Parameters.Add(Column("durationMs", NpgsqlDbType.Bigint, durationMs));
+        command.Parameters.Add(Column("metadata", NpgsqlDbType.Text, metadata));
+        command.Parameters.Add(Column("errorMessage", NpgsqlDbType.Text, errorMessage));
+        command.Parameters.Add(Column("timestamp", NpgsqlDbType.TimestampTz, timestamp));
+        return command;
+    }
+
+    private static NpgsqlParameter<T[]> Column<T>(string name, NpgsqlDbType elementType, T[] values) =>
+        new NpgsqlParameter<T[]>(name, NpgsqlDbType.Array | elementType) { TypedValue = values };
 
     private static (List<string> clauses, DynamicParameters parameters) BuildWhereClause(AuditLogQuery query)
     {
