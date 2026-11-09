@@ -75,7 +75,7 @@
   a request that changes something: no route outside the single-row update and delete evaluates them, so they used to be
   ignored and the write went through. The routing table is checked, so a route added later is held without being listed.
 - Dependencies: the OpenTelemetry ASP.NET Core and HTTP client instrumentation packages move to 1.20.2 (patch; the
-  rest of the family stays on 1.20.1, which is its latest).
+  rest of the family stays on 1.20.1, which is its latest). `ModelContextProtocol.AspNetCore` moves to 2.4.0.
 
 ## 0.35.0
 

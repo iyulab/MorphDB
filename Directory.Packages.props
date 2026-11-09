@@ -22,7 +22,7 @@
     <PackageVersion Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.14" />
     <PackageVersion Include="StackExchange.Redis" Version="3.4.31" />
     <!-- Model Context Protocol: the read-only MCP door (MorphDB.Mcp) -->
-    <PackageVersion Include="ModelContextProtocol.AspNetCore" Version="2.3.1" />
+    <PackageVersion Include="ModelContextProtocol.AspNetCore" Version="2.4.0" />
     <!-- Authentication & Security -->
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.14" />
     <PackageVersion Include="BCrypt.Net-Next" Version="4.2.0" />
