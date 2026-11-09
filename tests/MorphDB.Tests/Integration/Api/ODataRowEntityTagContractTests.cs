@@ -161,4 +161,54 @@ public class ODataRowEntityTagContractTests
         (await response.Content.ReadAsStringAsync(Ct)).Should().Contain("If-Match");
         (await LabelAsync(table, id)).Should().Be("v1");
     }
+
+    /// <summary>
+    /// A batch's one response names no entity, so it carries no <c>ETag</c> header — what the header said was the tag of
+    /// whichever item ran last. Each item keeps its own tag, as the annotation in its body.
+    /// </summary>
+    [Fact]
+    public async Task A_batch_response_carries_no_entity_tag_header_and_each_item_keeps_its_annotation()
+    {
+        var (set, _, id) = await TableWithOneRowAsync();
+
+        using var response = await _client.PostAsJsonAsync("/odata/$batch", new
+        {
+            requests = new object[]
+            {
+                new { id = "a", method = "GET", url = $"{set}({id})" },
+                new { id = "b", method = "PATCH", url = $"{set}({id})", body = new { label = "v2" } },
+            },
+        }, Ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        response.Headers.Contains("ETag").Should().BeFalse("the batch response is not an entity");
+        var items = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct)).RootElement.GetProperty("responses")
+            .EnumerateArray().ToDictionary(i => i.GetProperty("id").GetString()!);
+        items["a"].GetProperty("body").GetProperty("@odata.etag").GetString().Should().Be("\"1\"");
+        items["b"].GetProperty("body").GetProperty("@odata.etag").GetString().Should().Be("\"2\"");
+    }
+
+    [Fact]
+    public async Task A_single_entity_read_still_carries_the_entity_tag_header()
+    {
+        var (set, _, id) = await TableWithOneRowAsync();
+
+        using var response = await _client.GetAsync($"/odata/{set}({id})", Ct);
+
+        response.Headers.GetValues("ETag").Single().Should().Be("\"1\"");
+    }
+
+    [Fact]
+    public async Task A_stale_delete_names_the_version_the_row_is_at()
+    {
+        var (set, table, id) = await TableWithOneRowAsync();
+        (await PatchAsync(set, id, "moved", ifMatch: null)).EnsureSuccessStatusCode(); // version 2
+
+        using var response = await DeleteAsync(set, id, "\"9\"");
+
+        response.StatusCode.Should().Be(HttpStatusCode.PreconditionFailed);
+        var message = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct)).RootElement.GetProperty("error").GetProperty("message").GetString();
+        message.Should().Contain("expected 9").And.Contain("current version is 2");
+        (await LabelAsync(table, id)).Should().Be("moved");
+    }
 }

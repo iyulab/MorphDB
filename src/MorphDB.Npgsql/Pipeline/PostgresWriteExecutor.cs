@@ -696,19 +696,22 @@ public sealed class PostgresWriteExecutor : IWriteExecutor
     {
         if (context.Options.ExpectedVersion is { } expected && table.VersioningEnabled)
         {
-            var exists = await conn.Connection.ExecuteScalarAsync<int?>(
+            // The row's version now, so the conflict says what the caller's tag is up against — the same words a
+            // update's conflict uses (VersionApplier), not "changed since", which a tag ahead of the row is not.
+            var versionColumn = table.Columns.First(c => c.LogicalName == SystemColumns.Version);
+            var current = await conn.Connection.ExecuteScalarAsync<int?>(
                 new CommandDefinition(
-                    $"SELECT 1 FROM {DmlBuilder.QuoteIdentifier(table.PhysicalName)} WHERE {ActiveRowById(table, idColumn)}",
+                    $"SELECT {DmlBuilder.QuoteIdentifier(versionColumn.PhysicalName)} FROM {DmlBuilder.QuoteIdentifier(table.PhysicalName)} WHERE {ActiveRowById(table, idColumn)}",
                     new { id = context.RecordId },
                     transaction: conn.Transaction,
                     cancellationToken: context.CancellationToken));
-            if (exists is not null)
+            if (current is not null)
             {
                 return WriteResult.Failed(new ValidationError
                 {
                     Field = SystemColumns.Version,
                     Code = ValidationErrorCodes.VersionConflict,
-                    Message = $"Version conflict: expected {expected}, but the record has been changed since.",
+                    Message = $"Version conflict: expected {expected}, but current version is {current}.",
                     AttemptedValue = expected
                 });
             }

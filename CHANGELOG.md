@@ -13,6 +13,12 @@
   option, so it was read as a custom option and ignored: a `PATCH` or `DELETE` that carried it wrote without the
   precondition (the row was changed or removed whatever its version). The OData door takes the version as `If-Match` (the
   row's entity tag); the `400` says so.
+- **Small inconsistencies in the row entity-tag surface.** `If-Match: "05"` (or `"005"`) matched a row at version 5: the tag
+  is the version in plain decimal and is compared strongly, so another spelling of it now never matches (`412`). A stale
+  `DELETE` said `expected 9, but the record has been changed since` where a stale `PATCH` said `expected 9, but current
+  version is 5`; both now name the version the row is at. The refusal of `?expectedVersion=` on a REST route now says to send
+  the row's entity tag in `If-Match`. A `POST /odata/$batch` response no longer carries an `ETag` header (it was the tag of the
+  last item that ran; each item keeps its own `@odata.etag`).
 
 ## 0.36.0
 

@@ -8,6 +8,13 @@ namespace MorphDB.Service.Models.Api;
 /// </summary>
 internal static class QueryParameterCheck
 {
+    /// <summary>
+    /// What to do instead of <c>?expectedVersion=</c>, the parameter this refusal exists for: a write states the row
+    /// version it expects in <c>If-Match</c>, as the entity tag a read of the row returned.
+    /// </summary>
+    private const string ExpectedVersionHint =
+        " To write only if the row is still at the version you read, send that row's entity tag (the ETag of a single-row read) in the 'If-Match' header.";
+
     /// <summary>The first parameter of <paramref name="query"/> that is not among <paramref name="known"/>, as a refusal; else null.</summary>
     public static string? Unknown(IEnumerable<string> query, IReadOnlyCollection<string> known) => Unknown(query, known, known);
 
@@ -21,9 +28,10 @@ internal static class QueryParameterCheck
         {
             if (!known.Contains(name, StringComparer.OrdinalIgnoreCase))
             {
-                return listed.Count == 0
+                var refusal = listed.Count == 0
                     ? $"Unknown query parameter '{name}'. This route takes no query parameters."
                     : $"Unknown query parameter '{name}'. Supported parameters: {string.Join(", ", listed)}.";
+                return name.Equals("expectedVersion", StringComparison.OrdinalIgnoreCase) ? refusal + ExpectedVersionHint : refusal;
             }
         }
 

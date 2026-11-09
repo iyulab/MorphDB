@@ -34,6 +34,9 @@ public sealed partial class MorphODataController : ControllerBase
     private readonly IUnitOfWorkFactory _units;
     private readonly ILogger<MorphODataController> _logger;
 
+    /// <summary>Whether this request is a <c>$batch</c>, whose items answer inside one response.</summary>
+    private bool _inBatch;
+
     public MorphODataController(
         IEdmModelProvider modelProvider,
         ODataQueryHandler queryHandler,
@@ -374,7 +377,13 @@ public sealed partial class MorphODataController : ControllerBase
         if (EntityTags.ForRow(entity) is { } tag)
         {
             body["@odata.etag"] = tag;
-            Response.Headers.ETag = tag;
+
+            // A batch item answers inside the batch's one response, which names no entity: the item carries its tag as
+            // the annotation, and a header there would be the tag of whichever item ran last.
+            if (!_inBatch)
+            {
+                Response.Headers.ETag = tag;
+            }
         }
 
         return body;
@@ -469,6 +478,7 @@ public sealed partial class MorphODataController : ControllerBase
         [FromBody] ODataBatchRequest batchRequest,
         CancellationToken cancellationToken)
     {
+        _inBatch = true;
         if (ODataBatchGroups.Problem(batchRequest.Requests) is { } problem)
         {
             return BadRequest(ODataError.Of("INVALID_ARGUMENT", problem));

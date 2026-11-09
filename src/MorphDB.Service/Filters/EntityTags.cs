@@ -119,7 +119,11 @@ internal static class EntityTags
                 Problem: "The 'If-Match' header is not an entity tag: an entity tag is a quoted string such as \"3\" (RFC 9110 §8.8.3), or '*'.");
         }
 
-        return int.TryParse(tag[1..^1], NumberStyles.None, CultureInfo.InvariantCulture, out var version)
+        // Compared strongly, byte for byte: the tag this service issues is the version in plain decimal, so "05" is not
+        // a spelling of "5" — it is a different tag no row carries.
+        var inner = tag[1..^1];
+        return int.TryParse(inner, NumberStyles.None, CultureInfo.InvariantCulture, out var version)
+               && inner == version.ToString(CultureInfo.InvariantCulture)
             ? new IfMatch(IfMatchKind.Version, version)
             : new IfMatch(IfMatchKind.NeverMatches);
     }

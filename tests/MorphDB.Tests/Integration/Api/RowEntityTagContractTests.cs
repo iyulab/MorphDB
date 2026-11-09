@@ -138,6 +138,69 @@ public class RowEntityTagContractTests
         (await LabelAsync(table, id)).Should().Be("v1");
     }
 
+    /// <summary>The tag is the version in plain decimal; compared strongly, "01" is not a spelling of "1" but a tag no row carries.</summary>
+    [Theory]
+    [InlineData("\"01\"")]
+    [InlineData("\"001\"")]
+    [InlineData("\"1.0\"")]
+    public async Task A_tag_that_is_not_the_exact_decimal_of_the_version_does_not_match_it(string tag)
+    {
+        var (table, id) = await TableWithOneRowAsync(); // version 1
+
+        using var patched = await PatchAsync(table, id, "changed", tag);
+        using var deleted = await DeleteAsync(table, id, tag);
+
+        patched.StatusCode.Should().Be(HttpStatusCode.PreconditionFailed, tag);
+        deleted.StatusCode.Should().Be(HttpStatusCode.PreconditionFailed, tag);
+        (await LabelAsync(table, id)).Should().Be("v1", "neither write was applied");
+    }
+
+    /// <summary>An update and a delete that name a tag the row is not at say the same thing: what they expected, what the row is at.</summary>
+    [Fact]
+    public async Task A_conflict_names_the_current_version_the_same_way_on_an_update_and_a_delete()
+    {
+        var (table, id) = await TableWithOneRowAsync();
+        (await PatchAsync(table, id, "moved", ifMatch: null)).EnsureSuccessStatusCode(); // version 2
+
+        using var patched = await PatchAsync(table, id, "mine", "\"9\"");
+        using var deleted = await DeleteAsync(table, id, "\"9\"");
+
+        foreach (var response in new[] { patched, deleted })
+        {
+            response.StatusCode.Should().Be(HttpStatusCode.PreconditionFailed);
+            using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct));
+            doc.RootElement.GetProperty("message").GetString().Should().Contain("expected 9").And.Contain("current version is 2");
+        }
+    }
+
+    /// <summary>
+    /// <c>expectedVersion</c> is what a caller reaches for first; the refusal is where it learns the header that does the
+    /// job — on every route that refuses it, not only the writes.
+    /// </summary>
+    [Fact]
+    public async Task The_refusal_of_expected_version_names_the_If_Match_header()
+    {
+        var (table, id) = await TableWithOneRowAsync();
+        using var patch = new HttpRequestMessage(HttpMethod.Patch, $"/api/data/{table}/{id}?expectedVersion=1") { Content = JsonContent.Create(new { label = "x" }) };
+
+        var responses = new[]
+        {
+            await _client.SendAsync(patch, Ct),
+            await _client.DeleteAsync($"/api/data/{table}/{id}?expectedVersion=1", Ct),
+            await _client.GetAsync($"/api/data/{table}/{id}?expectedVersion=1", Ct),
+            await _client.PostAsJsonAsync($"/api/data/{table}?expectedVersion=1", new { code = "z", label = "z" }, Ct),
+        };
+
+        foreach (var response in responses)
+        {
+            response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+            using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct));
+            doc.RootElement.GetProperty("message").GetString().Should().Contain("expectedVersion").And.Contain("If-Match");
+        }
+
+        (await LabelAsync(table, id)).Should().Be("v1");
+    }
+
     [Fact]
     public async Task A_star_needs_only_that_the_row_exists()
     {
