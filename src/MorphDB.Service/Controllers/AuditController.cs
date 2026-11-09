@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using MorphDB.Core.Abstractions;
+using MorphDB.Service.Filters;
 using MorphDB.Service.Models.Api;
 using MorphDB.Service.Security;
 
@@ -25,6 +26,7 @@ internal static partial class AuditControllerLogs
 /// Provides read-only access to audit trail for compliance and security.
 /// </summary>
 [ApiController]
+[RejectUnknownInput]
 [Route("api/projects/{projectId:guid}/audit")]
 [Produces("application/json")]
 public sealed class AuditController : ControllerBase

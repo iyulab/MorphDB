@@ -25,6 +25,7 @@ internal static partial class WebhookControllerLogs
 /// Webhook management API endpoints.
 /// </summary>
 [ApiController]
+[RejectUnknownInput]
 [Route("api/webhooks")]
 [Produces("application/json")]
 [RequireProject]

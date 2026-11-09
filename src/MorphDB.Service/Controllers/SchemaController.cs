@@ -33,6 +33,7 @@ internal static partial class SchemaControllerLogs
 /// Schema management API endpoints.
 /// </summary>
 [ApiController]
+[RejectUnknownInput]
 [Route("api/schema")]
 [Produces("application/json")]
 [RequireProject]

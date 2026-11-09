@@ -9,6 +9,7 @@ namespace MorphDB.Service.Controllers;
 /// Controller for security management operations.
 /// </summary>
 [ApiController]
+[RejectUnknownInput]
 [Route("api/security")]
 [RequireProject]
 public sealed class SecurityController : ControllerBase

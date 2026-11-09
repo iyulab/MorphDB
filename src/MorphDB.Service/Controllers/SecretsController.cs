@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using MorphDB.Core.Exceptions;
 using MorphDB.Core.Security;
+using MorphDB.Service.Filters;
 
 namespace MorphDB.Service.Controllers;
 
@@ -14,6 +15,7 @@ namespace MorphDB.Service.Controllers;
 /// </para>
 /// </summary>
 [ApiController]
+[RejectUnknownInput]
 [Route("api/security/secrets")]
 public sealed class SecretsController : ControllerBase
 {

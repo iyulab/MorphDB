@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using MorphDB.Core.Abstractions;
 using MorphDB.Core.Exceptions;
 using MorphDB.Core.Models;
+using MorphDB.Service.Filters;
 using MorphDB.Service.Models.Api;
 using MorphDB.Service.Security;
 
@@ -49,6 +50,7 @@ internal static partial class ProjectControllerLogs
 /// Handles project creation, updates, status changes, and deletion.
 /// </summary>
 [ApiController]
+[RejectUnknownInput]
 [Route("api/projects")]
 [Produces("application/json")]
 public sealed class ProjectController : ControllerBase

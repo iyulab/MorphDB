@@ -11,6 +11,7 @@ namespace MorphDB.Service.Controllers;
 /// Controller for aggregation operations (COUNT, SUM, AVG, MIN, MAX with GROUP BY).
 /// </summary>
 [ApiController]
+[RejectUnknownInput]
 [Route("api/data")]
 [RequireProject]
 public sealed class AggregationController : ControllerBase

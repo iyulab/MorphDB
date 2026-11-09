@@ -1934,7 +1934,7 @@ both.
 | 400 | `INVALID_FILTER` | A malformed `filter` expression, or an unknown filter operator |
 | 400 | `INVALID_WEBHOOK_FILTER` | A webhook `filter` value that is not a scalar literal — object and array values are not supported (see [Webhook](#webhook)) |
 | 400 | `INVALID_WEBHOOK_URL` | A webhook `url` that is not an absolute `http` or `https` URL without credentials, or whose host is not in `Webhooks__AllowedHosts` (see [Webhook](#webhook)) |
-| 400 | `INVALID_ARGUMENT` | A malformed value elsewhere in the request (e.g. an unknown column type — the message lists the supported set) |
+| 400 | `INVALID_ARGUMENT` | A malformed value elsewhere in the request (e.g. an unknown column type — the message lists the supported set); a query parameter the route does not take (the message names it and lists the ones the route takes); or a conditional header (`If-Match`, `If-None-Match`, `If-Unmodified-Since`) on a request that changes something, other than the `If-Match` the single-row update and delete evaluate |
 | 400 | `MISSING_PROJECT` | The request did not say which project it applies to — send `X-Project-Id` |
 | 400 | `INVALID_PROJECT_ID` | `X-Project-Id` was sent but is not a GUID |
 | 400 | `INVALID_EXPRESSION` | A CHECK predicate, index predicate, policy expression, or a view's join condition or column expression that could escape the clause it is written into, or that PostgreSQL cannot resolve (a name that is no column of the base table or a joined table, a syntax error, operands of types the operator does not take, a value of the wrong type) — creating or changing a view, creating an index; the answer names the kind of refusal, not the database's text |

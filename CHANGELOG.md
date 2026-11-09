@@ -32,6 +32,9 @@
 
 ### Fixed
 
+- `MorphDB.Client`: `WebhookClient.GetDeliveriesAsync(webhookId, page, pageSize)` sent `page` and `pageSize`, which the
+  deliveries route does not take and used to ignore, so every page answered the first fifty deliveries. It now sends the
+  `limit` and `offset` the route takes (`offset = (page - 1) * pageSize`) and refuses a page before the first or an empty page.
 - **A batch of audit entries is stored whole or not at all, and the writer keeps up with more requests.** The writer inserted
   a project's queued entries one statement at a time, each committing by itself and each costing a round trip, so an entry the
   database refused left the entries before it stored while the lost-entry counter counted the whole batch, and under heavy
@@ -66,6 +69,11 @@
   are held to the same rules in their own terms: a system query option other than `$format` is refused on a `POST`, `PATCH`
   or `DELETE` (a `$filter` on a `DELETE` used to be ignored and the entity the key names was deleted), in a `$batch` item
   as on its own, and so are the conditional headers; a custom option (no `$`) is still the request's own.
+- **Breaking**: the rest of the REST surface refuses input it does not take as well — the project, schema, secrets, security
+  policy, webhook, hierarchy, aggregation, diagnostics and audit-log routes. A query parameter a route does not declare is a
+  `400 INVALID_ARGUMENT` naming it and listing the ones it takes (reads too), and the three conditional headers are refused on
+  a request that changes something: no route outside the single-row update and delete evaluates them, so they used to be
+  ignored and the write went through. The routing table is checked, so a route added later is held without being listed.
 - Dependencies: the OpenTelemetry ASP.NET Core and HTTP client instrumentation packages move to 1.20.2 (patch; the
   rest of the family stays on 1.20.1, which is its latest).
 

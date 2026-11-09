@@ -77,7 +77,12 @@ public sealed class WebhookClient
         int pageSize = 50,
         CancellationToken cancellationToken = default)
     {
-        var url = string.Create(CultureInfo.InvariantCulture, $"/api/webhooks/{webhookId}/deliveries?page={page}&pageSize={pageSize}");
+        // The route pages by limit and offset. It used to be sent page and pageSize, which it does not take and ignored,
+        // so every page answered the first one.
+        ArgumentOutOfRangeException.ThrowIfLessThan(page, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(pageSize, 1);
+        var offset = (long)(page - 1) * pageSize;
+        var url = string.Create(CultureInfo.InvariantCulture, $"/api/webhooks/{webhookId}/deliveries?limit={pageSize}&offset={offset}");
         var response = await _httpClient.GetAsync(url, cancellationToken);
         await ErrorEnvelope.EnsureSuccessAsync(response, cancellationToken);
         return await response.Content.ReadFromJsonAsync(MorphDBJsonContext.Default.ListWebhookDelivery, cancellationToken) ?? [];

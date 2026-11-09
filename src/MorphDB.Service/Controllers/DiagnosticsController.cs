@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using MorphDB.Core.Diagnostics;
 using MorphDB.Npgsql.Infrastructure;
+using MorphDB.Service.Filters;
 using MorphDB.Service.Infrastructure;
 using MorphDB.Service.Security;
 using Npgsql;
@@ -16,6 +17,7 @@ namespace MorphDB.Service.Controllers;
 /// </para>
 /// </summary>
 [ApiController]
+[RejectUnknownInput]
 [Route("api/[controller]")]
 public partial class DiagnosticsController : ControllerBase
 {

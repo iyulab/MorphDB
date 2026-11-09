@@ -10,6 +10,7 @@ namespace MorphDB.Service.Controllers;
 /// API endpoints for querying hierarchical (tree-structured) data.
 /// </summary>
 [ApiController]
+[RejectUnknownInput]
 [Route("api/hierarchy")]
 [Produces("application/json")]
 [RequireProject]
