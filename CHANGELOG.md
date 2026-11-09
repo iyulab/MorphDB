@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.36.0
+
+A minor that closes a hole in 0.35.0 and earlier and makes the REST and MCP doors strict about what they are sent. A CHECK
+that compares two columns (`hi >= lo`) was not enforced on a change that names only one of them, so `PATCH` `{ "hi": 3 }`
+stored a row with `lo` 5 under that CHECK through every door; a change is now judged on the row it leaves behind. It adds
+row-level optimistic concurrency on the wire (`ETag` / `If-Match`, with `MorphDB.Client` support) and a counter for audit
+entries that were lost, makes the audit writer store a batch whole in one statement (under heavy read load the queue no
+longer overflows), and fixes the client's webhook delivery paging. Breaking: every REST route now refuses a query
+parameter it does not declare and a conditional header on a request that changes something with `400`, and an MCP tool
+refuses an argument it does not declare — a caller that sent a stray parameter or a misspelled argument has to stop (see
+the entries under Changed; the `0.35.x` client's `WebhookClient.GetDeliveriesAsync` was one — use the `0.36` client).
+
 ### Added
 
 - **Row-level optimistic concurrency, on the wire.** A row of a versioned table has an entity tag — its `_version` as a
