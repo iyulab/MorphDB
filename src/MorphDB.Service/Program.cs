@@ -291,6 +291,7 @@ try
             .AddHttpClientInstrumentation()
             .AddOtlpExporter())
         .WithMetrics(metrics => metrics
+            .AddMeter(MorphDB.Npgsql.Audit.AuditMetrics.MeterName)
             .AddAspNetCoreInstrumentation()
             .AddHttpClientInstrumentation()
             .AddRuntimeInstrumentation()

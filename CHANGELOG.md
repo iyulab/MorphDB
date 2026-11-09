@@ -14,15 +14,29 @@
   See "Optimistic concurrency" in `docs/API.md`.
 - `MorphDB.Client`: `DataClient.UpdateAsync` / `DeleteAsync` overloads that take `long expectedVersion` (sent as
   `If-Match`), `MorphDBPreconditionFailedException` for the `412`, and `DataRecord.Version`.
+- **Lost audit entries are counted.** The audit log is written from a bounded queue after the response, so an entry can be
+  lost without any request failing. The `morphdb.audit.dropped` counter (meter `MorphDB`, scraped at `/metrics` as
+  `morphdb_audit_dropped_total`) now adds
+  one for each entry that was discarded because the queue overflowed (`reason=queue_overflow`), because a batch could not be
+  written (`write_failed`), or because the service was shutting down (`service_stopped`). A value above zero means the log has
+  a gap.
 
 ### Docs
 
+- `docs/API.md` "Audit log" and the README no longer say every request "is recorded". They describe what the code does:
+  an entry is queued, written in the background, and lost when the queue overflows, when a batch cannot be written, or when
+  the process dies with entries waiting — the first two are counted.
 - `docs/API.md` "Verifying a delivery": the four headers a webhook delivery carries, the signed text
   (`"{timestamp}.{body}"`, keyed with the secret's UTF-8 bytes), a receiver in Python and a worked example whose signature
   a test pins.
 
 ### Fixed
 
+- Stopping the service while the audit writer was between two batches wrote the batch it had just finished a second time,
+  so its entries were stored twice. The final flush now starts from an empty batch.
+- The warning "Audit event queue is full, dropping oldest events" was never logged: a full queue discards its oldest entry
+  and still accepts the write, so the check that raised the warning could not fail. The queue now reports each discarded
+  entry, and the warning is logged at most once every ten seconds while it keeps happening.
 - A project row left in the removed `Suspended` state (status 2) is now turned back into an active one when the server starts.
   The state was removed because it did nothing, but a row written while it existed kept the number, which matches no status
   today: the audit retention sweep selects active projects only, so such a project's audit history was never trimmed, and the

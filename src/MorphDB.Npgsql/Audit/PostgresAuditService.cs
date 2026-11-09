@@ -12,7 +12,10 @@ namespace MorphDB.Npgsql.Audit;
 
 /// <summary>
 /// PostgreSQL implementation of audit logging service.
-/// Uses async queue for non-blocking writes.
+/// Uses async queue for non-blocking writes: a request returns once its entry is queued, and a background
+/// writer stores it in batches. The recording is therefore best-effort — an entry is lost when the queue
+/// overflows (the oldest are discarded), when a batch cannot be written (it is discarded after the failure is
+/// logged), or when the process dies with entries still queued. <see cref="AuditMetrics"/> counts the first two.
 /// Implements PII masking to protect sensitive data in audit trails.
 /// </summary>
 public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposable
@@ -27,6 +30,9 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
 
     private const int MaxBatchSize = 100;
     private const int MaxQueueSize = 10000;
+    private const long OverflowWarningIntervalMs = 10_000;
+
+    private long _lastOverflowWarningAt = long.MinValue / 2;
 
     public PostgresAuditService(
         MorphConnectionFactory connections,
@@ -39,12 +45,16 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
         _projectRepository = projectRepository;
         _logger = logger;
 
-        _eventQueue = Channel.CreateBounded<AuditEvent>(new BoundedChannelOptions(MaxQueueSize)
-        {
-            FullMode = BoundedChannelFullMode.DropOldest,
-            SingleReader = true,
-            SingleWriter = false
-        });
+        // A full DropOldest queue still accepts every write — it discards the oldest entry instead,
+        // so a failed TryWrite never signals overflow. The drop callback is the only place it shows.
+        _eventQueue = Channel.CreateBounded<AuditEvent>(
+            new BoundedChannelOptions(MaxQueueSize)
+            {
+                FullMode = BoundedChannelFullMode.DropOldest,
+                SingleReader = true,
+                SingleWriter = false
+            },
+            OnEventDropped);
 
         _processorTask = ProcessEventsAsync(_cts.Token);
     }
@@ -57,10 +67,7 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
     /// <inheritdoc/>
     public async Task LogAsync(AuditEvent auditEvent, CancellationToken cancellationToken = default)
     {
-        if (!_eventQueue.Writer.TryWrite(auditEvent))
-        {
-            LogQueueFull(_logger);
-        }
+        Enqueue(auditEvent);
 
         await Task.CompletedTask;
     }
@@ -70,10 +77,34 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
     {
         foreach (var evt in events)
         {
-            _eventQueue.Writer.TryWrite(evt);
+            Enqueue(evt);
         }
 
         await Task.CompletedTask;
+    }
+
+    private void Enqueue(AuditEvent auditEvent)
+    {
+        // The queue only refuses a write once it is completed, i.e. while the service shuts down.
+        if (!_eventQueue.Writer.TryWrite(auditEvent))
+        {
+            AuditMetrics.RecordDropped(1, AuditMetrics.ServiceStopped);
+        }
+    }
+
+    private void OnEventDropped(AuditEvent dropped)
+    {
+        AuditMetrics.RecordDropped(1, AuditMetrics.QueueOverflow);
+
+        // An overloaded service drops thousands of entries a second; the counter has the count, the log
+        // only needs to say it is happening.
+        var now = Environment.TickCount64;
+        var last = Volatile.Read(ref _lastOverflowWarningAt);
+        if (now - last >= OverflowWarningIntervalMs
+            && Interlocked.CompareExchange(ref _lastOverflowWarningAt, now, last) == last)
+        {
+            LogQueueFull(_logger);
+        }
     }
 
     /// <inheritdoc/>
@@ -391,12 +422,20 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
             }
             catch (Exception ex)
             {
+                // The batch in hand is gone: the next pass clears it. Failures inside a write are counted there.
+                if (batch.Count > 0)
+                {
+                    AuditMetrics.RecordDropped(batch.Count, AuditMetrics.WriteFailed);
+                }
+
                 LogProcessingError(_logger, ex);
                 await Task.Delay(1000, cancellationToken);
             }
         }
 
-        // Flush remaining events
+        // Flush remaining events. The batch still holds what the last pass wrote (or failed to) when the stop
+        // arrived between passes; writing it again would store those entries twice.
+        batch.Clear();
         while (_eventQueue.Reader.TryRead(out var evt))
         {
             batch.Add(evt);
@@ -473,6 +512,7 @@ public sealed partial class PostgresAuditService : IAuditService, IAsyncDisposab
             }
             catch (Exception ex)
             {
+                AuditMetrics.RecordDropped(events.Count, AuditMetrics.WriteFailed);
                 LogWriteError(_logger, projectId, events.Count, ex);
             }
         }

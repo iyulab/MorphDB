@@ -31,7 +31,7 @@ MorphDB: [Developer] → [Logical Schema] → [Physical DB]
 |-----------|--------|
 | **Logical-Physical Separation** | Rename tables/columns without data migration |
 | **Physical Integrity, Logical Names** | Integrity constraints are enforced by the database; only CHECK stays app-layer, because its expressions reference logical names |
-| **Blocked Access = Security** | No direct SQL = No SQL injection, full audit trail |
+| **Blocked Access = Security** | No direct SQL = No SQL injection, an audit log of every answered request (written best-effort; losses are [counted](docs/API.md#audit-log)) |
 | **Encapsulated Complexity** | Simple API, complex internals hidden |
 
 **Trade-offs**: We sacrifice direct SQL access and some advanced DB features in exchange for security, flexibility, and simplicity.

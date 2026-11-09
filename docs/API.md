@@ -1793,8 +1793,15 @@ answering.
 
 ## Audit log
 
-Every request the service answers for a project is recorded in that project's audit log (health and
-metrics probes excepted).
+Every request the service answers for a project is queued for that project's audit log (health and
+metrics probes excepted) and written by a background worker after the response is sent, so a request never waits
+for the log.
+
+The recording is best-effort. An entry is lost when more than 10,000 are waiting (the oldest are discarded to make
+room), when the database cannot take a batch (the failure is logged and the batch is discarded), and when the process
+dies with entries still waiting. The first two are counted: the `morphdb.audit.dropped` counter on the `MorphDB`
+meter adds one for every entry lost, tagged `reason` = `queue_overflow`, `write_failed` or `service_stopped`.
+`/metrics` exports it as `morphdb_audit_dropped_total{reason="…"}`. A value above zero means the log has a gap; a process that dies cannot count what it lost.
 
 ```yaml
 GET    /api/projects/{projectId}/audit/logs          # A page of entries, newest first
