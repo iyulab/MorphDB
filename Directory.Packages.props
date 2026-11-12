@@ -17,9 +17,9 @@
     <PackageVersion Include="HotChocolate.Data" Version="16.7.3" />
     <PackageVersion Include="Microsoft.AspNetCore.OData" Version="9.5.0" />
     <!-- Swashbuckle 10.2.1+ pulls Microsoft.OpenApi 2.7.5, closing GHSA-v5pm-xwqc-g5wc -->
-    <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.3.1" />
+    <PackageVersion Include="Swashbuckle.AspNetCore" Version="11.0.0" />
     <!-- Caching -->
-    <PackageVersion Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="11.0.0" />
     <PackageVersion Include="StackExchange.Redis" Version="3.4.31" />
     <!-- Model Context Protocol: the read-only MCP door (MorphDB.Mcp) -->
     <PackageVersion Include="ModelContextProtocol.AspNetCore" Version="2.4.0" />
@@ -27,7 +27,7 @@
     <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.14" />
     <PackageVersion Include="BCrypt.Net-Next" Version="4.2.0" />
     <!-- Real-time -->
-    <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="11.0.0" />
     <!-- Logging & Diagnostics -->
     <PackageVersion Include="Serilog.AspNetCore" Version="10.0.0" />
     <PackageVersion Include="Serilog.Sinks.Console" Version="6.1.1" />

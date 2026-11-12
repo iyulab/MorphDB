@@ -20,6 +20,10 @@
   the row's entity tag in `If-Match`. A `POST /odata/$batch` response no longer carries an `ETag` header (it was the tag of the
   last item that ran; each item keeps its own `@odata.etag`).
 
+### Changed
+
+- `Microsoft.Extensions.Caching.StackExchangeRedis` and `Microsoft.AspNetCore.SignalR.Client` 11.0.0, and `Swashbuckle.AspNetCore` 11.0.0; each restores and builds on net10.0 (the first carries a `net10.0` target, the second a `netstandard2.0` one), so the libraries stay on net10.0. `MorphDB.Client` and `MorphDB.Npgsql` therefore declare these 11.0.0 versions as their minimum.
+
 ## 0.36.0
 
 A minor that closes a hole in 0.35.0 and earlier and makes the REST and MCP doors strict about what they are sent. A CHECK
