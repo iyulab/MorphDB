@@ -17,7 +17,7 @@ public class LogicalNameValidatorTests
     [InlineData("order_items")]
     [InlineData("_custom_table")]
     [InlineData("_archive_logs")]
-    [InlineData("_formbase_entities")]
+    [InlineData("_entity_registry")]
     public void ValidateEntityName_ValidNames_ShouldNotThrow(string name)
     {
         var act = () => LogicalNameValidator.ValidateEntityName(name, "Table");

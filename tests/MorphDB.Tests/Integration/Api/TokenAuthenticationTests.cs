@@ -230,7 +230,7 @@ public class TokenAuthenticationTests
     }
 
     [Theory]
-    [InlineData("""{"sub":"agent-7","act":{"sub":"saem"}}""", "agent-7")]
+    [InlineData("""{"sub":"agent-7","act":{"sub":"delegate-service"}}""", "agent-7")]
     [InlineData("""{"client_id":"x"}""", null)]
     [InlineData("\"agent-7\"", null)]
     [InlineData("not json", null)]

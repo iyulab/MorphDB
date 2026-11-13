@@ -8,7 +8,7 @@ namespace MorphDB.Tests.Integration.Api;
 
 /// <summary>
 /// A service that enforces no credential says so as it starts — an open service is a deployment choice, and one nobody made on
-/// purpose belongs in the first lines of its log (the Formbase host does the same).
+/// purpose belongs in the first lines of its log.
 /// </summary>
 [Collection("API")]
 [Trait("Category", "ApiIntegration")]
