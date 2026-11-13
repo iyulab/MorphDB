@@ -56,7 +56,7 @@ public class SoftDeleteOtherDoorsContractTests
         var response = await _client.PostAsJsonAsync("/graphql", new { query, variables }, ct);
         var payload = await response.Content.ReadAsStringAsync(ct);
         response.StatusCode.Should().Be(HttpStatusCode.OK, payload);
-        var root = JsonDocument.Parse(payload).RootElement.Clone();
+        var root = JsonElement.Parse(payload);
         root.TryGetProperty("errors", out var errors).Should().BeFalse($"the read must resolve: {errors}");
         return root.GetProperty("data");
     }
@@ -66,7 +66,7 @@ public class SoftDeleteOtherDoorsContractTests
         var response = await _client.GetAsync(url, ct);
         var payload = await response.Content.ReadAsStringAsync(ct);
         response.StatusCode.Should().Be(HttpStatusCode.OK, payload);
-        return JsonDocument.Parse(payload).RootElement.Clone();
+        return JsonElement.Parse(payload);
     }
 
     private static IReadOnlyList<Guid> ODataIds(JsonElement root) =>

@@ -209,7 +209,7 @@ public sealed class LookupMatchTests
         var separator = tableAndQuery.Contains('?', StringComparison.Ordinal) ? '&' : '?';
         var response = await _client.GetAsync($"/api/data/{tableAndQuery}{separator}orderBy={orderBy}:asc", TestContext.Current.CancellationToken);
         response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("data")
+        return JsonElement.Parse(await response.Content.ReadAsStringAsync()).GetProperty("data")
             .EnumerateArray().Select(r => r.GetProperty("data").Clone()).ToList();
     }
 }

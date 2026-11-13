@@ -54,7 +54,7 @@ public class DataExceptionContractTests
     {
         var text = await response.Content.ReadAsStringAsync(Ct);
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest, text);
-        var body = JsonDocument.Parse(text).RootElement;
+        var body = JsonElement.Parse(text);
         body.GetProperty("code").GetString().Should().Be("DATA_EXCEPTION");
         body.GetProperty("message").GetString().Should().Contain("division by zero");
         PhysicalNameGuard.FindPhysicalNames(text).Should().BeEmpty("the answer must not carry a physical name");

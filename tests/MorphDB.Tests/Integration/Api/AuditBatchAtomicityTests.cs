@@ -204,7 +204,7 @@ public class AuditBatchAtomicityTests
         var json = await connection.ExecuteScalarAsync<string?>(
             $"""SELECT to_jsonb(t)::text FROM "{names!.Value.SystemSchema}"."_audit_logs" t WHERE "action" = @action""",
             new { action });
-        return json is null ? null : System.Text.Json.JsonDocument.Parse(json).RootElement.Clone();
+        return json is null ? null : System.Text.Json.JsonElement.Parse(json);
     }
 
     private async Task<int> CountAuditEntriesAsync(Guid projectId)

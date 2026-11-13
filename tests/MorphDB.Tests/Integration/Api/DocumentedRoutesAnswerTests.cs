@@ -43,7 +43,7 @@ public class DocumentedRoutesAnswerTests
         }, ct)).StatusCode.Should().Be(HttpStatusCode.Created);
         var insert = await client.PostAsJsonAsync($"/api/data/{table}", new Dictionary<string, object?> { ["label"] = "a" }, ct);
         insert.StatusCode.Should().Be(HttpStatusCode.Created);
-        var rowId = JsonDocument.Parse(await insert.Content.ReadAsStringAsync(ct)).RootElement.GetProperty("id").GetString()!;
+        var rowId = JsonElement.Parse(await insert.Content.ReadAsStringAsync(ct)).GetProperty("id").GetString()!;
 
         var reads = DocsRouteParityTests.DocumentedRoutes()
             .Where(r => r.StartsWith("GET ", StringComparison.Ordinal))

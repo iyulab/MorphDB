@@ -153,7 +153,7 @@ public class ODataWriteUnknownInputContractTests
         }, Ct);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var items = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct)).RootElement.GetProperty("responses")
+        var items = JsonElement.Parse(await response.Content.ReadAsStringAsync(Ct)).GetProperty("responses")
             .EnumerateArray().ToDictionary(i => i.GetProperty("id").GetString()!);
         foreach (var item in new[] { "a", "b", "c" })
             items[item].GetProperty("status").GetInt32().Should().Be(400, $"item {item} carries an option a write does not take");

@@ -619,8 +619,8 @@ public class DataServiceTests
                 new CreateColumnRequest { LogicalName = "note", DataType = MorphDataType.Text },
             ]
         }, ct);
-        var json = System.Text.Json.JsonDocument.Parse(
-            """{"at":"2026-01-15T09:30:00+09:00","day":"2026-01-15","amount":12.50,"tags":{"a":[1,2]},"ref":"0199e2a0-0000-7000-8000-000000000001","note":null}""").RootElement;
+        var json = System.Text.Json.JsonElement.Parse(
+            """{"at":"2026-01-15T09:30:00+09:00","day":"2026-01-15","amount":12.50,"tags":{"a":[1,2]},"ref":"0199e2a0-0000-7000-8000-000000000001","note":null}""");
         Dictionary<string, object?> Payload() => json.EnumerateObject().ToDictionary(p => p.Name, p => (object?)p.Value.Clone());
 
         var single = await _dataService.InsertAsync(projectId, table.LogicalName, Payload(), ct);
@@ -652,10 +652,10 @@ public class DataServiceTests
                 new CreateColumnRequest { LogicalName = "n", DataType = MorphDataType.Integer },
             ]
         }, ct);
-        var json = System.Text.Json.JsonDocument.Parse("""{"k":[1,2]}""").RootElement;
+        var json = System.Text.Json.JsonElement.Parse("""{"k":[1,2]}""");
         var ids = Enumerable.Range(0, 6).Select(_ => Guid.NewGuid()).ToList();
         // Ids as the REST path delivers them.
-        object Id(int i) => System.Text.Json.JsonDocument.Parse($"\"{ids[i]}\"").RootElement.Clone();
+        object Id(int i) => System.Text.Json.JsonElement.Parse($"\"{ids[i]}\"");
         IDictionary<string, object?>[] rows =
         [
             new Dictionary<string, object?> { ["_id"] = Id(0), ["note"] = "a", ["n"] = 1 },

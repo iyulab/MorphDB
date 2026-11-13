@@ -104,8 +104,7 @@ public class TransactionWriteContractTests
         var viaRest = await _client.PostAsJsonAsync($"/api/data/{table}",
             new Dictionary<string, object?> { ["email"] = "rest@example.com" }, TestContext.Current.CancellationToken);
         viaRest.EnsureSuccessStatusCode();
-        var restRow = JsonDocument.Parse(await viaRest.Content.ReadAsStringAsync(TestContext.Current.CancellationToken))
-            .RootElement.GetProperty("data");
+        var restRow = JsonElement.Parse(await viaRest.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).GetProperty("data");
 
         var txn = await ExecuteAsync(new
         {

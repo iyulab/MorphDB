@@ -352,7 +352,7 @@ public class ClientProjectContractTests
                 Settings = new ClientModels.ProjectSettings { EnableAuditLog = false },
             }, TestContext.Current.CancellationToken);
 
-        var sent = JsonDocument.Parse(handler.Body!).RootElement.GetProperty("settings");
+        var sent = JsonElement.Parse(handler.Body!).GetProperty("settings");
         sent.GetProperty("enableAuditLog").GetBoolean().Should().BeFalse();
 
         // The field a partial body loses most expensively. It is present and true here, which is

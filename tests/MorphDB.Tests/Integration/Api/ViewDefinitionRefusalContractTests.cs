@@ -36,7 +36,7 @@ public class ViewDefinitionRefusalContractTests
         var text = await response.Content.ReadAsStringAsync(Ct);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest, $"{because}: {text}");
-        JsonDocument.Parse(text).RootElement.GetProperty("code").GetString().Should().Be("INVALID_EXPRESSION");
+        JsonElement.Parse(text).GetProperty("code").GetString().Should().Be("INVALID_EXPRESSION");
         PhysicalNameGuard.FindPhysicalNames(text).Should().BeEmpty("the refusal must not carry a physical name");
     }
 
@@ -56,7 +56,7 @@ public class ViewDefinitionRefusalContractTests
         var text = await patch.Content.ReadAsStringAsync(Ct);
 
         patch.StatusCode.Should().Be(HttpStatusCode.BadRequest, text);
-        JsonDocument.Parse(text).RootElement.GetProperty("code").GetString().Should().Be("INVALID_EXPRESSION");
+        JsonElement.Parse(text).GetProperty("code").GetString().Should().Be("INVALID_EXPRESSION");
         (await _client.GetAsync($"/api/views/{view}/data", Ct)).StatusCode.Should().Be(HttpStatusCode.OK,
             "a refused replacement leaves the view as it was");
     }

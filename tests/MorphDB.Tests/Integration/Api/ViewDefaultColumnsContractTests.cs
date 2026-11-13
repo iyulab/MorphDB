@@ -32,7 +32,7 @@ public class ViewDefaultColumnsContractTests
         var text = await response.Content.ReadAsStringAsync(Ct);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK, text);
-        var rows = JsonDocument.Parse(text).RootElement.GetProperty("data");
+        var rows = JsonElement.Parse(text).GetProperty("data");
         rows.GetArrayLength().Should().Be(1);
         var names = rows[0].EnumerateObject().Select(p => p.Name).ToArray();
         names.Should().Contain(["_id", "code", "qty"]).And.NotContain(n => n.StartsWith("col_", StringComparison.Ordinal),
@@ -48,7 +48,7 @@ public class ViewDefaultColumnsContractTests
         var response = await _client.GetAsync($"/api/views/{view}", Ct);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var columns = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct)).RootElement.GetProperty("columns")
+        var columns = JsonElement.Parse(await response.Content.ReadAsStringAsync(Ct)).GetProperty("columns")
             .EnumerateArray().ToDictionary(c => c.GetProperty("name").GetString()!, c => c.GetProperty("dataType").GetString()!);
         columns.Should().ContainKey("code").WhoseValue.Should().Be("Text");
         columns.Should().ContainKey("qty").WhoseValue.Should().Be("Integer");
@@ -67,7 +67,7 @@ public class ViewDefaultColumnsContractTests
             Columns = [new ViewColumnApiSpec { Source = "qty", Alias = "quantity" }, new ViewColumnApiSpec { Source = "code", Alias = "label", DataType = "longtext" }],
         }, Ct)).EnsureSuccessStatusCode();
 
-        var columns = JsonDocument.Parse(await (await _client.GetAsync($"/api/views/{view}", Ct)).Content.ReadAsStringAsync(Ct)).RootElement.GetProperty("columns")
+        var columns = JsonElement.Parse(await (await _client.GetAsync($"/api/views/{view}", Ct)).Content.ReadAsStringAsync(Ct)).GetProperty("columns")
             .EnumerateArray().ToDictionary(c => c.GetProperty("name").GetString()!, c => c.GetProperty("dataType").GetString()!);
 
         columns["quantity"].Should().Be("Integer", "an integer column read through a view is still an integer");
@@ -89,8 +89,7 @@ public class ViewDefaultColumnsContractTests
     {
         var (_, view) = await SeedViewAsync(withColumns: true);
 
-        var rows = JsonDocument.Parse(await (await _client.GetAsync($"/api/views/{view}/data?take=1", Ct)).Content.ReadAsStringAsync(Ct))
-            .RootElement.GetProperty("data");
+        var rows = JsonElement.Parse(await (await _client.GetAsync($"/api/views/{view}/data?take=1", Ct)).Content.ReadAsStringAsync(Ct)).GetProperty("data");
 
         rows[0].EnumerateObject().Select(p => p.Name).Should().Equal("code");
     }
@@ -146,7 +145,7 @@ public class ViewDefaultColumnsContractTests
             """, System.Text.Encoding.UTF8, "application/json"), Ct);
         created.StatusCode.Should().Be(HttpStatusCode.Created, await created.Content.ReadAsStringAsync(Ct));
 
-        var rows = JsonDocument.Parse(await (await _client.GetAsync($"/api/views/{view}/data", Ct)).Content.ReadAsStringAsync(Ct)).RootElement.GetProperty("data");
+        var rows = JsonElement.Parse(await (await _client.GetAsync($"/api/views/{view}/data", Ct)).Content.ReadAsStringAsync(Ct)).GetProperty("data");
         rows.GetArrayLength().Should().Be(1);
         rows[0].GetProperty("customer").GetString().Should().Be("Acme");
         rows[0].GetProperty("total").GetDecimal().Should().Be(7.5m);

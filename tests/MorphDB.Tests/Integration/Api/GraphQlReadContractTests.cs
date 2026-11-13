@@ -107,7 +107,7 @@ public class GraphQlReadContractTests
                 """,
             variables = new { table }
         }, TestContext.Current.CancellationToken);
-        var root = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).RootElement;
+        var root = JsonElement.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
 
         root.TryGetProperty("errors", out var errors).Should().BeTrue("a cursor this server never issued must not resolve");
         errors[0].GetProperty("extensions").GetProperty("code").GetString().Should().Be("INVALID_CURSOR");
@@ -380,7 +380,7 @@ public class GraphQlReadContractTests
     {
         var response = await _client.PostAsJsonAsync("/graphql", new { query }, TestContext.Current.CancellationToken);
         var payload = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
-        var root = JsonDocument.Parse(payload).RootElement.Clone();
+        var root = JsonElement.Parse(payload);
         root.TryGetProperty("errors", out var errors).Should().BeTrue($"the request must be refused: {payload}");
         return errors[0];
     }
@@ -393,7 +393,7 @@ public class GraphQlReadContractTests
         var payload = await response.Content.ReadAsStringAsync();
         response.StatusCode.Should().Be(HttpStatusCode.OK, payload);
 
-        var root = JsonDocument.Parse(payload).RootElement.Clone();
+        var root = JsonElement.Parse(payload);
 
         // A coercion failure is reported inside a 200 payload, so the transport status says
         // nothing. Read it here or every assertion below dies on a null `data`.

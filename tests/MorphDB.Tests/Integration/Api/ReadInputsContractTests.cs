@@ -35,7 +35,7 @@ public class ReadInputsContractTests
         var text = await response.Content.ReadAsStringAsync(Ct);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest, text);
-        var error = JsonDocument.Parse(text).RootElement;
+        var error = JsonElement.Parse(text);
         error.GetProperty("code").GetString().Should().Be("INVALID_ARGUMENT");
         error.GetProperty("message").GetString().Should().Contain(unknown).And.Contain("pageSize", "it lists what the list does take");
     }
@@ -60,13 +60,13 @@ public class ReadInputsContractTests
         {
             var response = await _client.GetAsync($"/api/views/{view}/data?{query}", Ct);
             response.StatusCode.Should().Be(HttpStatusCode.BadRequest, query);
-            JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct)).RootElement.GetProperty("code").GetString()
+            JsonElement.Parse(await response.Content.ReadAsStringAsync(Ct)).GetProperty("code").GetString()
                 .Should().Be("INVALID_ARGUMENT", query);
         }
 
         var zero = await _client.GetAsync($"/api/views/{view}/data?take=0&skip=0&select=code&orderBy=code:desc&filter={Uri.EscapeDataString("qty:gt:0")}", Ct);
         zero.StatusCode.Should().Be(HttpStatusCode.OK);
-        JsonDocument.Parse(await zero.Content.ReadAsStringAsync(Ct)).RootElement.GetProperty("data").GetArrayLength().Should().Be(0, "take=0 is no rows");
+        JsonElement.Parse(await zero.Content.ReadAsStringAsync(Ct)).GetProperty("data").GetArrayLength().Should().Be(0, "take=0 is no rows");
     }
 
     [Theory]
@@ -80,7 +80,7 @@ public class ReadInputsContractTests
         var text = await response.Content.ReadAsStringAsync(Ct);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest, text);
-        JsonDocument.Parse(text).RootElement.GetProperty("error").GetProperty("code").GetString().Should().Be("INVALID_ARGUMENT");
+        JsonElement.Parse(text).GetProperty("error").GetProperty("code").GetString().Should().Be("INVALID_ARGUMENT");
     }
 
     [Fact]
@@ -91,7 +91,7 @@ public class ReadInputsContractTests
         var response = await _client.GetAsync($"/odata/{EntitySet(table)}?$orderby={Uri.EscapeDataString("qty desc, code asc")}", Ct);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var rows = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct)).RootElement.GetProperty("value");
+        var rows = JsonElement.Parse(await response.Content.ReadAsStringAsync(Ct)).GetProperty("value");
         rows[0].GetProperty("qty").GetInt32().Should().Be(6);
     }
 

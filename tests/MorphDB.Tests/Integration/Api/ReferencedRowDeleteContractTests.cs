@@ -84,7 +84,7 @@ public sealed class ReferencedRowDeleteContractTests
         var odata = await _client.DeleteAsync($"/odata/{entitySet}({f.Parent})", ct);
         var odataPayload = await odata.Content.ReadAsStringAsync(ct);
         odata.StatusCode.Should().Be(HttpStatusCode.Conflict, odataPayload);
-        JsonDocument.Parse(odataPayload).RootElement.GetProperty("error").GetProperty("code").GetString().Should().Be("ROW_REFERENCED");
+        JsonElement.Parse(odataPayload).GetProperty("error").GetProperty("code").GetString().Should().Be("ROW_REFERENCED");
 
         var graphql = await _client.PostAsJsonAsync("/graphql", new
         {

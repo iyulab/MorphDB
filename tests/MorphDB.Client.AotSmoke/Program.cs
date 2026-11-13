@@ -53,7 +53,7 @@ var inserted = await client.Data.InsertAsync("products", new Dictionary<string, 
     ["ref"] = Guid.Parse("33333333-3333-3333-3333-333333333333"),
     ["tags"] = new List<string> { "a", "b" },
     ["meta"] = new Dictionary<string, object?> { ["k"] = 1, ["deep"] = new object?[] { true, null } },
-    ["raw"] = JsonDocument.Parse("""{"j":[1]}""").RootElement,
+    ["raw"] = JsonElement.Parse("""{"j":[1]}"""),
 });
 CheckBody("""
     {"lot":"L-4","qty":3,"weight":2.5,"price":9.99,"ok":false,"note":null,"at":"2026-01-02T03:04:05+00:00",

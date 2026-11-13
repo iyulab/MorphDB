@@ -218,7 +218,7 @@ public class AuditColumnsTakeAnySubjectTests
         var policy = await master.PostAsJsonAsync("/api/security/policies",
             new { name = "own_rows", tableName = table, policyType = "Select", expression = "_owner_id = {{user_id}}" }, Ct);
         policy.IsSuccessStatusCode.Should().BeTrue(await policy.Content.ReadAsStringAsync(Ct));
-        var policyId = JsonDocument.Parse(await policy.Content.ReadAsStringAsync(Ct)).RootElement.GetProperty("id").GetGuid();
+        var policyId = JsonElement.Parse(await policy.Content.ReadAsStringAsync(Ct)).GetProperty("id").GetGuid();
 
         var refused = await master.PatchAsJsonAsync($"/api/schema/tables/{table}/columns/_owner_id", new { type = "text", version = await VersionAsync(master, table) }, Ct);
 

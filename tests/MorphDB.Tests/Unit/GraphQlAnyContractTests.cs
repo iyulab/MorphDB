@@ -20,7 +20,7 @@ namespace MorphDB.Tests.Unit;
 /// </summary>
 public class GraphQlAnyContractTests
 {
-    private static JsonElement Json(string raw) => JsonDocument.Parse(raw).RootElement.Clone();
+    private static JsonElement Json(string raw) => JsonElement.Parse(raw);
 
     [Fact]
     public void A_number_narrows_to_the_smallest_integer_that_holds_it_then_to_decimal()

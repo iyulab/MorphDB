@@ -319,7 +319,7 @@ public class FilterExpressionContractTests
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK, body);
-        var names = JsonDocument.Parse(body).RootElement.GetProperty("value").EnumerateArray().Select(r => r.GetProperty("name").GetString()).ToArray();
+        var names = JsonElement.Parse(body).GetProperty("value").EnumerateArray().Select(r => r.GetProperty("name").GetString()).ToArray();
         names.Should().Equal(label is null ? "c" : "coded");
     }
 

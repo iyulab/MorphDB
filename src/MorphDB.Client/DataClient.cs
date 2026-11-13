@@ -393,7 +393,7 @@ public sealed class DataClient
     /// </summary>
     internal static object? WireValue(FilterOperator op, object? value) =>
         op is FilterOperator.Exists or FilterOperator.NotExists && value is RelatedRows rows
-            ? JsonDocument.Parse(FormatRelatedRows(rows)).RootElement.Clone()
+            ? JsonElement.Parse(FormatRelatedRows(rows))
             : value;
 
     private static string FormatRelatedRows(RelatedRows rows)

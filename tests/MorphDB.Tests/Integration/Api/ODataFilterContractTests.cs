@@ -88,7 +88,7 @@ public class ODataFilterContractTests
         var text = await response.Content.ReadAsStringAsync(Ct);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest, filter);
-        var error = JsonDocument.Parse(text).RootElement.GetProperty("error");
+        var error = JsonElement.Parse(text).GetProperty("error");
         error.GetProperty("code").GetString().Should().Be("VALIDATION_ERROR", filter);
         error.GetProperty("message").GetString().Should().Contain("Supported").And.Contain("and, or, not");
     }
@@ -107,14 +107,14 @@ public class ODataFilterContractTests
             },
         }, Ct);
 
-        var items = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct)).RootElement.GetProperty("responses")
+        var items = JsonElement.Parse(await response.Content.ReadAsStringAsync(Ct)).GetProperty("responses")
             .EnumerateArray().ToDictionary(i => i.GetProperty("id").GetString()!);
         items["a"].GetProperty("body").GetProperty("value").GetArrayLength().Should().Be(3);
         items["b"].GetProperty("status").GetInt32().Should().Be(400);
     }
 
     private static string[] Names(string body) =>
-        [.. JsonDocument.Parse(body).RootElement.GetProperty("value").EnumerateArray().Select(r => r.GetProperty("name").GetString()!)];
+        [.. JsonElement.Parse(body).GetProperty("value").EnumerateArray().Select(r => r.GetProperty("name").GetString()!)];
 
     private async Task<string> SeedAsync()
     {

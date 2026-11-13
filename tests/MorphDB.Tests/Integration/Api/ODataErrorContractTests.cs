@@ -50,7 +50,7 @@ public class ODataErrorContractTests
     private static async Task<(HttpStatusCode Status, ODataErrorDetail Body)> ReadErrorAsync(HttpResponseMessage response)
     {
         var payload = await response.Content.ReadAsStringAsync();
-        var root = JsonDocument.Parse(payload).RootElement;
+        var root = JsonElement.Parse(payload);
         root.TryGetProperty("error", out var error).Should().BeTrue($"every OData error is an OData error object: {payload}");
         error.ValueKind.Should().Be(JsonValueKind.Object, $"`error` is an object with code and message, not a string: {payload}");
         return (response.StatusCode, JsonSerializer.Deserialize<ODataErrorDetail>(error.GetRawText())!);

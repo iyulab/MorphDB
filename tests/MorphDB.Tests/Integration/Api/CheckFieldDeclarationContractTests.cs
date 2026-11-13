@@ -99,7 +99,7 @@ public class CheckFieldDeclarationContractTests
     {
         var text = await response.Content.ReadAsStringAsync(Ct);
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest, text);
-        JsonDocument.Parse(text).RootElement.GetProperty("message").GetString().Should().Contain(field);
+        JsonElement.Parse(text).GetProperty("message").GetString().Should().Contain(field);
         PhysicalNameGuard.FindPhysicalNames(text).Should().BeEmpty("the refusal must not carry a physical name");
     }
 

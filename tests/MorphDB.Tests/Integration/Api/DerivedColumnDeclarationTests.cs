@@ -240,6 +240,6 @@ public sealed class DerivedColumnDeclarationTests
     {
         var response = await _client.GetAsync(url, TestContext.Current.CancellationToken);
         response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("data").Clone();
+        return JsonElement.Parse(await response.Content.ReadAsStringAsync()).GetProperty("data").Clone();
     }
 }

@@ -91,7 +91,7 @@ public class ClientRequestBodyContractTests
         ["timeSpanFraction"] = new TimeSpan(1, 2, 3, 4, 5),
         ["guid"] = Guid.Parse("11111111-2222-3333-4444-555555555555"),
         ["bytes"] = new byte[] { 1, 2, 3 },
-        ["jsonElement"] = JsonDocument.Parse("""{"a":[1,"two",null]}""").RootElement,
+        ["jsonElement"] = JsonElement.Parse("""{"a":[1,"two",null]}"""),
         ["jsonNode"] = JsonNode.Parse("""{"z":1}"""),
         ["jsonArrayNode"] = new JsonArray(1, 2),
         ["dictionary"] = new Dictionary<string, object?> { ["n"] = 1, ["inner"] = new Dictionary<string, object?> { ["deep"] = null } },

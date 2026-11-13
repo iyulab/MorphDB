@@ -85,7 +85,7 @@ public class PhysicalNameExposureContractTests
         response.EnsureSuccessStatusCode();
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
-        JsonDocument.Parse(body).RootElement.TryGetProperty("errors", out _).Should().BeFalse(body);
+        JsonElement.Parse(body).TryGetProperty("errors", out _).Should().BeFalse(body);
         PhysicalNameGuard.FindPhysicalNames(body).Should().BeEmpty(
             "the GraphQL row surface reuses the same logical row dictionaries REST does, and must stay in step with it");
     }

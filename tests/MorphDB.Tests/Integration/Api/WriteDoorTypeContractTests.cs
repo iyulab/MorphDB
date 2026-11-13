@@ -62,7 +62,7 @@ public class WriteDoorTypeContractTests
         var requested = await _client.PostAsync($"/api/bulk/{table}/import/{format}",
             new StringContent(body, Encoding.UTF8, contentType), Ct);
         requested.StatusCode.Should().Be(HttpStatusCode.Accepted, await requested.Content.ReadAsStringAsync(Ct));
-        var jobId = JsonDocument.Parse(await requested.Content.ReadAsStringAsync(Ct)).RootElement.GetProperty("jobId").GetGuid();
+        var jobId = JsonElement.Parse(await requested.Content.ReadAsStringAsync(Ct)).GetProperty("jobId").GetGuid();
 
         await As(null, async () =>
         {
@@ -73,7 +73,7 @@ public class WriteDoorTypeContractTests
 
         var status = await _client.GetAsync($"/api/bulk/import/{jobId}", Ct);
         status.StatusCode.Should().Be(HttpStatusCode.OK);
-        return JsonDocument.Parse(await status.Content.ReadAsStringAsync(Ct)).RootElement.Clone();
+        return JsonElement.Parse(await status.Content.ReadAsStringAsync(Ct));
     }
 
     private static string FirstRowError(JsonElement status) =>
@@ -114,7 +114,7 @@ public class WriteDoorTypeContractTests
         status.GetProperty("successCount").GetInt64().Should().Be(1);
 
         var rows = await _client.GetAsync($"/api/data/{table}?filter=code:eq:d1", Ct);
-        var data = JsonDocument.Parse(await rows.Content.ReadAsStringAsync(Ct)).RootElement.GetProperty("data")[0].GetProperty("data");
+        var data = JsonElement.Parse(await rows.Content.ReadAsStringAsync(Ct)).GetProperty("data")[0].GetProperty("data");
         data.GetProperty("ref").GetGuid().Should().Be(reference);
         data.GetProperty("due").GetString().Should().StartWith("2026-01-15");
     }

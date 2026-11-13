@@ -42,7 +42,7 @@ public class SchemaChangelogApiTests
         var response = await client.GetAsync(route, ct);
         var text = await response.Content.ReadAsStringAsync(ct);
         response.StatusCode.Should().Be(HttpStatusCode.OK, $"{route}: {text}");
-        return JsonDocument.Parse(text).RootElement.Clone();
+        return JsonElement.Parse(text);
     }
 
     [Fact]

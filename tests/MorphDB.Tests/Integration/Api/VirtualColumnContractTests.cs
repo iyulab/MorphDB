@@ -123,17 +123,17 @@ public sealed class VirtualColumnContractTests
 
         var posted = await _client.PostAsync($"/api/data/{table}/query", Json($$"""{"filter":{"$type":"condition","column":"{{column}}","operator":"eq","value":{{json}} } }"""), ct);
         posted.StatusCode.Should().Be(HttpStatusCode.OK, await posted.Content.ReadAsStringAsync(ct));
-        JsonDocument.Parse(await posted.Content.ReadAsStringAsync(ct)).RootElement.GetProperty("data").GetArrayLength().Should().Be(expected);
+        JsonElement.Parse(await posted.Content.ReadAsStringAsync(ct)).GetProperty("data").GetArrayLength().Should().Be(expected);
 
         var aggregated = await _client.PostAsync($"/api/data/{table}/aggregate",
             Json($$"""{"aggregations":[{"function":"count","alias":"n"}],"filter":[{"column":"{{column}}","operator":"eq","value":{{json}} }]}"""), ct);
         aggregated.StatusCode.Should().Be(HttpStatusCode.OK, await aggregated.Content.ReadAsStringAsync(ct));
-        JsonDocument.Parse(await aggregated.Content.ReadAsStringAsync(ct)).RootElement.GetProperty("data")[0].GetProperty("n").GetInt64().Should().Be(expected);
+        JsonElement.Parse(await aggregated.Content.ReadAsStringAsync(ct)).GetProperty("data")[0].GetProperty("n").GetInt64().Should().Be(expected);
 
         var literal = int.TryParse(value, out _) ? value : $"'{value}'";
         var odata = await _client.GetAsync($"/odata/{EntitySet(table)}?$filter={column} eq {literal}", ct);
         odata.StatusCode.Should().Be(HttpStatusCode.OK, await odata.Content.ReadAsStringAsync(ct));
-        JsonDocument.Parse(await odata.Content.ReadAsStringAsync(ct)).RootElement.GetProperty("value").GetArrayLength().Should().Be(expected);
+        JsonElement.Parse(await odata.Content.ReadAsStringAsync(ct)).GetProperty("value").GetArrayLength().Should().Be(expected);
     }
 
     [Fact]
@@ -147,7 +147,7 @@ public sealed class VirtualColumnContractTests
 
         var odata = await _client.GetAsync($"/odata/{EntitySet(shop.Orders)}?$orderby=doubled desc", TestContext.Current.CancellationToken);
         odata.StatusCode.Should().Be(HttpStatusCode.OK);
-        var rows = JsonDocument.Parse(await odata.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).RootElement.GetProperty("value");
+        var rows = JsonElement.Parse(await odata.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).GetProperty("value");
         rows.EnumerateArray().Select(r => r.GetProperty("doubled").GetInt32()).Should().Equal(14, 10, 2);
     }
 
@@ -160,14 +160,14 @@ public sealed class VirtualColumnContractTests
         var grouped = await _client.PostAsync($"/api/data/{shop.Orders}/aggregate",
             Json("""{"aggregations":[{"function":"count","alias":"n"},{"function":"sum","column":"doubled","alias":"total"}],"groupBy":["customer_grade"],"orderBy":[{"column":"customer_grade","direction":"asc"}]}"""), ct);
         grouped.StatusCode.Should().Be(HttpStatusCode.OK, await grouped.Content.ReadAsStringAsync(ct));
-        var groups = JsonDocument.Parse(await grouped.Content.ReadAsStringAsync(ct)).RootElement.GetProperty("data");
+        var groups = JsonElement.Parse(await grouped.Content.ReadAsStringAsync(ct)).GetProperty("data");
         groups.EnumerateArray().Select(g => (g.GetProperty("customer_grade").GetString(), g.GetProperty("n").GetInt64(), g.GetProperty("total").GetInt64()))
             .Should().Equal(("A", 2L, 24L), ("B", 1L, 2L));
 
         var max = await _client.PostAsync($"/api/data/{shop.Customers}/aggregate",
             Json("""{"aggregations":[{"function":"max","column":"order_total","alias":"m"}]}"""), ct);
         max.StatusCode.Should().Be(HttpStatusCode.OK, await max.Content.ReadAsStringAsync(ct));
-        JsonDocument.Parse(await max.Content.ReadAsStringAsync(ct)).RootElement.GetProperty("data")[0].GetProperty("m").GetInt64().Should().Be(12);
+        JsonElement.Parse(await max.Content.ReadAsStringAsync(ct)).GetProperty("data")[0].GetProperty("m").GetInt64().Should().Be(12);
     }
 
     [Fact]
@@ -217,13 +217,13 @@ public sealed class VirtualColumnContractTests
 
         var byKey = await _client.GetAsync($"/odata/{EntitySet(shop.Orders)}({shop.O1})", ct);
         byKey.StatusCode.Should().Be(HttpStatusCode.OK, await byKey.Content.ReadAsStringAsync(ct));
-        var row = JsonDocument.Parse(await byKey.Content.ReadAsStringAsync(ct)).RootElement;
+        var row = JsonElement.Parse(await byKey.Content.ReadAsStringAsync(ct));
         row.GetProperty("customer_grade").GetString().Should().Be("A");
         row.GetProperty("doubled").GetInt32().Should().Be(10);
 
         var customer = await _client.GetAsync($"/odata/{EntitySet(shop.Customers)}({shop.C1})", ct);
         customer.StatusCode.Should().Be(HttpStatusCode.OK, await customer.Content.ReadAsStringAsync(ct));
-        JsonDocument.Parse(await customer.Content.ReadAsStringAsync(ct)).RootElement.GetProperty("order_total").GetInt64().Should().Be(12);
+        JsonElement.Parse(await customer.Content.ReadAsStringAsync(ct)).GetProperty("order_total").GetInt64().Should().Be(12);
     }
 
     [Fact]
@@ -235,7 +235,7 @@ public sealed class VirtualColumnContractTests
         var posted = await _client.PostAsync($"/api/data/{shop.Orders}/query",
             Json("""{"select":["doubled","customer_grade"],"orderBy":["customer_grade:desc","doubled:asc"]}"""), ct);
         posted.StatusCode.Should().Be(HttpStatusCode.OK, await posted.Content.ReadAsStringAsync(ct));
-        JsonDocument.Parse(await posted.Content.ReadAsStringAsync(ct)).RootElement.GetProperty("data").EnumerateArray()
+        JsonElement.Parse(await posted.Content.ReadAsStringAsync(ct)).GetProperty("data").EnumerateArray()
             .Select(r => r.GetProperty("data"))
             .Select(d => (d.GetProperty("customer_grade").GetString(), d.GetProperty("doubled").GetInt32()))
             .Should().Equal(("B", 2), ("A", 10), ("A", 14));
@@ -365,7 +365,7 @@ public sealed class VirtualColumnContractTests
         var response = await _client.PostAsJsonAsync("/graphql", new { query, variables }, ct);
         var payload = await response.Content.ReadAsStringAsync(ct);
         response.StatusCode.Should().Be(HttpStatusCode.OK, payload);
-        var root = JsonDocument.Parse(payload).RootElement.Clone();
+        var root = JsonElement.Parse(payload);
         root.TryGetProperty("errors", out var errors).Should().BeFalse($"the read must resolve: {errors}");
         return root.GetProperty("data");
     }
@@ -387,14 +387,14 @@ public sealed class VirtualColumnContractTests
     {
         var response = await _client.GetAsync(url, TestContext.Current.CancellationToken);
         response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("data").Clone();
+        return JsonElement.Parse(await response.Content.ReadAsStringAsync()).GetProperty("data").Clone();
     }
 
     private async Task<int> CountRowsAsync(string url)
     {
         var response = await _client.GetAsync(url, TestContext.Current.CancellationToken);
         response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("data").GetArrayLength();
+        return JsonElement.Parse(await response.Content.ReadAsStringAsync()).GetProperty("data").GetArrayLength();
     }
 
     /// <summary>The values of <paramref name="column"/> in list order, ordered by <paramref name="orderBy"/>.</summary>
@@ -403,7 +403,7 @@ public sealed class VirtualColumnContractTests
         var order = orderBy.Contains(':', StringComparison.Ordinal) ? orderBy : $"{orderBy}:asc";
         var response = await _client.GetAsync($"/api/data/{table}?orderBy={order}", TestContext.Current.CancellationToken);
         response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("data")
+        return JsonElement.Parse(await response.Content.ReadAsStringAsync()).GetProperty("data")
             .EnumerateArray()
             .Select(r => r.GetProperty("data").GetProperty(column))
             .Select(v => v.ValueKind == JsonValueKind.Null ? "null" : v.ToString())

@@ -90,7 +90,7 @@ public class WriteDoorConstraintContractTests
     {
         var requested = await _client.PostAsync($"/api/bulk/{table}/import/{format}", new StringContent(body, Encoding.UTF8, contentType), Ct);
         requested.EnsureSuccessStatusCode();
-        var jobId = JsonDocument.Parse(await requested.Content.ReadAsStringAsync(Ct)).RootElement.GetProperty("jobId").GetGuid();
+        var jobId = JsonElement.Parse(await requested.Content.ReadAsStringAsync(Ct)).GetProperty("jobId").GetGuid();
         await As(null, async () =>
         {
             var job = (await Executor.GetPendingImportJobsAsync(int.MaxValue, Ct)).Single(j => j.JobId == jobId);

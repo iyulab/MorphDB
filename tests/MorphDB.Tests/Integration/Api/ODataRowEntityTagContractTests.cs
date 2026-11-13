@@ -182,7 +182,7 @@ public class ODataRowEntityTagContractTests
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         response.Headers.Contains("ETag").Should().BeFalse("the batch response is not an entity");
-        var items = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct)).RootElement.GetProperty("responses")
+        var items = JsonElement.Parse(await response.Content.ReadAsStringAsync(Ct)).GetProperty("responses")
             .EnumerateArray().ToDictionary(i => i.GetProperty("id").GetString()!);
         items["a"].GetProperty("body").GetProperty("@odata.etag").GetString().Should().Be("\"1\"");
         items["b"].GetProperty("body").GetProperty("@odata.etag").GetString().Should().Be("\"2\"");
@@ -207,7 +207,7 @@ public class ODataRowEntityTagContractTests
         using var response = await DeleteAsync(set, id, "\"9\"");
 
         response.StatusCode.Should().Be(HttpStatusCode.PreconditionFailed);
-        var message = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct)).RootElement.GetProperty("error").GetProperty("message").GetString();
+        var message = JsonElement.Parse(await response.Content.ReadAsStringAsync(Ct)).GetProperty("error").GetProperty("message").GetString();
         message.Should().Contain("expected 9").And.Contain("current version is 2");
         (await LabelAsync(table, id)).Should().Be("moved");
     }

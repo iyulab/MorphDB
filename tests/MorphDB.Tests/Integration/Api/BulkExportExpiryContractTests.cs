@@ -48,7 +48,7 @@ public class BulkExportExpiryContractTests
         (await _client.PostAsJsonAsync($"/api/data/{table}", new Dictionary<string, object?> { ["n"] = 1 }, Ct)).EnsureSuccessStatusCode();
 
         var requested = await _client.PostAsJsonAsync($"/api/bulk/{table}/export/csv", new CsvExportApiRequest(), Ct);
-        var jobId = JsonDocument.Parse(await requested.Content.ReadAsStringAsync(Ct)).RootElement.GetProperty("jobId").GetGuid();
+        var jobId = JsonElement.Parse(await requested.Content.ReadAsStringAsync(Ct)).GetProperty("jobId").GetGuid();
         await As(null, async () =>
         {
             var job = (await Executor.GetPendingExportJobsAsync(int.MaxValue, Ct)).Single(j => j.JobId == jobId);

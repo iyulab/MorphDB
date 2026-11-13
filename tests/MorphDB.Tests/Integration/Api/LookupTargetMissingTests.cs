@@ -286,7 +286,7 @@ public sealed class LookupTargetMissingTests
         var separator = tableAndQuery.Contains('?', StringComparison.Ordinal) ? '&' : '?';
         var response = await _client.GetAsync($"/api/data/{tableAndQuery}{separator}orderBy=customer_code:asc", TestContext.Current.CancellationToken);
         response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("data")
+        return JsonElement.Parse(await response.Content.ReadAsStringAsync()).GetProperty("data")
             .EnumerateArray().Select(r => r.GetProperty("data").Clone()).ToList();
     }
 }

@@ -409,7 +409,7 @@ public class ODataApiTests
         }, ct);
         var payload = await response.Content.ReadAsStringAsync(ct);
         response.StatusCode.Should().Be(HttpStatusCode.OK, payload);
-        var items = JsonDocument.Parse(payload).RootElement.GetProperty("responses");
+        var items = JsonElement.Parse(payload).GetProperty("responses");
 
         var list = items[0].GetProperty("body");
         items[0].GetProperty("status").GetInt32().Should().Be(200);
@@ -480,7 +480,7 @@ public class ODataApiTests
                 new { id = "b", method = "POST", url = set, body = new { name = "Never", email = "never@example.com", is_active = true }, dependsOn = DependsOn("a") },
             },
         }, ct);
-        var items = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct)).RootElement.GetProperty("responses");
+        var items = JsonElement.Parse(await response.Content.ReadAsStringAsync(ct)).GetProperty("responses");
 
         items[0].GetProperty("status").GetInt32().Should().Be(404);
         items[1].GetProperty("status").GetInt32().Should().Be(424);
@@ -493,7 +493,7 @@ public class ODataApiTests
         var response = await _client.PostAsJsonAsync("/odata/$batch", new { requests }, ct);
         var text = await response.Content.ReadAsStringAsync(ct);
         return ((int)response.StatusCode, response.IsSuccessStatusCode
-            ? [.. JsonDocument.Parse(text).RootElement.GetProperty("responses").EnumerateArray()]
+            ? [.. JsonElement.Parse(text).GetProperty("responses").EnumerateArray()]
             : []);
     }
 

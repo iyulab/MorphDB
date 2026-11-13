@@ -9,7 +9,7 @@ namespace MorphDB.Tests.Unit;
 /// </summary>
 public class JsonValueConverterTests
 {
-    private static JsonElement Json(string raw) => JsonDocument.Parse(raw).RootElement;
+    private static JsonElement Json(string raw) => JsonElement.Parse(raw);
 
     [Fact]
     public void ToClrValue_String_ReturnsString()

@@ -98,7 +98,7 @@ public class ODataQueryOptionsContractTests
         var response = await _client.GetAsync($"/odata/{set}?$top=0&$count=true", Ct);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct)).RootElement;
+        var body = JsonElement.Parse(await response.Content.ReadAsStringAsync(Ct));
         body.GetProperty("value").GetArrayLength().Should().Be(0, "$top=0 is zero rows, not 'no $top'");
         body.GetProperty("@odata.count").GetInt64().Should().Be(Rows);
         body.TryGetProperty("@odata.nextLink", out _).Should().BeFalse();
@@ -112,7 +112,7 @@ public class ODataQueryOptionsContractTests
         var response = await _client.GetAsync($"/odata/{set}?$top={QueryLimits.MaxPageSize + 5}", Ct);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct)).RootElement;
+        var body = JsonElement.Parse(await response.Content.ReadAsStringAsync(Ct));
         var first = body.GetProperty("value").GetArrayLength();
         first.Should().BeLessThan(QueryLimits.MaxPageSize + 5, "one page does not carry what was asked");
         var next = body.GetProperty("@odata.nextLink").GetString()!;
@@ -161,7 +161,7 @@ public class ODataQueryOptionsContractTests
         var response = await _client.GetAsync($"/odata/{set}?count=true&orderby=name desc&select=name&top=2", Ct);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct)).RootElement;
+        var body = JsonElement.Parse(await response.Content.ReadAsStringAsync(Ct));
         body.GetProperty("@odata.count").GetInt64().Should().Be(Rows);
         var names = body.GetProperty("value").EnumerateArray().Select(e => e.GetProperty("name").GetString()).ToArray();
         names.Should().Equal($"n{Rows - 1:D2}", $"n{Rows - 2:D2}");
@@ -203,7 +203,7 @@ public class ODataQueryOptionsContractTests
     {
         var set = await SeedAsync(rows: QueryLimits.MaxPageSize + 10);
 
-        var body = JsonDocument.Parse(await (await _client.GetAsync($"/odata/{set}?top={QueryLimits.MaxPageSize + 5}", Ct)).Content.ReadAsStringAsync(Ct)).RootElement;
+        var body = JsonElement.Parse(await (await _client.GetAsync($"/odata/{set}?top={QueryLimits.MaxPageSize + 5}", Ct)).Content.ReadAsStringAsync(Ct));
 
         var next = body.GetProperty("@odata.nextLink").GetString()!;
         next.Should().Contain("$top=").And.Contain("$skip=");
@@ -257,7 +257,7 @@ public class ODataQueryOptionsContractTests
         }, Ct);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var items = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct)).RootElement.GetProperty("responses")
+        var items = JsonElement.Parse(await response.Content.ReadAsStringAsync(Ct)).GetProperty("responses")
             .EnumerateArray().ToDictionary(i => i.GetProperty("id").GetString()!);
         items["a"].GetProperty("status").GetInt32().Should().Be(200);
         items["a"].GetProperty("body").GetProperty("value").GetArrayLength().Should().Be(0);
@@ -286,7 +286,7 @@ public class ODataQueryOptionsContractTests
         }, Ct);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var items = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct)).RootElement.GetProperty("responses")
+        var items = JsonElement.Parse(await response.Content.ReadAsStringAsync(Ct)).GetProperty("responses")
             .EnumerateArray().ToDictionary(i => i.GetProperty("id").GetString()!);
         items["a"].GetProperty("status").GetInt32().Should().Be(400);
         items["a"].GetProperty("body").GetProperty("error").GetProperty("message").GetString().Should().Contain("$search");
@@ -304,13 +304,13 @@ public class ODataQueryOptionsContractTests
     {
         var text = await response.Content.ReadAsStringAsync(Ct);
         response.StatusCode.Should().Be(HttpStatusCode.OK, text);
-        return [.. JsonDocument.Parse(text).RootElement.GetProperty("value").EnumerateArray().Select(e => e.Clone())];
+        return [.. JsonElement.Parse(text).GetProperty("value").EnumerateArray().Select(e => e.Clone())];
     }
 
     private static async Task<(HttpStatusCode Status, string Code, string Message)> ReadErrorAsync(HttpResponseMessage response)
     {
         var text = await response.Content.ReadAsStringAsync(Ct);
-        var error = JsonDocument.Parse(text).RootElement.GetProperty("error");
+        var error = JsonElement.Parse(text).GetProperty("error");
         return (response.StatusCode, error.GetProperty("code").GetString()!, error.GetProperty("message").GetString()!);
     }
 

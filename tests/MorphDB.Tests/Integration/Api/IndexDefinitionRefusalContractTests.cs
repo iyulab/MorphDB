@@ -39,7 +39,7 @@ public class IndexDefinitionRefusalContractTests
         var text = await response.Content.ReadAsStringAsync(Ct);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest, $"{because}: {text}");
-        JsonDocument.Parse(text).RootElement.GetProperty("code").GetString().Should().Be("INVALID_EXPRESSION");
+        JsonElement.Parse(text).GetProperty("code").GetString().Should().Be("INVALID_EXPRESSION");
         PhysicalNameGuard.FindPhysicalNames(text).Should().BeEmpty("the refusal must not carry a physical name");
     }
 

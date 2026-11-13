@@ -82,26 +82,26 @@ public class BulkJobCancellationContractTests
     {
         var response = await _client.PostAsync($"/api/bulk/{table}/import/csv", new StringContent(Csv(rows), Encoding.UTF8, "text/csv"), Ct);
         response.StatusCode.Should().Be(HttpStatusCode.Accepted, await response.Content.ReadAsStringAsync(Ct));
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct)).RootElement.GetProperty("jobId").GetGuid();
+        return JsonElement.Parse(await response.Content.ReadAsStringAsync(Ct)).GetProperty("jobId").GetGuid();
     }
 
     private async Task<Guid> RequestExportAsync(string table)
     {
         var response = await _client.PostAsJsonAsync($"/api/bulk/{table}/export/csv", new CsvExportApiRequest(), Ct);
         response.StatusCode.Should().Be(HttpStatusCode.Accepted, await response.Content.ReadAsStringAsync(Ct));
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct)).RootElement.GetProperty("jobId").GetGuid();
+        return JsonElement.Parse(await response.Content.ReadAsStringAsync(Ct)).GetProperty("jobId").GetGuid();
     }
 
     private async Task<string> StatusAsync(string kind, Guid jobId)
     {
         var response = await _client.GetAsync($"/api/bulk/{kind}/{jobId}", Ct);
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct)).RootElement.GetProperty("status").GetString()!;
+        return JsonElement.Parse(await response.Content.ReadAsStringAsync(Ct)).GetProperty("status").GetString()!;
     }
 
     private async Task<long> RowCountAsync(string table)
     {
         var response = await _client.GetAsync($"/api/data/{table}?pageSize=1&count=true", Ct);
-        return JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct)).RootElement.GetProperty("pagination").GetProperty("totalCount").GetInt64();
+        return JsonElement.Parse(await response.Content.ReadAsStringAsync(Ct)).GetProperty("pagination").GetProperty("totalCount").GetInt64();
     }
 
     [Fact]

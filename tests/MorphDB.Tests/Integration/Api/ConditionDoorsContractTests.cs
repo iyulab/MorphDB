@@ -254,7 +254,7 @@ public class ConditionDoorsContractTests
     private async Task<Answer> GraphQlAsync(string query, Func<JsonElement, int> count)
     {
         var response = await _client.PostAsync("/graphql", Json(new { query }), Ct);
-        var root = JsonDocument.Parse(await response.Content.ReadAsStringAsync(Ct)).RootElement;
+        var root = JsonElement.Parse(await response.Content.ReadAsStringAsync(Ct));
         if (root.TryGetProperty("errors", out var errors) && errors.GetArrayLength() > 0)
         {
             // A refusal names its code; an error with none is the server failing to say what went wrong.
@@ -273,7 +273,7 @@ public class ConditionDoorsContractTests
         var text = response.Content.ReadAsStringAsync(Ct).GetAwaiter().GetResult();
         return response.StatusCode switch
         {
-            HttpStatusCode.OK => Answer.Rows(count(JsonDocument.Parse(text).RootElement)),
+            HttpStatusCode.OK => Answer.Rows(count(JsonElement.Parse(text))),
             HttpStatusCode.BadRequest => Answer.Refused,
             var status => Answer.Failed($"{(int)status} {text}"),
         };
