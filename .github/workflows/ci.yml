@@ -20,7 +20,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  DOTNET_VERSION: '10.0.x'
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
   DOTNET_NOLOGO: true
 
@@ -38,7 +37,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          global-json-file: global.json
 
       - name: Restore dependencies
         run: dotnet restore
@@ -59,7 +58,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          global-json-file: global.json
 
       - name: Restore dependencies
         run: dotnet restore
@@ -85,7 +84,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          global-json-file: global.json
 
       - name: Restore dependencies
         run: dotnet restore
@@ -109,7 +108,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          global-json-file: global.json
 
       - name: Publish as Native AOT
         run: dotnet publish tests/MorphDB.Client.AotSmoke/MorphDB.Client.AotSmoke.csproj --configuration Release --runtime linux-x64 --output aot-smoke
@@ -131,7 +130,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          global-json-file: global.json
 
       - name: Cache NuGet packages
         uses: actions/cache@v6
