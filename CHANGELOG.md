@@ -22,6 +22,9 @@
 
 ### Changed
 
+- The constitution's boundary clause no longer names what sits above MorphDB (an AI layer, an ontology, a form type): it says the
+  meaning above the engine is carried by the layer above, which matches the line next to it, that MorphDB does not know what is
+  built on it. The direction of the boundary is unchanged.
 - `Microsoft.Extensions.Caching.StackExchangeRedis` and `Microsoft.AspNetCore.SignalR.Client` 11.0.0, and `Swashbuckle.AspNetCore` 11.0.0; each restores and builds on net10.0 (the first carries a `net10.0` target, the second a `netstandard2.0` one), so the libraries stay on net10.0. `MorphDB.Client` and `MorphDB.Npgsql` therefore declare these 11.0.0 versions as their minimum.
 
 ## 0.36.0
