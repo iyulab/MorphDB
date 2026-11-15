@@ -27,6 +27,9 @@
   built on it. The direction of the boundary is unchanged.
 - `Microsoft.Extensions.Caching.StackExchangeRedis` and `Microsoft.AspNetCore.SignalR.Client` 11.0.0, and `Swashbuckle.AspNetCore` 11.0.0; each restores and builds on net10.0 (the first carries a `net10.0` target, the second a `netstandard2.0` one), so the libraries stay on net10.0. `MorphDB.Client` and `MorphDB.Npgsql` therefore declare these 11.0.0 versions as their minimum.
 - `HotChocolate.AspNetCore` and `HotChocolate.Data` 16.7.5 (from 16.7.3, which the registry has since marked deprecated for critical bugs; the transitive `HotChocolate.*` packages follow). The GraphQL surface is unchanged; the full suite passes.
+- **Breaking:** an index row written before 0.2.1 — its column entries carry no `logical_name` — is no longer read as if the
+  physical name were the logical one. It is refused with a message that says to drop and recreate the index with 0.36.x and then
+  upgrade. A database that never ran a version before 0.2.1 is unaffected.
 
 ## 0.36.0
 

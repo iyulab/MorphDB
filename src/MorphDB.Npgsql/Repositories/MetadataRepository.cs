@@ -878,13 +878,14 @@ public sealed class MetadataRepository : IMetadataRepository
             .Select(elem =>
             {
                 var physicalName = elem.GetProperty("physical_name").GetString()!;
-                // Support backward compatibility: use physical_name if logical_name is not present.
-                // TODO(remove-legacy-read): the writer has emitted logical_name since v0.2.1, so only an index row
-                // written before that lacks it. Remove this fallback (read logical_name as required) once the upgrade
-                // path rewrites such entries or a stated minimum database version starts after v0.2.1.
-                var logicalName = elem.TryGetProperty("logical_name", out var ln)
-                    ? ln.GetString() ?? physicalName
-                    : physicalName;
+                // The writer has recorded the column's logical name since v0.2.1; a row written before that lacks it, and
+                // is no longer read as if the physical name were the logical one (a different name to everything that
+                // addresses the index's columns). It is refused with the way to rewrite it.
+                var logicalName = elem.TryGetProperty("logical_name", out var ln) && ln.GetString() is { } named
+                    ? named
+                    : throw new InvalidOperationException(
+                        $"The index '{row.logical_name}' was stored by a version before MorphDB 0.2.1, which recorded no logical name for its columns, "
+                        + "and is no longer read. Drop and recreate the index with a release that still reads it (0.36.x), then upgrade.");
 
                 return new IndexColumnInfo
                 {

@@ -305,6 +305,62 @@ public class MetadataRepositoryTests
         result.Columns.Should().HaveCount(1);
     }
 
+    /// <summary>
+    /// A row written before 0.2.1 recorded no logical column name. It used to be read as if the physical name were the
+    /// logical one -- a different name to every caller that addresses the index's columns -- and is now refused, saying how
+    /// to rewrite it.
+    /// </summary>
+    [Fact]
+    public async Task GetIndexByIdAsync_RefusesAnIndexRowThatRecordsNoLogicalColumnName()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var table = new TableMetadata
+        {
+            TableId = Guid.NewGuid(),
+            ProjectId = Guid.NewGuid(),
+            LogicalName = "test_table_" + Guid.NewGuid().ToString("N")[..8],
+            PhysicalName = "t_" + Guid.NewGuid().ToString("N")[..16],
+            SchemaVersion = 1
+        };
+        await _repository.InsertTableAsync(table, cancellationToken: ct);
+        var column = new ColumnMetadata
+        {
+            ColumnId = Guid.NewGuid(), TableId = table.TableId, LogicalName = "legacy_col", PhysicalName = "c_legacy_col",
+            DataType = MorphDataType.Text, NativeType = "TEXT", OrdinalPosition = 1
+        };
+        await _repository.InsertColumnAsync(column, cancellationToken: ct);
+        var index = new IndexMetadata
+        {
+            IndexId = Guid.NewGuid(),
+            TableId = table.TableId,
+            LogicalName = "idx_legacy",
+            PhysicalName = "i_" + Guid.NewGuid().ToString("N")[..16],
+            Columns =
+            [
+                new IndexColumnInfo
+                {
+                    ColumnId = column.ColumnId, LogicalName = column.LogicalName, PhysicalName = column.PhysicalName,
+                    Direction = SortDirection.Ascending, NullsPosition = NullsPosition.Last
+                }
+            ],
+            IndexType = IndexType.BTree
+        };
+        await _repository.InsertIndexAsync(index, cancellationToken: ct);
+        await using (var connection = await _fixture.DataSource.OpenConnectionAsync(ct))
+        await using (var command = connection.CreateCommand())
+        {
+            // The shape a database from before 0.2.1 holds: the column entries without `logical_name`.
+            command.CommandText = "UPDATE morphdb._morph_indexes SET columns = (SELECT jsonb_agg(elem - 'logical_name') FROM jsonb_array_elements(columns) elem) WHERE index_id = @id";
+            command.Parameters.AddWithValue("id", index.IndexId);
+            await command.ExecuteNonQueryAsync(ct);
+        }
+
+        var read = async () => await _repository.GetIndexByIdAsync(index.IndexId, ct);
+
+        (await read.Should().ThrowAsync<InvalidOperationException>())
+            .Which.Message.Should().Contain("idx_legacy").And.Contain("before MorphDB 0.2.1").And.Contain("Drop and recreate");
+    }
+
     [Fact]
     public async Task GetIndexesByTableIdAsync_ShouldReturnAllIndexes()
     {
