@@ -26,6 +26,7 @@
   meaning above the engine is carried by the layer above, which matches the line next to it, that MorphDB does not know what is
   built on it. The direction of the boundary is unchanged.
 - `Microsoft.Extensions.Caching.StackExchangeRedis` and `Microsoft.AspNetCore.SignalR.Client` 11.0.0, and `Swashbuckle.AspNetCore` 11.0.0; each restores and builds on net10.0 (the first carries a `net10.0` target, the second a `netstandard2.0` one), so the libraries stay on net10.0. `MorphDB.Client` and `MorphDB.Npgsql` therefore declare these 11.0.0 versions as their minimum.
+- `HotChocolate.AspNetCore` and `HotChocolate.Data` 16.7.5 (from 16.7.3, which the registry has since marked deprecated for critical bugs; the transitive `HotChocolate.*` packages follow). The GraphQL surface is unchanged; the full suite passes.
 
 ## 0.36.0
 
