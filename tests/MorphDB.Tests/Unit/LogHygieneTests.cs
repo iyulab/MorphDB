@@ -78,5 +78,7 @@ public class LogHygieneTests
             .Should().NotContain(l => l.Contains("ASPNETCORE_URLS", StringComparison.Ordinal),
                 "the warning at start is the host saying the image set the port twice");
         dockerfile.Should().Contain("ENV ASPNETCORE_HTTP_PORTS=8080");
+        dockerfile.Should().Contain("ENV PGGSSENCMODE=disable",
+            "the image has no GSSAPI library, and the driver otherwise prints that it cannot load it on every start");
     }
 }

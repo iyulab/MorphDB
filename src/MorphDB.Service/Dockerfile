@@ -48,6 +48,10 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
 # The port by the setting the base image already uses (ASPNETCORE_HTTP_PORTS). Setting ASPNETCORE_URLS beside it makes
 # the host warn on every start that it is overriding the first with the second; the healthcheck follows either.
 ENV ASPNETCORE_HTTP_PORTS=8080
+# The runtime image carries no GSSAPI library, so the Npgsql driver can never negotiate GSS encryption here; it used to
+# find that out on every start and print `Cannot load library libgssapi_krb5.so.2`. Saying so once is the same
+# behaviour without the noise. Override it (or the connection string's `Gss Encryption Mode`) in an image that adds the library.
+ENV PGGSSENCMODE=disable
 ENV ASPNETCORE_ENVIRONMENT=Production
 
 # Entry point

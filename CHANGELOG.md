@@ -25,7 +25,9 @@
   fails, or any request that answers `5xx` or throws, keeps its `Error` line), and the image set both `ASPNETCORE_URLS` and the base
   image's `ASPNETCORE_HTTP_PORTS`, so every start warned `Overriding HTTP_PORTS '8080' … Binding to values defined by URLS instead`.
   The image now names its port by `ASPNETCORE_HTTP_PORTS=8080` only; change it with that setting. The healthcheck follows
-  `ASPNETCORE_URLS` when it is set (it wins, as in ASP.NET Core) and `ASPNETCORE_HTTP_PORTS` otherwise.
+  `ASPNETCORE_URLS` when it is set (it wins, as in ASP.NET Core) and `ASPNETCORE_HTTP_PORTS` otherwise. The image also sets
+  `PGGSSENCMODE=disable`: it carries no GSSAPI library, and the driver printed `Cannot load library libgssapi_krb5.so.2` at every
+  start for want of one (override the variable, or set `Gss Encryption Mode` in the connection string, in an image that adds it).
 
 ### Changed
 
