@@ -325,8 +325,13 @@ public class MetadataRepositoryTests
         await _repository.InsertTableAsync(table, cancellationToken: ct);
         var column = new ColumnMetadata
         {
-            ColumnId = Guid.NewGuid(), TableId = table.TableId, LogicalName = "legacy_col", PhysicalName = "c_legacy_col",
-            DataType = MorphDataType.Text, NativeType = "TEXT", OrdinalPosition = 1
+            ColumnId = Guid.NewGuid(),
+            TableId = table.TableId,
+            LogicalName = "legacy_col",
+            PhysicalName = "c_legacy_col",
+            DataType = MorphDataType.Text,
+            NativeType = "TEXT",
+            OrdinalPosition = 1
         };
         await _repository.InsertColumnAsync(column, cancellationToken: ct);
         var index = new IndexMetadata
