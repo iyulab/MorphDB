@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.37.0
+
+A minor that makes the OData door read what it is sent: a system option written without its `$` or in another case is the option it
+names (before, it was taken for a custom option, ignored, and the request got every row with a `200`), a write that names
+`expectedVersion` is refused instead of writing without its precondition, and the row entity-tag surface answers consistently. The
+published image's log is no longer mostly noise (every line written twice, a line per health probe, a port-override warning, a missing
+GSSAPI library, a Data Protection key-ring warning), and the `HotChocolate` packages move to 16.7.5 because the registry marked 16.7.3
+deprecated for critical bugs. Breaking: an index row written before 0.2.1 is refused with an instruction to drop and recreate the
+index, rather than read as if the physical name were the logical one (see the last entry under Changed).
+
 ### Fixed
 
 - **The OData door no longer answers a system option it did not read with every row.** OData 4.01 (§5.1) has a service take
