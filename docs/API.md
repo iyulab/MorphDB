@@ -752,14 +752,14 @@ what is read, never answered as less than it says.
 Any other system option — `$search`, `$expand`, `$apply`, `$skiptoken`, one that is not in OData at all — is refused with
 `400 INVALID_ARGUMENT` naming it, rather than answered without it: left out, a narrowing option would hand back every
 row with a `200`. One entity read (`Customers(<id>)`) takes `$select` and `$format`, and refuses the options of a
-collection. `$format` is `json` — nothing else is written. A system option is read with or without its `$` and in any case, as OData 4.01 (§5.1) has it — `top=0` is `$top=0`, `Filter=…` is
+collection. `$format` is `json` — nothing else is written. **Since 0.37.0:** a system option is read with or without its `$` and in any case, as OData 4.01 (§5.1) has it — `top=0` is `$top=0`, `Filter=…` is
 `$filter=…`, and `search=…` is the unserved `$search`, refused — and one given twice (`top=1&$top=2`) is refused, not won by one of
 the two. Names that are not system options are the request's own and are left alone: a custom option (`debug=1`) and a
 parameter alias (`@name=…`). `$top` and `$skip` are non-negative whole
 numbers and `$count` is `true` or `false`; `$top=0` is no rows (and `$count=true` still counts). A batch request is
 held to the same rules as the request on its own.
 
-A write (`POST`, `PATCH`, `DELETE`) takes no system option but `$format`, and no `expectedVersion` — that is the REST doors' name for a
+A write (`POST`, `PATCH`, `DELETE`) takes no system option but `$format`, and (**Since 0.37.0**) no `expectedVersion` — that is the REST doors' name for a
 precondition, and an OData write states the row version it expects in `If-Match` (an entity tag); sent here it is refused with `400`
 rather than read as a custom option and ignored, which wrote without the precondition: `DELETE Customers(<id>)?$filter=…` is
 refused with `400 INVALID_ARGUMENT` instead of deleting the entity the key names whatever the filter says. The
@@ -1087,7 +1087,7 @@ If-Match: "3"
 | the row's current tag (`"3"`) | the write is made; the answer carries the new tag (`"4"`) |
 | a tag the row has moved past | `412 PRECONDITION_FAILED` — nothing is written |
 | `*` | the row exists, so the write is made (it opts out of the check) |
-| a weak tag (`W/"3"`) or a tag that is not a version of this row — including another spelling of one (`"03"`) | `412` — `If-Match` is compared strongly (RFC 9110 §13.1.1), and the tag is the version in plain decimal, so these never match |
+| a weak tag (`W/"3"`) or a tag that is not a version of this row — including another spelling of one (`"03"`, **Since 0.37.0**) | `412` — `If-Match` is compared strongly (RFC 9110 §13.1.1), and the tag is the version in plain decimal, so these never match |
 | several tags, or not an entity tag at all | `400 INVALID_ARGUMENT` — a row has one version at a time |
 | a version tag on a table that keeps no version | `400 INVALID_ARGUMENT` — there is no tag to compare, so the header is refused, not ignored |
 | absent | the write is unconditional, as before |
