@@ -19,6 +19,13 @@
   version is 5`; both now name the version the row is at. The refusal of `?expectedVersion=` on a REST route now says to send
   the row's entity tag in `If-Match`. A `POST /odata/$batch` response no longer carries an `ETag` header (it was the tag of the
   last item that ran; each item keeps its own `@odata.etag`).
+- **The published image's log is no longer mostly noise.** Every line was written twice (a console sink in `appsettings.json` beside
+  the one `Program.cs` adds — the file's `Serilog:WriteTo` is gone; add sinks of your own through configuration as before), the
+  healthcheck's own `GET /health` was a line every few seconds (a probe that answers is now written below Information; one that
+  fails, or any request that answers `5xx` or throws, keeps its `Error` line), and the image set both `ASPNETCORE_URLS` and the base
+  image's `ASPNETCORE_HTTP_PORTS`, so every start warned `Overriding HTTP_PORTS '8080' … Binding to values defined by URLS instead`.
+  The image now names its port by `ASPNETCORE_HTTP_PORTS=8080` only; change it with that setting. The healthcheck follows
+  `ASPNETCORE_URLS` when it is set (it wins, as in ASP.NET Core) and `ASPNETCORE_HTTP_PORTS` otherwise.
 
 ### Changed
 

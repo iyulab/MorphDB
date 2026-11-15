@@ -45,7 +45,9 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD ["dotnet", "MorphDB.Service.dll", "--health-check"]
 
 # Set environment variables
-ENV ASPNETCORE_URLS=http://+:8080
+# The port by the setting the base image already uses (ASPNETCORE_HTTP_PORTS). Setting ASPNETCORE_URLS beside it makes
+# the host warn on every start that it is overriding the first with the second; the healthcheck follows either.
+ENV ASPNETCORE_HTTP_PORTS=8080
 ENV ASPNETCORE_ENVIRONMENT=Production
 
 # Entry point

@@ -13,7 +13,7 @@ internal static class HealthProbe
     /// <summary>Returns 0 when the service answers healthy, 1 otherwise — the exit codes Docker reads.</summary>
     internal static async Task<int> RunAsync()
     {
-        var uri = ProbeUri();
+        var uri = ProbeUri(Environment.GetEnvironmentVariable);
 
         try
         {
@@ -42,13 +42,14 @@ internal static class HealthProbe
     }
 
     /// <summary>
-    /// Follows the port the host was told to bind, so the probe survives a consumer overriding
-    /// ASPNETCORE_URLS. The host part is not reusable: a binding is a listening pattern
+    /// Follows the port the host was told to bind, so the probe survives a consumer overriding it. ASP.NET Core reads
+    /// <c>ASPNETCORE_URLS</c> first and <c>ASPNETCORE_HTTP_PORTS</c> (the setting the image names its port by) only when
+    /// there are no URLs, and so does this. The host part of a URL is not reusable: a binding is a listening pattern
     /// (<c>http://+:8080</c>), not an address anything can dial.
     /// </summary>
-    private static Uri ProbeUri()
+    internal static Uri ProbeUri(Func<string, string?> environment)
     {
-        var bound = Environment.GetEnvironmentVariable("ASPNETCORE_URLS")
+        var bound = environment("ASPNETCORE_URLS")
             ?.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .FirstOrDefault(url => url.StartsWith("http://", StringComparison.OrdinalIgnoreCase));
 
@@ -59,8 +60,13 @@ internal static class HealthProbe
                 UriKind.Absolute,
                 out var parsed)
             ? parsed.Port
-            : 8080;
+            : HttpPortsPort(environment("ASPNETCORE_HTTP_PORTS")) ?? 8080;
 
         return new Uri($"http://localhost:{port}/health");
     }
+
+    private static int? HttpPortsPort(string? ports) =>
+        ports?.Split([';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(p => int.TryParse(p, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var n) ? n : (int?)null)
+            .FirstOrDefault(n => n is > 0 and <= 65535);
 }
