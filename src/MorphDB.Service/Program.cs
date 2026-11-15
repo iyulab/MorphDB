@@ -1,5 +1,7 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection.KeyManagement;
+using Microsoft.AspNetCore.DataProtection.XmlEncryption;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.OpenApi;
 using MorphDB.Core.Abstractions;
@@ -211,6 +213,22 @@ try
     // The read-only MCP door: off unless MorphDB__Mcp__Enabled, and never on a service that enforces no credential.
     builder.Services.AddMorphDbMcp(builder.Configuration, authenticationEnforced: secretOptions.IsEnforced);
     builder.Services.AddScoped<IMorphReadPort, ServiceReadPort>();
+    // AddAuthentication() registers ASP.NET Core Data Protection unconditionally, and the framework then creates
+    // a key ring at start-up -- in a container that is a key file under the user profile plus a warning on every
+    // start that the keys may not outlive the container. Nothing here protects data with it: the only scheme is
+    // JWT bearer (validates, never encrypts), and the service has no cookie authentication, antiforgery, or
+    // session affinity. So say so: a key ring held in memory writes nothing and warns about nothing. If a feature
+    // that protects data is ever added, replace this with a persisted, shared key ring -- replicas that each
+    // made their own keys could not read each other's protected values.
+    // The key ring is built at start-up regardless of the provider a caller resolves, so the repository holding its
+    // keys is what has to be in memory -- replacing only the provider leaves the start-up key file and warning.
+    builder.Services.AddDataProtection();
+    builder.Services.AddOptions<KeyManagementOptions>()
+        .Configure(options =>
+        {
+            options.XmlRepository = new InMemoryXmlRepository();
+            options.XmlEncryptor = new NullXmlEncryptor(); // in memory, so "unencrypted at rest" has no rest to be at
+        });
     builder.Services.AddAuthentication()
         .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, jwt =>
         {

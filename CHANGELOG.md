@@ -28,6 +28,9 @@
   `ASPNETCORE_URLS` when it is set (it wins, as in ASP.NET Core) and `ASPNETCORE_HTTP_PORTS` otherwise. The image also sets
   `PGGSSENCMODE=disable`: it carries no GSSAPI library, and the driver printed `Cannot load library libgssapi_krb5.so.2` at every
   start for want of one (override the variable, or set `Gss Encryption Mode` in the connection string, in an image that adds it).
+  A start no longer announces a Data Protection key ring the service never uses: nothing in MorphDB protects data with it (JWT bearer
+  validates and never encrypts; there are no cookies, antiforgery or session affinity), so the key ring is held in memory and a start
+  writes no key file under the user profile and no longer warns that the keys may not outlive the container.
 
 ### Changed
 
