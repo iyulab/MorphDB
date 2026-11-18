@@ -29,7 +29,7 @@
     <!-- Real-time -->
     <PackageVersion Include="Microsoft.AspNetCore.SignalR.Client" Version="11.0.0" />
     <!-- Logging & Diagnostics -->
-    <PackageVersion Include="Serilog.AspNetCore" Version="10.0.0" />
+    <PackageVersion Include="Serilog.AspNetCore" Version="11.0.0" />
     <PackageVersion Include="Serilog.Sinks.Console" Version="6.1.1" />
     <!-- The family moves in lockstep or not at all: a partial bump leaves one package resolving a
          newer Api than another declares, which surfaces as a downgrade conflict rather than a clear
