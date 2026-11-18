@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Fixed
+
+- **A many-to-many relation reports its junction table, and deleting the relation takes the table with it.** The relation
+  made a junction table and returned it from `CreateRelationAsync` as `null`: no column held the table's id, so it read
+  back without one too, and the delete had nothing to find — the junction table and its links stayed behind as a table
+  nothing referred to. The relation now stores the id (`junction_table_id`, added by migration; null on a relation made
+  before this, which keeps reading back without one and keeps its junction table when deleted), returns the table's id and
+  name, and deleting it drops the junction table, describes it as deleted and logs that, in the same change as the relation's.
+
 ## 0.37.0
 
 A minor that makes the OData door read what it is sent: a system option written without its `$` or in another case is the option it

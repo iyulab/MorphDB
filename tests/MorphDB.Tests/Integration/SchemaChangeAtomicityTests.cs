@@ -148,6 +148,78 @@ public class SchemaChangeAtomicityTests
         (await SchemaManager().GetTableAsync(projectId, junction, ct)).Should().NotBeNull("the junction name is free again");
     }
 
+    private async Task<(CreateRelationRequest Request, string Junction)> ManyToManyRequestAsync(Guid projectId, CancellationToken ct)
+    {
+        var left = await CreateTableAsync(SchemaManager(), projectId, ct);
+        var right = await CreateTableAsync(SchemaManager(), projectId, ct);
+        var junction = "junction_" + Guid.NewGuid().ToString("N")[..8];
+        return (new CreateRelationRequest
+        {
+            ProjectId = projectId,
+            LogicalName = "left_right",
+            SourceTableId = left.TableId,
+            SourceColumnId = left.Columns.Single(c => c.LogicalName == SystemColumns.Id).ColumnId,
+            TargetTableId = right.TableId,
+            TargetColumnId = right.Columns.Single(c => c.LogicalName == SystemColumns.Id).ColumnId,
+            RelationType = RelationType.ManyToMany,
+            JunctionTableName = junction,
+        }, junction);
+    }
+
+    [Fact]
+    public async Task A_many_to_many_relation_says_which_junction_table_it_made_when_it_is_created_and_when_it_is_read_again()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var projectId = Guid.NewGuid();
+        var (request, junction) = await ManyToManyRequestAsync(projectId, ct);
+
+        var created = await SchemaManager().CreateRelationAsync(request, ct);
+        var read = await Repository().GetRelationByIdAsync(created.RelationId, ct);
+        var table = await SchemaManager().GetTableAsync(projectId, junction, ct);
+
+        table.Should().NotBeNull();
+        created.JunctionTableId.Should().Be(table!.TableId);
+        created.JunctionTableName.Should().Be(junction);
+        read!.JunctionTableId.Should().Be(table.TableId, "the relation names its junction table as stored, not as a name rule would guess it");
+        read.JunctionTableName.Should().Be(junction);
+    }
+
+    [Fact]
+    public async Task Deleting_a_many_to_many_relation_takes_the_junction_table_it_made_with_it()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var projectId = Guid.NewGuid();
+        var (request, junction) = await ManyToManyRequestAsync(projectId, ct);
+        var created = await SchemaManager().CreateRelationAsync(request, ct);
+        var junctionTable = (await SchemaManager().GetTableAsync(projectId, junction, ct))!;
+        (await RelationsNamedAsync(junctionTable.PhysicalName, "r", ct)).Should().Be(1);
+
+        await SchemaManager().DeleteRelationAsync(created.RelationId, ct);
+
+        (await RelationsNamedAsync(junctionTable.PhysicalName, "r", ct)).Should().Be(0, "a junction table whose relation is gone holds links nothing can read");
+        (await SchemaManager().GetTableAsync(projectId, junction, ct)).Should().BeNull();
+        (await Repository().GetRelationByIdAsync(created.RelationId, ct)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task A_many_to_many_relation_whose_deletion_cannot_be_logged_keeps_its_junction_table_and_can_be_deleted_again()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var projectId = Guid.NewGuid();
+        var (request, junction) = await ManyToManyRequestAsync(projectId, ct);
+        var created = await SchemaManager().CreateRelationAsync(request, ct);
+        var junctionTable = (await SchemaManager().GetTableAsync(projectId, junction, ct))!;
+
+        var act = () => SchemaManager(new ThrowingChangeLogger(SchemaOperation.DeleteRelation)).DeleteRelationAsync(created.RelationId, ct);
+        await act.Should().ThrowAsync<InvalidOperationException>();
+
+        (await RelationsNamedAsync(junctionTable.PhysicalName, "r", ct)).Should().Be(1, "a change that did not happen takes nothing with it");
+        (await Repository().GetRelationByIdAsync(created.RelationId, ct)).Should().NotBeNull();
+
+        await SchemaManager().DeleteRelationAsync(created.RelationId, ct);
+        (await RelationsNamedAsync(junctionTable.PhysicalName, "r", ct)).Should().Be(0);
+    }
+
     [Fact]
     public async Task A_column_whose_deletion_cannot_be_logged_is_still_there_and_can_be_deleted_again()
     {

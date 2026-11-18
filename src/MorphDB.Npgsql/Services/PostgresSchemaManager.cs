@@ -1568,12 +1568,34 @@ public sealed class PostgresSchemaManager : ISchemaManager
 
         var currentVersion = await _repository.GetCurrentVersionAsync(relation.SourceTableId, cancellationToken: cancellationToken);
 
-        // The foreign key, the relation's description, the version and the log entry are one change.
+        // A many-to-many relation made a junction table of its own, and it goes with the relation: its rows are the links
+        // the relation holds, and nothing reads them once the relation is gone. A relation stored before the table was
+        // recorded names none and leaves it, as it always did.
+        var junction = relation.RelationType == RelationType.ManyToMany && relation.JunctionTableId is { } junctionId
+            ? await _repository.GetTableByIdAsync(junctionId, cancellationToken: cancellationToken)
+            : null;
+
+        // The foreign key (or the junction table), the relation's description, the version and the log entry are one change.
         await InUnitAsync(async (connection, transaction) =>
         {
-            var constraintName = $"fk_{sourceTable.PhysicalName}_{sourceColumn.PhysicalName}";
-            var dropFkSql = DdlBuilder.BuildDropForeignKey(sourceTable.PhysicalName, constraintName);
-            await connection.ExecuteAsync(new CommandDefinition(dropFkSql, transaction: transaction, cancellationToken: cancellationToken));
+            if (junction is not null)
+            {
+                await connection.ExecuteAsync(new CommandDefinition(DdlBuilder.BuildDropTable(junction.PhysicalName), transaction: transaction, cancellationToken: cancellationToken));
+                await _repository.SoftDeleteTableAsync(junction.TableId, transaction, cancellationToken);
+                await _changeLogger.LogChangeAsync(new SchemaChangeEntry
+                {
+                    TableId = junction.TableId,
+                    Operation = SchemaOperation.DeleteTable,
+                    SchemaVersion = junction.SchemaVersion,
+                    Changes = new { junction.LogicalName }
+                }, transaction, cancellationToken);
+            }
+            else
+            {
+                var constraintName = $"fk_{sourceTable.PhysicalName}_{sourceColumn.PhysicalName}";
+                var dropFkSql = DdlBuilder.BuildDropForeignKey(sourceTable.PhysicalName, constraintName);
+                await connection.ExecuteAsync(new CommandDefinition(dropFkSql, transaction: transaction, cancellationToken: cancellationToken));
+            }
 
             // Soft delete metadata
             await _repository.SoftDeleteRelationAsync(relationId, transaction, cancellationToken);

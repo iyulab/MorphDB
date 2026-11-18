@@ -107,6 +107,13 @@ public static class GlobalSchemaMigrations
         ALTER TABLE IF EXISTS morphdb._morph_relations ADD COLUMN IF NOT EXISTS enforce_on_write BOOLEAN NOT NULL DEFAULT true;
         ALTER TABLE IF EXISTS morphdb._morph_relations ADD COLUMN IF NOT EXISTS virtual_cascade BOOLEAN NOT NULL DEFAULT true;
 
+        -- A many-to-many relation made a junction table and handed its id back, but no column held it: the relation read
+        -- back without it and a deleted relation could not say which table was its own to take away. NULL on every existing
+        -- row is correct and deliberate: the link from an older relation to its junction table was never recorded, and a
+        -- table is not guessed from a name rule (a relation's junction table can be named anything). Such a relation keeps
+        -- reading back without one, and deleting it leaves the junction table as it always did.
+        ALTER TABLE IF EXISTS morphdb._morph_relations ADD COLUMN IF NOT EXISTS junction_table_id UUID;
+
         -- Per-row import failures were computed (WritePipeline returns the real error per row) and
         -- then discarded: the streaming loop only tallied error_count, and this table had no column
         -- to hold the reasons. A caller with errorCount > 0 and errorMessage = NULL (the job only

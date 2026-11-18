@@ -733,6 +733,8 @@ public static class DdlBuilder
                 -- relation that silently stops being checked is worse than one that never was.
                 enforce_on_write BOOLEAN NOT NULL DEFAULT true,
                 virtual_cascade BOOLEAN NOT NULL DEFAULT true,
+                -- The junction table a many-to-many relation made, by id; NULL for every other kind of relation.
+                junction_table_id UUID,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
 

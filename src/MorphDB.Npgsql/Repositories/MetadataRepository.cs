@@ -560,10 +560,11 @@ public sealed class MetadataRepository : IMetadataRepository
     {
         const string sql = """
             INSERT INTO morphdb._morph_relations
-                (relation_id, project_id, logical_name, source_table_id, source_column_id, target_table_id, target_column_id, relation_type, on_delete, on_update, descriptor, enforce_on_write, virtual_cascade)
+                (relation_id, project_id, logical_name, source_table_id, source_column_id, target_table_id, target_column_id, relation_type, on_delete, on_update, descriptor, enforce_on_write, virtual_cascade, junction_table_id)
             VALUES
-                (@RelationId, @ProjectId, @LogicalName, @SourceTableId, @SourceColumnId, @TargetTableId, @TargetColumnId, @RelationType, @OnDelete, @OnUpdate, @Descriptor::jsonb, @EnforceOnWrite, @VirtualCascade)
-            RETURNING relation_id, project_id, logical_name, source_table_id, source_column_id, target_table_id, target_column_id, relation_type, on_delete, on_update, descriptor, is_active, enforce_on_write, virtual_cascade, created_at
+                (@RelationId, @ProjectId, @LogicalName, @SourceTableId, @SourceColumnId, @TargetTableId, @TargetColumnId, @RelationType, @OnDelete, @OnUpdate, @Descriptor::jsonb, @EnforceOnWrite, @VirtualCascade, @JunctionTableId)
+            RETURNING relation_id, project_id, logical_name, source_table_id, source_column_id, target_table_id, target_column_id, relation_type, on_delete, on_update, descriptor, is_active, enforce_on_write, virtual_cascade, junction_table_id, created_at,
+                   (SELECT jt.logical_name FROM morphdb._morph_tables jt WHERE jt.table_id = junction_table_id) AS junction_table_name
             """;
 
         await using var lease = await LeaseSystemAsync(transaction, cancellationToken);
@@ -582,7 +583,8 @@ public sealed class MetadataRepository : IMetadataRepository
             OnUpdate = MapOnUpdateAction(relation.OnUpdate),
             Descriptor = relation.Descriptor?.RootElement.GetRawText(),
             relation.EnforceOnWrite,
-            relation.VirtualCascade
+            relation.VirtualCascade,
+            relation.JunctionTableId
         }, transaction);
 
         InvalidateUnlessIn(transaction);
@@ -594,10 +596,12 @@ public sealed class MetadataRepository : IMetadataRepository
         CancellationToken cancellationToken = default)
     {
         const string sql = """
-            SELECT r.relation_id, r.project_id, r.logical_name, r.source_table_id, r.source_column_id, r.target_table_id, r.target_column_id, r.relation_type, r.on_delete, r.on_update, r.descriptor, r.is_active, r.enforce_on_write, r.virtual_cascade, r.created_at,
+            SELECT r.relation_id, r.project_id, r.logical_name, r.source_table_id, r.source_column_id, r.target_table_id, r.target_column_id, r.relation_type, r.on_delete, r.on_update, r.descriptor, r.is_active, r.enforce_on_write, r.virtual_cascade, r.junction_table_id, r.created_at,
+                   jt.logical_name AS junction_table_name,
                    tt.logical_name AS target_table_name, tc.logical_name AS target_column_name
             FROM morphdb._morph_relations r
             LEFT JOIN morphdb._morph_tables tt ON tt.table_id = r.target_table_id
+            LEFT JOIN morphdb._morph_tables jt ON jt.table_id = r.junction_table_id
             LEFT JOIN morphdb._morph_columns tc ON tc.column_id = r.target_column_id
             WHERE r.relation_id = @RelationId AND r.is_active = true
             """;
@@ -698,10 +702,12 @@ public sealed class MetadataRepository : IMetadataRepository
         """;
 
     private const string RelationsSelect = """
-        SELECT r.relation_id, r.project_id, r.logical_name, r.source_table_id, r.source_column_id, r.target_table_id, r.target_column_id, r.relation_type, r.on_delete, r.on_update, r.descriptor, r.is_active, r.enforce_on_write, r.virtual_cascade, r.created_at,
+        SELECT r.relation_id, r.project_id, r.logical_name, r.source_table_id, r.source_column_id, r.target_table_id, r.target_column_id, r.relation_type, r.on_delete, r.on_update, r.descriptor, r.is_active, r.enforce_on_write, r.virtual_cascade, r.junction_table_id, r.created_at,
+                   jt.logical_name AS junction_table_name,
                tt.logical_name AS target_table_name, tc.logical_name AS target_column_name
         FROM morphdb._morph_relations r
         LEFT JOIN morphdb._morph_tables tt ON tt.table_id = r.target_table_id
+            LEFT JOIN morphdb._morph_tables jt ON jt.table_id = r.junction_table_id
         LEFT JOIN morphdb._morph_columns tc ON tc.column_id = r.target_column_id
         """;
 
@@ -929,6 +935,8 @@ public sealed class MetadataRepository : IMetadataRepository
         IsActive = row.is_active,
         EnforceOnWrite = row.enforce_on_write,
         VirtualCascade = row.virtual_cascade,
+        JunctionTableId = row.junction_table_id,
+        JunctionTableName = row.junction_table_name,
         TargetTableName = row.target_table_name,
         TargetColumnName = row.target_column_name
     };
@@ -1071,6 +1079,8 @@ public sealed class MetadataRepository : IMetadataRepository
         public bool is_active { get; set; }
         public bool enforce_on_write { get; set; }
         public bool virtual_cascade { get; set; }
+        public Guid? junction_table_id { get; set; }
+        public string? junction_table_name { get; set; }
         public DateTimeOffset created_at { get; set; }
         public string? target_table_name { get; set; }
         public string? target_column_name { get; set; }
