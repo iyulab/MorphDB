@@ -93,7 +93,13 @@ public sealed class MetadataRepository : IMetadataRepository
         return MapToTableMetadata(result);
     }
 
-    public async Task<TableMetadata?> GetTableByIdAsync(
+    public Task<TableMetadata?> GetTableByIdAsync(
+        Guid tableId,
+        bool includeColumns = false,
+        CancellationToken cancellationToken = default)
+        => DeadlockRetry.RunReadAsync(() => GetTableByIdOnceAsync(tableId, includeColumns, cancellationToken));
+
+    private async Task<TableMetadata?> GetTableByIdOnceAsync(
         Guid tableId,
         bool includeColumns = false,
         CancellationToken cancellationToken = default)
@@ -106,7 +112,14 @@ public sealed class MetadataRepository : IMetadataRepository
         return Kept(await ReadTableAsync(connection, "@TableId", new { TableId = tableId }, includeColumns), includeColumns, generation);
     }
 
-    public async Task<TableMetadata?> GetTableByNameAsync(
+    public Task<TableMetadata?> GetTableByNameAsync(
+        Guid projectId,
+        string logicalName,
+        bool includeColumns = false,
+        CancellationToken cancellationToken = default)
+        => DeadlockRetry.RunReadAsync(() => GetTableByNameOnceAsync(projectId, logicalName, includeColumns, cancellationToken));
+
+    private async Task<TableMetadata?> GetTableByNameOnceAsync(
         Guid projectId,
         string logicalName,
         bool includeColumns = false,
@@ -177,7 +190,13 @@ public sealed class MetadataRepository : IMetadataRepository
         return WithDetails(MapToTableMetadata(row), columns, relations, indexRows.Select(MapToIndexMetadata).ToList());
     }
 
-    public async Task<IReadOnlyList<TableMetadata>> ListTablesAsync(
+    public Task<IReadOnlyList<TableMetadata>> ListTablesAsync(
+        Guid projectId,
+        bool includeColumns = false,
+        CancellationToken cancellationToken = default)
+        => DeadlockRetry.RunReadAsync(() => ListTablesOnceAsync(projectId, includeColumns, cancellationToken));
+
+    private async Task<IReadOnlyList<TableMetadata>> ListTablesOnceAsync(
         Guid projectId,
         bool includeColumns = false,
         CancellationToken cancellationToken = default)
@@ -332,7 +351,12 @@ public sealed class MetadataRepository : IMetadataRepository
         return MapToColumnMetadata(result);
     }
 
-    public async Task<ColumnMetadata?> GetColumnByIdAsync(
+    public Task<ColumnMetadata?> GetColumnByIdAsync(
+        Guid columnId,
+        CancellationToken cancellationToken = default)
+        => DeadlockRetry.RunReadAsync(() => GetColumnByIdOnceAsync(columnId, cancellationToken));
+
+    private async Task<ColumnMetadata?> GetColumnByIdOnceAsync(
         Guid columnId,
         CancellationToken cancellationToken = default)
     {
@@ -351,7 +375,12 @@ public sealed class MetadataRepository : IMetadataRepository
         return row is null ? null : MapToColumnMetadata(row);
     }
 
-    public async Task<IReadOnlyList<ColumnMetadata>> GetColumnsByTableIdAsync(
+    public Task<IReadOnlyList<ColumnMetadata>> GetColumnsByTableIdAsync(
+        Guid tableId,
+        CancellationToken cancellationToken = default)
+        => DeadlockRetry.RunReadAsync(() => GetColumnsByTableIdOnceAsync(tableId, cancellationToken));
+
+    private async Task<IReadOnlyList<ColumnMetadata>> GetColumnsByTableIdOnceAsync(
         Guid tableId,
         CancellationToken cancellationToken = default)
     {
@@ -501,7 +530,12 @@ public sealed class MetadataRepository : IMetadataRepository
         return MapToIndexMetadata(result);
     }
 
-    public async Task<IndexMetadata?> GetIndexByIdAsync(
+    public Task<IndexMetadata?> GetIndexByIdAsync(
+        Guid indexId,
+        CancellationToken cancellationToken = default)
+        => DeadlockRetry.RunReadAsync(() => GetIndexByIdOnceAsync(indexId, cancellationToken));
+
+    private async Task<IndexMetadata?> GetIndexByIdOnceAsync(
         Guid indexId,
         CancellationToken cancellationToken = default)
     {
@@ -517,7 +551,12 @@ public sealed class MetadataRepository : IMetadataRepository
         return row is null ? null : MapToIndexMetadata(row);
     }
 
-    public async Task<IReadOnlyList<IndexMetadata>> GetIndexesByTableIdAsync(
+    public Task<IReadOnlyList<IndexMetadata>> GetIndexesByTableIdAsync(
+        Guid tableId,
+        CancellationToken cancellationToken = default)
+        => DeadlockRetry.RunReadAsync(() => GetIndexesByTableIdOnceAsync(tableId, cancellationToken));
+
+    private async Task<IReadOnlyList<IndexMetadata>> GetIndexesByTableIdOnceAsync(
         Guid tableId,
         CancellationToken cancellationToken = default)
     {
@@ -591,7 +630,12 @@ public sealed class MetadataRepository : IMetadataRepository
         return MapToRelationMetadata(result);
     }
 
-    public async Task<RelationMetadata?> GetRelationByIdAsync(
+    public Task<RelationMetadata?> GetRelationByIdAsync(
+        Guid relationId,
+        CancellationToken cancellationToken = default)
+        => DeadlockRetry.RunReadAsync(() => GetRelationByIdOnceAsync(relationId, cancellationToken));
+
+    private async Task<RelationMetadata?> GetRelationByIdOnceAsync(
         Guid relationId,
         CancellationToken cancellationToken = default)
     {
@@ -612,7 +656,12 @@ public sealed class MetadataRepository : IMetadataRepository
         return row is null ? null : MapToRelationMetadata(row);
     }
 
-    public async Task<IReadOnlyList<RelationMetadata>> GetRelationsByTableIdAsync(
+    public Task<IReadOnlyList<RelationMetadata>> GetRelationsByTableIdAsync(
+        Guid tableId,
+        CancellationToken cancellationToken = default)
+        => DeadlockRetry.RunReadAsync(() => GetRelationsByTableIdOnceAsync(tableId, cancellationToken));
+
+    private async Task<IReadOnlyList<RelationMetadata>> GetRelationsByTableIdOnceAsync(
         Guid tableId,
         CancellationToken cancellationToken = default)
     {

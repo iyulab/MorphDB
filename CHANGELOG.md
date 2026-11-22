@@ -4,6 +4,13 @@
 
 ### Fixed
 
+- **A metadata read chosen as a deadlock victim is sent again instead of answering `500`.** Listing the tables
+  (`GET /api/schema/tables`) was seen to fail with `40P01 deadlock detected` when a read of the metadata tables crossed
+  another session's lock on them. The inserts already retried a victim; the reads did not. The table, column, index and
+  relation reads of the metadata repository now retry a deadlock (`40P01`) or serialization failure (`40001`) a few times
+  with a short jittered wait. A read made inside a unit of work is not retried: there the whole transaction was the
+  victim, and the statement cannot run in it again.
+
 - **A many-to-many relation reports its junction table, and deleting the relation takes the table with it.** The relation
   made a junction table and returned it from `CreateRelationAsync` as `null`: no column held the table's id, so it read
   back without one too, and the delete had nothing to find — the junction table and its links stayed behind as a table

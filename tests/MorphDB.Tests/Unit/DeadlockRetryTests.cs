@@ -1,3 +1,4 @@
+using MorphDB.Npgsql.Infrastructure;
 using MorphDB.Npgsql.Repositories;
 using Npgsql;
 
@@ -45,5 +46,41 @@ public class DeadlockRetryTests
 
         await act.Should().ThrowAsync<PostgresException>();
         calls.Should().Be(1, "a unique violation is the caller's answer, not a collision to retry");
+    }
+
+    [Theory]
+    [InlineData(PostgresErrorCodes.DeadlockDetected)]
+    [InlineData(PostgresErrorCodes.SerializationFailure)]
+    public async Task A_metadata_read_chosen_as_a_deadlock_victim_is_sent_again(string sqlState)
+    {
+        var calls = 0;
+
+        var result = await DeadlockRetry.RunReadAsync(() => ++calls < 2 ? throw Failure(sqlState) : Task.FromResult("listed"));
+
+        result.Should().Be("listed");
+        calls.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task A_read_inside_a_unit_of_work_is_not_sent_again_because_the_whole_transaction_was_the_victim()
+    {
+        var calls = 0;
+        using var scope = ConnectionScope.Begin(new UnitTransaction(null!));
+
+        var act = () => DeadlockRetry.RunReadAsync<string>(() => { calls++; throw Failure(PostgresErrorCodes.DeadlockDetected); });
+
+        await act.Should().ThrowAsync<PostgresException>();
+        calls.Should().Be(1, "PostgreSQL has abandoned the transaction; the statement cannot run in it again");
+    }
+
+    [Fact]
+    public async Task A_metadata_read_that_fails_otherwise_is_thrown_at_once()
+    {
+        var calls = 0;
+
+        var act = () => DeadlockRetry.RunReadAsync<string>(() => { calls++; throw Failure(PostgresErrorCodes.UndefinedTable); });
+
+        await act.Should().ThrowAsync<PostgresException>();
+        calls.Should().Be(1);
     }
 }

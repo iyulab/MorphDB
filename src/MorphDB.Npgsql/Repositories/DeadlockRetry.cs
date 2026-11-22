@@ -1,3 +1,4 @@
+using MorphDB.Npgsql.Infrastructure;
 using Npgsql;
 
 namespace MorphDB.Npgsql.Repositories;
@@ -12,6 +13,14 @@ namespace MorphDB.Npgsql.Repositories;
 internal static class DeadlockRetry
 {
     private const int Attempts = 4;
+
+    /// <summary>
+    /// Runs a metadata read, sent again when it is chosen as a deadlock victim -- a read changes nothing, so
+    /// sending it again is always safe. Inside a unit of work the victim is the whole transaction, not the
+    /// statement (PostgreSQL has abandoned it), so there the read runs once and the failure is thrown.
+    /// </summary>
+    public static Task<T> RunReadAsync<T>(Func<Task<T>> read)
+        => ConnectionScope.HasScope ? read() : RunAsync(read);
 
     public static async Task<T> RunAsync<T>(Func<Task<T>> statement)
     {
