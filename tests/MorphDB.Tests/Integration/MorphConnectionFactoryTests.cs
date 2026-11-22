@@ -137,11 +137,11 @@ public class MorphConnectionFactoryTests
         nextUser.Should().BeEmpty("the next open of the same connection has no caller, and must not inherit one");
     }
 
-    [Theory]
-    [InlineData("Multiplexing=true")]
-    [InlineData("No Reset On Close=true")]
-    public async Task A_data_source_that_would_share_session_state_between_callers_is_refused(string setting)
+    [Fact]
+    public async Task A_data_source_that_keeps_session_state_between_callers_is_refused()
     {
+        const string setting = "No Reset On Close=true";
+
         // Building a data source connects to nothing, so the refusal needs no server.
         await using var dataSource = NpgsqlDataSource.Create(
             $"Host=localhost;Database=never_reached;Username=x;Password=x;{setting}");
@@ -150,6 +150,18 @@ public class MorphConnectionFactoryTests
 
         act.Should().Throw<ArgumentException>()
             .WithMessage($"*{setting}*", "the message has to name the setting to remove");
+    }
+
+    [Fact]
+    public void Multiplexing_cannot_be_switched_on_so_no_context_is_ever_read_by_another_callers_statement()
+    {
+        // The factory used to refuse Multiplexing=true itself. Npgsql 11 removed multiplexing and rejects
+        // the keyword, so the state the factory guarded against cannot be built. If a later Npgsql brings
+        // multiplexing back, this fails and the factory needs its refusal back.
+        var act = () => NpgsqlDataSource.Create(
+            "Host=localhost;Database=never_reached;Username=x;Password=x;Multiplexing=true");
+
+        act.Should().Throw<ArgumentException>();
     }
 
     /// <summary>

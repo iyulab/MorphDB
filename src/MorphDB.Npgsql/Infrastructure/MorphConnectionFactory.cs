@@ -72,7 +72,7 @@ public sealed class MorphConnectionFactory
     private readonly ISecurityContextAccessor _securityContext;
 
     /// <exception cref="ArgumentException">
-    /// The data source multiplexes, or keeps session state when a connection is returned to the pool.
+    /// The data source keeps session state when a connection is returned to the pool.
     /// </exception>
     public MorphConnectionFactory(
         NpgsqlDataSource dataSource,
@@ -84,15 +84,8 @@ public sealed class MorphConnectionFactory
         ArgumentException.ThrowIfNullOrWhiteSpace(bypassRole);
 
         var settings = new NpgsqlConnectionStringBuilder(dataSource.ConnectionString);
-        if (settings.Multiplexing)
-        {
-            throw new ArgumentException(
-                "The connection string sets Multiplexing=true. A multiplexed command runs on whichever physical " +
-                "connection is free, so there is no session for a security context to be written to, and one " +
-                "caller's context would be read by another's statement. Remove the setting.",
-                nameof(dataSource));
-        }
-
+        // Npgsql 11 removed multiplexing and rejects the keyword outright, so a data source can no longer
+        // share one physical connection between callers; only the pool-reset setting is left to refuse.
         if (settings.NoResetOnClose)
         {
             throw new ArgumentException(

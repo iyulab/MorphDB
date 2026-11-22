@@ -11,6 +11,14 @@
   before this, which keeps reading back without one and keeps its junction table when deleted), returns the table's id and
   name, and deleting it drops the junction table, describes it as deleted and logs that, in the same change as the relation's.
 
+### Changed
+
+- **`Npgsql` 10.0.3 → 11.0.0.** Npgsql 11 removed multiplexing and rejects the `Multiplexing` connection-string keyword
+  outright (even `Multiplexing=false`), so `MorphConnectionFactory` no longer refuses it itself: a data source that shares one
+  physical connection between callers cannot be built any more. The refusal of `No Reset On Close=true` is unchanged. A
+  test now pins that the keyword is rejected, so a later Npgsql that brings multiplexing back fails it instead of silently
+  letting one caller's security context be read by another caller's statement.
+
 ## 0.37.0
 
 A minor that makes the OData door read what it is sent: a system option written without its `$` or in another case is the option it

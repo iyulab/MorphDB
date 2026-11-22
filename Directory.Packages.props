@@ -4,7 +4,7 @@
   </PropertyGroup>
   <ItemGroup>
     <!-- PostgreSQL -->
-    <PackageVersion Include="Npgsql" Version="10.0.3" />
+    <PackageVersion Include="Npgsql" Version="11.0.0" />
     <!-- Query Building -->
     <PackageVersion Include="SqlKata" Version="4.0.1" />
     <PackageVersion Include="SqlKata.Execution" Version="4.0.1" />
