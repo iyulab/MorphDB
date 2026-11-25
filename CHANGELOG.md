@@ -11,6 +11,10 @@
   with a short jittered wait. A read made inside a unit of work is not retried: there the whole transaction was the
   victim, and the statement cannot run in it again.
 
+- **The documentation of `MorphDB:Mcp:MaxPageSize` says what the setting bounds.** It also caps `read_view` pages and
+  `aggregate` groups, and a value above 1000 does not reach `query_records`, which stops at 1000 as the REST table list
+  does. Behaviour is unchanged.
+
 - **A many-to-many relation reports its junction table, and deleting the relation takes the table with it.** The relation
   made a junction table and returned it from `CreateRelationAsync` as `null`: no column held the table's id, so it read
   back without one too, and the delete had nothing to find — the junction table and its links stayed behind as a table

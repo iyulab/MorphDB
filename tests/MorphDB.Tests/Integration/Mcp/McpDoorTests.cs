@@ -330,6 +330,31 @@ public class McpDoorTests
         page.GetProperty("hasNext").GetBoolean().Should().BeTrue();
     }
 
+    // The door's cap only narrows: raised above the table list's own maximum, a table read must still stop where the
+    // REST list stops, and must say the size it used so the next page lands where the caller thinks it does.
+    [Fact]
+    public async Task A_table_read_stops_at_the_rest_lists_maximum_even_when_the_door_allows_more()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var master = RestAs(MasterSecret);
+        var table = $"mcp_max_{Guid.NewGuid():N}"[..28];
+        (await master.PostAsJsonAsync("/api/schema/tables", new CreateTableApiRequest
+        {
+            Name = table,
+            Columns = [new CreateColumnApiRequest { Name = "n", Type = "integer", Nullable = false }],
+        }, ct)).EnsureSuccessStatusCode();
+        var rows = Enumerable.Range(0, 1001).Select(n => new Dictionary<string, object?> { ["n"] = n }).ToList();
+        (await master.PostAsJsonAsync($"/api/batch/data/{table}/insert", rows, ct)).EnsureSuccessStatusCode();
+        await using var client = await McpAs(MasterSecret, maxPageSize: 2000);
+
+        var result = await client.CallToolAsync("query_records", new Dictionary<string, object?> { ["table"] = table, ["pageSize"] = 1500 }, cancellationToken: ct);
+
+        var page = result.StructuredContent!.Value;
+        page.GetProperty("rows").GetArrayLength().Should().Be(1000);
+        page.GetProperty("pageSize").GetInt32().Should().Be(1000);
+        page.GetProperty("hasNext").GetBoolean().Should().BeTrue();
+    }
+
     [Fact]
     public async Task A_request_with_no_project_is_refused_in_the_words_the_rest_api_uses()
     {

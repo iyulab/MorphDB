@@ -1614,7 +1614,7 @@ tables without writing REST calls. It is off by default and it only reads.
 
 ```bash
 MorphDB__Mcp__Enabled=true        # the door, at /mcp (MorphDB__Mcp__Path)
-MorphDB__Mcp__MaxPageSize=100     # the most rows one tool call returns
+MorphDB__Mcp__MaxPageSize=100     # the most rows (for aggregate, groups) one tool call returns
 ```
 
 It is the same service, not a second one: a request is authenticated by the credential the REST API asks for (a
@@ -1633,7 +1633,10 @@ start-up. Streamable HTTP, stateless.
 | `describe_views` | The project's views — each one's name, base table and columns, and whether it is a materialized view (a stored copy) and when that copy was last refreshed |
 | `read_view` | One page of a view's rows — `select`, `filter` (`column:op:value`), `orderBy`, `page`, `pageSize` as on `GET /api/views/{name}/data`, read through the row-level rules of the tables the view reads. The result says whether the view is materialized and when it was last refreshed, so a stored copy is not taken for the live rows |
 
-There is no tool that writes. A page is capped at `MaxPageSize`; `hasNext` says whether more follow. A request the REST
+There is no tool that writes. A page is capped at `MaxPageSize`; `hasNext` says whether more follow. `query_records`
+reads by the table list's rules, so it returns at most 1000 rows even when `MaxPageSize` is set higher — the result's
+`pageSize` says the size it used. `read_view` and `aggregate` are bounded by `MaxPageSize` alone: the view read and the
+aggregate route of the REST API set no maximum of their own. A request the REST
 API would refuse (an unknown table, a filter it does not accept, no project) is the tool's error, in the same words.
 
 A tool answers only the arguments it declares. An argument it does not take — `filters` for `filter` — is the tool's error

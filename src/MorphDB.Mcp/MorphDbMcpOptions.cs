@@ -12,6 +12,10 @@ public sealed class MorphDbMcpOptions
     /// <summary>Gets or sets the path the door answers on. Default <c>/mcp</c>.</summary>
     public string Path { get; set; } = "/mcp";
 
-    /// <summary>Gets or sets the most rows one <c>query_records</c> call returns. Default 100.</summary>
+    /// <summary>
+    /// Gets or sets the most rows one <c>query_records</c> or <c>read_view</c> call returns, and the most groups one
+    /// <c>aggregate</c> call returns. Default 100. <c>query_records</c> reads by the table list's rules, so it also
+    /// returns at most 1000 rows whatever this is set to.
+    /// </summary>
     public int MaxPageSize { get; set; } = 100;
 }
