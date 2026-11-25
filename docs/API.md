@@ -1633,6 +1633,8 @@ start-up. Streamable HTTP, stateless.
 | `describe_views` | The project's views — each one's name, base table and columns, and whether it is a materialized view (a stored copy) and when that copy was last refreshed |
 | `read_view` | One page of a view's rows — `select`, `filter` (`column:op:value`), `orderBy`, `page`, `pageSize` as on `GET /api/views/{name}/data`, read through the row-level rules of the tables the view reads. The result says whether the view is materialized and when it was last refreshed, so a stored copy is not taken for the live rows |
 
+*Since 0.38.0 this section states the bounds below; the behaviour they describe is already that of 0.37.0.*
+
 There is no tool that writes. A page is capped at `MaxPageSize`; `hasNext` says whether more follow. `query_records`
 reads by the table list's rules, so it returns at most 1000 rows even when `MaxPageSize` is set higher — the result's
 `pageSize` says the size it used. `read_view` and `aggregate` are bounded by `MaxPageSize` alone: the view read and the
