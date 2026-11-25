@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Removed
+
+- **Breaking (compile-time only): `IComputedColumnManager`, `AddComputedColumnRequest` and `ComputedColumnValidationResult`
+  are gone from `MorphDB.Core`.** Nothing implemented the interface, nothing registered or called it, and no route or client
+  method used the two types, so no working code can have depended on them. Computed, formula, lookup and rollup columns are
+  declared through the schema API as before.
+
 ### Fixed
 
 - **A metadata read chosen as a deadlock victim is sent again instead of answering `500`.** Listing the tables
