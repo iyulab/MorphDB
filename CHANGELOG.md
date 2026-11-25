@@ -6,7 +6,8 @@
 
 - **Breaking (compile-time only): `IComputedColumnManager`, `AddComputedColumnRequest` and `ComputedColumnValidationResult`
   are gone from `MorphDB.Core`.** Nothing implemented the interface, nothing registered or called it, and no route or client
-  method used the two types, so no working code can have depended on them. Computed, formula, lookup and rollup columns are
+  method used the two types, so no call into MorphDB can have depended on them; only code that declared its own
+  implementation of the interface, or used the types by itself, stops compiling. Computed, formula, lookup and rollup columns are
   declared through the schema API as before.
 
 ### Fixed
