@@ -3,8 +3,6 @@ using MorphDB.Core.Models;
 using MorphDB.Npgsql.Repositories;
 using MorphDB.Service.Models.Api;
 
-using static MorphDB.Core.Abstractions.QueryLimits;
-
 namespace MorphDB.Service.Services;
 
 /// <summary>
@@ -26,7 +24,7 @@ internal static class DataReads
         CancellationToken cancellationToken)
     {
         // Validate pagination
-        var pageSize = Math.Clamp(query.PageSize, 1, Math.Min(1000, MaxPageSize));
+        var pageSize = Math.Clamp(query.PageSize, 1, ReadLimits.MaxRows);
         var page = Math.Max(query.Page, 1);
         var skip = PaginationInfo.Skip(page, pageSize, query.Offset);
 

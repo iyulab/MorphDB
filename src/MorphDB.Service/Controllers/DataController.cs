@@ -7,8 +7,6 @@ using MorphDB.Service.Filters;
 using MorphDB.Service.Models.Api;
 using MorphDB.Service.Services;
 
-using static MorphDB.Core.Abstractions.QueryLimits;
-
 namespace MorphDB.Service.Controllers;
 
 internal static partial class DataControllerLogs
@@ -154,7 +152,7 @@ public sealed class DataController : ControllerBase
         try
         {
             var projectId = GetProjectId();
-            var pageSize = Math.Clamp(request.PageSize, 1, Math.Min(1000, MaxPageSize));
+            var pageSize = Math.Clamp(request.PageSize, 1, ReadLimits.MaxRows);
             var page = Math.Max(request.Page, 1);
             var skip = PaginationInfo.Skip(page, pageSize, request.Offset);
 
