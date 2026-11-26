@@ -14,8 +14,8 @@ public sealed class MorphDbMcpOptions
 
     /// <summary>
     /// Gets or sets the most rows one <c>query_records</c> or <c>read_view</c> call returns, and the most groups one
-    /// <c>aggregate</c> call returns. Default 100. <c>query_records</c> reads by the table list's rules, so it also
-    /// returns at most 1000 rows whatever this is set to.
+    /// <c>aggregate</c> call returns. Default 100. <c>query_records</c> and <c>read_view</c> read by the REST reads'
+    /// rules, so a page of rows is at most 1000 whatever this is set to.
     /// </summary>
     public int MaxPageSize { get; set; } = 100;
 }

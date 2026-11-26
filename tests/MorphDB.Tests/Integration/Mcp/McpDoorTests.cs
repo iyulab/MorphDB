@@ -355,6 +355,48 @@ public class McpDoorTests
         page.GetProperty("hasNext").GetBoolean().Should().BeTrue();
     }
 
+    // A view read has the same maximum on both doors. The door reports the size it used, so that its next page
+    // starts where the rows of this one ended -- a size cut without saying so would skip rows.
+    [Fact]
+    public async Task A_view_read_stops_at_the_rest_view_reads_maximum_even_when_the_door_allows_more()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var master = RestAs(MasterSecret);
+        var table = $"mcp_vmax_{Guid.NewGuid():N}"[..28];
+        (await master.PostAsJsonAsync("/api/schema/tables", new CreateTableApiRequest
+        {
+            Name = table,
+            Columns = [new CreateColumnApiRequest { Name = "n", Type = "integer", Nullable = false }],
+        }, ct)).EnsureSuccessStatusCode();
+        var rows = Enumerable.Range(0, 1001).Select(n => new Dictionary<string, object?> { ["n"] = n }).ToList();
+        (await master.PostAsJsonAsync($"/api/batch/data/{table}/insert", rows, ct)).EnsureSuccessStatusCode();
+        var view = $"v_{table}";
+        (await master.PostAsJsonAsync("/api/views", new CreateViewApiRequest
+        {
+            Name = view,
+            BaseTable = table,
+            Columns = [new ViewColumnApiSpec { Source = "n", Alias = "n" }],
+        }, ct)).EnsureSuccessStatusCode();
+        await using var client = await McpAs(MasterSecret, maxPageSize: 2000);
+
+        async Task<(int[] Rows, int PageSize, bool HasNext)> Read(int number)
+        {
+            var result = await client.CallToolAsync("read_view", new Dictionary<string, object?> { ["view"] = view, ["orderBy"] = "n:asc", ["page"] = number, ["pageSize"] = 1500 }, cancellationToken: ct);
+            var page = result.StructuredContent!.Value;
+            return ([.. page.GetProperty("rows").EnumerateArray().Select(r => r.GetProperty("n").GetInt32())],
+                page.GetProperty("pageSize").GetInt32(), page.GetProperty("hasNext").GetBoolean());
+        }
+
+        var first = await Read(1);
+        var second = await Read(2);
+
+        first.Rows.Should().Equal(Enumerable.Range(0, 1000));
+        first.PageSize.Should().Be(1000);
+        first.HasNext.Should().BeTrue();
+        second.Rows.Should().Equal(1000);
+        second.HasNext.Should().BeFalse();
+    }
+
     [Fact]
     public async Task A_request_with_no_project_is_refused_in_the_words_the_rest_api_uses()
     {

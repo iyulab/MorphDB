@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Changed
+
+- **Breaking: a view read takes at most 1000 rows.** `GET /api/views/{name}/data` answers `400`
+  (`INVALID_ARGUMENT`) to a `take` above 1000; it had no maximum, while the table list stops at 1000. It is refused
+  rather than cut, because a view is paged by the caller's own `skip`: with the page cut in silence, the rows between
+  the cut and the next `skip` would never be read. Read further rows with `skip`. This reaches
+  `MorphDB.Client`'s `ViewClient.QueryAsync` with a `PageSize` above 1000. The MCP tool `read_view` cuts the page to
+  1000, as `query_records` does, and its `pageSize` says the size it used. Aggregates are unchanged: a maximum on the
+  number of groups would silently drop groups from a call that asks for all of them. The in-process
+  `IViewManager.QueryViewAsync` is unchanged.
+
+- **`Npgsql` 10.0.3 → 11.0.0.** Npgsql 11 removed multiplexing and rejects the `Multiplexing` connection-string keyword
+  outright (even `Multiplexing=false`), so `MorphConnectionFactory` no longer refuses it itself: a data source that shares one
+  physical connection between callers cannot be built any more. The refusal of `No Reset On Close=true` is unchanged. A
+  test now pins that the keyword is rejected, so a later Npgsql that brings multiplexing back fails it instead of silently
+  letting one caller's security context be read by another caller's statement.
+
 ### Removed
 
 - **Breaking (compile-time only): `IComputedColumnManager`, `AddComputedColumnRequest` and `ComputedColumnValidationResult`
@@ -21,7 +38,7 @@
 
 - **The documentation of `MorphDB:Mcp:MaxPageSize` says what the setting bounds.** It also caps `read_view` pages and
   `aggregate` groups, and a value above 1000 does not reach `query_records`, which stops at 1000 as the REST table list
-  does. Behaviour is unchanged.
+  does. (`read_view` stops there too from this release — see Changed.)
 
 - **A many-to-many relation reports its junction table, and deleting the relation takes the table with it.** The relation
   made a junction table and returned it from `CreateRelationAsync` as `null`: no column held the table's id, so it read
@@ -29,14 +46,6 @@
   nothing referred to. The relation now stores the id (`junction_table_id`, added by migration; null on a relation made
   before this, which keeps reading back without one and keeps its junction table when deleted), returns the table's id and
   name, and deleting it drops the junction table, describes it as deleted and logs that, in the same change as the relation's.
-
-### Changed
-
-- **`Npgsql` 10.0.3 → 11.0.0.** Npgsql 11 removed multiplexing and rejects the `Multiplexing` connection-string keyword
-  outright (even `Multiplexing=false`), so `MorphConnectionFactory` no longer refuses it itself: a data source that shares one
-  physical connection between callers cannot be built any more. The refusal of `No Reset On Close=true` is unchanged. A
-  test now pins that the keyword is rejected, so a later Npgsql that brings multiplexing back fails it instead of silently
-  letting one caller's security context be read by another caller's statement.
 
 ## 0.37.0
 

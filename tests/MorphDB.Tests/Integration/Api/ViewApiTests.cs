@@ -598,6 +598,31 @@ public class ViewApiTests
         }
     }
 
+    // The table list stops at 1000 rows. A view read refuses a larger take instead of cutting it: the caller
+    // works out skip from the take they asked for, so rows cut off in silence would never be read.
+    [Fact]
+    public async Task QueryView_TakeAboveTheMaximum_ShouldBeRefused()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var baseTable = await CreateBaseTableAsync();
+        var viewName = $"vw_max_{Guid.NewGuid():N}"[..30];
+        (await _client.PostAsJsonAsync("/api/views", new CreateViewApiRequest
+        {
+            Name = viewName,
+            BaseTable = baseTable,
+            Columns = [new ViewColumnApiSpec { Source = "name", Alias = "name" }],
+        }, ct)).StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var atTheMaximum = await _client.GetAsync($"/api/views/{viewName}/data?take=1000", ct);
+        var above = await _client.GetAsync($"/api/views/{viewName}/data?take=1001", ct);
+
+        atTheMaximum.StatusCode.Should().Be(HttpStatusCode.OK);
+        above.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var error = (await above.Content.ReadFromJsonAsync<ErrorResponse>(ct))!;
+        error.Code.Should().Be("INVALID_ARGUMENT");
+        error.Message.Should().Contain("1000").And.Contain("skip");
+    }
+
     #endregion
 
     #region Project Isolation Tests

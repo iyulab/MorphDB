@@ -345,6 +345,13 @@ public sealed class ViewController : ControllerBase
                 return BadRequest(new ErrorResponse { Error = "BadRequest", Message = "'skip' and 'take' are not negative.", Code = "INVALID_ARGUMENT" });
             }
 
+            // Refused rather than cut: the caller works out skip from the take they asked for, so rows cut off
+            // in silence would never be read.
+            if (query.Take > ReadLimits.MaxRows)
+            {
+                return BadRequest(new ErrorResponse { Error = "BadRequest", Message = $"'take' is at most {ReadLimits.MaxRows}; read further rows with 'skip'.", Code = "INVALID_ARGUMENT" });
+            }
+
             var queryRequest = ViewReads.Request(projectId, name, query.Select, query.Filter, query.OrderBy, query.Skip, query.Take ?? 50);
 
             var result = await _viewManager.QueryViewAsync(queryRequest, cancellationToken);

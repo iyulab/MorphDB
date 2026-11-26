@@ -2743,7 +2743,7 @@ public sealed record ViewQueryApiParameters
     public int? Skip { get; init; }
 
     /// <summary>
-    /// Number of rows to take.
+    /// Number of rows to take (default: 50, max: 1000). A larger number is refused, not cut.
     /// </summary>
     public int? Take { get; init; }
 }

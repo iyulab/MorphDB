@@ -135,7 +135,10 @@ internal sealed class ServiceReadPort(
     public async ValueTask<McpViewPage> ReadViewAsync(McpViewQuery query, CancellationToken cancellationToken)
     {
         var projectId = await ProjectAsync(cancellationToken);
-        var skip = (long)(query.Page - 1) * query.PageSize;
+        // As a table read does: the size is cut to the REST read's maximum here, and the page says the size it used,
+        // so the next page starts where this one ended.
+        var size = Math.Min(query.PageSize, ReadLimits.MaxRows);
+        var skip = (long)(query.Page - 1) * size;
         if (skip > int.MaxValue)
         {
             throw new MorphReadRefusedException($"Page {query.Page} is beyond what a view read can reach; narrow it with a filter.");
@@ -144,14 +147,14 @@ internal sealed class ServiceReadPort(
         try
         {
             var read = await viewManager.QueryViewAsync(
-                ViewReads.Request(projectId, query.View, query.Select, query.Filter?.ToArray(), query.OrderBy, (int)skip, query.PageSize),
+                ViewReads.Request(projectId, query.View, query.Select, query.Filter?.ToArray(), query.OrderBy, (int)skip, size),
                 cancellationToken);
             var materialized = read.Metadata?.IsMaterialized ?? false;
             return new McpViewPage(
                 read.Data,
                 read.HasMore,
                 query.Page,
-                query.PageSize,
+                size,
                 materialized,
                 materialized ? read.Metadata!.LastRefreshedAt : null,
                 materialized && read.Metadata!.IsStale);

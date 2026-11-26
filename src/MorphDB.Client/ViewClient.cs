@@ -85,7 +85,8 @@ public sealed class ViewClient
     }
 
     /// <summary>
-    /// Queries data from a view — the same selection, filters, order and paging a table read takes.
+    /// Queries data from a view — the same selection, filters, order and paging a table read takes. A page is at
+    /// most 1000 rows: the server refuses a larger <see cref="QueryRequest.PageSize"/>, where a table read cuts it.
     /// </summary>
     public async Task<ViewRows> QueryAsync(
         string viewName,

@@ -295,6 +295,10 @@ applies — alongside `select`, `orderBy` (`column:asc|desc`, comma-separated) a
 column the view does not have, or a condition the view cannot answer (`between`), is refused with `400`
 (`INVALID_FILTER`).
 
+*Since 0.38.0* `take` is at most 1000 rows (default 50). A larger `take` is refused with `400`
+(`INVALID_ARGUMENT`); a table list cuts a larger `pageSize` instead. The view read pages by the caller's own
+`skip`, so a page cut without a word would leave rows that no later page reads.
+
 `exists` keeps the rows that have a related row — OData's `any()`, PostgREST's embedded filter. Its value
 names the related `table`, the related table's `column` that holds this row's value of the filtered column,
 and a `filter` list of conditions on the related rows (filter texts as above, or in a body
@@ -1633,12 +1637,12 @@ start-up. Streamable HTTP, stateless.
 | `describe_views` | The project's views — each one's name, base table and columns, and whether it is a materialized view (a stored copy) and when that copy was last refreshed |
 | `read_view` | One page of a view's rows — `select`, `filter` (`column:op:value`), `orderBy`, `page`, `pageSize` as on `GET /api/views/{name}/data`, read through the row-level rules of the tables the view reads. The result says whether the view is materialized and when it was last refreshed, so a stored copy is not taken for the live rows |
 
-*Since 0.38.0 this section states the bounds below; the behaviour they describe is already that of 0.37.0.*
+*Since 0.38.0 `read_view` stops at 1000 rows. The other bounds below are already those of 0.37.0.*
 
 There is no tool that writes. A page is capped at `MaxPageSize`; `hasNext` says whether more follow. `query_records`
-reads by the table list's rules, so it returns at most 1000 rows even when `MaxPageSize` is set higher — the result's
-`pageSize` says the size it used. `read_view` and `aggregate` are bounded by `MaxPageSize` alone: the view read and the
-aggregate route of the REST API set no maximum of their own. A request the REST
+and `read_view` read by the REST reads' rules, so a page of rows is at most 1000 even when `MaxPageSize` is set
+higher — the result's `pageSize` says the size it used, and the next `page` starts where that one ended. `aggregate`
+is bounded by `MaxPageSize` alone: the aggregate route of the REST API sets no maximum on the number of groups. A request the REST
 API would refuse (an unknown table, a filter it does not accept, no project) is the tool's error, in the same words.
 
 A tool answers only the arguments it declares. An argument it does not take — `filters` for `filter` — is the tool's error
