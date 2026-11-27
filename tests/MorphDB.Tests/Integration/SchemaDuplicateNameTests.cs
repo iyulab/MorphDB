@@ -192,6 +192,29 @@ public class SchemaDuplicateNameTests
 
     private static string Suffix() => Guid.NewGuid().ToString("N")[..8];
 
+    /// <summary>
+    /// The project column's name is refused wherever a column is named — not only when a table is created —
+    /// as a reserved name, never as one that is taken.
+    /// </summary>
+    [Fact]
+    public async Task The_project_column_cannot_be_named_by_adding_updating_or_renaming_a_column()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var table = await CreateTableAsync(Guid.NewGuid(), ct);
+        var qty = table.Columns.Single(c => c.LogicalName == "qty").ColumnId;
+        Func<Task>[] doors =
+        [
+            () => SchemaManager().AddColumnAsync(new AddColumnRequest { TableId = table.TableId, LogicalName = "Project_ID", DataType = MorphDataType.Text, IsNullable = true, ExpectedVersion = table.SchemaVersion }, ct),
+            () => SchemaManager().UpdateColumnAsync(new UpdateColumnRequest { ColumnId = qty, LogicalName = "project_id", ExpectedVersion = table.SchemaVersion }, ct),
+            () => SchemaManager().RenameColumnAsync(new RenameColumnRequest { ColumnId = qty, NewLogicalName = "project_id", ExpectedVersion = table.SchemaVersion }, ct),
+        ];
+
+        foreach (var door in doors)
+        {
+            (await door.Should().ThrowAsync<SchemaException>()).Which.ErrorCode.Should().Be("RESERVED_NAME");
+        }
+    }
+
     private async Task<TableMetadata> CreateTableAsync(Guid projectId, CancellationToken ct, CreateColumnRequest? extra = null)
     {
         List<CreateColumnRequest> columns = [new() { LogicalName = "qty", DataType = MorphDataType.Integer, IsNullable = true }];
