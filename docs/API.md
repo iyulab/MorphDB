@@ -1969,7 +1969,7 @@ both.
 | 400 | `JOB_NOT_COMPLETED` | Reading the result of a bulk job that has not finished |
 | 400 | `NOT_MATERIALIZED` | Refreshing or reading a view that is not materialized |
 | 400 | `INVALID_NAME` | A table or column name that is empty or over the length limit, or a column name with a leading underscore (those are the system columns') |
-| 400 | `RESERVED_NAME` | A name in the space the system reserves for itself: a column named `project_id` (in any case), or the system prefix on a table |
+| 400 | `RESERVED_NAME` | A name in the space the system reserves for itself: a column named `project_id` (in any case; *Since 0.38.0* — 0.37.0 answers the exact name `409` `DUPLICATE_NAME` and creates a table with `Project_ID`), or the system prefix on a table |
 | 400 | `SYSTEM_COLUMN` | An attempt to alter or drop a column the table owns rather than the caller |
 | 400 | `UNSAFE_TYPE_CAST` | A column type change whose existing values cannot be converted — export, reload, and change the declaration instead |
 | 400 | `INVALID_OPERATION` | A schema operation that is well-formed but cannot apply to this target — creating, refreshing or reading a materialized view over a table that has a row-level security policy that narrows reads (`Select` or `All`), or giving such a policy to a table a materialized view reads |
