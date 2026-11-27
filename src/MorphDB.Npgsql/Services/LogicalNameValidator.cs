@@ -1,4 +1,5 @@
 using MorphDB.Core.Exceptions;
+using MorphDB.Core.Models;
 
 namespace MorphDB.Npgsql.Services;
 
@@ -6,7 +7,7 @@ namespace MorphDB.Npgsql.Services;
 /// Validates logical names for MorphDB entities and columns.
 /// Entity names (tables, views, indexes, relations) allow underscore prefix
 /// but block the reserved "_morph_" prefix.
-/// Column names block all underscore prefixes (reserved for system columns).
+/// Column names block all underscore prefixes and the project column (reserved for system columns).
 /// </summary>
 public static class LogicalNameValidator
 {
@@ -37,7 +38,9 @@ public static class LogicalNameValidator
 
     /// <summary>
     /// Validates a logical name for columns.
-    /// Blocks all underscore prefixes (reserved for system columns like _id, _created_at).
+    /// Blocks all underscore prefixes (reserved for system columns like _id, _created_at) and
+    /// <see cref="SystemColumns.ProjectId"/>, in any case: every table already has that column, and column
+    /// names are looked up ignoring case.
     /// </summary>
     public static void ValidateColumnName(string name)
     {
@@ -54,6 +57,11 @@ public static class LogicalNameValidator
         if (name.StartsWith('_'))
         {
             throw new SchemaException("INVALID_NAME", "Column name cannot start with underscore (reserved for system columns).");
+        }
+
+        if (string.Equals(name, SystemColumns.ProjectId, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new SchemaException("RESERVED_NAME", $"Column name '{name}' is reserved for system columns.");
         }
     }
 }

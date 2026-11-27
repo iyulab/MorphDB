@@ -29,6 +29,13 @@
 
 ### Fixed
 
+- **A column named `project_id` is refused as a reserved name** — `400` `RESERVED_NAME`, on every door that creates,
+  adds or renames a column. Every table already keeps its project in a column of that name, so creating a table with it
+  answered `409` `DUPLICATE_NAME`, "Column with name 'project_id' already exists", which a client could only read as its
+  own duplicate or a conflict worth retrying. The name is now refused in any case: `Project_ID` could be created before,
+  beside the system's column, though column names are looked up ignoring case. A table that already has such a column
+  keeps it; renaming it away still works.
+
 - **A metadata read chosen as a deadlock victim is sent again instead of answering `500`.** Listing the tables
   (`GET /api/schema/tables`) was seen to fail with `40P01 deadlock detected` when a read of the metadata tables crossed
   another session's lock on them. The inserts already retried a victim; the reads did not. The table, column, index and

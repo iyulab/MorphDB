@@ -110,6 +110,27 @@ public class LogicalNameValidatorTests
             .Where(e => e.ErrorCode == "INVALID_NAME");
     }
 
+    [Theory]
+    // The column every table keeps its project in. Compared ignoring case, as column names are looked up.
+    [InlineData("project_id")]
+    [InlineData("Project_ID")]
+    public void ValidateColumnName_TheProjectColumn_ShouldThrowReservedName(string name)
+    {
+        var act = () => LogicalNameValidator.ValidateColumnName(name);
+        act.Should().Throw<SchemaException>()
+            .Where(e => e.ErrorCode == "RESERVED_NAME");
+    }
+
+    [Theory]
+    [InlineData("project")]
+    [InlineData("project_identifier")]
+    [InlineData("projectId")]
+    public void ValidateColumnName_NamesNearTheProjectColumn_ShouldNotThrow(string name)
+    {
+        var act = () => LogicalNameValidator.ValidateColumnName(name);
+        act.Should().NotThrow();
+    }
+
     [Fact]
     public void ValidateColumnName_Empty_ShouldThrowInvalidName()
     {

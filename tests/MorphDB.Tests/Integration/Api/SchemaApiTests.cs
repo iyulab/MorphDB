@@ -25,6 +25,24 @@ public class SchemaApiTests
 
     #region Table Operations
 
+    [Fact]
+    public async Task CreateTable_NamingTheProjectColumn_ShouldRefuseItAsReserved()
+    {
+        // Answered as a taken name, a client could only conclude that it had sent the column twice, or retry.
+        var request = new CreateTableApiRequest
+        {
+            Name = $"api_test_{Guid.NewGuid():N}"[..30],
+            Columns = [new CreateColumnApiRequest { Name = "project_id", Type = "text", Nullable = true }]
+        };
+
+        var response = await _client.PostAsJsonAsync("/api/schema/tables", request, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>(TestContext.Current.CancellationToken);
+        error!.Code.Should().Be("RESERVED_NAME");
+        error.Message.Should().Contain("project_id");
+    }
+
     [Theory]
     // Both payloads escaped their clause into arbitrary DDL before the DdlBuilder guards existed,
     // executed by a role privileged enough to reach outside the project's own schemas. The reply has
